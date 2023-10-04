@@ -1,25 +1,26 @@
 # Fast website crawler
 
-Fast website crawler is an easy-to-use script for Linux that crawls and fetches URLs from a website.
+Fast website crawler is an easy-to-use script for Linux (x64) that crawls and fetches URLs from a website. Windows, macOS or arm64 are also supported with little effort, see below.
 
 The motivation to create this tool? At [siteone.io](https://www.siteone.io/) we develop various web applications or presentations that we need to completely crawl and check speeds, DoS/DDoS mitigations, status codes, cache settings, find non-existent pages, redirects, etc. This tool solves all our needs at once.
 
 ## Features
 
-* No external dependencies, no complicated installation. It works well with **any modern Linux distribution**.
+* No external dependencies, no complicated installation. It works well with **any modern Linux (x64) distribution** and with little effort also on Windows, macOS or arm64 architecture.
 * Efficiently crawls the website starting from the provided URL.
-* Uses Swoole's coroutine capability for concurrency and high performance.
+* Uses Swoole's coroutine capability for concurrency (configurable by `--max-workers=<num>`) and high performance.
 * Dynamic User-Agent string based on selected `--device` type with the option to override by `--user-agent`.
-* Option to add random query parameters to the URLs to test cache behavior.
+* Option to add random query parameters to the URLs to test cache/anti-cache behavior.
+* Option to remove all query parameters from the URLs.
 * Beautifully formatted console output with colored statuses. See screenshot below.
 * Displays execution statistics at the end, including AVG, MIN, and MAX response times and breakdown by HTTP status codes.
 * Output - the script provides a detailed table-like output which includes:
-* * Crawled URLs
-* * Status code of the HTTP response (colored based on the status)
-* * Time taken for the HTTP request (colored based on the time)
-* * Response size
-* * Specified headers from the HTTP response (based on `--headers-to-table` argument)
-* * Furthermore, the script provides summary statistics at the end of its execution, showing details like the total number of URLs processed, breakdown by HTTP status codes, and total, average, min, and max response times.
+  * Crawled URLs
+  * Status code of the HTTP response (colored based on the status)
+  * Time taken for the HTTP request (colored based on the time)
+  * Response size
+  * Specified headers from the HTTP response (based on `--headers-to-table` argument)
+* Furthermore, the script provides summary statistics at the end of its execution, showing details like the total number of URLs processed, breakdown by HTTP status codes, and total, average, min, and max response times.
 
 ## Roadmap
 
@@ -89,13 +90,19 @@ To run the script, execute the `crawler.php` file from the command line with pre
 * `--remove-query-params`: Whether to remove all query parameters from the parsed URLs.
 * `--show-urls-without-domain`: If set, URLs displayed in the output table will not include the domain.
 
-## Dependencies
+## Windows, macOS or arm64
 
-Make sure you have the Swoole extension installed in your PHP environment to leverage the coroutine functionality.
+If using Windows, you can download [swoole-cli-v4.8.13-cygwin-x64.zip](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-cygwin-x64.zip) from [Swoole releases](https://github.com/swoole/swoole-src/releases) and use precompiled `bin/swoole-cli.exe`.
+
+If using macOS, you can download (x64) [swoole-cli-v4.8.13-macos-x64.tar.xz](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-macos-x64.tar.xz) or (arm64) [swoole-cli-v4.8.13-macos-arm64.tar.xz](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-macos-arm64.tar.xz) and use `bin/swoole-cli`.
+
+If using arm64 Linux, you can download precompiled [swoole-cli-v4.8.13-linux-arm64.tar.xz](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-linux-arm64.tar.xz) and use `bin/swoole-cli`.
 
 ## Disclaimer
 
 Please use responsibly and ensure that you have the necessary permissions when crawling websites. Some sites may have rules against automated access detailed in their robots.txt.
+
+**The author is not responsible for any consequences caused by inappropriate use or deliberate misuse of this tool.**
 
 ## License
 
