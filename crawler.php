@@ -37,13 +37,13 @@ $workers->column('workers', \Swoole\Table::TYPE_INT, 2);
 $workers->create();
 $workers->set('1', ['workers' => 0]);
 
-$queue = new \Swoole\Table(5000);
-$queue->column('url', \Swoole\Table::TYPE_STRING, 1000);
+$queue = new \Swoole\Table($options->maxQueueLength);
+$queue->column('url', \Swoole\Table::TYPE_STRING, $options->maxUrlLength);
 $queue->create();
 $queue->set(md5($options->url), ['url' => $options->url]);
 
-$visited = new \Swoole\Table(10000);
-$visited->column('url', \Swoole\Table::TYPE_STRING, 1000);
+$visited = new \Swoole\Table($options->maxVisitedUrls);
+$visited->column('url', \Swoole\Table::TYPE_STRING, $options->maxUrlLength);
 $visited->column('time', \Swoole\Table::TYPE_FLOAT, 8);
 $visited->column('status', \Swoole\Table::TYPE_INT, 8);
 $visited->column('size', \Swoole\Table::TYPE_INT, 8);
@@ -330,6 +330,9 @@ class CrawlerOptions
     public string $acceptEncoding = 'gzip, deflate, br';
     public ?string $userAgent = null;
     public ?array $headersToTable = [];
+    public int $maxQueueLength = 1000;
+    public int $maxVisitedUrls = 5000;
+    public int $maxUrlLength = 2000;
     public bool $addRandomQueryParams = false;
     public bool $removeQueryParams = false;
     public bool $showUrlsWithoutDomain = false;
@@ -366,6 +369,15 @@ class CrawlerOptions
             if (strpos($arg, '--headers-to-table=') === 0) {
                 $result->headersToTable = explode(',', str_replace(' ', '', trim(substr($arg, 19), ' "\'')));
             }
+            if (strpos($arg, '--max-queue-length=') === 0) {
+                $result->maxQueueLength = (int)substr($arg, 19);
+            }
+            if (strpos($arg, '--max-visited-urls=') === 0) {
+                $result->maxVisitedUrls = (int)substr($arg, 19);
+            }
+            if (strpos($arg, '--max-url-length=') === 0) {
+                $result->maxUrlLength = (int)substr($arg, 17);
+            }
             if (strpos($arg, '--add-random-query-params') === 0) {
                 $result->addRandomQueryParams = true;
             }
@@ -400,9 +412,12 @@ class CrawlerOptions
         echo "--accept-encoding=<value>       Optional. Custom Accept-Encoding. Default is 'gzip, deflate, br'.\n";
         echo "--user-agent=<value>            Optional. Custom user agent. Use quotation marks. If specified, it takes precedence over the device parameter.\n";
         echo "--headers-to-table=<value>      Optional. Comma delimited list of HTTP response headers added to output table.\n";
+        echo "--max-queue-length=<n>          Optional. The maximum length of the waiting URL queue. Increase in case of large websites, but expect higher memory requirements. Default is 1000.\n";
+        echo "--max-visited-urls=<n>          Optional. The maximum number of the visited URLs. Increase in case of large websites, but expect higher memory requirements. Default is 5000.\n";
+        echo "--max-url-length=<n>            Optional. The maximum supported URL length in chars. Increase in case of very long URLs, but expect higher memory requirements. Default is 2000.\n";
         echo "--remove-query-params           Optional. Remove query parameters from found URLs.\n";
         echo "--add-random-query-params       Optional. Adds several random query parameters to each URL.\n";
-        echo "--show-urls-without-domain      Optional. On output, show only the URL without protocol and domain..\n";
+        echo "--show-urls-without-domain      Optional. On output, show only the URL without protocol and domain.\n";
         echo "\n";
         echo "Version: " . VERSION . "\n";
         echo "Created with ♥ by Ján Regeš (jan.reges@siteone.cz) [10/2023]\n";

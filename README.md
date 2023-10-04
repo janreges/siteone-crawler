@@ -59,6 +59,9 @@ To run the script, execute the `crawler.php` file from the command line with pre
   --accept-encoding="gzip, deflate" \
   --timeout=5 \
   --table-url-column-size=80 \
+  --max-queue-length=3000 \
+  --max-visited-urls=10000 \
+  --max-url-length=5000 \
   --remove-query-params \
   --add-random-query-params \
   --show-urls-without-domain
@@ -79,6 +82,9 @@ To run the script, execute the `crawler.php` file from the command line with pre
 * `--accept-encoding=<string>`: Accept-Encoding header value. Defaults to `gzip, deflate, br` if not specified.
 * `--timeout=<seconds>`: Timeout duration in seconds for the HTTP requests. Defaults to `10` seconds if not specified.
 * `--table-url-column-size=<num>`: Basic URL column size in chars. Defaults to `120` chars if not specified.
+* `--max-queue-length=<num>`: The maximum length of the waiting URL queue. Increase in case of large websites, but expect higher memory requirements. Defaults to `1000` if not specified.
+* `--max-visited-urls=<num>`: The maximum number of the visited URLs. Increase in case of large websites, but expect higher memory requirements. Defaults to `5000` if not specified.
+* `--max-url-length=<num>`: The maximum supported URL length in chars. Increase in case of very long URLs with query params, but expect higher memory requirements. Defaults to `2000` if not specified.
 * `--add-random-query-params`: Whether to add random query parameters to the URL. This can help in testing cache behavior.
 * `--remove-query-params`: Whether to remove all query parameters from the parsed URLs.
 * `--show-urls-without-domain`: If set, URLs displayed in the output table will not include the domain.
