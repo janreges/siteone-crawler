@@ -110,7 +110,7 @@ function processNextUrl(\Swoole\Table $queue, \Swoole\Table $visited, \Swoole\Ta
     }
     $workers->decr('1', 'workers');
 
-    preg_match_all('/<a\s+.*?href="([^"]+)"[^>]*>/i', $body, $matches);
+    preg_match_all('/<a\s+.*?href=["\']([^"\']+)["\'][^>]*>/i', $body, $matches);
     foreach ($matches[1] as $match) {
         $match = trim($match);
         $parsedMatch = parse_url($match);
@@ -120,36 +120,51 @@ function processNextUrl(\Swoole\Table $queue, \Swoole\Table $visited, \Swoole\Ta
             $validForParsing = false;
         }
 
-        if ($validForParsing) {
-            $nextUrl = $match;
+        if (!$validForParsing) {
+            continue;
+        }
 
-            if (isset($parsedMatch['host']) && !isset($parsedMatch['scheme'])) {
-                $nextUrl = "$scheme://$nextUrl";
-            } elseif (!isset($parsedMatch['host'])) {
-                $nextUrl = "$scheme://$domain$nextUrl";
-            }
 
-            $nextUrl = preg_replace('/#.*$/', '', $nextUrl);
-            if ($options->removeQueryParams) {
-                $nextUrl = preg_replace('/\?.*$/', '', $nextUrl);
-            }
+        $nextUrl = $match;
 
-            if (!$visited->exist(md5($nextUrl)) && !$queue->exist(md5($nextUrl)) && @parse_url($nextUrl) !== false && (preg_match('/\.[a-z0-9]{2,4}$/i', $nextUrl) === 0 || stripos($nextUrl, '.html') !== false)) {
-                $queue->set(md5($nextUrl), ['url' => $nextUrl]);
-            }
+        if (isset($parsedMatch['host']) && !isset($parsedMatch['scheme'])) {
+            $nextUrl = "$scheme://$nextUrl";
+        } elseif (!isset($parsedMatch['host']) && !str_starts_with($nextUrl, '/') && !str_starts_with($nextUrl, '#') && preg_match('/^https?:\/\//i', $nextUrl) === 0) {
+            $nextUrl = relativeToAbsoluteUrl($nextUrl, $url);
+        } elseif (!isset($parsedMatch['host'])) {
+            $nextUrl = "$scheme://$domain$nextUrl";
+        }
+
+        if (!$nextUrl) {
+            continue;
+        }
+
+        $nextUrl = preg_replace('/#.*$/', '', $nextUrl);
+        if ($options->removeQueryParams) {
+            $nextUrl = preg_replace('/\?.*$/', '', $nextUrl);
+        }
+
+        $nextUrlMd5 = md5($nextUrl);
+        if (!$visited->exist($nextUrlMd5) && !$queue->exist($nextUrlMd5) && @parse_url($nextUrl) !== false && (preg_match('/\.[a-z0-9]{2,4}$/i', $nextUrl) === 0 || preg_match('/\.(html|shtml|phtml)/i', $nextUrl) === 1)) {
+            $queue->set($nextUrlMd5, ['url' => $nextUrl]);
         }
     }
 
     $elapsedTime = microtime(true) - $start;
 
     // update stats for visited row
-    $visitedRow = $visited->get(md5($url));
+    $urlMd5 = md5($url);
+    $visitedRow = $visited->get($urlMd5);
+    if (!$visitedRow) {
+        echo getColorText("ERROR: Unable to handle visited URL. Set higher --max-visited-urls or --max-url-length.", 'red');
+        exit(1);
+    }
     $visitedRow['time'] = $elapsedTime;
     $visitedRow['status'] = $status;
     $visitedRow['size'] = $body ? strlen($body) : 0;
-    $visited->set(md5($url), $visitedRow);
+    $visited->set($urlMd5, $visitedRow);
 
-    $coloredStatus = $status;
+    $coloredStatus = null;
     if ($status == 200) {
         $coloredStatus = getColorText(str_pad($status, 6, ' '), 'green');
     } else if ($status > 300 && $status < 400) {
@@ -189,6 +204,44 @@ function processNextUrl(\Swoole\Table $queue, \Swoole\Table $visited, \Swoole\Ta
             Coroutine::create('processNextUrl', $queue, $visited, $workers);
         }
     }
+}
+
+function relativeToAbsoluteUrl(string $relativeUrl, string $baseUrl): ?string
+{
+    if (substr($relativeUrl, 0, 1) === '/' || preg_match('/^https?:\/\//', $relativeUrl) === 1) {
+        return $relativeUrl;
+    }
+
+    // handle href="./xyz" - it is equivalent to href="xyz"
+    if (str_starts_with($relativeUrl, './')) {
+        $relativeUrl = substr($relativeUrl, 2);
+    }
+
+    // remove query params and hash from base URL
+    $baseUrl = preg_replace(['/\?.*$/', '/#.*$/'], ['', ''], $baseUrl);
+
+    // remove file name from base URL and trim trailing slash
+    $baseUrl = preg_match('/\.[a-z0-9]{2,10}$/i', $baseUrl) === 1 ? rtrim(preg_replace('/\/[^\/]+$/i', '', $baseUrl), ' /') : rtrim($baseUrl, ' /');
+
+    // explode base URL and relative URL to segments
+    $baseSegments = explode('/', trim($baseUrl, '/'));
+    $relativeSegments = explode('/', $relativeUrl);
+
+    foreach ($relativeSegments as $segment) {
+        if ($segment === '..') {
+            // Odebrání posledního segmentu z base URL, pokud se jedná o proteckování na úroveň výše
+            array_pop($baseSegments);
+        } else {
+            $baseSegments[] = $segment;
+        }
+    }
+
+    // build and validate final URL
+    $finalUrl = implode('/', $baseSegments);
+    if (!filter_var($finalUrl, FILTER_VALIDATE_URL)) {
+        $finalUrl = null;
+    }
+    return $finalUrl;
 }
 
 function displayTotalStats(\Swoole\Table $visited): void
