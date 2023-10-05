@@ -112,6 +112,14 @@ To run the crawler, execute the `crawler.php` file from the command line with pr
 
 If using Windows, you can use [Ubuntu](https://ubuntu.com/wsl)/[Debian](https://www.linuxfordevices.com/tutorials/linux/install-debian-on-windows-wsl) in [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) or you can download [swoole-cli-v4.8.13-cygwin-x64.zip](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-cygwin-x64.zip) from [Swoole releases](https://github.com/swoole/swoole-src/releases) and use precompiled `bin/swoole-cli.exe`.
 
+A really functional and tested Windows command looks like this (modify your path to `swoole-cli.exe` and `crawler.php`):
+
+```
+c:\Work\swoole-cli-v4.8.13-cygwin-x64\bin\swoole-cli.exe C:\Work\siteone-website-crawler\crawler.php --url=https://www.siteone.io/ --output=json
+```
+
+> Cygwin does not support STDERR and rewritable lines in the console. Therefore, the output is not as beautiful as on Linux.
+
 If using macOS, you can download (x64) [swoole-cli-v4.8.13-macos-x64.tar.xz](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-macos-x64.tar.xz) or (arm64) [swoole-cli-v4.8.13-macos-arm64.tar.xz](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-macos-arm64.tar.xz) and use `bin/swoole-cli`.
 
 If using arm64 Linux, you can download precompiled [swoole-cli-v4.8.13-linux-arm64.tar.xz](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-linux-arm64.tar.xz) and use `bin/swoole-cli`.
