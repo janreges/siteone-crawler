@@ -16,7 +16,7 @@ class Options
     public string $acceptEncoding = 'gzip, deflate, br';
     public ?string $userAgent = null;
     public array $headersToTable = [];
-    public int $maxQueueLength = 1000;
+    public int $maxQueueLength = 2000;
     public int $maxVisitedUrls = 5000;
     public int $maxUrlLength = 2000;
     public array $crawlAssets = [];
@@ -165,7 +165,7 @@ class Options
         echo "--user-agent=<value>            Optional. Custom user agent. Use quotation marks. If specified, it takes precedence over the device parameter.\n";
         echo "--headers-to-table=<values>     Optional. Comma delimited list of HTTP response headers added to output table. A specialty is the possibility to use 'Title', 'Keywords' and 'Description'.\n";
         echo "--crawl-assets=<values>         Optional. Comma delimited list of frontend assets you want to crawl too. Supported values: '" . implode("', '", AssetType::getAvailableTextTypes()) . "'.\n";
-        echo "--max-queue-length=<n>          Optional. The maximum length of the waiting URL queue. Increase in case of large websites, but expect higher memory requirements. Default is 1000.\n";
+        echo "--max-queue-length=<n>          Optional. The maximum length of the waiting URL queue. Increase in case of large websites, but expect higher memory requirements. Default is 2000.\n";
         echo "--max-visited-urls=<n>          Optional. The maximum number of the visited URLs. Increase in case of large websites, but expect higher memory requirements. Default is 5000.\n";
         echo "--max-url-length=<n>            Optional. The maximum supported URL length in chars. Increase in case of very long URLs, but expect higher memory requirements. Default is 2000.\n";
         echo "--remove-query-params           Optional. Remove query parameters from found URLs.\n";

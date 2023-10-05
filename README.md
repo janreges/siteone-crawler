@@ -92,7 +92,7 @@ To run the crawler, execute the `crawler.php` file from the command line with pr
 * `--accept-encoding=<string>`: Accept-Encoding header value. Defaults to `gzip, deflate, br` if not specified.
 * `--timeout=<seconds>`: Timeout duration in seconds for the HTTP requests. Defaults to `10` seconds if not specified.
 * `--table-url-column-size=<num>`: Basic URL column size in chars. Defaults to `100` chars if not specified.
-* `--max-queue-length=<num>`: The maximum length of the waiting URL queue. Increase in case of large websites, but expect higher memory requirements. Defaults to `1000` if not specified.
+* `--max-queue-length=<num>`: The maximum length of the waiting URL queue. Increase in case of large websites, but expect higher memory requirements. Defaults to `2000` if not specified.
 * `--max-visited-urls=<num>`: The maximum number of the visited URLs. Increase in case of large websites, but expect higher memory requirements. Defaults to `5000` if not specified.
 * `--max-url-length=<num>`: The maximum supported URL length in chars. Increase in case of very long URLs with query params, but expect higher memory requirements. Defaults to `2000` if not specified.
 * `--add-random-query-params`: Whether to add random query parameters to the URL. This can help in testing cache behavior.
