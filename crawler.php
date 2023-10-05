@@ -6,7 +6,8 @@ use Crawler\Utils;
 use Crawler\Options;
 
 spl_autoload_register(function ($class) {
-    require_once(__DIR__ . '/' . str_replace('\\', '/', $class) . '.php');
+    $classFile = dirname(platformCompatiblePath($_SERVER['PHP_SELF'])) . '/' . str_replace('\\', '/', $class) . '.php';
+    require_once($classFile);
 });
 
 const VERSION = '2023.10.2';
@@ -31,3 +32,12 @@ try {
     exit(1);
 }
 
+
+function platformCompatiblePath(string $path): string
+{
+    if (stripos(PHP_OS, 'CYGWIN') !== false) {
+        $path = preg_replace('/^([A-Z]):/i', '/cygdrive/\1', $path);
+        $path = str_replace('\\', '/', $path);
+    }
+    return $path;
+}

@@ -113,7 +113,14 @@ class JsonOutput implements Output
             $url
         );
         $maxStdErrLength = max($maxStdErrLength, strlen($progressToStdErr));
-        fwrite(STDERR, str_pad($progressToStdErr, $maxStdErrLength));
+        $progressContent = str_pad($progressToStdErr, $maxStdErrLength);
+
+        // cygwin does not support stderr, so we just print status to stdout
+        if (stripos(PHP_OS, 'CYGWIN') !== false) {
+            echo $progressContent."\n";
+        } else {
+            fwrite(STDERR, $progressContent);
+        }
     }
 
     public function printError(string $text): void
