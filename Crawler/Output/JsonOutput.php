@@ -43,6 +43,8 @@ class JsonOutput implements Output
 
     public function printTotalStats(Table $visited): void
     {
+        fwrite(STDERR, "\n\n");
+
         $info = [
             'totalUrls' => $visited->count(),
             'totalSize' => 0,
@@ -78,8 +80,9 @@ class JsonOutput implements Output
         $this->json['results'] = [];
     }
 
-    public function printTableRow(Client $httpClient, string $url, int $status, float $elapsedTime, int $size, array $extraParsedContent): void
+    public function printTableRow(Client $httpClient, string $url, int $status, float $elapsedTime, int $size, array $extraParsedContent, string $progressStatus): void
     {
+        static $maxStdErrLength = 0;
         $row = [
             'url' => $url,
             'status' => $status,
@@ -92,13 +95,25 @@ class JsonOutput implements Output
             $value = '';
             if (array_key_exists($headerName, $extraParsedContent)) {
                 $value = trim($extraParsedContent[$headerName]);
-            } elseif (array_key_exists(strtolower($headerName), $httpClient->headers)) {
+            } elseif (array_key_exists(strtolower($headerName), $httpClient->headers ?: [])) {
                 $value = trim($httpClient->headers[strtolower($headerName)]);
             }
             $row['extras'][$headerName] = $value;
         }
 
         $this->json['results'][] = $row;
+
+        // put progress to stderr
+        list($done, $total) = explode('/', $progressStatus);
+        $progressToStdErr = sprintf(
+            "\rProgress: %s | %s %s | %s",
+            str_pad($progressStatus, 7),
+            Utils::getProgressBar($done, $total, 25),
+            number_format($elapsedTime, 3, '.') . " sec",
+            $url
+        );
+        $maxStdErrLength = max($maxStdErrLength, strlen($progressToStdErr));
+        fwrite(STDERR, str_pad($progressToStdErr, $maxStdErrLength));
     }
 
     public function printError(string $text): void

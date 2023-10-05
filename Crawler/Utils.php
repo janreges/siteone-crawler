@@ -151,4 +151,12 @@ class Utils
 
         return $firstPart . $placeholder . $secondPart;
     }
+
+    public static function getProgressBar(int $done, int $total, int $segments = 20): string
+    {
+        $percentage = ($done / $total) * 100;
+        $filledSegments = round(($done / $total) * $segments);
+        $progressBar = str_repeat('>', $filledSegments) . str_repeat(' ', $segments - $filledSegments + 1);
+        return sprintf("%s|%s|", str_pad(intval($percentage) . '%', 5), $progressBar);
+    }
 }

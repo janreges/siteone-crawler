@@ -4,33 +4,41 @@ SiteOne Website Crawler **is the best, most powerful and most functional website
 
 It works on all major platforms, but most easily on Linux. Windows, macOS or arm64 are also supported with little effort, see below.
 
-What was the motivation for creating this tool? At [siteone.io](https://www.siteone.io/) we have been creating web applications and web presentations for our clients for more than 20 years. We have implemented hundreds of projects and we have one need all around. We need to check that the whole site is working. Check that all pages respond quickly, that the title and other SEO criteria are well designed, that there are no non-existent pages, that the cache information is set correctly, that we do not have unnecessary redirects. And last but not least, he needs to carry out load tests, or test our DoS and DDoS protection on the infrastructure.
+## Motivation to create this tool
+
+At [SiteOne](https://www.siteone.io/) we have been creating web applications and web presentations for our clients for more than 20 years. We have implemented hundreds of projects, and we have one need all around.
+
+We need to check that the whole website is working great. Check that all pages respond quickly, that the title and other SEO criteria are well-designed, that there are no non-existent pages (invalid links or missing files), that the cache or security headers are set correctly, that we do not have unnecessary redirects. Last but not least, we need to perform stress tests or test protections against DoS/DDoS attacks on our infrastructure.
+
+There are GUI tools like [Xenu's Link Sleuth](https://home.snafu.de/tilman/xenulink.html), or [Screaming Frog SEO Spider](https://www.screamingfrog.co.uk/seo-spider/), or some poor quality CLI tools. None of these tools covered all our needs. That's why we decided to create our own tool.
+
+Ehmmmm... Enough of the marketing bullshit! What was really the most real reason? The author, head of development and infrastructure at [SiteOne](https://www.siteone.io/), wanted to prove that he could develop a great tool in 12 hours of pure working time and take a break from caring for his extremely prematurely born son. And he did it! :-) The tool is great, and his son is doing great too! ♥
 
 ## Features
 
 * No external dependencies, no complicated installation. It works well with **any modern Linux (x64) distribution** and with little effort also on Windows, macOS or arm64 architecture.
 * Efficiently crawls the website starting from the provided URL.
-* Dynamic User-Agent string based on selected `--device` type with the option to override by `--user-agent`.
-* Option to set ``JSON for better integration with CI/CD pipelines and other tools.
-* Option to add random query parameters to the URLs to test cache/anti-cache behavior.
-* Option to remove all query parameters from the URLs.
-* Option to hide the scheme and host from the URLs in the output table.
-* Option to truncate the URLs to the specified column size in the output table.
-* Option to crawl also assets (images, CSS, JS, fonts and other files).
-* Option to specify which extra headers from the HTTP response to display in the output table.
-* Option to specify the maximum number of workers for concurrent URL processing. You can use all your CPU cores.
-* Beautifully formatted and colored console output with highlighted status codes and slow response times.
-* Displays execution statistics at the end, including AVG, MIN, and MAX response times and breakdown by HTTP status codes.
-* Supports HTTP/1.1 and HTTP/2.
-* Sophisticated error handling and input parameter validation
-* Output - the script provides a detailed table-like output which includes:
+* Supports **public domains** and also **local domains** (e.g. `http://localhost:3000`).
+* Dynamic **User-Agent** string based on selected `--device` type with the option to override by `--user-agent`.
+* Option `--output=json` for better integration with CI/CD pipelines and other tools. The JSON output also has a nice visual progress reporting.
+* Option `--max-workers=<num>` to specify the maximum number of workers for concurrent URL processing. You can use all your CPU cores.
+* Option `--crawl-assets=<values>` to crawl also selected assets (images, fonts, styles, scripts, files).
+* Option `--headers-to-table=<values>` to specify which extra headers from the HTTP response to display in the output table.
+* Option `--add-random-query-params` to add random query params to test cache/anti-cache behavior.
+* Option `--remove-query-params` to remove all query parameters from the URLs to skip unwanted dynamic URLs.
+* Option `--hide-scheme-and-host` to hide the scheme and host from the URLs in the output table for more compact output.
+* Option `--truncate-url-to-column-size` to truncate the URLs to the specified `--table-url-column-size=<size>` in the output table.
+* Beautifully **formatted and colored console output** with highlighted status codes and slow response times.
+* Displays **execution statistics** at the end, including AVG, MIN, and MAX response times and breakdown by HTTP status codes.
+* Supports **HTTP/1.1** and **HTTP/2**. Supports **HTTP** and **HTTPS**.
+* Sophisticated **error handling** and input parameters validation.
+* Table output - the script provides a detailed table-like output which includes:
   * Crawled URLs
   * Status code of the HTTP response (colored based on the status)
   * Time taken for the HTTP request (colored based on the time)
   * Response size
   * Specified headers from the HTTP response (based on `--headers-to-table` argument)
-  * Title, Keywords and Description extracted from the HTML response (based on `--headers-to-table` argument)
-* Furthermore, the script provides summary statistics at the end of its execution, showing details like the total number of URLs processed, breakdown by HTTP status codes, and total, average, min, and max response times.
+  * `Title`, `Keywords` and `Description` extracted from the HTML response (based on `--headers-to-table` argument)
 
 ## Installation
 
@@ -46,7 +54,7 @@ chmod +x ./swoole-cli
 
 ## Usage
 
-To run the crawler, execute the `crawler.php` file from the command line with pre-compiled `swoole-cli` and provide the required arguments:
+To run the crawler, execute the `crawler.php` file from the command line with precompiled `swoole-cli` and provide the required arguments:
 
 **Basic example**
 
@@ -102,7 +110,7 @@ To run the crawler, execute the `crawler.php` file from the command line with pr
 
 ## Windows, macOS or arm64
 
-If using Windows, you can download [swoole-cli-v4.8.13-cygwin-x64.zip](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-cygwin-x64.zip) from [Swoole releases](https://github.com/swoole/swoole-src/releases) and use precompiled `bin/swoole-cli.exe`.
+If using Windows, you can use [Ubuntu](https://ubuntu.com/wsl)/[Debian](https://www.linuxfordevices.com/tutorials/linux/install-debian-on-windows-wsl) in [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) or you can download [swoole-cli-v4.8.13-cygwin-x64.zip](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-cygwin-x64.zip) from [Swoole releases](https://github.com/swoole/swoole-src/releases) and use precompiled `bin/swoole-cli.exe`.
 
 If using macOS, you can download (x64) [swoole-cli-v4.8.13-macos-x64.tar.xz](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-macos-x64.tar.xz) or (arm64) [swoole-cli-v4.8.13-macos-arm64.tar.xz](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-macos-arm64.tar.xz) and use `bin/swoole-cli`.
 

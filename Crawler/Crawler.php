@@ -223,7 +223,8 @@ class Crawler
         $this->updateVisitedUrl($url, $elapsedTime, $status, $bodySize);
 
         // print table row to output
-        $this->output->printTableRow($client, $absoluteUrl, $status, $elapsedTime, $bodySize, $extraParsedContent);
+        $progressStatus = $this->visited->count() . '/' . ($this->queue->count() + $this->visited->count());
+        $this->output->printTableRow($client, $absoluteUrl, $status, $elapsedTime, $bodySize, $extraParsedContent, $progressStatus);
 
         // check if crawler is done and exit or start new coroutine to process next URL
         if ($this->queue->count() === 0 && $this->getActiveWorkersNumber() === 0) {

@@ -53,7 +53,7 @@ class FormattedTextOutput implements Output
         echo $header . str_repeat("-", strlen(trim($header))) . "\n";
     }
 
-    public function printTableRow(Client $httpClient, string $url, int $status, float $elapsedTime, int $size, array $extraParsedContent): void
+    public function printTableRow(Client $httpClient, string $url, int $status, float $elapsedTime, int $size, array $extraParsedContent, string $progressStatus): void
     {
         $urlForTable = $this->options->hideSchemeAndHost ? (preg_replace('/^https?:\/\/[^\/]+\//i', '/', $url)) : $url;
 
