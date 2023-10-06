@@ -40,11 +40,11 @@ class HtmlReport
                                 <path fill-rule="evenodd" clip-rule="evenodd" d="M0 0.0527344H57.9785V58.0312H0V0.0527344ZM10.25 48.0639H47.7323V10.0156H10.25V48.0639Z" fill="#333333"></path>
                             </svg>
                         </a>
-                        SiteOne Website Crawler Report
+                        Website crawler report
                     </h1>
                     
                     <section class="mb-5">
-                        <h2>Crawler Info</h2>
+                        <h2>Basic info</h2>
                         <table class="table table-bordered table-hover table-two-col">
                             <tr>
                                 <th>Version</th>
@@ -134,7 +134,7 @@ class HtmlReport
                     <section>
                         <br />
                         <hr />
-                        The report was created <strong>' . date('Y-m-d - H:i:s') . '</strong> using the <a href="https://github.com/janreges/siteone-website-crawler"><strong>SiteOne Website Crawler</strong></a> with ♥ by Ján Regeš from <a href="https://www.siteone.io/?utm_source=siteone_crawler&utm_medium=email&utm_campaign=crawler_report&utm_content=v' . VERSION . '"><strong>SiteOne</strong></a> (Czech Republic).<br />
+                        The report was generated <strong>' . date('Y-m-d - H:i:s') . '</strong> using the ♥ <a href="https://github.com/janreges/siteone-website-crawler"><strong>SiteOne Website Crawler</strong></a> by Ján Regeš from <a href="https://www.siteone.io/?utm_source=siteone_crawler&utm_medium=email&utm_campaign=crawler_report&utm_content=v' . VERSION . '"><strong>SiteOne</strong></a> (Czech Republic).<br />
                         <br />
                     </section>
                 </div>

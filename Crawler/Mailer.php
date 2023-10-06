@@ -23,10 +23,10 @@ class Mailer
         $htmlBodyForEmail = $this->styleHtmlBodyForEmail($htmlBody);
         $parsedUrl = ParsedUrl::parse($this->options->url);
 
-        $this->sendEmailBySMTP(
+        $this->sendEmailBySmtp(
             $this->options->mailTo,
             $this->options->mailFrom,
-            "SiteOne Crawler report for {$parsedUrl->host} (" . date('Y-m-d H:i:s') . ')',
+            "Crawler report for {$parsedUrl->host} (" . date('Y-m-d H:i') . ')',
             $htmlBodyForEmail,
             $this->options->mailSmtpHost,
             $this->options->mailSmtpPort,
@@ -69,7 +69,7 @@ class Mailer
      * @return void
      * @throws \Exception
      */
-    private function sendEmailBySMTP(array $recipients, string $sender, string $subject, string $htmlBody, string $smtpHost, int $smtpPort, ?string $smtpUser = null, ?string $smtpPass = null): void
+    private function sendEmailBySmtp(array $recipients, string $sender, string $subject, string $htmlBody, string $smtpHost, int $smtpPort, ?string $smtpUser = null, ?string $smtpPass = null): void
     {
         $senderName = 'SiteOne Crawler';
 

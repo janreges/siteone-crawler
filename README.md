@@ -128,59 +128,53 @@ required arguments:
 
 #### Required:
 
-* `--url=<value>`: The starting URL to begin crawling from.
+* `--url=<value>`: Required. HTTP or HTTPS URL address of the website to be crawled from. Use quotation marks if the URL contains query parameters.
 
-#### Optional:
+#### Basic settings:
 
-* `--device=<string>`: Specify the device type. Options: `desktop`, `mobile`, `tablet`. Defaults to `desktop` if not
-  specified.
-* `--output=<string>`: Specify the output type. Options: `text` or `json`. Defaults to `text` if not specified.
-* `--max-workers=<num>`: The maximum number of workers for concurrent URL processing. Defaults to `3` if not specified.
-* `--user-agent="<string>"`: The User-Agent string to use for the HTTP requests. If not provided, it defaults based on
-  the `device` argument.
-* `--headers-to-table=<string>`: Specify which extra headers from the HTTP response to display in the table output.
-  Comma delimited. A specialty is the possibility to use `Title`, `Keywords` and `Description`. These are extracted from
-  the HTML response and displayed in the table output. You can also set the expected length of the column in parentheses
-  for better output - for example 'X-Cache(10)'
-* `--crawl-assets=<string>`: Optional. Comma delimited list of assets you want to crawl too. Supported
-  values: `fonts`, `images`, `styles`, `scripts` and `files` (pdf, etc.). Defaults to empty if not specified so no
-  assets are crawled.
-* `--accept-encoding=<string>`: Accept-Encoding header value. Defaults to `gzip, deflate, br` if not specified.
-* `--timeout=<seconds>`: Timeout duration in seconds for the HTTP requests. Defaults to `3` seconds if not specified.
-* `--url-column-size=<num>`: Basic URL column size in chars. Defaults to `80` chars if not specified.
-* `--max-queue-length=<num>`: The maximum length of the waiting URL queue. Increase in case of large websites, but
-  expect higher memory requirements. Defaults to `2000` if not specified.
-* `--max-visited-urls=<num>`: The maximum number of the visited URLs. Increase in case of large websites, but expect
-  higher memory requirements. Defaults to `5000` if not specified.
-* `--max-url-length=<num>`: The maximum supported URL length in chars. Increase in case of very long URLs with query
-  params, but expect higher memory requirements. Defaults to `2000` if not specified.
-* `--include-regex=<regex>`: Optional. Regular expression compatible with PHP preg_match() for URLs that should be
-  included. Argument can be specified multiple times. Example: `--include-regex='/^.*\/public\//'`. If at least one
-  argument is specified, then any URL (except the initial URL) must match at least one regex. Otherwise, the URL is
-  ignored.
-* `--ignore-regex=<regex>`: Optional. Regular expression compatible with PHP preg_match() for URLs that should be
-  ignored. Argument can be specified multiple times. Example: `--ignore-regex='/^.*\/downloads\/.*\.pdf$/i'`.
-* `--add-random-query-params`: Whether to add random query parameters to the URL. This can help in testing cache
-  behavior.
-* `--remove-query-params`: Whether to remove all query parameters from the parsed URLs.
-* `--hide-scheme-and-host`: If set, URLs displayed in the output table will not include the domain.
-* `--do-not-truncate-url`: Long URLs are truncated by default to column size so that the table does not wrap. With this
-  option, you can turn off the truncation.
-* `--hide-progress-bar`: Hide progress bar visible in text and JSON output for more compact view.
+* `--url=<url>`                    Required. HTTP or HTTPS URL address of the website to be crawled.Use quotation marks if the URL contains query parameters
+* `--device=<device`               Device type for choosing a predefined User-Agent. Ignored when `--user-agent` is defined. Supported values: `desktop`, `mobile`, `tablet`. Defaults is `desktop`.
+* `--user-agent=<value>`           Custom User-Agent header. Use quotation marks. If specified, it takes precedence over the device parameter.
+* `--timeout=<num>`                Request timeout in seconds. Default is `3`.
 
-#### Output files options:
+####  Output settings:
 
-* `--output-html-file=<file>`: Optional. Save formatted HTML output to a file. Extension `.html` is automatically added
-  if not specified.
-* `--output-json-file=<file>`: Optional. Save formatted JSON output to a file. Extension `.json` is automatically added
-  if not specified.
-* `--output-text-file=<file>`: Optional. Save formatted text output to a file. Extension `.txt` is automatically added
-  if not specified.
-* `--add-timestamp-to-output-file`:  Optional. Add timestamp as suffix to output file name. Example: you
-  set `--output-json-file=/dir/report.json` and target filename will be `/dir/report.2023-10-06.14-33-12.json`.
-* `--add-host-to-output-file`: Optional. Add host from URL as suffix to output file name. Example: you
-  set `--output-html-file=/dir/report.html` and target filename will be `/dir/report.www.mydomain.tld.html`. You can
-  combine this option with `--add-timestamp-to-output-file` option as well.
+* `--output=<value>`               Output type. Supported values: `text`, `json`. Default is `text`.
+* `--headers-to-table=<values>`    Comma delimited list of HTTP response headers added to output table. A special case is the possibility to use `Title`, `Keywords` and `Description`. You can set the expected length of the column in parentheses for better look - for example `X-Cache(10)`
+* `--url-column-size=<num>`        Basic URL column width. Default is `80`.
+* `--do-not-truncate-url`          In the text output, long URLs are truncated by default to `--url-column-size` so the table does not wrap due to long URLs. With this option, you can turn off the truncation.
+* `--hide-scheme-and-host`         On text output, hide scheme and host of URLs for more compact view.
+* `--hide-progress-bar`            Hide progress bar visible in text and JSON output for more compact view.
+
+#### Advanced crawler settings:
+
+* `--max-workers=<num>`            Maximum number of concurrent workers (threads). Use carefully. A high number of threads can cause a DoS attack. Default is `3`.
+* `--crawl-assets=<values>`        Comma delimited list of frontend assets you want to crawl too. Otherwise, URLs with an extension are ignored. Supported values: `fonts`, `images`, `styles`, `scripts`, `files`.
+* `--include-regex=<regex>`        Regular expression compatible with PHP preg_match() for URLs that should be included. Argument can be specified multiple times. Example: `--include-regex='/^\/public\//'`
+* `--ignore-regex=<regex>`         Regular expression compatible with PHP preg_match() for URLs that should be ignored. Argument can be specified multiple times. Example: `--ignore-regex='/^.*\/downloads\/.*\.pdf$/i'`
+* `--accept-encoding=<value>`      Custom `Accept-Encoding` request header. Default is `gzip, deflate, br`.
+* `--remove-query-params`          Remove query parameters from found URLs. Useful on websites where a lot of links are made to the same pages, only with different irrelevant query parameters.
+* `--add-random-query-params`      Adds several random query parameters to each URL. With this, it is possible to bypass certain forms of server and CDN caches.
+* `--max-queue-length=<num>`       The maximum length of the waiting URL queue. Increase in case of large websites, but expect higher memory requirements. Default is `2000`.
+* `--max-visited-urls=<num>`       The maximum number of the visited URLs. Increase in case of large websites, but expect higher memory requirements. Default is `5000`.
+* `--max-url-length=<num>`         The maximum supported URL length in chars. Increase in case of very long URLs, but expect higher memory requirements. Default is `2000`.
+
+#### Export settings:
+
+* `--output-html-file=<file>`      File path for HTML output. Extension `.html` is automatically added if not specified.
+* `--output-json-file=<file>`      File path for JSON output. Extension `.json` is automatically added if not specified.
+* `--output-text-file=<file>`      File path for text output. Extension `.txt` is automatically added if not specified.
+* `--add-host-to-output-file`      Add host from initial URL as suffix to output file name. Example: you set `--output-json-file=/dir/report` and target filename will be `/dir/report.www.mydomain.tld.json`.
+* `--add-timestamp-to-output-file` Add timestamp as suffix to output file name. Example: you set `--output-html-file=/dir/report` and target filename will be `/dir/report.2023-10-06.14-33-12.html`.
+
+#### Mailer options:
+
+* `--mail-to=<email>`              Optional but required for mailer activation. Send report to given email addresses. You can specify multiple emails separated by comma.
+* `--mail-from=<email>`            Sender email address. Default is `siteone-website-crawler@your-hostname`.
+* `--mail-smtp-host=<host>`        SMTP host for sending emails. Default is `localhost`.
+* `--mail-smtp-port=<port>`        SMTP port for sending emails. Default is `25`.
+* `--mail-smtp-user=<user>`        SMTP user, if your SMTP server requires authentication.
+* `--mail-smtp-pass=<pass>`        SMTP password, if your SMTP server requires authentication.
 
 #### Mailer options:
 
