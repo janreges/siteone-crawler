@@ -135,7 +135,7 @@ class FormattedTextOutput implements Output
                 $coloredElapsedTime,
                 $coloredSize,
                 $extraHeadersContent
-            ), ' |') . "\n");
+            ), '|') . "\n");
     }
 
     public function addTotalStats(Table $visited): void

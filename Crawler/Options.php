@@ -204,6 +204,18 @@ class Options
         exit(1);
     }
 
+    public function toArray(bool $maskSensitive = true): array
+    {
+        $result = [];
+        foreach ($this as $key => $value) {
+            if ($maskSensitive && in_array($key, ['mailSmtpPass'])) {
+                $value = '***';
+            }
+            $result[$key] = $value;
+        }
+        return $result;
+    }
+
     private static function displayHelp(): void
     {
         echo "\n";

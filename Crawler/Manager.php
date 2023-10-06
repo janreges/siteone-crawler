@@ -145,8 +145,7 @@ class Manager
      * @return Output
      * @throws Exception
      */
-    private
-    function getOutputByOptions(Options $options): Output
+    private function getOutputByOptions(Options $options): Output
     {
         $requiredOutputs = [];
         if ($this->options->outputType == OutputType::FORMATTED_TEXT || $this->options->outputTextFile) {
@@ -154,7 +153,7 @@ class Manager
                 $this->version,
                 $this->startTime,
                 $this->options,
-                $this->command,
+                $this->getSafeCommand(),
                 $this->options->outputType == OutputType::FORMATTED_TEXT
             );
         }
@@ -163,7 +162,7 @@ class Manager
                 $this->version,
                 $this->startTime,
                 $this->options,
-                $this->command,
+                $this->getSafeCommand(),
                 $this->options->outputType == OutputType::JSON
             );
         }
@@ -181,6 +180,15 @@ class Manager
         } else {
             throw new Exception("Unknown output type {$this->options->outputType}");
         }
+    }
+
+    public function getSafeCommand(): string
+    {
+        return preg_replace(
+            ['/(pass[a-z]{0,5})=[^\s]+/i', '/(key[s]?)=[^\s*]+/i', '/(secret[s]?)=[^\s*]+/i'],
+            ['$1=***', '$1=***', '$1=***'],
+            $this->command
+        );
     }
 
 }

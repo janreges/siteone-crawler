@@ -211,7 +211,7 @@ If using macOS with latest arm64 M1/M2 CPU, download arm64
 version [swoole-cli-v4.8.13-macos-arm64.tar.xz](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-macos-arm64.tar.xz),
 unpack and use its precompiled `swoole-cli`.
 
-If using macOS with Intel CPU (x64), download amd64
+If using macOS with Intel CPU (x64), download x64
 version  [swoole-cli-v4.8.13-macos-x64.tar.xz](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-macos-x64.tar.xz),
 unpack and use its precompiled `swoole-cli`.
 

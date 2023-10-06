@@ -45,9 +45,9 @@ class Mailer
                             border-collapse: collapse;
                         }
                     
-                        table, th, td {
-                            border: 1px solid #666666;
-                            padding: 4px;
+                        body table, body table th, body table td {
+                            border: 1px solid #555555;
+                            padding: 3px !important;
                             vertical-align: top;
                             text-align: left;
                         }

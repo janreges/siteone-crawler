@@ -47,7 +47,7 @@ class JsonOutput implements Output
 
     public function addUsedOptions(string $finalUserAgent): void
     {
-        $this->json['options'] = (array)$this->options;
+        $this->json['options'] = $this->options->toArray(true);
         $this->json['crawler']['finalUserAgent'] = $finalUserAgent;
     }
 
