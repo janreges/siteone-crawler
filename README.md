@@ -83,13 +83,13 @@ chmod +x ./swoole-cli
 To run the crawler, execute the `crawler.php` file from the command line with precompiled `swoole-cli` and provide the
 required arguments:
 
-**Basic example**
+### Basic example
 
 ```bash
 ./swoole-cli crawler.php --url=https://mydomain.tld/ --device=mobile
 ```
 
-**Fully-featured example**
+### Fully-featured example
 
 ```bash
 ./swoole-cli crawler.php --url=https://mydomain.tld/ \
@@ -176,18 +176,8 @@ required arguments:
 * `--mail-smtp-user=<user>`        SMTP user, if your SMTP server requires authentication.
 * `--mail-smtp-pass=<pass>`        SMTP password, if your SMTP server requires authentication.
 
-#### Mailer options:
-
 **NOTICE**: For now, only SMTP without encryption is supported, typically running on port 25. If you are interested in
-this tool, we can also implement secure SMTP support, or simply send me a merge request with lightweight implementation.
-
-* `--mail-to=<email>`: Optional but required for mailer activation. Send report to email addresses. You can specify
-  multiple emails separated by comma.
-* `--mail-from=<email>`: Optional. Sender email address. Default is `siteone-website-crawler@your-hostname`.
-* `--mail-smtp-host=<host>`: Optional. SMTP host for sending email. Default is `localhost`.
-* `--mail-smtp-port=<port>`: Optional. SMTP port for sending email. Default is `25`.
-* `--mail-smtp-user=<user>`: Optional. SMTP user, if your SMTP server requires authentication.
-* `--mail-smtp-pass=<pass>`: Optional. SMTP password, if your SMTP server requires authentication.
+this tool, we can also implement secure SMTP support, or simply send me a pull request with lightweight implementation.
 
 ## Other platforms
 
