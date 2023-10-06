@@ -166,7 +166,7 @@ class Options
         echo "--url-column-size=<value> Optional. Basic URL column width. Default is 80.\n";
         echo "--accept-encoding=<value>       Optional. Custom Accept-Encoding. Default is 'gzip, deflate, br'.\n";
         echo "--user-agent=<value>            Optional. Custom user agent. Use quotation marks. If specified, it takes precedence over the device parameter.\n";
-        echo "--headers-to-table=<values>     Optional. Comma delimited list of HTTP response headers added to output table. A specialty is the possibility to use 'Title', 'Keywords' and 'Description'.\n";
+        echo "--headers-to-table=<values>     Optional. Comma delimited list of HTTP response headers added to output table. A specialty is the possibility to use 'Title', 'Keywords' and 'Description'. You can set the expected length of the column in parentheses for better output - for example 'X-Cache(10)'\n";
         echo "--crawl-assets=<values>         Optional. Comma delimited list of frontend assets you want to crawl too. Supported values: '" . implode("', '", AssetType::getAvailableTextTypes()) . "'.\n";
         echo "--max-queue-length=<n>          Optional. The maximum length of the waiting URL queue. Increase in case of large websites, but expect higher memory requirements. Default is 2000.\n";
         echo "--max-visited-urls=<n>          Optional. The maximum number of the visited URLs. Increase in case of large websites, but expect higher memory requirements. Default is 5000.\n";

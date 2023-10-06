@@ -51,7 +51,8 @@ class FormattedTextOutput implements Output
         }
 
         foreach ($this->options->headersToTable as $headerName) {
-            $header .= " | {$headerName}";
+            $headerInfo = Utils::getColumnInfo($headerName);
+            $header .= " | " . str_pad($headerInfo['name'], $headerInfo['size']);
         }
         $header .= "\n";
         echo $header . str_repeat("-", strlen(trim($header))) . "\n";
@@ -88,14 +89,17 @@ class FormattedTextOutput implements Output
                 : str_pad(Utils::getFormattedSize($size), 8);
 
         $extraHeadersContent = '';
-        foreach ($this->options->headersToTable as $headerName) {
+        foreach ($this->options->headersToTable as $header) {
             $value = '';
+            $headerInfo = Utils::getColumnInfo($header);
+            $headerName = $headerInfo['name'];
             if (array_key_exists($headerName, $extraParsedContent)) {
                 $value = trim($extraParsedContent[$headerName]);
             } elseif ($httpClient->headers && array_key_exists(strtolower($headerName), $httpClient->headers)) {
                 $value = trim($httpClient->headers[strtolower($headerName)]);
             }
-            $extraHeadersContent .= (' | ' . str_pad($value, strlen($headerName)));
+
+            $extraHeadersContent .= (' | ' . str_pad($value, $headerInfo['size']));
         }
 
         if ($this->options->addRandomQueryParams) {

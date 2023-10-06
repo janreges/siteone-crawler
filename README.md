@@ -70,7 +70,7 @@ To run the crawler, execute the `crawler.php` file from the command line with pr
   --output=text \
   --max-workers=2 \
   --user-agent="My User-Agent String" \
-  --headers-to-table="X-Cache,Title,Keywords,Description" \
+  --headers-to-table="X-Cache(10),Title,Keywords,Description" \
   --accept-encoding="gzip, deflate" \
   --timeout=5 \
   --url-column-size=100 \
@@ -96,7 +96,7 @@ To run the crawler, execute the `crawler.php` file from the command line with pr
 * `--output=<string>`: Specify the output type. Options: `text` or `json`. Defaults to `text` if not specified.
 * `--max-workers=<num>`: The maximum number of workers for concurrent URL processing. Defaults to `3` if not specified.
 * `--user-agent="<string>"`: The User-Agent string to use for the HTTP requests. If not provided, it defaults based on the `device` argument.
-* `--headers-to-table=<string>`: Specify which extra headers from the HTTP response to display in the table output. Comma delimited. A specialty is the possibility to use `Title`, `Keywords` and `Description`. These are extracted from the HTML response and displayed in the table output.
+* `--headers-to-table=<string>`: Specify which extra headers from the HTTP response to display in the table output. Comma delimited. A specialty is the possibility to use `Title`, `Keywords` and `Description`. These are extracted from the HTML response and displayed in the table output. You can also set the expected length of the column in parentheses for better output - for example 'X-Cache(10)'
 * `--crawl-assets=<string>`: Optional. Comma delimited list of assets you want to crawl too. Supported values: `fonts`, `images`, `styles`, `scripts` and `files` (pdf, etc.). Defaults to empty if not specified so no assets are crawled.
 * `--accept-encoding=<string>`: Accept-Encoding header value. Defaults to `gzip, deflate, br` if not specified.
 * `--timeout=<seconds>`: Timeout duration in seconds for the HTTP requests. Defaults to `3` seconds if not specified.
