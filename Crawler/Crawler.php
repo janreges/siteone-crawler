@@ -141,7 +141,7 @@ class Crawler
             }
 
             // add URL to queue if it's not already there
-            if ($this->isUrlReadyToQueue($urlForQueue)) {
+            if ($this->isUrlSuitableForQueue($urlForQueue)) {
                 $this->addUrlToQueue($urlForQueue);
             }
         }
@@ -246,8 +246,12 @@ class Crawler
         }
     }
 
-    private function isUrlReadyToQueue(string $url): bool
+    private function isUrlSuitableForQueue(string $url): bool
     {
+        if (!$this->isUrlAllowedByRegexs($url)) {
+            return false;
+        }
+
         $urlKey = $this->getUrlKeyForSwooleTable($url);
 
         $isInQueue = $this->queue->exist($urlKey);
@@ -257,6 +261,24 @@ class Crawler
         $parseableAreOnlyHtmlFiles = empty($this->options->crawlAssets);
 
         return !$isInQueue && !$isAlreadyVisited && $isParsable && ($isUrlWithHtml || !$parseableAreOnlyHtmlFiles);
+    }
+
+    private function isUrlAllowedByRegexs(string $url): bool
+    {
+        $isAllowed = $this->options->includeRegex === [];
+        foreach ($this->options->includeRegex as $includeRegex) {
+            if (preg_match($includeRegex, $url) === 1) {
+                $isAllowed = true;
+                break;
+            }
+        }
+        foreach ($this->options->ignoreRegex as $ignoreRegex) {
+            if (preg_match($ignoreRegex, $url) === 1) {
+                $isAllowed = false;
+                break;
+            }
+        }
+        return $isAllowed;
     }
 
     private function addUrlToQueue(string $url): void

@@ -43,6 +43,8 @@ great, and his son is doing great too! ♥
 * Option `--crawl-assets=<values>` to crawl also selected assets (images, fonts, styles, scripts, files).
 * Option `--headers-to-table=<values>` to specify which extra headers from the HTTP response to display in the output
   table.
+* Option `--include-regex=<regexp>` and `--ignore-regex=<regexp>` to include or ignore URLs based on regular expression.
+  Both arguments can be specified multiple times and can be combined.
 * Option `--add-random-query-params` to add random query params to test cache/anti-cache behavior.
 * Option `--remove-query-params` to remove all query parameters from the URLs to skip unwanted dynamic URLs.
 * Option `--hide-scheme-and-host` to hide the scheme and host from the URLs in the output table for more compact output.
@@ -102,6 +104,9 @@ required arguments:
   --max-visited-urls=10000 \
   --max-url-length=5000 \
   --crawl-assets="fonts,images,styles,scripts,files" \
+  --include-regex="/^.*\/technologies.*/" \
+  --include-regex="/^.*\/fashion.*/" \
+  --ignore-regex="/^.*\/downloads\/.*\.pdf$/i" \
   --remove-query-params \
   --add-random-query-params \
   --hide-scheme-and-host \
@@ -149,6 +154,12 @@ required arguments:
   higher memory requirements. Defaults to `5000` if not specified.
 * `--max-url-length=<num>`: The maximum supported URL length in chars. Increase in case of very long URLs with query
   params, but expect higher memory requirements. Defaults to `2000` if not specified.
+* `--include-regex=<regex>`: Optional. Regular expression compatible with PHP preg_match() for URLs that should be
+  included. Argument can be specified multiple times. Example: `--include-regex='/^.*\/public\//'`. If at least one
+  argument is specified, then any URL (except the initial URL) must match at least one regex. Otherwise, the URL is
+  ignored.
+* `--ignore-regex=<regex>`: Optional. Regular expression compatible with PHP preg_match() for URLs that should be
+  ignored. Argument can be specified multiple times. Example: `--ignore-regex='/^.*\/downloads\/.*\.pdf$/i'`.
 * `--add-random-query-params`: Whether to add random query parameters to the URL. This can help in testing cache
   behavior.
 * `--remove-query-params`: Whether to remove all query parameters from the parsed URLs.

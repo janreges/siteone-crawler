@@ -20,6 +20,8 @@ class Options
     public int $maxVisitedUrls = 5000;
     public int $maxUrlLength = 2000;
     public array $crawlAssets = [];
+    public array $includeRegex = [];
+    public array $ignoreRegex = [];
     public bool $addRandomQueryParams = false;
     public bool $removeQueryParams = false;
     public bool $hideSchemeAndHost = false;
@@ -165,7 +167,19 @@ class Options
                 $result->mailSmtpPass = trim(substr($arg, 17), ' "\'');
             } else if (str_starts_with($arg, '--mail-from=')) {
                 $result->mailFrom = trim(substr($arg, 12), ' "\'');
-            } elseif (str_starts_with($arg, '-')) {
+            } else if (str_starts_with($arg, '--include-regex=')) {
+                $regex = trim(substr($arg, 16), ' "\'');
+                if (@preg_match($regex, '') === false) {
+                    self::errorExit("Invalid regular expression '{$regex}' in --include-regex It must be valid PCRE regex.");
+                }
+                $result->includeRegex[] = $regex;
+            } else if (str_starts_with($arg, '--ignore-regex=')) {
+                $regex = trim(substr($arg, 15), ' "\'');
+                if (@preg_match($regex, '') === false) {
+                    self::errorExit("Invalid regular expression '{$regex}' in --ignore-regex. It must be valid PCRE regex.");
+                }
+                $result->ignoreRegex[] = $regex;
+            } else if (str_starts_with($arg, '-')) {
                 self::errorExit("Unknown parameter '{$arg}'");
             }
         }
@@ -235,6 +249,8 @@ class Options
         echo "--output-text-file=<file>       Optional. File name for text output. Extension `.txt` is automatically added if not specified.\n";
         echo "--add-timestamp-to-output-file  Optional. Add timestamp suffix to output file name. Example: you set '--output-json-file=/dir/report.json' and target filename will be '/dir/report.2023-10-06.14-33-12.html'.\n";
         echo "--add-host-to-output-file       Optional. Add host from URL suffix to output file name. Example: you set '--output-json-file=/dir/report.json' and target filename will be '/dir/report.www.mydomain.tld.html'.\n";
+        echo "--include-regex=<regex>       Optional. Regular expression compatible with PHP preg_match() for URLs that should be included. Argument can be specified multiple times. Example: --include-regex='/^\/public\//'\n";
+        echo "--ignore-regex=<regex>        Optional. Regular expression compatible with PHP preg_match() for URLs that should be ignored. Argument can be specified multiple times. Example: --ignore-regex='/^.*\/downloads\/.*\.pdf$/i'\n";
         echo "--max-queue-length=<n>          Optional. The maximum length of the waiting URL queue. Increase in case of large websites, but expect higher memory requirements. Default is 2000.\n";
         echo "--max-visited-urls=<n>          Optional. The maximum number of the visited URLs. Increase in case of large websites, but expect higher memory requirements. Default is 5000.\n";
         echo "--max-url-length=<n>            Optional. The maximum supported URL length in chars. Increase in case of very long URLs, but expect higher memory requirements. Default is 2000.\n";
