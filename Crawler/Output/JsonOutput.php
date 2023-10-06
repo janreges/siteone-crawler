@@ -103,23 +103,25 @@ class JsonOutput implements Output
 
         $this->json['results'][] = $row;
 
-        // put progress to stderr
-        list($done, $total) = explode('/', $progressStatus);
-        $progressToStdErr = sprintf(
-            "\rProgress: %s | %s %s | %s",
-            str_pad($progressStatus, 7),
-            Utils::getProgressBar($done, $total, 25),
-            number_format($elapsedTime, 3, '.') . " sec",
-            $url
-        );
-        $maxStdErrLength = max($maxStdErrLength, strlen($progressToStdErr));
-        $progressContent = str_pad($progressToStdErr, $maxStdErrLength);
+        if (!$this->options->hideProgressBar) {
+            // put progress to stderr
+            list($done, $total) = explode('/', $progressStatus);
+            $progressToStdErr = sprintf(
+                "\rProgress: %s | %s %s | %s",
+                str_pad($progressStatus, 7),
+                Utils::getProgressBar($done, $total, 25),
+                number_format($elapsedTime, 3, '.') . " sec",
+                $url
+            );
+            $maxStdErrLength = max($maxStdErrLength, strlen($progressToStdErr));
+            $progressContent = str_pad($progressToStdErr, $maxStdErrLength);
 
-        // cygwin does not support stderr, so we just print status to stdout
-        if (stripos(PHP_OS, 'CYGWIN') !== false) {
-            echo $progressContent."\n";
-        } else {
-            fwrite(STDERR, $progressContent);
+            // cygwin does not support stderr, so we just print status to stdout
+            if (stripos(PHP_OS, 'CYGWIN') !== false) {
+                echo $progressContent . "\n";
+            } else {
+                fwrite(STDERR, $progressContent);
+            }
         }
     }
 

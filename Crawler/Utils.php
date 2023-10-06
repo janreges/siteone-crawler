@@ -28,7 +28,7 @@ class Utils
 
         foreach ($relativeSegments as $segment) {
             if ($segment === '..') {
-                // Odebrání posledního segmentu z base URL, pokud se jedná o proteckování na úroveň výše
+                // remove last segment from base URL if it is a 'dotting' to the level above
                 array_pop($baseSegments);
             } else {
                 $baseSegments[] = $segment;
@@ -156,7 +156,7 @@ class Utils
     {
         $percentage = ($done / $total) * 100;
         $filledSegments = round(($done / $total) * $segments);
-        $progressBar = str_repeat('>', $filledSegments) . str_repeat(' ', $segments - $filledSegments + 1);
+        $progressBar = str_repeat('>', $filledSegments) . str_repeat(' ', $segments - $filledSegments);
         return sprintf("%s|%s|", str_pad(intval($percentage) . '%', 5), $progressBar);
     }
 }

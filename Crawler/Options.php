@@ -11,8 +11,8 @@ class Options
     public DeviceType $device = DeviceType::DESKTOP;
     public OutputType $outputType = OutputType::FORMATTED_TEXT;
     public int $maxWorkers = 3;
-    public int $timeout = 10;
-    public int $tableUrlColumnSize = 100;
+    public int $timeout = 3;
+    public int $urlColumnSize = 80;
     public string $acceptEncoding = 'gzip, deflate, br';
     public ?string $userAgent = null;
     public array $headersToTable = [];
@@ -23,7 +23,8 @@ class Options
     public bool $addRandomQueryParams = false;
     public bool $removeQueryParams = false;
     public bool $hideSchemeAndHost = false;
-    public bool $truncateUrlToColumnSize = false;
+    public bool $doNotTruncateUrl = false;
+    public bool $hideProgressBar = false;
 
     private static array $required = ["url"];
     private static bool $jsonOutput = false;
@@ -74,10 +75,10 @@ class Options
                 if ($result->timeout <= 0) {
                     self::errorExit("Invalid value '{$result->timeout}' (minimum is 1) for --timeout");
                 }
-            } else if (str_starts_with($arg, '--table-url-column-size=')) {
-                $result->tableUrlColumnSize = (int)substr($arg, 24);
-                if ($result->tableUrlColumnSize <= 10) {
-                    self::errorExit("Invalid value '{$result->tableUrlColumnSize}' (minimum is 10) for --table-url-column-size");
+            } else if (str_starts_with($arg, '--url-column-size=')) {
+                $result->urlColumnSize = (int)substr($arg, 18);
+                if ($result->urlColumnSize <= 10) {
+                    self::errorExit("Invalid value '{$result->urlColumnSize}' (minimum is 10) for --url-column-size");
                 }
             } else if (str_starts_with($arg, '--accept-encoding=')) {
                 $result->acceptEncoding = trim(substr($arg, 18), ' "\'');
@@ -115,8 +116,10 @@ class Options
                 $result->removeQueryParams = true;
             } else if (str_starts_with($arg, '--hide-scheme-and-host')) {
                 $result->hideSchemeAndHost = true;
-            } else if (str_starts_with($arg, '--truncate-url-to-column-size')) {
-                $result->truncateUrlToColumnSize = true;
+            } else if (str_starts_with($arg, '--do-not-truncate-url')) {
+                $result->doNotTruncateUrl = true;
+            } else if (str_starts_with($arg, '--hide-progress-bar')) {
+                $result->hideProgressBar = true;
             } elseif (str_starts_with($arg, '-')) {
                 self::errorExit("Unknown parameter '{$arg}'");
             }
@@ -159,8 +162,8 @@ class Options
         echo "--device=<device>               Optional. Device for choosing a predefined user-agent. Ignored when --user-agent is defined. Supported values: '" . implode("', '", DeviceType::getAvailableTextTypes()) . "'. Defaults is 'desktop'.\n";
         echo "--output=<value>                Optional. Output type. Supported values: '" . implode("', '", OutputType::getAvailableTextTypes()) . "'. Default is 'text'.\n";
         echo "--max-workers=<n>               Optional. Maximum number of workers (threads). Use carefully. A high number of threads will cause a DoS attack. Default is 3.\n";
-        echo "--timeout=<n>                   Optional. Timeout in seconds. Default is 10.\n";
-        echo "--table-url-column-size=<value> Optional. Basic URL column width. Default is 100.\n";
+        echo "--timeout=<n>                   Optional. Timeout in seconds. Default is 3.\n";
+        echo "--url-column-size=<value> Optional. Basic URL column width. Default is 80.\n";
         echo "--accept-encoding=<value>       Optional. Custom Accept-Encoding. Default is 'gzip, deflate, br'.\n";
         echo "--user-agent=<value>            Optional. Custom user agent. Use quotation marks. If specified, it takes precedence over the device parameter.\n";
         echo "--headers-to-table=<values>     Optional. Comma delimited list of HTTP response headers added to output table. A specialty is the possibility to use 'Title', 'Keywords' and 'Description'.\n";
@@ -170,8 +173,9 @@ class Options
         echo "--max-url-length=<n>            Optional. The maximum supported URL length in chars. Increase in case of very long URLs, but expect higher memory requirements. Default is 2000.\n";
         echo "--remove-query-params           Optional. Remove query parameters from found URLs.\n";
         echo "--add-random-query-params       Optional. Adds several random query parameters to each URL.\n";
-        echo "--hide-scheme-and-host          Optional. On output, hide scheme and host of URLs for more compact view.\n";
-        echo "--truncate-url-to-column-size   Optional. On output, trim the URL to the length of the column, otherwise a long URL will break the look of the table.\n";
+        echo "--hide-scheme-and-host          Optional. On text output, hide scheme and host of URLs for more compact view.\n";
+        echo "--do-not-truncate-url           Optional. In the text output, long URLs are truncated by default so that the table does not wrap. With this option, you can turn off the truncation.\n";
+        echo "--hide-progress-bar             Optional. Hide progress bar visible in text and JSON output for more compact view.\n";
         echo "\n";
         echo "Version: " . VERSION . "\n";
         echo "Created with ♥ by Ján Regeš (jan.reges@siteone.cz) [10/2023]\n";

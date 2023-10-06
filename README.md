@@ -27,7 +27,8 @@ Ehmmmm... Enough of the marketing bullshit! What was really the most real reason
 * Option `--add-random-query-params` to add random query params to test cache/anti-cache behavior.
 * Option `--remove-query-params` to remove all query parameters from the URLs to skip unwanted dynamic URLs.
 * Option `--hide-scheme-and-host` to hide the scheme and host from the URLs in the output table for more compact output.
-* Option `--truncate-url-to-column-size` to truncate the URLs to the specified `--table-url-column-size=<size>` in the output table.
+* Option `--do-not-truncate-url` to truncate the URLs to the specified `--url-column-size=<size>` in the output table.
+* Option `--hide-progress-bar` to hide progress bar visible in text and JSON output for more compact view.
 * Beautifully **formatted and colored console output** with highlighted status codes and slow response times.
 * Displays **execution statistics** at the end, including AVG, MIN, and MAX response times and breakdown by HTTP status codes.
 * Supports **HTTP/1.1** and **HTTP/2**. Supports **HTTP** and **HTTPS**.
@@ -72,7 +73,7 @@ To run the crawler, execute the `crawler.php` file from the command line with pr
   --headers-to-table="X-Cache,Title,Keywords,Description" \
   --accept-encoding="gzip, deflate" \
   --timeout=5 \
-  --table-url-column-size=80 \
+  --url-column-size=100 \
   --max-queue-length=3000 \
   --max-visited-urls=10000 \
   --max-url-length=5000 \
@@ -80,7 +81,7 @@ To run the crawler, execute the `crawler.php` file from the command line with pr
   --remove-query-params \
   --add-random-query-params \
   --hide-scheme-and-host \
-  --truncate-url-to-column-size
+  --do-not-truncate-url
 ```
 
 ### Arguments
@@ -98,15 +99,16 @@ To run the crawler, execute the `crawler.php` file from the command line with pr
 * `--headers-to-table=<string>`: Specify which extra headers from the HTTP response to display in the table output. Comma delimited. A specialty is the possibility to use `Title`, `Keywords` and `Description`. These are extracted from the HTML response and displayed in the table output.
 * `--crawl-assets=<string>`: Optional. Comma delimited list of assets you want to crawl too. Supported values: `fonts`, `images`, `styles`, `scripts` and `files` (pdf, etc.). Defaults to empty if not specified so no assets are crawled.
 * `--accept-encoding=<string>`: Accept-Encoding header value. Defaults to `gzip, deflate, br` if not specified.
-* `--timeout=<seconds>`: Timeout duration in seconds for the HTTP requests. Defaults to `10` seconds if not specified.
-* `--table-url-column-size=<num>`: Basic URL column size in chars. Defaults to `100` chars if not specified.
+* `--timeout=<seconds>`: Timeout duration in seconds for the HTTP requests. Defaults to `3` seconds if not specified.
+* `--url-column-size=<num>`: Basic URL column size in chars. Defaults to `80` chars if not specified.
 * `--max-queue-length=<num>`: The maximum length of the waiting URL queue. Increase in case of large websites, but expect higher memory requirements. Defaults to `2000` if not specified.
 * `--max-visited-urls=<num>`: The maximum number of the visited URLs. Increase in case of large websites, but expect higher memory requirements. Defaults to `5000` if not specified.
 * `--max-url-length=<num>`: The maximum supported URL length in chars. Increase in case of very long URLs with query params, but expect higher memory requirements. Defaults to `2000` if not specified.
 * `--add-random-query-params`: Whether to add random query parameters to the URL. This can help in testing cache behavior.
 * `--remove-query-params`: Whether to remove all query parameters from the parsed URLs.
 * `--hide-scheme-and-host`: If set, URLs displayed in the output table will not include the domain.
-* `--truncate-url-to-column-size`: If set, URLs displayed in the output table will be truncated to the specified column size. Otherwise, they will be wrapped to the next line.
+* `--do-not-truncate-url`: Long URLs are truncated by default to column size so that the table does not wrap. With this option, you can turn off the truncation.
+* `--hide-progress-bar`: Hide progress bar visible in text and JSON output for more compact view.
 
 ## Other platforms
 
@@ -168,7 +170,7 @@ Output is truncated (only 3 URLs in results) for better readability.
     "name": "SiteOne Website Crawler",
     "version": "2023.10.2",
     "executedAt": "2023-10-05 16:50:27",
-    "command": "crawler.php --url=https:\/\/www.siteone.io\/ --headers-to-table=Title --max-workers=2 --truncate-url-to-column-size --table-url-column-size=72 --output=json"
+    "command": "crawler.php --url=https:\/\/www.siteone.io\/ --headers-to-table=Title --max-workers=2 --do-not-truncate-url --url-column-size=72 --output=json"
   },
   "options": {
     "url": "https:\/\/www.siteone.io\/",
@@ -176,7 +178,7 @@ Output is truncated (only 3 URLs in results) for better readability.
     "outputType": "json",
     "maxWorkers": 2,
     "timeout": 10,
-    "tableUrlColumnSize": 72,
+    "urlColumnSize": 72,
     "acceptEncoding": "gzip, deflate, br",
     "userAgent": null,
     "headersToTable": [
@@ -189,7 +191,7 @@ Output is truncated (only 3 URLs in results) for better readability.
     "addRandomQueryParams": false,
     "removeQueryParams": false,
     "hideSchemeAndHost": false,
-    "truncateUrlToColumnSize": true
+    "doNotTruncateUrl": true
   },
   "results": [
     {

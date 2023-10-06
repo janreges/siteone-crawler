@@ -45,7 +45,11 @@ class FormattedTextOutput implements Output
 
     public function printTableHeader(): void
     {
-        $header = str_pad("URL", $this->options->tableUrlColumnSize) . " |" . " Status " . "|" . " Time  " . "|" . " Size     ";
+        $header = str_pad("URL", $this->options->urlColumnSize) . " |" . " Status " . "|" . " Time  " . "|" . " Size     ";
+        if (!$this->options->hideProgressBar) {
+            $header = str_pad("Progress report", 26) . "| " . $header;
+        }
+
         foreach ($this->options->headersToTable as $headerName) {
             $header .= " | {$headerName}";
         }
@@ -88,7 +92,7 @@ class FormattedTextOutput implements Output
             $value = '';
             if (array_key_exists($headerName, $extraParsedContent)) {
                 $value = trim($extraParsedContent[$headerName]);
-            } elseif (array_key_exists(strtolower($headerName), $httpClient->headers)) {
+            } elseif ($httpClient->headers && array_key_exists(strtolower($headerName), $httpClient->headers)) {
                 $value = trim($httpClient->headers[strtolower($headerName)]);
             }
             $extraHeadersContent .= (' | ' . str_pad($value, strlen($headerName)));
@@ -98,13 +102,26 @@ class FormattedTextOutput implements Output
             $urlForTable .= Utils::getColorText('+%random-query%', 'gray');
         }
 
-        if ($this->options->truncateUrlToColumnSize) {
-            $urlForTable = Utils::truncateInTwoThirds($urlForTable, $this->options->tableUrlColumnSize, '...');
+        if (!$this->options->doNotTruncateUrl) {
+            $urlForTable = Utils::truncateInTwoThirds($urlForTable, $this->options->urlColumnSize, '...');
+        }
+
+        // put progress to stderr
+        $progressContent = '';
+        if (!$this->options->hideProgressBar) {
+            list($done, $total) = explode('/', $progressStatus);
+            $progressToStdErr = sprintf(
+                "%s | %s",
+                str_pad($progressStatus, 7),
+                Utils::getProgressBar($done, $total, 10)
+            );
+            $progressContent = str_pad($progressToStdErr, 17);
         }
 
         echo trim(sprintf(
-                '%s | %s | %s | %s %s',
-                str_pad($urlForTable, $this->options->tableUrlColumnSize),
+                '%s %s | %s | %s | %s %s',
+                $progressContent,
+                str_pad($urlForTable, $this->options->urlColumnSize),
                 $coloredStatus,
                 $coloredElapsedTime,
                 $coloredSize,
