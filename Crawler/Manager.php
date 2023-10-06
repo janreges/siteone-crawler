@@ -39,13 +39,13 @@ class Manager
      */
     public function run(): void
     {
-        $this->output->printBanner();
-        $this->output->printUsedOptions();
+        $this->output->addBanner();
+        $this->output->addUsedOptions();
 
         $crawler = new Crawler($this->options, $this->output);
         $crawler->run();
 
-        $this->output->printEnd();
+        $this->output->end();
     }
 
     /**

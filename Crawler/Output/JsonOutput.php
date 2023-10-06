@@ -31,17 +31,17 @@ class JsonOutput implements Output
         $this->command = $command;
     }
 
-    public function printBanner(): void
+    public function addBanner(): void
     {
         $this->json['crawler'] = ['name' => 'SiteOne Website Crawler', 'version' => $this->version, 'executedAt' => date('Y-m-d H:i:s'), 'command' => $this->command];
     }
 
-    public function printUsedOptions(): void
+    public function addUsedOptions(): void
     {
         $this->json['options'] = (array)$this->options;
     }
 
-    public function printTotalStats(Table $visited): void
+    public function addTotalStats(Table $visited): void
     {
         fwrite(STDERR, "\n\n");
 
@@ -75,12 +75,12 @@ class JsonOutput implements Output
         ];
     }
 
-    public function printTableHeader(): void
+    public function addTableHeader(): void
     {
         $this->json['results'] = [];
     }
 
-    public function printTableRow(Client $httpClient, string $url, int $status, float $elapsedTime, int $size, array $extraParsedContent, string $progressStatus): void
+    public function addTableRow(Client $httpClient, string $url, int $status, float $elapsedTime, int $size, array $extraParsedContent, string $progressStatus): void
     {
         static $maxStdErrLength = 0;
         $row = [
@@ -125,7 +125,7 @@ class JsonOutput implements Output
         }
     }
 
-    public function printError(string $text): void
+    public function addError(string $text): void
     {
         if (!isset($this->json['error'])) {
             $this->json['error'] = [];
@@ -133,7 +133,7 @@ class JsonOutput implements Output
         $this->json['error'][] = date('Y-m-d H:i:s') . ' | ' . $text;
     }
 
-    public function printEnd(): void
+    public function end(): void
     {
         $json = json_encode($this->json, JSON_PRETTY_PRINT | JSON_INVALID_UTF8_IGNORE);
 

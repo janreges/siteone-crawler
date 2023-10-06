@@ -7,17 +7,17 @@ use Swoole\Table;
 
 interface Output
 {
-    public function printBanner(): void;
+    public function addBanner(): void;
 
-    public function printUsedOptions(): void;
+    public function addUsedOptions(): void;
 
-    public function printTableHeader(): void;
+    public function addTableHeader(): void;
 
-    public function printTableRow(Client $httpClient, string $url, int $status, float $elapsedTime, int $size, array $extraParsedContent, string $progressStatus): void;
+    public function addTableRow(Client $httpClient, string $url, int $status, float $elapsedTime, int $size, array $extraParsedContent, string $progressStatus): void;
 
-    public function printTotalStats(Table $visited): void;
+    public function addTotalStats(Table $visited): void;
 
-    public function printError(string $text): void;
+    public function addError(string $text): void;
 
-    public function printEnd(): void;
+    public function end(): void;
 }

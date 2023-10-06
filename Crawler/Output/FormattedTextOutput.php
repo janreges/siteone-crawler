@@ -29,7 +29,7 @@ class FormattedTextOutput implements Output
         $this->command = $command;
     }
 
-    public function printBanner(): void
+    public function addBanner(): void
     {
         echo "===========================\n";
         echo "= SiteOne Website Crawler =\n";
@@ -38,12 +38,12 @@ class FormattedTextOutput implements Output
         echo "===========================\n\n";
     }
 
-    public function printUsedOptions(): void
+    public function addUsedOptions(): void
     {
         // echo "Used options: " . Utils::getColorText(print_r($this->options, true), 'gray') . "\n";
     }
 
-    public function printTableHeader(): void
+    public function addTableHeader(): void
     {
         $header = str_pad("URL", $this->options->urlColumnSize) . " |" . " Status " . "|" . " Time  " . "|" . " Size     ";
         if (!$this->options->hideProgressBar) {
@@ -57,7 +57,7 @@ class FormattedTextOutput implements Output
         echo $header . str_repeat("-", strlen(trim($header))) . "\n";
     }
 
-    public function printTableRow(Client $httpClient, string $url, int $status, float $elapsedTime, int $size, array $extraParsedContent, string $progressStatus): void
+    public function addTableRow(Client $httpClient, string $url, int $status, float $elapsedTime, int $size, array $extraParsedContent, string $progressStatus): void
     {
         $urlForTable = $this->options->hideSchemeAndHost ? (preg_replace('/^https?:\/\/[^\/]+\//i', '/', $url)) : $url;
 
@@ -129,7 +129,7 @@ class FormattedTextOutput implements Output
             ), ' |') . "\n";
     }
 
-    public function printTotalStats(Table $visited): void
+    public function addTotalStats(Table $visited): void
     {
         $info = [
             'totalUrls' => $visited->count(),
@@ -168,12 +168,12 @@ class FormattedTextOutput implements Output
         echo str_repeat('=', 80) . "\n";
     }
 
-    public function printError(string $text): void
+    public function addError(string $text): void
     {
         echo Utils::getColorText($text, 'red') . "\n";
     }
 
-    public function printEnd(): void
+    public function end(): void
     {
         // nothing to do
     }

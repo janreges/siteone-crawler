@@ -68,7 +68,7 @@ class Crawler
         $this->addUrlToQueue($this->options->url);
 
         // print table header
-        $this->output->printTableHeader();
+        $this->output->addTableHeader();
 
         // start recursive coroutine to process URLs
         Coroutine\run(function () {
@@ -224,11 +224,11 @@ class Crawler
 
         // print table row to output
         $progressStatus = $this->visited->count() . '/' . ($this->queue->count() + $this->visited->count());
-        $this->output->printTableRow($client, $absoluteUrl, $status, $elapsedTime, $bodySize, $extraParsedContent, $progressStatus);
+        $this->output->addTableRow($client, $absoluteUrl, $status, $elapsedTime, $bodySize, $extraParsedContent, $progressStatus);
 
         // check if crawler is done and exit or start new coroutine to process next URL
         if ($this->queue->count() === 0 && $this->getActiveWorkersNumber() === 0) {
-            $this->output->printTotalStats($this->visited);
+            $this->output->addTotalStats($this->visited);
             Coroutine::cancel(Coroutine::getCid());
         } else {
             while ($this->getActiveWorkersNumber() < $this->options->maxWorkers && $this->queue->count() > 0) {
