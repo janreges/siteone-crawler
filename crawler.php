@@ -10,7 +10,7 @@ spl_autoload_register(function ($class) {
     require_once($classFile);
 });
 
-const VERSION = '2023.10.2';
+const VERSION = '2023.10.3';
 $startTime = microtime(true);
 
 // parse input parameters with internal error handling and output

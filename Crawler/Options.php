@@ -26,6 +26,19 @@ class Options
     public bool $doNotTruncateUrl = false;
     public bool $hideProgressBar = false;
 
+    public ?string $outputHtmlFile = null;
+    public ?string $outputJsonFile = null;
+    public ?string $outputTextFile = null;
+    public bool $addTimestampToOutputFile = false;
+    public bool $addHostToOutputFile = false;
+
+    public ?array $mailTo = null;
+    public string $mailSmtpHost = 'localhost';
+    public int $mailSmtpPort = 25;
+    public ?string $mailSmtpUser = null;
+    public ?string $mailSmtpPass = null;
+    public string $mailFrom = 'siteone-website-crawler@your-hostname';
+
     private static array $required = ["url"];
     private static bool $jsonOutput = false;
 
@@ -37,6 +50,11 @@ class Options
     public function hasCrawlAsset(AssetType $assetType): bool
     {
         return in_array($assetType, $this->crawlAssets);
+    }
+
+    public function mailerIsActivated(): bool
+    {
+        return $this->mailTo !== null;
     }
 
     public static function parse(array $argv): self
@@ -65,7 +83,7 @@ class Options
                 } catch (\Exception $e) {
                     self::errorExit($e->getMessage());
                 }
-            }else if (str_starts_with($arg, '--max-workers=')) {
+            } else if (str_starts_with($arg, '--max-workers=')) {
                 $result->maxWorkers = (int)substr($arg, 14);
                 if ($result->maxWorkers <= 0) {
                     self::errorExit("Invalid value '{$result->maxWorkers}' (minimum is 1) for --max-workers");
@@ -95,6 +113,16 @@ class Options
                         self::errorExit($e->getMessage());
                     }
                 }
+            } else if (str_starts_with($arg, '--output-html-file=')) {
+                $result->outputHtmlFile = trim(substr($arg, 19), ' "\'');
+            } else if (str_starts_with($arg, '--output-json-file=')) {
+                $result->outputJsonFile = trim(substr($arg, 19), ' "\'');
+            } else if (str_starts_with($arg, '--output-text-file=')) {
+                $result->outputTextFile = trim(substr($arg, 19), ' "\'');
+            } else if (str_starts_with($arg, '--add-timestamp-to-output-file')) {
+                $result->addTimestampToOutputFile = true;
+            } else if (str_starts_with($arg, '--add-host-to-output-file')) {
+                $result->addHostToOutputFile = true;
             } else if (str_starts_with($arg, '--max-queue-length=')) {
                 $result->maxQueueLength = (int)substr($arg, 19);
                 if ($result->maxQueueLength < 10) {
@@ -120,9 +148,31 @@ class Options
                 $result->doNotTruncateUrl = true;
             } else if (str_starts_with($arg, '--hide-progress-bar')) {
                 $result->hideProgressBar = true;
+            } else if (str_starts_with($arg, '--mail-to=')) {
+                $result->mailTo = explode(',', str_replace(' ', '', trim(substr($arg, 10), ' "\'')));
+                foreach ($result->mailTo as $email) {
+                    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                        self::errorExit("Invalid email '{$email}' in --mail-to");
+                    }
+                }
+            } else if (str_starts_with($arg, '--mail-smtp-host=')) {
+                $result->mailSmtpHost = trim(substr($arg, 17), ' "\'');
+            } else if (str_starts_with($arg, '--mail-smtp-port=')) {
+                $result->mailSmtpPort = intval(trim(substr($arg, 17), ' "\''));
+            } else if (str_starts_with($arg, '--mail-smtp-user=')) {
+                $result->mailSmtpUser = trim(substr($arg, 17), ' "\'');
+            } else if (str_starts_with($arg, '--mail-smtp-pass=')) {
+                $result->mailSmtpPass = trim(substr($arg, 17), ' "\'');
+            } else if (str_starts_with($arg, '--mail-from=')) {
+                $result->mailFrom = trim(substr($arg, 12), ' "\'');
             } elseif (str_starts_with($arg, '-')) {
                 self::errorExit("Unknown parameter '{$arg}'");
             }
+        }
+
+        // update @your-hostname to real hostname if mailer is activated
+        if ($result->mailerIsActivated() && str_contains($result->mailFrom, '@your-hostname')) {
+            $result->mailFrom = str_replace('@your-hostname', '@' . gethostname(), $result->mailFrom);
         }
 
         // Checking required parameters
@@ -140,7 +190,7 @@ class Options
         $errorContent = "\nERROR: " . trim($message) . "\n";
 
         if (self::$jsonOutput) {
-            echo json_encode(['error' => $errorContent], JSON_PRETTY_PRINT|JSON_INVALID_UTF8_IGNORE);
+            echo json_encode(['error' => $errorContent], JSON_PRETTY_PRINT | JSON_INVALID_UTF8_IGNORE);
             exit(1);
         }
 
@@ -168,6 +218,11 @@ class Options
         echo "--user-agent=<value>            Optional. Custom user agent. Use quotation marks. If specified, it takes precedence over the device parameter.\n";
         echo "--headers-to-table=<values>     Optional. Comma delimited list of HTTP response headers added to output table. A specialty is the possibility to use 'Title', 'Keywords' and 'Description'. You can set the expected length of the column in parentheses for better output - for example 'X-Cache(10)'\n";
         echo "--crawl-assets=<values>         Optional. Comma delimited list of frontend assets you want to crawl too. Supported values: '" . implode("', '", AssetType::getAvailableTextTypes()) . "'.\n";
+        echo "--output-html-file=<file>       Optional. File name for HTML output. Extension `.html` is automatically added if not specified.\n";
+        echo "--output-json-file=<file>       Optional. File name for JSON output. Extension `.json` is automatically added if not specified.\n";
+        echo "--output-text-file=<file>       Optional. File name for text output. Extension `.txt` is automatically added if not specified.\n";
+        echo "--add-timestamp-to-output-file  Optional. Add timestamp suffix to output file name. Example: you set '--output-json-file=/dir/report.json' and target filename will be '/dir/report.2023-10-06.14-33-12.html'.\n";
+        echo "--add-host-to-output-file       Optional. Add host from URL suffix to output file name. Example: you set '--output-json-file=/dir/report.json' and target filename will be '/dir/report.www.mydomain.tld.html'.\n";
         echo "--max-queue-length=<n>          Optional. The maximum length of the waiting URL queue. Increase in case of large websites, but expect higher memory requirements. Default is 2000.\n";
         echo "--max-visited-urls=<n>          Optional. The maximum number of the visited URLs. Increase in case of large websites, but expect higher memory requirements. Default is 5000.\n";
         echo "--max-url-length=<n>            Optional. The maximum supported URL length in chars. Increase in case of very long URLs, but expect higher memory requirements. Default is 2000.\n";
@@ -177,7 +232,15 @@ class Options
         echo "--do-not-truncate-url           Optional. In the text output, long URLs are truncated by default so that the table does not wrap. With this option, you can turn off the truncation.\n";
         echo "--hide-progress-bar             Optional. Hide progress bar visible in text and JSON output for more compact view.\n";
         echo "\n";
+        echo "HTML report mailer options:\n";
+        echo "--mail-to=<email>               Optional but required for mailer activation. Send report to email addresses. You can specify multiple emails separated by comma.\n";
+        echo "--mail-smtp-host=<host>         Optional. SMTP host for sending email. Default is 'localhost'.\n";
+        echo "--mail-smtp-port=<port>         Optional. SMTP port for sending email. Default is 25.\n";
+        echo "--mail-smtp-user=<user>         Optional. SMTP user, if your SMTP server requires authentication.\n";
+        echo "--mail-smtp-pass=<pass>         Optional. SMTP password, if your SMTP server requires authentication.\n";
+        echo "--mail-from=<email>             Optional. Sender email address. Default is 'siteone-website-crawler@your-hostname'.\n";
+        echo "\n";
         echo "Version: " . VERSION . "\n";
-        echo "Created with ♥ by Ján Regeš (jan.reges@siteone.cz) [10/2023]\n";
+        echo "Created with ♥ by Ján Regeš (jan.reges@siteone.cz) from www.SiteOne.io (Czech Republic) [10/2023]\n";
     }
 }

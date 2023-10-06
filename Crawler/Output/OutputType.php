@@ -6,6 +6,7 @@ enum OutputType implements \JsonSerializable
 {
     case FORMATTED_TEXT;
     case JSON;
+    case MULTI;
 
     public static function fromText(string $text): self
     {
@@ -33,6 +34,8 @@ enum OutputType implements \JsonSerializable
             return 'text';
         } elseif ($this === self::JSON) {
             return 'json';
+        } elseif ($this === self::MULTI) {
+            return 'multi';
         } else {
             throw new \Exception("Unknown output type '{$this}'");
         }

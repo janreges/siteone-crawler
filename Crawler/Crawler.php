@@ -14,7 +14,7 @@ class Crawler
     private Options $options;
     private Output $output;
 
-    private Table $workers;
+    private Table $statusTable;
     private Table $queue;
     private Table $visited;
 
@@ -39,10 +39,11 @@ class Crawler
      */
     private function init(): void
     {
-        $this->workers = new Table(1);
-        $this->workers->column('workers', Table::TYPE_INT, 2);
-        $this->workers->create();
-        $this->workers->set('1', ['workers' => 0]);
+        $this->statusTable = new Table(1);
+        $this->statusTable->column('workers', Table::TYPE_INT, 2);
+        $this->statusTable->column('doneUrls', Table::TYPE_INT, 8);
+        $this->statusTable->create();
+        $this->statusTable->set('1', ['workers' => 0, 'doneUrls' => 0]);
 
         $this->queue = new Table($this->options->maxQueueLength);
         $this->queue->column('url', Table::TYPE_STRING, $this->options->maxUrlLength);
@@ -189,10 +190,11 @@ class Crawler
         }
 
         // increment workers count
-        $this->workers->incr('1', 'workers');
+        $this->statusTable->incr('1', 'workers');
 
         $start = microtime(true);
         $parsedUrl = ParsedUrl::parse($url);
+        $isAssetUrl = $parsedUrl->extension && stripos($parsedUrl->extension, 'html') === false;
 
         $absoluteUrl = $this->initialParsedUrl->scheme . '://' . $this->initialParsedUrl->host . ($this->initialParsedUrl->port !== 80 && $this->initialParsedUrl->port !== 443 ? ':' . $this->initialParsedUrl->port : '') . $parsedUrl->path;
         $finalUrlForHttpClient = $this->options->addRandomQueryParams ? Utils::addRandomQueryParams($parsedUrl->path) : $parsedUrl->path;
@@ -202,15 +204,21 @@ class Crawler
         $client->setHeaders(['User-Agent' => $this->finalUserAgent]);
         $client->setHeaders(['Accept-Encoding' => $this->options->acceptEncoding]);
         $client->set(['timeout' => $this->options->timeout]);
-        $client->get($finalUrlForHttpClient);
+        $client->setMethod($isAssetUrl ? 'HEAD' : 'GET');
+        $client->execute($finalUrlForHttpClient);
 
         $body = $client->body;
         $status = $client->statusCode;
         $elapsedTime = microtime(true) - $start;
-        $bodySize = $body ? strlen($body) : 0;
+
+        if ($isAssetUrl && isset($client->headers['content-length'])) {
+            $bodySize = (int)$client->headers['content-length'];
+        } else {
+            $bodySize = $body ? strlen($body) : 0;
+        }
 
         // decrement workers count after request is done
-        $this->workers->decr('1', 'workers');
+        $this->statusTable->decr('1', 'workers');
 
         // parse HTML body and fill queue with new URLs
         $isHtmlBody = isset($client->headers['content-type']) && stripos($client->headers['content-type'], 'text/html') !== false;
@@ -223,7 +231,7 @@ class Crawler
         $this->updateVisitedUrl($url, $elapsedTime, $status, $bodySize);
 
         // print table row to output
-        $progressStatus = $this->visited->count() . '/' . ($this->queue->count() + $this->visited->count());
+        $progressStatus = $this->statusTable->get('1', 'doneUrls') . '/' . ($this->queue->count() + $this->visited->count());
         $this->output->addTableRow($client, $absoluteUrl, $status, $elapsedTime, $bodySize, $extraParsedContent, $progressStatus);
 
         // check if crawler is done and exit or start new coroutine to process next URL
@@ -272,6 +280,8 @@ class Crawler
         $visitedUrl['status'] = $status;
         $visitedUrl['size'] = $size;
         $this->visited->set($urlKey, $visitedUrl);
+
+        $this->statusTable->incr('1', 'doneUrls');
     }
 
     private function getUrlKeyForSwooleTable(string $url): string
@@ -283,10 +293,15 @@ class Crawler
 
     private function getActiveWorkersNumber(): int
     {
-        return $this->workers->get('1', 'workers');
+        return $this->statusTable->get('1', 'workers');
     }
 
-    private function getFinalUserAgent(): string
+    private function getDoneUrlsNumber(): int
+    {
+        return $this->statusTable->get('1', 'doneUrls');
+    }
+
+    public function getFinalUserAgent(): string
     {
         if ($this->options->userAgent) {
             return $this->options->userAgent;

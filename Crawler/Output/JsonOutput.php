@@ -14,6 +14,7 @@ class JsonOutput implements Output
     private float $startTime;
     private Options $options;
     private string $command;
+    private bool $printToOutput = true;
 
     private array $json = [];
 
@@ -22,28 +23,39 @@ class JsonOutput implements Output
      * @param float $startTime
      * @param Options $options
      * @param string $command
+     * @param bool $printToOutput
      */
-    public function __construct(string $version, float $startTime, Options $options, string $command)
+    public function __construct(string $version, float $startTime, Options $options, string $command, bool $printToOutput = true)
     {
         $this->version = $version;
         $this->startTime = $startTime;
         $this->options = $options;
         $this->command = $command;
+        $this->printToOutput = $printToOutput;
     }
 
     public function addBanner(): void
     {
-        $this->json['crawler'] = ['name' => 'SiteOne Website Crawler', 'version' => $this->version, 'executedAt' => date('Y-m-d H:i:s'), 'command' => $this->command];
+        $this->json['crawler'] = [
+            'name' => 'SiteOne Website Crawler',
+            'version' => $this->version,
+            'executedAt' => date('Y-m-d H:i:s'),
+            'command' => $this->command,
+            'hostname' => gethostname()
+        ];
     }
 
-    public function addUsedOptions(): void
+    public function addUsedOptions(string $finalUserAgent): void
     {
         $this->json['options'] = (array)$this->options;
+        $this->json['crawler']['finalUserAgent'] = $finalUserAgent;
     }
 
     public function addTotalStats(Table $visited): void
     {
-        fwrite(STDERR, "\n\n");
+        if ($this->printToOutput) {
+            fwrite(STDERR, "\n\n");
+        }
 
         $info = [
             'totalUrls' => $visited->count(),
@@ -85,7 +97,7 @@ class JsonOutput implements Output
         static $maxStdErrLength = 0;
         $row = [
             'url' => $url,
-            'status' => $status,
+            'status' => Utils::getHttpClientCodeWithErrorDescription($status),
             'elapsedTime' => round($elapsedTime, 3),
             'size' => $size,
             'extras' => [],
@@ -105,7 +117,7 @@ class JsonOutput implements Output
 
         $this->json['results'][] = $row;
 
-        if (!$this->options->hideProgressBar) {
+        if (!$this->options->hideProgressBar && $this->printToOutput) {
             // put progress to stderr
             list($done, $total) = explode('/', $progressStatus);
             $progressToStdErr = sprintf(
@@ -127,6 +139,14 @@ class JsonOutput implements Output
         }
     }
 
+    public function addNotice(string $text): void
+    {
+        if (!isset($this->json['notice'])) {
+            $this->json['notice'] = [];
+        }
+        $this->json['notice'][] = date('Y-m-d H:i:s') . ' | ' . $text;
+    }
+
     public function addError(string $text): void
     {
         if (!isset($this->json['error'])) {
@@ -135,16 +155,29 @@ class JsonOutput implements Output
         $this->json['error'][] = date('Y-m-d H:i:s') . ' | ' . $text;
     }
 
+    public function getJson(): string
+    {
+        return json_encode($this->json, JSON_PRETTY_PRINT | JSON_INVALID_UTF8_IGNORE);
+    }
+
     public function end(): void
     {
-        $json = json_encode($this->json, JSON_PRETTY_PRINT | JSON_INVALID_UTF8_IGNORE);
+        if (!$this->printToOutput) {
+            return;
+        }
 
+        $json = $this->getJson();
         if (!$json) {
             echo "ERROR: unable to parse JSON: " . json_last_error_msg() . "\n";
             print_r($this->json);
         } else {
             echo $json;
         }
+    }
+
+    public function getType(): OutputType
+    {
+        return OutputType::JSON;
     }
 
 }

@@ -14,33 +14,38 @@ class FormattedTextOutput implements Output
     private float $startTime;
     private Options $options;
     private string $command;
+    private bool $printToOutput = true;
+
+    private string $outputText = '';
 
     /**
      * @param string $version
      * @param float $startTime
      * @param Options $options
      * @param string $command
+     * @param bool $printToOutput
      */
-    public function __construct(string $version, float $startTime, Options $options, string $command)
+    public function __construct(string $version, float $startTime, Options $options, string $command, bool $printToOutput)
     {
         $this->version = $version;
         $this->startTime = $startTime;
         $this->options = $options;
         $this->command = $command;
+        $this->printToOutput = $printToOutput;
     }
 
     public function addBanner(): void
     {
-        echo "===========================\n";
-        echo "= SiteOne Website Crawler =\n";
-        echo "= Version: " . $this->version . "      =\n";
-        echo "= jan.reges@siteone.cz    =\n";
-        echo "===========================\n\n";
+        $this->addToOutput("===========================\n");
+        $this->addToOutput("= SiteOne Website Crawler =\n");
+        $this->addToOutput("= Version: " . $this->version . "      =\n");
+        $this->addToOutput("= jan.reges@siteone.cz    =\n");
+        $this->addToOutput("===========================\n\n");
     }
 
-    public function addUsedOptions(): void
+    public function addUsedOptions(string $finalUserAgent): void
     {
-        // echo "Used options: " . Utils::getColorText(print_r($this->options, true), 'gray') . "\n";
+        // $this->addToOutput("Used options: " . Utils::getColorText(print_r($this->options, true), 'gray') . "\n");
     }
 
     public function addTableHeader(): void
@@ -55,7 +60,7 @@ class FormattedTextOutput implements Output
             $header .= " | " . str_pad($headerInfo['name'], $headerInfo['size']);
         }
         $header .= "\n";
-        echo $header . str_repeat("-", strlen(trim($header))) . "\n";
+        $this->addToOutput($header . str_repeat("-", strlen(trim($header))) . "\n");
     }
 
     public function addTableRow(Client $httpClient, string $url, int $status, float $elapsedTime, int $size, array $extraParsedContent, string $progressStatus): void
@@ -73,7 +78,7 @@ class FormattedTextOutput implements Output
         } elseif ($status > 400 && $status < 500) {
             $coloredStatus = Utils::getColorText(str_pad($status, 6, ' '), 'cyan', true);
         } else {
-            $coloredStatus = Utils::getColorText(str_pad($status, 6, ' '), 'red', true);
+            $coloredStatus = Utils::getColorText(str_pad(Utils::getHttpClientCodeWithErrorDescription($status, true), 6, ' '), 'red', true);
         }
 
         $coloredElapsedTime = sprintf("%.3f", $elapsedTime);
@@ -122,7 +127,7 @@ class FormattedTextOutput implements Output
             $progressContent = str_pad($progressToStdErr, 17);
         }
 
-        echo trim(sprintf(
+        $this->addToOutput(trim(sprintf(
                 '%s %s | %s | %s | %s %s',
                 $progressContent,
                 str_pad($urlForTable, $this->options->urlColumnSize),
@@ -130,7 +135,7 @@ class FormattedTextOutput implements Output
                 $coloredElapsedTime,
                 $coloredSize,
                 $extraHeadersContent
-            ), ' |') . "\n";
+            ), ' |') . "\n");
     }
 
     public function addTotalStats(Table $visited): void
@@ -152,33 +157,57 @@ class FormattedTextOutput implements Output
             $info['maxTime'] = $info['maxTime'] === null ? $row['time'] : max($row['time'], $info['maxTime']);
         }
 
-        echo "\n";
+        $this->addToOutput("\n");
         $resultHeader = "Total execution time: " . Utils::getColorText(number_format(microtime(true) - $this->startTime, 2, '.', ' ') . " sec", 'cyan');
-        echo str_repeat('=', 80) . "\n";
-        echo "{$resultHeader}\n";
-        echo "Total processed URLs: " . Utils::getColorText($info['totalUrls'], 'cyan') . " with total size " . Utils::getColorText(Utils::getFormattedSize($info['totalSize']), 'cyan') . "\n";
-        echo "Response times: "
+        $this->addToOutput(str_repeat('=', 80) . "\n");
+        $this->addToOutput("{$resultHeader}\n");
+        $this->addToOutput("Total processed URLs: " . Utils::getColorText($info['totalUrls'], 'cyan') . " with total size " . Utils::getColorText(Utils::getFormattedSize($info['totalSize']), 'cyan') . "\n");
+        $this->addToOutput("Response times: "
             . " AVG " . Utils::getColorText(number_format($info['totalTime'] / $info['totalUrls'], 3, '.', ' ') . ' sec', 'magenta', true)
             . " MIN " . Utils::getColorText(number_format($info['minTime'], 3, '.', ' ') . ' sec', 'green', true)
             . " MAX " . Utils::getColorText(number_format($info['maxTime'], 3, '.', ' ') . ' sec', 'red', true)
-            . " TOTAL " . Utils::getColorText(number_format($info['totalTime'], 3, '.', ' ') . ' sec', 'cyan', true) . "\n";
-        echo "URLs by status:\n";
+            . " TOTAL " . Utils::getColorText(number_format($info['totalTime'], 3, '.', ' ') . ' sec', 'cyan', true) . "\n");
+        $this->addToOutput("URLs by status:\n");
         ksort($info['countByStatus']);
         $statuses = '';
         foreach ($info['countByStatus'] as $status => $count) {
-            $statuses .= " {$status}: $count\n";
+            $statuses .= " " . Utils::getHttpClientCodeWithErrorDescription($status, false) . ": $count\n";
         }
-        echo Utils::getColorText(rtrim($statuses), 'yellow') . "\n";
-        echo str_repeat('=', 80) . "\n";
+        $this->addToOutput(Utils::getColorText(rtrim($statuses), 'yellow') . "\n");
+        $this->addToOutput(str_repeat('=', 80) . "\n");
+    }
+
+    public function addNotice(string $text): void
+    {
+        $this->addToOutput(Utils::getColorText($text, 'yellow') . "\n");
     }
 
     public function addError(string $text): void
     {
-        echo Utils::getColorText($text, 'red') . "\n";
+        $this->addToOutput(Utils::getColorText($text, 'red') . "\n");
     }
 
     public function end(): void
     {
         // nothing to do
+    }
+
+    public function addToOutput(string $output): void
+    {
+        if ($this->printToOutput) {
+            echo $output;
+        }
+
+        $this->outputText .= $output;
+    }
+
+    public function getOutputText(): string
+    {
+        return $this->outputText;
+    }
+
+    public function getType(): OutputType
+    {
+        return OutputType::FORMATTED_TEXT;
     }
 }

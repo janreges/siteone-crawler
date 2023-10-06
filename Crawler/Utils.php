@@ -182,4 +182,25 @@ class Utils
         return $result;
     }
 
+    public static function removeAnsiColors(string $text): string
+    {
+        return preg_replace('/\033\[\d+(;\d+)*m/', '', $text);
+    }
+
+    public static function getHttpClientCodeWithErrorDescription(int $httpCode, bool $shortVersion = false): string
+    {
+        static $errors = [
+            -1 => ['short' => '-1:CON', 'long' => '-1:CONN-FAIL'],
+            -2 => ['short' => '-2:TIM', 'long' => '-2:TIMEOUT'],
+            -3 => ['short' => '-3:RST', 'long' => '-3:SRV-RESET'],
+            -4 => ['short' => '-4:SND', 'long' => '-4:SEND-ERROR']
+        ];
+
+        if (isset($errors[$httpCode])) {
+            return $shortVersion ? $errors[$httpCode]['short'] : $errors[$httpCode]['long'];
+        }
+
+        return strval($httpCode);
+    }
+
 }

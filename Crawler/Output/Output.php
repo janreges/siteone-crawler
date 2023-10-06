@@ -9,7 +9,7 @@ interface Output
 {
     public function addBanner(): void;
 
-    public function addUsedOptions(): void;
+    public function addUsedOptions(string $finalUserAgent): void;
 
     public function addTableHeader(): void;
 
@@ -17,7 +17,11 @@ interface Output
 
     public function addTotalStats(Table $visited): void;
 
+    public function addNotice(string $text): void;
+
     public function addError(string $text): void;
+
+    public function getType(): OutputType;
 
     public function end(): void;
 }
