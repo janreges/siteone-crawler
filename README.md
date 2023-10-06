@@ -108,21 +108,31 @@ To run the crawler, execute the `crawler.php` file from the command line with pr
 * `--hide-scheme-and-host`: If set, URLs displayed in the output table will not include the domain.
 * `--truncate-url-to-column-size`: If set, URLs displayed in the output table will be truncated to the specified column size. Otherwise, they will be wrapped to the next line.
 
-## Windows, macOS or arm64
+## Other platforms
 
-If using Windows, you can use [Ubuntu](https://ubuntu.com/wsl)/[Debian](https://www.linuxfordevices.com/tutorials/linux/install-debian-on-windows-wsl) in [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) or you can download [swoole-cli-v4.8.13-cygwin-x64.zip](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-cygwin-x64.zip) from [Swoole releases](https://github.com/swoole/swoole-src/releases) and use precompiled `bin/swoole-cli.exe`.
+### Windows (x64)
 
-A really functional and tested Windows command looks like this (modify your path to `swoole-cli.exe` and `crawler.php`):
+If using Windows, the best choice is to use [Ubuntu](https://ubuntu.com/wsl) or [Debian](https://www.linuxfordevices.com/tutorials/linux/install-debian-on-windows-wsl) in [WSL](https://learn.microsoft.com/en-us/windows/wsl/install).
 
-```
+Otherwise, you can download [swoole-cli-v4.8.13-cygwin-x64.zip](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-cygwin-x64.zip) from [Swoole releases](https://github.com/swoole/swoole-src/releases) and use precompiled `bin/swoole-cli.exe`.
+
+A really functional and tested Windows command looks like this (modify path to your `swoole-cli.exe` and `crawler.php`):
+
+```bash
 c:\Work\swoole-cli-v4.8.13-cygwin-x64\bin\swoole-cli.exe C:\Work\siteone-website-crawler\crawler.php --url=https://www.siteone.io/ --output=json
 ```
 
-> Cygwin does not support STDERR and rewritable lines in the console. Therefore, the output is not as beautiful as on Linux.
+**NOTICE**: Cygwin does not support STDERR with rewritable lines in the console. Therefore, the output is not as beautiful as on Linux or macOS.
 
-If using macOS, you can download (x64) [swoole-cli-v4.8.13-macos-x64.tar.xz](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-macos-x64.tar.xz) or (arm64) [swoole-cli-v4.8.13-macos-arm64.tar.xz](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-macos-arm64.tar.xz) and use `bin/swoole-cli`.
+### macOS (arm64, x64)
 
-If using arm64 Linux, you can download precompiled [swoole-cli-v4.8.13-linux-arm64.tar.xz](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-linux-arm64.tar.xz) and use `bin/swoole-cli`.
+If using macOS with latest arm64 M1/M2 CPU, download arm64 version [swoole-cli-v4.8.13-macos-arm64.tar.xz](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-macos-arm64.tar.xz), unpack and use its precompiled `swoole-cli`.
+
+If using macOS with Intel CPU (x64), download amd64 version  [swoole-cli-v4.8.13-macos-x64.tar.xz](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-macos-x64.tar.xz), unpack and use its precompiled `swoole-cli`.
+
+### Linux (arm64) 
+
+If using arm64 Linux, you can download precompiled [swoole-cli-v4.8.13-linux-arm64.tar.xz](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-linux-arm64.tar.xz) and use its precompiled `swoole-cli`.
 
 ## Roadmap
 
