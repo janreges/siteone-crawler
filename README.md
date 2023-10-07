@@ -7,25 +7,25 @@ SiteOne Website Crawler is **the best, easy-to-use, most powerful and most funct
 - [Features](#features)
 - [Motivation to create this tool](#motivation-to-create-this-tool)
 - [Installation](#installation)
-  * [Linux (x64)](#linux-x64)
-  * [Windows (x64)](#windows-x64)
-  * [macOS (arm64, x64)](#macos-arm64-x64)
-  * [Linux (arm64)](#linux-arm64)
+    * [Linux (x64)](#linux-x64)
+    * [Windows (x64)](#windows-x64)
+    * [macOS (arm64, x64)](#macos-arm64-x64)
+    * [Linux (arm64)](#linux-arm64)
 - [Usage](#usage)
-  * [Basic example](#basic-example)
-  * [Fully-featured example](#fully-featured-example)
-  * [Arguments](#arguments)
-    + [Basic settings](#basic-settings)
-    + [Output settings](#output-settings)
-    + [Advanced crawler settings](#advanced-crawler-settings)
-    + [Export settings](#export-settings)
-    + [Mailer options](#mailer-options)
+    * [Basic example](#basic-example)
+    * [Fully-featured example](#fully-featured-example)
+    * [Arguments](#arguments)
+        + [Basic settings](#basic-settings)
+        + [Output settings](#output-settings)
+        + [Advanced crawler settings](#advanced-crawler-settings)
+        + [Export settings](#export-settings)
+        + [Mailer options](#mailer-options)
 - [Roadmap](#roadmap)
 - [Disclaimer](#disclaimer)
 - [License](#license)
 - [Output examples](#output-examples)
-  * [Text output](#text-output)
-  * [JSON output](#json-output)
+    * [Text output](#text-output)
+    * [JSON output](#json-output)
 
 ## Features
 
@@ -79,9 +79,14 @@ chmod +x ./swoole-cli
 
 ### Windows (x64)
 
-If using Windows, the best choice is to use [Ubuntu](https://ubuntu.com/wsl) or [Debian](https://www.linuxfordevices.com/tutorials/linux/install-debian-on-windows-wsl) in [WSL](https://learn.microsoft.com/en-us/windows/wsl/install).
+If using Windows, the best choice is to use [Ubuntu](https://ubuntu.com/wsl)
+or [Debian](https://www.linuxfordevices.com/tutorials/linux/install-debian-on-windows-wsl)
+in [WSL](https://learn.microsoft.com/en-us/windows/wsl/install).
 
-Otherwise, you can  download [swoole-cli-v4.8.13-cygwin-x64.zip](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-cygwin-x64.zip) from [Swoole releases](https://github.com/swoole/swoole-src/releases) and use precompiled Cygwin-based `bin/swoole-cli.exe`.
+Otherwise, you can
+download [swoole-cli-v4.8.13-cygwin-x64.zip](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-cygwin-x64.zip)
+from [Swoole releases](https://github.com/swoole/swoole-src/releases) and use precompiled
+Cygwin-based `bin/swoole-cli.exe`.
 
 A really functional and tested Windows command looks like this (modify path to your `swoole-cli.exe` and `crawler.php`):
 
@@ -94,15 +99,19 @@ beautiful as on Linux or macOS.
 
 ### macOS (arm64, x64)
 
-If using macOS with latest arm64 M1/M2 CPU, download arm64  version [swoole-cli-v4.8.13-macos-arm64.tar.xz](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-macos-arm64.tar.xz),
+If using macOS with latest arm64 M1/M2 CPU, download arm64
+version [swoole-cli-v4.8.13-macos-arm64.tar.xz](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-macos-arm64.tar.xz),
 unpack and use its precompiled `swoole-cli`.
 
-If using macOS with Intel CPU (x64), download x64  version  [swoole-cli-v4.8.13-macos-x64.tar.xz](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-macos-x64.tar.xz),
+If using macOS with Intel CPU (x64), download x64
+version  [swoole-cli-v4.8.13-macos-x64.tar.xz](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-macos-x64.tar.xz),
 unpack and use its precompiled `swoole-cli`.
 
 ### Linux (arm64)
 
-If using arm64 Linux, you can download [swoole-cli-v4.8.13-linux-arm64.tar.xz](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-linux-arm64.tar.xz) and use its precompiled `swoole-cli`.
+If using arm64 Linux, you can
+download [swoole-cli-v4.8.13-linux-arm64.tar.xz](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-linux-arm64.tar.xz)
+and use its precompiled `swoole-cli`.
 
 ## Usage
 
@@ -123,7 +132,7 @@ required arguments:
   --max-workers=2 \
   --timeout=5 \
   --user-agent="My User-Agent String" \
-  --headers-to-table="X-Cache(10),Title,Keywords,Description" \
+  --headers-to-table="DOM,X-Cache(10),Title,Keywords,Description" \
   --accept-encoding="gzip, deflate" \
   --url-column-size=100 \
   --max-queue-length=3000 \
@@ -168,8 +177,8 @@ required arguments:
 
 * `--output=<value>`               Output type. Supported values: `text`, `json`. Default is `text`.
 * `--headers-to-table=<values>`    Comma delimited list of HTTP response headers added to output table. A special case
-  is the possibility to use `Title`, `Keywords` and `Description`. You can set the expected length of the column in
-  parentheses for better look - for example `X-Cache(10)`
+  is the possibility to use `Title`, `Keywords` and `Description`. Also, you can set `DOM` to display number of DOM
+  elements in HTML. You can set the expected length of the column in parentheses for better look - for example `X-Cache(10)`
 * `--url-column-size=<num>`        Basic URL column width. Default is `80`.
 * `--do-not-truncate-url`          In the text output, long URLs are truncated by default to `--url-column-size` so the
   table does not wrap due to long URLs. With this option, you can turn off the truncation.
@@ -202,7 +211,8 @@ required arguments:
 #### Export settings
 
 * `--output-html-file=<file>`      File path for HTML output. Extension `.html` is automatically added if not specified.
-* `--output-json-file=<file>`      File path for JSON output. Extension `.json` is automatically added if not specified.W
+* `--output-json-file=<file>`      File path for JSON output. Extension `.json` is automatically added if not
+  specified.
 * `--output-text-file=<file>`      File path for text output. Extension `.txt` is automatically added if not specified.
 * `--output-sitemap-xml=<file>`    File path where generated XML Sitemap will be saved. Extension `.xml` is
   automatically added if not specified.

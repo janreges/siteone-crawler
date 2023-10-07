@@ -57,7 +57,7 @@ class FormattedTextOutput implements Output
 
         foreach ($this->options->headersToTable as $headerName) {
             $headerInfo = Utils::getColumnInfo($headerName);
-            $header .= " | " . str_pad($headerInfo['name'], $headerInfo['size']);
+            $header .= " | " . str_pad($headerInfo['name'], max($headerInfo['size'], 4));
         }
         $header .= "\n";
         $this->addToOutput($header . str_repeat("-", strlen(trim($header))) . "\n");
@@ -104,7 +104,7 @@ class FormattedTextOutput implements Output
                 $value = trim($httpClient->headers[strtolower($headerName)]);
             }
 
-            $extraHeadersContent .= (' | ' . str_pad($value, $headerInfo['size']));
+            $extraHeadersContent .= (' | ' . str_pad($value, max($headerInfo['size'], 4)));
         }
 
         if ($this->options->addRandomQueryParams) {

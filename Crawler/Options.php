@@ -16,6 +16,7 @@ class Options
     public string $acceptEncoding = 'gzip, deflate, br';
     public ?string $userAgent = null;
     public array $headersToTable = [];
+    public array $headersToTableNamesOnly = [];
     public int $maxQueueLength = 2000;
     public int $maxVisitedUrls = 5000;
     public int $maxUrlLength = 2000;
@@ -49,7 +50,7 @@ class Options
 
     public function hasHeaderToTable(string $headerName): bool
     {
-        return in_array($headerName, $this->headersToTable);
+        return in_array($headerName, $this->headersToTableNamesOnly);
     }
 
     public function hasCrawlAsset(AssetType $assetType): bool
@@ -109,6 +110,7 @@ class Options
                 $result->userAgent = trim(substr($arg, 13), ' "\'');
             } else if (str_starts_with($arg, '--headers-to-table=')) {
                 $result->headersToTable = explode(',', str_replace(' ', '', trim(substr($arg, 19), ' "\'')));
+                $result->headersToTableNamesOnly = explode(',', preg_replace(['/\s+/', '/\s*\(\s*\d*\s*\)\s*/'], ['', ''], trim(substr($arg, 19), ' "\'')));
             } else if (str_starts_with($arg, '--crawl-assets=')) {
                 $crawlAssets = explode(',', str_replace(' ', '', trim(substr($arg, 15), ' "\'')));
                 foreach ($crawlAssets as $asset) {
@@ -261,7 +263,7 @@ class Options
         echo "Output settings:\n";
         echo "----------------\n";
         echo "--output=<value>               Output type `text` or `json`. Default `text`.\n";
-        echo "--headers-to-table=<values>    HTTP headers for output table, e.g., `X-Cache(10),Title`.\n";
+        echo "--headers-to-table=<values>    HTTP headers for output table, e.g., `DOM,X-Cache(10),Title`.\n";
         echo "--url-column-size=<num>        URL column width. Default `80`.\n";
         echo "--do-not-truncate-url          Avoid truncating URLs to `--url-column-size`.\n";
         echo "--hide-scheme-and-host         Hide URL scheme/host in output.\n";

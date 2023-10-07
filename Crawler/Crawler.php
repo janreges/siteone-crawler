@@ -171,6 +171,12 @@ class Crawler
             $result['Keywords'] = trim($matches[1][0] ?? '');
         }
 
+        if ($this->options->hasHeaderToTable('DOM')) {
+            @preg_match_all('/<\w+/', $body, $matches);
+            $dom = count($matches[0] ?? []);
+            $result['DOM'] = $dom;
+        }
+
         return $result;
     }
 
