@@ -92,7 +92,7 @@ class JsonOutput implements Output
         $this->json['results'] = [];
     }
 
-    public function addTableRow(Client $httpClient, string $url, int $status, float $elapsedTime, int $size, array $extraParsedContent, string $progressStatus): void
+    public function addTableRow(Client $httpClient, string $url, int $status, float $elapsedTime, int $size, int $type, array $extraParsedContent, string $progressStatus): void
     {
         static $maxStdErrLength = 0;
         $row = [
@@ -100,6 +100,7 @@ class JsonOutput implements Output
             'status' => Utils::getHttpClientCodeWithErrorDescription($status),
             'elapsedTime' => round($elapsedTime, 3),
             'size' => $size,
+            'type' => $type,
             'extras' => [],
         ];
 
@@ -178,6 +179,13 @@ class JsonOutput implements Output
     public function getType(): OutputType
     {
         return OutputType::JSON;
+    }
+
+    public function getUrlsForSitemap(int $onlyType): array
+    {
+        return array_column(array_filter($this->json['results'], function ($row) use ($onlyType) {
+            return $row['status'] === '200' && $row['type'] === $onlyType;
+        }), 'url');
     }
 
 }

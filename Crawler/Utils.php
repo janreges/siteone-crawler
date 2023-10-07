@@ -4,6 +4,12 @@ namespace Crawler;
 
 class Utils
 {
+    private static $colorsEnabled = true;
+
+    public static function disableColors(): void
+    {
+        self::$colorsEnabled = false;
+    }
 
     public static function relativeToAbsoluteUrl(string $relativeUrl, string $baseUrl): ?string
     {
@@ -58,6 +64,10 @@ class Utils
 
     public static function getColorText(string $text, string $color, ?bool $setBackground = false): string
     {
+        if (!self::$colorsEnabled) {
+            return $text;
+        }
+
         // if output is not visible (non-interactive mode), do not colorize text
         $isOutputVisible = posix_isatty(STDOUT);
         if (!$isOutputVisible) {

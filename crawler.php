@@ -15,6 +15,9 @@ $startTime = microtime(true);
 
 // parse input parameters with internal error handling and output
 $options = Options::parse($argv);
+if ($options->noColor) {
+    Utils::disableColors();
+}
 
 // run crawler
 try {

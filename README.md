@@ -37,6 +37,7 @@ SiteOne Website Crawler is **the best, easy-to-use, most powerful and most funct
 - will send you a **nice HTML report** to your email addresses
 - will **export** the output to JSON, HTML or text for **your integrations**
 - allows testing **public** and **local projects on specific ports**
+- it will help you **warm up the application cache** or the **cache on the reverse proxy** of the entire website
 - will provide you with data for **SEO analysis**
 - it will perform a **stress test** and allow you to test the protection of the infrastructure
 - it also crawls **all files**, styles, scripts, fonts, images, documents, etc.
@@ -139,6 +140,8 @@ required arguments:
   --output-html-file=/dir/report.html \
   --output-json-file=/dir/report.json \
   --output-text-file=/dir/report.txt \
+  --output-sitemap-xml=/dir/sitemap.xml \
+  --output-sitemap-txt=/dir/sitemap.txt \
   --add-timestamp-to-output-file \
   --add-host-to-output-file \
   --mail-to=your.name@ymy-mail.tld \
@@ -172,6 +175,7 @@ required arguments:
   table does not wrap due to long URLs. With this option, you can turn off the truncation.
 * `--hide-scheme-and-host`         On text output, hide scheme and host of URLs for more compact view.
 * `--hide-progress-bar`            Hide progress bar visible in text and JSON output for more compact view.
+* `--no-color`                     Disable colored output.
 
 #### Advanced crawler settings
 
@@ -198,8 +202,12 @@ required arguments:
 #### Export settings
 
 * `--output-html-file=<file>`      File path for HTML output. Extension `.html` is automatically added if not specified.
-* `--output-json-file=<file>`      File path for JSON output. Extension `.json` is automatically added if not specified.
+* `--output-json-file=<file>`      File path for JSON output. Extension `.json` is automatically added if not specified.W
 * `--output-text-file=<file>`      File path for text output. Extension `.txt` is automatically added if not specified.
+* `--output-sitemap-xml=<file>`    File path where generated XML Sitemap will be saved. Extension `.xml` is
+  automatically added if not specified.
+* `--output-sitemap-txt=<file>`    File path where generated TXT Sitemap will be saved. Extension `.txt` is
+  automatically added if not specified.
 * `--add-host-to-output-file`      Add host from initial URL as suffix to output file name. Example: you
   set `--output-json-file=/dir/report` and target filename will be `/dir/report.www.mydomain.tld.json`.
 * `--add-timestamp-to-output-file` Add timestamp as suffix to output file name. Example: you

@@ -2,6 +2,7 @@
 
 namespace Crawler;
 
+use Crawler\Export\SitemapExporter;
 use Crawler\Output\FormattedTextOutput;
 use Crawler\Output\JsonOutput;
 use Crawler\Output\MultiOutput;
@@ -62,7 +63,13 @@ class Manager
      */
     public function handleOutputFilesAndMailer(): void
     {
-        if (!$this->options->outputTextFile && !$this->options->outputJsonFile && !$this->options->outputHtmlFile && !$this->options->mailerIsActivated()) {
+        if (!$this->options->outputTextFile
+            && !$this->options->outputJsonFile
+            && !$this->options->outputHtmlFile
+            && !$this->options->outputSitemapXml
+            && !$this->options->outputSitemapTxt
+            && !$this->options->mailerIsActivated()
+        ) {
             return;
         }
 
@@ -81,6 +88,9 @@ class Manager
             $this->output->addNotice("Text report saved to '{$reportFile}'.");
         }
 
+        /* @var $jsonOutput JsonOutput */
+        $jsonOutput = null;
+
         if ($this->options->outputJsonFile) {
             $jsonOutput = $multiOutput->getOutputByType(OutputType::JSON);
             /* @var $jsonOutput JsonOutput */
@@ -93,8 +103,22 @@ class Manager
             $this->output->addNotice("JSON report saved to '{$reportFile}'.");
         }
 
+        if ($this->options->outputSitemapXml || $this->options->outputSitemapTxt) {
+            $jsonOutput = $jsonOutput ?: $multiOutput->getOutputByType(OutputType::JSON);
+            $urls = $jsonOutput->getUrlsForSitemap(Crawler::URL_TYPE_HTML);
+            $sitemapExporter = new SitemapExporter($urls, []);
+            if ($this->options->outputSitemapXml) {
+                $sitemapExporter->generateXmlSitemap($this->options->outputSitemapXml);
+                $this->output->addNotice("XML sitemap with " . count($urls) . " URLs saved to '{$this->options->outputSitemapXml}'.");
+            }
+            if ($this->options->outputSitemapTxt) {
+                $sitemapExporter->generateTxtSitemap($this->options->outputSitemapTxt);
+                $this->output->addNotice("TXT sitemap with " . count($urls) . " URLs saved to '{$this->options->outputSitemapTxt}'.");
+            }
+        }
+
         if ($this->options->outputHtmlFile || $this->options->mailerIsActivated()) {
-            $jsonOutput = $multiOutput->getOutputByType(OutputType::JSON);
+            $jsonOutput = $jsonOutput ?: $multiOutput->getOutputByType(OutputType::JSON);
             $htmlReport = HtmlReport::generate($jsonOutput->getJson());
             if ($this->options->outputHtmlFile) {
                 $reportFile = $this->getReportFilename($this->options->outputHtmlFile, 'html');
@@ -157,7 +181,15 @@ class Manager
                 $this->options->outputType == OutputType::FORMATTED_TEXT
             );
         }
-        if ($this->options->outputType == OutputType::JSON || $this->options->outputJsonFile || $this->options->outputHtmlFile) {
+
+        $jsonOutputNeeded =
+            $this->options->outputType == OutputType::JSON
+            || $this->options->outputJsonFile
+            || $this->options->outputHtmlFile
+            || $this->options->outputSitemapXml
+            || $this->options->outputSitemapTxt;
+
+        if ($jsonOutputNeeded) {
             $requiredOutputs[] = new JsonOutput(
                 $this->version,
                 $this->startTime,

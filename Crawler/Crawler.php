@@ -2,7 +2,6 @@
 
 namespace Crawler;
 
-use Crawler\Exception\CrawlerDoneException;
 use Crawler\Output\Output;
 use Exception;
 use Swoole\Table;
@@ -20,6 +19,15 @@ class Crawler
 
     private ParsedUrl $initialParsedUrl;
     private string $finalUserAgent;
+
+    const URL_TYPE_HTML = 1;
+    const URL_TYPE_SCRIPT = 2;
+    const URL_TYPE_STYLESHEET = 3;
+    const URL_TYPE_IMAGE = 4;
+    const URL_TYPE_FONT = 5;
+    const URL_TYPE_DOCUMENT = 6;
+    const URL_TYPE_JSON = 7;
+    const URL_TYPE_OTHER_FILE = 9;
 
     /**
      * @param Options $options
@@ -54,6 +62,7 @@ class Crawler
         $this->visited->column('time', Table::TYPE_FLOAT, 8);
         $this->visited->column('status', Table::TYPE_INT, 8);
         $this->visited->column('size', Table::TYPE_INT, 8);
+        $this->visited->column('type', Table::TYPE_INT, 1); // @see self::URL_TYPE_*
         $this->visited->create();
 
         $this->finalUserAgent = $this->getFinalUserAgent();
@@ -227,12 +236,31 @@ class Crawler
             $extraParsedContent = $this->parseHtmlBodyAndFillQueue($body, $url);
         }
 
+        // get type self::URL_TYPE_* based on content-type header
+        $contentType = $client->headers['content-type'] ?? '';
+        $type = self::URL_TYPE_OTHER_FILE;
+        if (str_contains($contentType, 'text/html')) {
+            $type = self::URL_TYPE_HTML;
+        } elseif (str_contains($contentType, 'text/javascript')) {
+            $type = self::URL_TYPE_SCRIPT;
+        } elseif (str_contains($contentType, 'text/css')) {
+            $type = self::URL_TYPE_STYLESHEET;
+        } elseif (str_contains($contentType, 'image/')) {
+            $type = self::URL_TYPE_IMAGE;
+        } elseif (str_contains($contentType, 'font/')) {
+            $type = self::URL_TYPE_FONT;
+        } elseif (str_contains($contentType, 'application/json')) {
+            $type = self::URL_TYPE_JSON;
+        } elseif (str_contains($contentType, 'application/pdf') || str_contains($type, 'application/msword') || str_contains($type, 'application/vnd.ms-excel') || str_contains($type, 'application/vnd.ms-powerpoint')) {
+            $type = self::URL_TYPE_DOCUMENT;
+        }
+
         // update info about visited URL
-        $this->updateVisitedUrl($url, $elapsedTime, $status, $bodySize);
+        $this->updateVisitedUrl($url, $elapsedTime, $status, $bodySize, $type);
 
         // print table row to output
         $progressStatus = $this->statusTable->get('1', 'doneUrls') . '/' . ($this->queue->count() + $this->visited->count());
-        $this->output->addTableRow($client, $absoluteUrl, $status, $elapsedTime, $bodySize, $extraParsedContent, $progressStatus);
+        $this->output->addTableRow($client, $absoluteUrl, $status, $elapsedTime, $bodySize, $type, $extraParsedContent, $progressStatus);
 
         // check if crawler is done and exit or start new coroutine to process next URL
         if ($this->queue->count() === 0 && $this->getActiveWorkersNumber() === 0) {
@@ -291,7 +319,16 @@ class Crawler
         $this->visited->set($this->getUrlKeyForSwooleTable($url), ['url' => $url]);
     }
 
-    private function updateVisitedUrl(string $url, float $elapsedTime, int $status, int $size): void
+    /**
+     * @param string $url
+     * @param float $elapsedTime
+     * @param int $status
+     * @param int $size
+     * @param int $type @see self::URL_TYPE_*
+     * @return void
+     * @throws Exception
+     */
+    private function updateVisitedUrl(string $url, float $elapsedTime, int $status, int $size, int $type): void
     {
         $urlKey = $this->getUrlKeyForSwooleTable($url);
         $visitedUrl = $this->visited->get($urlKey);
@@ -301,6 +338,7 @@ class Crawler
         $visitedUrl['time'] = $elapsedTime;
         $visitedUrl['status'] = $status;
         $visitedUrl['size'] = $size;
+        $visitedUrl['type'] = $type;
         $this->visited->set($urlKey, $visitedUrl);
 
         $this->statusTable->incr('1', 'doneUrls');

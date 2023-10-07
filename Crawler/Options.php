@@ -27,10 +27,13 @@ class Options
     public bool $hideSchemeAndHost = false;
     public bool $doNotTruncateUrl = false;
     public bool $hideProgressBar = false;
+    public bool $noColor = false;
 
     public ?string $outputHtmlFile = null;
     public ?string $outputJsonFile = null;
     public ?string $outputTextFile = null;
+    public ?string $outputSitemapXml = null;
+    public ?string $outputSitemapTxt = null;
     public bool $addTimestampToOutputFile = false;
     public bool $addHostToOutputFile = false;
 
@@ -121,6 +124,16 @@ class Options
                 $result->outputJsonFile = trim(substr($arg, 19), ' "\'');
             } else if (str_starts_with($arg, '--output-text-file=')) {
                 $result->outputTextFile = trim(substr($arg, 19), ' "\'');
+            } else if (str_starts_with($arg, '--output-sitemap-xml=')) {
+                $result->outputSitemapXml = trim(substr($arg, 21), ' "\'');
+                if (!str_ends_with($result->outputSitemapXml, '.xml')) {
+                    $result->outputSitemapXml .= '.xml';
+                }
+            } else if (str_starts_with($arg, '--output-sitemap-txt=')) {
+                $result->outputSitemapTxt = trim(substr($arg, 21), ' "\'');
+                if (!str_ends_with($result->outputSitemapTxt, '.txt')) {
+                    $result->outputSitemapTxt .= '.txt';
+                }
             } else if (str_starts_with($arg, '--add-timestamp-to-output-file')) {
                 $result->addTimestampToOutputFile = true;
             } else if (str_starts_with($arg, '--add-host-to-output-file')) {
@@ -179,6 +192,8 @@ class Options
                     self::errorExit("Invalid regular expression '{$regex}' in --ignore-regex. It must be valid PCRE regex.");
                 }
                 $result->ignoreRegex[] = $regex;
+            } else if (str_starts_with($arg, '--no-color')) {
+                $result->noColor = true;
             } else if (str_starts_with($arg, '-')) {
                 self::errorExit("Unknown parameter '{$arg}'");
             }
@@ -251,6 +266,7 @@ class Options
         echo "--do-not-truncate-url          Avoid truncating URLs to `--url-column-size`.\n";
         echo "--hide-scheme-and-host         Hide URL scheme/host in output.\n";
         echo "--hide-progress-bar            Suppress progress bar in output.\n";
+        echo "--no-color                     Disable colored output.\n";
         echo "\n";
         echo "Advanced crawler settings:\n";
         echo "--------------------------\n";
@@ -267,11 +283,13 @@ class Options
         echo "\n";
         echo "Export settings:\n";
         echo "----------------\n";
-        echo "--output-html-file=<file>      Save as HTML. `.html` added if missing.\n";
-        echo "--output-json-file=<file>      Save as JSON. `.json` added if missing.\n";
-        echo "--output-text-file=<file>      Save as text. `.txt` added if missing.\n";
-        echo "--add-host-to-output-file      Append initial URL host to filename.\n";
-        echo "--add-timestamp-to-output-file Append timestamp to filename.\n";
+        echo "--output-html-file=<file>      Save HTML report. `.html` added if missing.\n";
+        echo "--output-json-file=<file>      Save report as JSON. `.json` added if missing.\n";
+        echo "--output-text-file=<file>      Save output as TXT. `.txt` added if missing.\n";
+        echo "--output-sitemap-xml=<file>    Save sitemap to XML. `.xml` added if missing.\n";
+        echo "--output-sitemap-txt=<file>    Save sitemap to TXT. `.txt` added if missing.\n";
+        echo "--add-host-to-output-file      Append initial URL host to filename except sitemaps.\n";
+        echo "--add-timestamp-to-output-file Append timestamp to filename except sitemaps.\n";
         echo "\n";
         echo "Mailer options:\n";
         echo "---------------\n";

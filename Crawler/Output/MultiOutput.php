@@ -57,10 +57,10 @@ class MultiOutput implements Output
         }
     }
 
-    public function addTableRow(Client $httpClient, string $url, int $status, float $elapsedTime, int $size, array $extraParsedContent, string $progressStatus): void
+    public function addTableRow(Client $httpClient, string $url, int $status, float $elapsedTime, int $size, int $type, array $extraParsedContent, string $progressStatus): void
     {
         foreach ($this->outputs as $output) {
-            $output->addTableRow($httpClient, $url, $status, $elapsedTime, $size, $extraParsedContent, $progressStatus);
+            $output->addTableRow($httpClient, $url, $status, $elapsedTime, $size, $type, $extraParsedContent, $progressStatus);
         }
     }
 
