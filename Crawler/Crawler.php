@@ -317,12 +317,20 @@ class Crawler
 
     private function addUrlToQueue(string $url): void
     {
-        $this->queue->set($this->getUrlKeyForSwooleTable($url), ['url' => $url]);
+        if (!$this->queue->set($this->getUrlKeyForSwooleTable($url), ['url' => $url])) {
+            $error = "ERROR: Unable to queue URL '{$url}'. Set higher --max-queue-length.";
+            $this->output->addError($error);
+            throw new Exception($error);
+        }
     }
 
     private function addUrlToVisited(string $url): void
     {
-        $this->visited->set($this->getUrlKeyForSwooleTable($url), ['url' => $url]);
+        if (!$this->visited->set($this->getUrlKeyForSwooleTable($url), ['url' => $url])) {
+            $error = "ERROR: Unable to add visited URL '{$url}'. Set higher --max-visited-urls or --max-url-length.";
+            $this->output->addError($error);
+            throw new Exception($error);
+        }
     }
 
     /**
