@@ -1,12 +1,49 @@
 # SiteOne Website Crawler
 
-SiteOne Website Crawler **is the best, most powerful and most functional website crawler you will love ♥**.
+SiteOne Website Crawler is **the best, easy-to-use, most powerful and most functional website crawler you will love ♥**.
 
-Crawler has beautiful formatted and colored console output and advanced features like static assets crawling, custom
-columns, exports to HTML/JSON/TXT and sending report to email addresses.
+## Table of contents
 
-It works on all major platforms, but most easily on Linux. Windows, macOS or arm64 are also supported with little
-effort, see below.
+- [Features](#features)
+- [Motivation to create this tool](#motivation-to-create-this-tool)
+- [Installation](#installation)
+  * [Linux (x64)](#linux-x64)
+  * [Windows (x64)](#windows-x64)
+  * [macOS (arm64, x64)](#macos-arm64-x64)
+  * [Linux (arm64)](#linux-arm64)
+- [Usage](#usage)
+  * [Basic example](#basic-example)
+  * [Fully-featured example](#fully-featured-example)
+  * [Arguments](#arguments)
+    + [Basic settings](#basic-settings)
+    + [Output settings](#output-settings)
+    + [Advanced crawler settings](#advanced-crawler-settings)
+    + [Export settings](#export-settings)
+    + [Mailer options](#mailer-options)
+- [Roadmap](#roadmap)
+- [Disclaimer](#disclaimer)
+- [License](#license)
+- [Output examples](#output-examples)
+  * [Text output](#text-output)
+  * [JSON output](#json-output)
+
+## Features
+
+- **all major platforms** supported without complicated installation (Linux, Windows, macOS, arm64)
+- has incredible **C++ performance** (thanks to Swoole's coroutines)
+- has **beautiful**, formatted, **interactive** and colored **console output**
+- will **find the weak points** or **strange behavior** of your website for you
+- provide simulation of **different device types** (desktop/mobile/tablet) thanks to predefined User-Agents
+- will send you a **nice HTML report** to your email addresses
+- will **export** the output to JSON, HTML or text for **your integrations**
+- allows testing **public** and **local projects on specific ports**
+- will provide you with data for **SEO analysis**
+- it will perform a **stress test** and allow you to test the protection of the infrastructure
+- it also crawls **all files**, styles, scripts, fonts, images, documents, etc.
+- will help you create a **sitemap** for your website
+- it will **clearly warn you** of any wrong use
+
+Don't hesitate and try it. You will love it as we do! ♥
 
 ## Motivation to create this tool
 
@@ -27,48 +64,11 @@ infrastructure at [SiteOne](https://www.siteone.io/), wanted to prove that he co
 pure working time and take a break from caring for his extremely prematurely born son. And he did it! :-) The tool is
 great, and his son is doing great too! ♥
 
-## Features
-
-* No external dependencies, no complicated installation. It works well with **any modern Linux (x64) distribution** and
-  with little effort also on Windows, macOS or arm64 architecture.
-* Efficiently crawls the website starting from the provided URL.
-* Supports **public domains** and also **local domains** (e.g. `http://localhost:3000`).
-* Dynamic **User-Agent** string based on selected `--device` type with the option to override by `--user-agent`.
-* Option `--output=json` for better integration with CI/CD pipelines and other tools. The JSON output also has a nice
-  visual progress reporting, if interactive output is detected.
-* Option `--mail-to=<email>` and `--mail-smtp-*` for sending nice HTML report to email addresses. For now only SMTP
-  without encryption is supported.
-* Option `--max-workers=<num>` to specify the maximum number of workers for concurrent URL processing. You can use full
-  power of your multicore CPU, but be careful and do not overload the target server.
-* Option `--crawl-assets=<values>` to crawl also selected assets (images, fonts, styles, scripts, files).
-* Option `--headers-to-table=<values>` to specify which extra headers from the HTTP response to display in the output
-  table.
-* Option `--include-regex=<regexp>` and `--ignore-regex=<regexp>` to include or ignore URLs based on regular expression.
-  Both arguments can be specified multiple times and can be combined.
-* Option `--add-random-query-params` to add random query params to test cache/anti-cache behavior.
-* Option `--remove-query-params` to remove all query parameters from the URLs to skip unwanted dynamic URLs.
-* Option `--hide-scheme-and-host` to hide the scheme and host from the URLs in the output table for more compact output.
-* Option `--do-not-truncate-url` to truncate the URLs to the specified `--url-column-size=<size>` in the output table.
-* Option `--hide-progress-bar` to hide progress bar visible in text and JSON output for more compact view.
-* Option `--output-html-file`, `--output-json-file` and `--output-text-file` to save formatted outputs to a file. You
-  can use `--add-timestamp-to-output-file` and `--add-host-to-output-file` options to add timestamp and host from URL as
-  suffix to output file name.
-* Beautifully **formatted and colored console output** with highlighted status codes and slow response times.
-* Displays **execution statistics** at the end, including AVG, MIN, and MAX response times and breakdown by HTTP status
-  codes.
-* Supports **HTTP/1.1** and **HTTP/2**. Supports **HTTP** and **HTTPS**.
-* Sophisticated **error handling** and input parameters validation.
-* Table output - the script provides a detailed table-like output which includes:
-    * Crawled URLs
-    * Status code of the HTTP response (colored based on the status)
-    * Time taken for the HTTP request (colored based on the time)
-    * Response size
-    * Specified headers from the HTTP response (based on `--headers-to-table` argument)
-    * `Title`, `Keywords` and `Description` extracted from the HTML response (based on `--headers-to-table` argument)
-
 ## Installation
 
-Most easily installation on most Linux (x64) distributions:
+### Linux (x64)
+
+Most easily installation on most Linux (x64) distributions thanks to precompiled `swoole-cli` binary.
 
 ```bash
 git clone https://github.com/janreges/siteone-website-crawler.git
@@ -76,7 +76,32 @@ cd siteone-website-crawler
 chmod +x ./swoole-cli
 ````
 
-> For Windows, macOS or arm64, see below. You have to download precompiled `swoole-cli` binary for your platform.
+### Windows (x64)
+
+If using Windows, the best choice is to use [Ubuntu](https://ubuntu.com/wsl) or [Debian](https://www.linuxfordevices.com/tutorials/linux/install-debian-on-windows-wsl) in [WSL](https://learn.microsoft.com/en-us/windows/wsl/install).
+
+Otherwise, you can  download [swoole-cli-v4.8.13-cygwin-x64.zip](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-cygwin-x64.zip) from [Swoole releases](https://github.com/swoole/swoole-src/releases) and use precompiled Cygwin-based `bin/swoole-cli.exe`.
+
+A really functional and tested Windows command looks like this (modify path to your `swoole-cli.exe` and `crawler.php`):
+
+```bash
+c:\Work\swoole-cli-v4.8.13-cygwin-x64\bin\swoole-cli.exe C:\Work\siteone-website-crawler\crawler.php --url=https://www.siteone.io/
+```
+
+**NOTICE**: Cygwin does not support STDERR with rewritable lines in the console. Therefore, the output is not as
+beautiful as on Linux or macOS.
+
+### macOS (arm64, x64)
+
+If using macOS with latest arm64 M1/M2 CPU, download arm64  version [swoole-cli-v4.8.13-macos-arm64.tar.xz](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-macos-arm64.tar.xz),
+unpack and use its precompiled `swoole-cli`.
+
+If using macOS with Intel CPU (x64), download x64  version  [swoole-cli-v4.8.13-macos-x64.tar.xz](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-macos-x64.tar.xz),
+unpack and use its precompiled `swoole-cli`.
+
+### Linux (arm64)
+
+If using arm64 Linux, you can download [swoole-cli-v4.8.13-linux-arm64.tar.xz](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-linux-arm64.tar.xz) and use its precompiled `swoole-cli`.
 
 ## Usage
 
@@ -126,50 +151,64 @@ required arguments:
 
 ### Arguments
 
-#### Required:
+#### Basic settings
 
-* `--url=<value>`: Required. HTTP or HTTPS URL address of the website to be crawled from. Use quotation marks if the URL contains query parameters.
-
-#### Basic settings:
-
-* `--url=<url>`                    Required. HTTP or HTTPS URL address of the website to be crawled.Use quotation marks if the URL contains query parameters
-* `--device=<device`               Device type for choosing a predefined User-Agent. Ignored when `--user-agent` is defined. Supported values: `desktop`, `mobile`, `tablet`. Defaults is `desktop`.
-* `--user-agent=<value>`           Custom User-Agent header. Use quotation marks. If specified, it takes precedence over the device parameter.
+* `--url=<url>`                    Required. HTTP or HTTPS URL address of the website to be crawled.Use quotation marks
+  if the URL contains query parameters
+* `--device=<device`               Device type for choosing a predefined User-Agent. Ignored when `--user-agent` is
+  defined. Supported values: `desktop`, `mobile`, `tablet`. Defaults is `desktop`.
+* `--user-agent=<value>`           Custom User-Agent header. Use quotation marks. If specified, it takes precedence over
+  the device parameter.
 * `--timeout=<num>`                Request timeout in seconds. Default is `3`.
 
-####  Output settings:
+#### Output settings
 
 * `--output=<value>`               Output type. Supported values: `text`, `json`. Default is `text`.
-* `--headers-to-table=<values>`    Comma delimited list of HTTP response headers added to output table. A special case is the possibility to use `Title`, `Keywords` and `Description`. You can set the expected length of the column in parentheses for better look - for example `X-Cache(10)`
+* `--headers-to-table=<values>`    Comma delimited list of HTTP response headers added to output table. A special case
+  is the possibility to use `Title`, `Keywords` and `Description`. You can set the expected length of the column in
+  parentheses for better look - for example `X-Cache(10)`
 * `--url-column-size=<num>`        Basic URL column width. Default is `80`.
-* `--do-not-truncate-url`          In the text output, long URLs are truncated by default to `--url-column-size` so the table does not wrap due to long URLs. With this option, you can turn off the truncation.
+* `--do-not-truncate-url`          In the text output, long URLs are truncated by default to `--url-column-size` so the
+  table does not wrap due to long URLs. With this option, you can turn off the truncation.
 * `--hide-scheme-and-host`         On text output, hide scheme and host of URLs for more compact view.
 * `--hide-progress-bar`            Hide progress bar visible in text and JSON output for more compact view.
 
-#### Advanced crawler settings:
+#### Advanced crawler settings
 
-* `--max-workers=<num>`            Maximum number of concurrent workers (threads). Use carefully. A high number of threads can cause a DoS attack. Default is `3`.
-* `--crawl-assets=<values>`        Comma delimited list of frontend assets you want to crawl too. Otherwise, URLs with an extension are ignored. Supported values: `fonts`, `images`, `styles`, `scripts`, `files`.
-* `--include-regex=<regex>`        Regular expression compatible with PHP preg_match() for URLs that should be included. Argument can be specified multiple times. Example: `--include-regex='/^\/public\//'`
-* `--ignore-regex=<regex>`         Regular expression compatible with PHP preg_match() for URLs that should be ignored. Argument can be specified multiple times. Example: `--ignore-regex='/^.*\/downloads\/.*\.pdf$/i'`
+* `--max-workers=<num>`            Maximum number of concurrent workers (threads). Use carefully. A high number of
+  threads can cause a DoS attack. Default is `3`.
+* `--crawl-assets=<values>`        Comma delimited list of frontend assets you want to crawl too. Otherwise, URLs with
+  an extension are ignored. Supported values: `fonts`, `images`, `styles`, `scripts`, `files`.
+* `--include-regex=<regex>`        Regular expression compatible with PHP preg_match() for URLs that should be included.
+  Argument can be specified multiple times. Example: `--include-regex='/^\/public\//'`
+* `--ignore-regex=<regex>`         Regular expression compatible with PHP preg_match() for URLs that should be ignored.
+  Argument can be specified multiple times. Example: `--ignore-regex='/^.*\/downloads\/.*\.pdf$/i'`
 * `--accept-encoding=<value>`      Custom `Accept-Encoding` request header. Default is `gzip, deflate, br`.
-* `--remove-query-params`          Remove query parameters from found URLs. Useful on websites where a lot of links are made to the same pages, only with different irrelevant query parameters.
-* `--add-random-query-params`      Adds several random query parameters to each URL. With this, it is possible to bypass certain forms of server and CDN caches.
-* `--max-queue-length=<num>`       The maximum length of the waiting URL queue. Increase in case of large websites, but expect higher memory requirements. Default is `2000`.
-* `--max-visited-urls=<num>`       The maximum number of the visited URLs. Increase in case of large websites, but expect higher memory requirements. Default is `5000`.
-* `--max-url-length=<num>`         The maximum supported URL length in chars. Increase in case of very long URLs, but expect higher memory requirements. Default is `2000`.
+* `--remove-query-params`          Remove query parameters from found URLs. Useful on websites where a lot of links are
+  made to the same pages, only with different irrelevant query parameters.
+* `--add-random-query-params`      Adds several random query parameters to each URL. With this, it is possible to bypass
+  certain forms of server and CDN caches.
+* `--max-queue-length=<num>`       The maximum length of the waiting URL queue. Increase in case of large websites, but
+  expect higher memory requirements. Default is `2000`.
+* `--max-visited-urls=<num>`       The maximum number of the visited URLs. Increase in case of large websites, but
+  expect higher memory requirements. Default is `5000`.
+* `--max-url-length=<num>`         The maximum supported URL length in chars. Increase in case of very long URLs, but
+  expect higher memory requirements. Default is `2000`.
 
-#### Export settings:
+#### Export settings
 
 * `--output-html-file=<file>`      File path for HTML output. Extension `.html` is automatically added if not specified.
 * `--output-json-file=<file>`      File path for JSON output. Extension `.json` is automatically added if not specified.
 * `--output-text-file=<file>`      File path for text output. Extension `.txt` is automatically added if not specified.
-* `--add-host-to-output-file`      Add host from initial URL as suffix to output file name. Example: you set `--output-json-file=/dir/report` and target filename will be `/dir/report.www.mydomain.tld.json`.
-* `--add-timestamp-to-output-file` Add timestamp as suffix to output file name. Example: you set `--output-html-file=/dir/report` and target filename will be `/dir/report.2023-10-06.14-33-12.html`.
+* `--add-host-to-output-file`      Add host from initial URL as suffix to output file name. Example: you
+  set `--output-json-file=/dir/report` and target filename will be `/dir/report.www.mydomain.tld.json`.
+* `--add-timestamp-to-output-file` Add timestamp as suffix to output file name. Example: you
+  set `--output-html-file=/dir/report` and target filename will be `/dir/report.2023-10-06.14-33-12.html`.
 
-#### Mailer options:
+#### Mailer options
 
-* `--mail-to=<email>`              Optional but required for mailer activation. Send report to given email addresses. You can specify multiple emails separated by comma.
+* `--mail-to=<email>`              Optional but required for mailer activation. Send report to given email addresses.
+  You can specify multiple emails separated by comma.
 * `--mail-from=<email>`            Sender email address. Default is `siteone-website-crawler@your-hostname`.
 * `--mail-smtp-host=<host>`        SMTP host for sending emails. Default is `localhost`.
 * `--mail-smtp-port=<port>`        SMTP port for sending emails. Default is `25`.
@@ -178,43 +217,6 @@ required arguments:
 
 **NOTICE**: For now, only SMTP without encryption is supported, typically running on port 25. If you are interested in
 this tool, we can also implement secure SMTP support, or simply send me a pull request with lightweight implementation.
-
-## Other platforms
-
-### Windows (x64)
-
-If using Windows, the best choice is to use [Ubuntu](https://ubuntu.com/wsl)
-or [Debian](https://www.linuxfordevices.com/tutorials/linux/install-debian-on-windows-wsl)
-in [WSL](https://learn.microsoft.com/en-us/windows/wsl/install).
-
-Otherwise, you can
-download [swoole-cli-v4.8.13-cygwin-x64.zip](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-cygwin-x64.zip)
-from [Swoole releases](https://github.com/swoole/swoole-src/releases) and use precompiled `bin/swoole-cli.exe`.
-
-A really functional and tested Windows command looks like this (modify path to your `swoole-cli.exe` and `crawler.php`):
-
-```bash
-c:\Work\swoole-cli-v4.8.13-cygwin-x64\bin\swoole-cli.exe C:\Work\siteone-website-crawler\crawler.php --url=https://www.siteone.io/ --output=json
-```
-
-**NOTICE**: Cygwin does not support STDERR with rewritable lines in the console. Therefore, the output is not as
-beautiful as on Linux or macOS.
-
-### macOS (arm64, x64)
-
-If using macOS with latest arm64 M1/M2 CPU, download arm64
-version [swoole-cli-v4.8.13-macos-arm64.tar.xz](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-macos-arm64.tar.xz),
-unpack and use its precompiled `swoole-cli`.
-
-If using macOS with Intel CPU (x64), download x64
-version  [swoole-cli-v4.8.13-macos-x64.tar.xz](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-macos-x64.tar.xz),
-unpack and use its precompiled `swoole-cli`.
-
-### Linux (arm64)
-
-If using arm64 Linux, you can download
-precompiled [swoole-cli-v4.8.13-linux-arm64.tar.xz](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-linux-arm64.tar.xz)
-and use its precompiled `swoole-cli`.
 
 ## Roadmap
 
