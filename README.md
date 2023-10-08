@@ -43,6 +43,7 @@ SiteOne Website Crawler is **the best, easy-to-use, most powerful and most funct
 - it also crawls **all files**, styles, scripts, fonts, images, documents, etc.
 - will help you create a **sitemap** for your website
 - it will **clearly warn you** of any wrong use
+- **captures CTRL+C** and ends with the statistics for at least the current URLs
 
 Don't hesitate and try it. You will love it as we do! ♥
 

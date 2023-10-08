@@ -4,9 +4,11 @@ namespace Crawler;
 
 use Crawler\Output\Output;
 use Exception;
+use Swoole\Process;
 use Swoole\Table;
 use Swoole\Coroutine;
 use Swoole\Coroutine\Http\Client;
+use Swoole\ExitException;
 
 class Crawler
 {
@@ -82,6 +84,14 @@ class Crawler
 
         // start recursive coroutine to process URLs
         Coroutine\run(function () {
+
+            // catch SIGINT (Ctrl+C), print statistics and stop crawler
+            Process::signal(SIGINT, function () {
+                $this->output->addTotalStats($this->visited);
+                Coroutine::cancel(Coroutine::getCid());
+                throw new ExitException(Utils::getColorText('I caught the manual stop of the script. Therefore, the statistics only contain processed URLs until the script stops.', 'red', true));
+            });
+
             while ($this->getActiveWorkersNumber() < $this->options->maxWorkers && $this->queue->count() > 0) {
                 Coroutine::create([$this, 'processNextUrl']);
             }

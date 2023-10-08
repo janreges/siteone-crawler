@@ -20,7 +20,7 @@ class SitemapExporter
 
     /**
      * @param string[] $urls
-     * @param array $options
+     * @param float[] $options
      */
     public function __construct(array $urls, array $options)
     {
