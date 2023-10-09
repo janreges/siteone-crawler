@@ -22,6 +22,8 @@ class Crawler
     private ParsedUrl $initialParsedUrl;
     private string $finalUserAgent;
 
+    private static array $htmlPagesExtensions = ['htm', 'html', 'shtml', 'php', 'phtml', 'ashx', 'xhtml', 'asp', 'aspx', 'jsp', 'jspx', 'do', 'cfm', 'cgi', 'pl'];
+
     const URL_TYPE_HTML = 1;
     const URL_TYPE_SCRIPT = 2;
     const URL_TYPE_STYLESHEET = 3;
@@ -110,14 +112,19 @@ class Crawler
      */
     private function parseHtmlBodyAndFillQueue(string $body, string $url): array
     {
+        static $regexForHtmlExtensions = null;
+        if (!$regexForHtmlExtensions) {
+            $regexForHtmlExtensions = '/\.(' . implode('|', self::$htmlPagesExtensions) . ')/i';
+        }
+
         $result = [];
 
         preg_match_all('/<a[^>]*\shref=["\']([^"\']+)["\'][^>]*>/i', $body, $matches);
         $foundUrls = $matches[1];
 
         if (!$this->options->hasCrawlAsset(AssetType::FILES)) {
-            $foundUrls = array_filter($foundUrls, function ($url) {
-                return preg_match('/\.[a-z0-9]{2,10}(|\?.*)$/i', $url) === 0;
+            $foundUrls = array_filter($foundUrls, function ($url) use ($regexForHtmlExtensions) {
+                return preg_match('/\.[a-z0-9]{2,10}(|\?.*)$/i', $url) === 0 || preg_match($regexForHtmlExtensions, $url) === 1;
             });
         }
 
@@ -230,7 +237,7 @@ class Crawler
 
         $start = microtime(true);
         $parsedUrl = ParsedUrl::parse($url);
-        $isAssetUrl = $parsedUrl->extension && stripos($parsedUrl->extension, 'html') === false;
+        $isAssetUrl = $parsedUrl->extension && !in_array($parsedUrl->extension, self::$htmlPagesExtensions);
 
         $absoluteUrl = $this->initialParsedUrl->scheme . '://' . $this->initialParsedUrl->host . ($this->initialParsedUrl->port !== 80 && $this->initialParsedUrl->port !== 443 ? ':' . $this->initialParsedUrl->port : '') . $parsedUrl->path;
         $finalUrlForHttpClient = $this->options->addRandomQueryParams ? Utils::addRandomQueryParams($parsedUrl->path) : $parsedUrl->path;
@@ -303,6 +310,11 @@ class Crawler
 
     private function isUrlSuitableForQueue(string $url): bool
     {
+        static $regexForHtmlExtensions = null;
+        if (!$regexForHtmlExtensions) {
+            $regexForHtmlExtensions = '/\.(' . implode('|', self::$htmlPagesExtensions) . ')/i';
+        }
+
         if (!$this->isUrlAllowedByRegexs($url)) {
             return false;
         }
@@ -312,7 +324,7 @@ class Crawler
         $isInQueue = $this->queue->exist($urlKey);
         $isAlreadyVisited = $this->visited->exist($urlKey);
         $isParsable = @parse_url($url) !== false;
-        $isUrlWithHtml = preg_match('/\.[a-z0-9]{2,4}$/i', $url) === 0 || preg_match('/\.(html|shtml|phtml)/i', $url) === 1;
+        $isUrlWithHtml = preg_match('/\.[a-z0-9]{2,5}(|\?.*)$/i', $url) === 0 || preg_match($regexForHtmlExtensions, $url) === 1;
         $parseableAreOnlyHtmlFiles = empty($this->options->crawlAssets);
 
         return !$isInQueue && !$isAlreadyVisited && $isParsable && ($isUrlWithHtml || !$parseableAreOnlyHtmlFiles);
@@ -392,7 +404,7 @@ class Crawler
     private function getUrlKeyForSwooleTable(string $url): string
     {
         $parsedUrl = parse_url($url);
-        $relevantParts = ($parsedUrl['host'] ?? '') . ($parsedUrl['path'] ?? '/');
+        $relevantParts = ($parsedUrl['host'] ?? '') . ($parsedUrl['path'] ?? '/') . ($parsedUrl['query'] ?? '');
         return md5($relevantParts);
     }
 

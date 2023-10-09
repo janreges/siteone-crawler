@@ -1,6 +1,6 @@
 # SiteOne Website Crawler
 
-SiteOne Website Crawler is **the best, easy-to-use, most powerful and most functional website crawler you will love ♥**.
+SiteOne Website Crawler is **the best, easy-to-use, most powerful and functional website crawler you will love ♥**.
 
 ## Table of contents
 
