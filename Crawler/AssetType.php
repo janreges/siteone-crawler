@@ -2,7 +2,10 @@
 
 namespace Crawler;
 
-enum AssetType implements \JsonSerializable
+use Exception;
+use JsonSerializable;
+
+enum AssetType implements JsonSerializable
 {
     case FONTS;
     case IMAGES;
@@ -10,6 +13,9 @@ enum AssetType implements \JsonSerializable
     case SCRIPTS;
     case FILES;
 
+    /**
+     * @throws Exception
+     */
     public static function fromText(string $text): self
     {
         $text = trim(strtolower($text));
@@ -24,7 +30,7 @@ enum AssetType implements \JsonSerializable
         } elseif ($text === 'files') {
             return self::FILES;
         } else {
-            throw new \Exception("Unknown asset type '{$text}'. Supported values are: " . implode(', ', self::getAvailableTextTypes()));
+            throw new Exception("Unknown asset type '{$text}'. Supported values are: " . implode(', ', self::getAvailableTextTypes()));
         }
     }
 
@@ -36,7 +42,7 @@ enum AssetType implements \JsonSerializable
         return ['fonts', 'images', 'styles', 'scripts', 'files'];
     }
 
-    public function jsonSerialize(): mixed
+    public function jsonSerialize(): string
     {
         if ($this === self::FONTS) {
             return 'fonts';
@@ -49,7 +55,7 @@ enum AssetType implements \JsonSerializable
         } elseif ($this === self::FILES) {
             return 'files';
         } else {
-            throw new \Exception("Unknown asset type '{$this}'");
+            throw new Exception("Unknown asset type");
         }
     }
 }

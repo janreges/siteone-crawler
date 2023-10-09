@@ -2,7 +2,7 @@
 
 namespace Crawler\Output;
 
-use Crawler\Options;
+use Crawler\CoreOptions;
 use Crawler\Utils;
 use Swoole\Coroutine\Http\Client;
 use Swoole\Table;
@@ -12,7 +12,7 @@ class JsonOutput implements Output
 
     private string $version;
     private float $startTime;
-    private Options $options;
+    private CoreOptions $options;
     private string $command;
     private bool $printToOutput = true;
 
@@ -21,11 +21,11 @@ class JsonOutput implements Output
     /**
      * @param string $version
      * @param float $startTime
-     * @param Options $options
+     * @param CoreOptions $options
      * @param string $command
      * @param bool $printToOutput
      */
-    public function __construct(string $version, float $startTime, Options $options, string $command, bool $printToOutput = true)
+    public function __construct(string $version, float $startTime, CoreOptions $options, string $command, bool $printToOutput = true)
     {
         $this->version = $version;
         $this->startTime = $startTime;
@@ -47,7 +47,7 @@ class JsonOutput implements Output
 
     public function addUsedOptions(string $finalUserAgent): void
     {
-        $this->json['options'] = $this->options->toArray(true);
+        $this->json['options'] = $this->options->toArray();
         $this->json['crawler']['finalUserAgent'] = $finalUserAgent;
     }
 
@@ -127,7 +127,7 @@ class JsonOutput implements Output
                 "\rProgress: %s | %s %s | %s",
                 str_pad($progressStatus, 7),
                 Utils::getProgressBar($done, $total, 25),
-                number_format($elapsedTime, 3, '.') . " sec",
+                number_format($elapsedTime, 3) . " sec",
                 Utils::truncateInTwoThirds($url, Utils::getConsoleWidth() - $textWidthWithoutUrl)
             );
             $maxStdErrLength = max($maxStdErrLength, strlen($progressToStdErr));
@@ -172,7 +172,6 @@ class JsonOutput implements Output
         $json = $this->getJson();
         if (!$json) {
             echo "ERROR: unable to parse JSON: " . json_last_error_msg() . "\n";
-            print_r($this->json);
         } else {
             echo $json;
         }

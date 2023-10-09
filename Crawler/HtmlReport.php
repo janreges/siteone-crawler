@@ -16,7 +16,7 @@ class HtmlReport
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <title>SiteOne Website Crawler Report - ' . htmlspecialchars($data['options']['url']) . '</title>
                 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
-                <style type="text/css">
+                <style>
                         table { border-collapse: collapse;  }
                         table.table-compact { font-size: 0.9em; }
                         table, table th, table td {

@@ -12,7 +12,7 @@ use Swoole\ExitException;
 
 class Crawler
 {
-    private Options $options;
+    private CoreOptions $options;
     private Output $output;
 
     private Table $statusTable;
@@ -32,11 +32,11 @@ class Crawler
     const URL_TYPE_OTHER_FILE = 9;
 
     /**
-     * @param Options $options
+     * @param CoreOptions $options
      * @param Output $output
      * @throws Exception
      */
-    public function __construct(Options $options, Output $output)
+    public function __construct(CoreOptions $options, Output $output)
     {
         $this->options = $options;
         $this->output = $output;
@@ -73,6 +73,7 @@ class Crawler
 
     /**
      * @return void
+     * @throws Exception
      */
     public function run(): void
     {
@@ -99,9 +100,13 @@ class Crawler
     }
 
     /**
+     * Parses HTML body and fills queue with new founded URLs
+     * Returns array with extra parsed content (Title, Keywords, Description, DOM, ...)
+     *
      * @param string $body
      * @param string $url
      * @return array
+     * @throws Exception
      */
     private function parseHtmlBodyAndFillQueue(string $body, string $url): array
     {
@@ -109,6 +114,12 @@ class Crawler
 
         preg_match_all('/<a[^>]*\shref=["\']([^"\']+)["\'][^>]*>/i', $body, $matches);
         $foundUrls = $matches[1];
+
+        if (!$this->options->hasCrawlAsset(AssetType::FILES)) {
+            $foundUrls = array_filter($foundUrls, function ($url) {
+                return preg_match('/\.[a-z0-9]{2,10}(|\?.*)$/i', $url) === 0;
+            });
+        }
 
         if ($this->options->crawlAssets) {
             foreach ($this->options->crawlAssets as $assetType) {
@@ -325,6 +336,11 @@ class Crawler
         return $isAllowed;
     }
 
+    /**
+     * @param string $url
+     * @return void
+     * @throws Exception
+     */
     private function addUrlToQueue(string $url): void
     {
         if (!$this->queue->set($this->getUrlKeyForSwooleTable($url), ['url' => $url])) {
@@ -334,6 +350,11 @@ class Crawler
         }
     }
 
+    /**
+     * @param string $url
+     * @return void
+     * @throws Exception
+     */
     private function addUrlToVisited(string $url): void
     {
         if (!$this->visited->set($this->getUrlKeyForSwooleTable($url), ['url' => $url])) {
@@ -380,27 +401,32 @@ class Crawler
         return $this->statusTable->get('1', 'workers');
     }
 
-    private function getDoneUrlsNumber(): int
-    {
-        return $this->statusTable->get('1', 'doneUrls');
-    }
-
+    /**
+     * @return string
+     * @throws Exception
+     */
     public function getFinalUserAgent(): string
     {
         if ($this->options->userAgent) {
             return $this->options->userAgent;
         }
 
-        switch ($this->options->device) {
-            case DeviceType::DESKTOP:
-                return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/' . date('y') . '.0.0.0 Safari/537.36';
-            case DeviceType::MOBILE:
-                return 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15A5370a Safari/604.1';
-            case DeviceType::TABLET:
-                return 'Mozilla/5.0 (Linux; Android 11; SAMSUNG SM-T875) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/14.0 Chrome/87.0.4280.141 Safari/537.36';
-            default:
-                throw new Exception("Unsupported device '{$this->options->device}'");
-        }
+        return match ($this->options->device) {
+            DeviceType::DESKTOP => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/' . date('y') . '.0.0.0 Safari/537.36',
+            DeviceType::MOBILE => 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15A5370a Safari/604.1',
+            DeviceType::TABLET => 'Mozilla/5.0 (Linux; Android 11; SAMSUNG SM-T875) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/14.0 Chrome/87.0.4280.141 Safari/537.36',
+            default => throw new Exception("Unsupported device '{$this->options->device}'"),
+        };
+    }
+
+    public function getOutput(): Output
+    {
+        return $this->output;
+    }
+
+    public function getCoreOptions(): CoreOptions
+    {
+        return $this->options;
     }
 
 }

@@ -4,7 +4,7 @@ namespace Crawler;
 
 class Utils
 {
-    private static $colorsEnabled = true;
+    private static bool $colorsEnabled = true;
 
     public static function disableColors(): void
     {
@@ -13,7 +13,7 @@ class Utils
 
     public static function relativeToAbsoluteUrl(string $relativeUrl, string $baseUrl): ?string
     {
-        if (substr($relativeUrl, 0, 1) === '/' || preg_match('/^https?:\/\//', $relativeUrl) === 1) {
+        if (str_starts_with($relativeUrl, '/') || preg_match('/^https?:\/\//', $relativeUrl) === 1) {
             return $relativeUrl;
         }
 
@@ -183,7 +183,7 @@ class Utils
             return $cache[$column];
         }
 
-        if (preg_match('/^([^\(]+)\s*\(\s*([0-9]+)\s*\)/', $column, $matches) === 1) {
+        if (preg_match('/^([^(]+)\s*\(\s*([0-9]+)\s*\)/', $column, $matches) === 1) {
             $result = ['name' => trim($matches[1]), 'size' => (int)$matches[2]];
         } else {
             $result = ['name' => trim($column), 'size' => strlen(trim($column))];

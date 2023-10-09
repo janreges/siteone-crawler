@@ -168,15 +168,15 @@ required arguments:
 
 * `--url=<url>`                    Required. HTTP or HTTPS URL address of the website to be crawled.Use quotation marks
   if the URL contains query parameters
-* `--device=<device`               Device type for choosing a predefined User-Agent. Ignored when `--user-agent` is
+* `--device=<val>`                 Device type for choosing a predefined User-Agent. Ignored when `--user-agent` is
   defined. Supported values: `desktop`, `mobile`, `tablet`. Defaults is `desktop`.
-* `--user-agent=<value>`           Custom User-Agent header. Use quotation marks. If specified, it takes precedence over
+* `--user-agent=<val>`             Custom User-Agent header. Use quotation marks. If specified, it takes precedence over
   the device parameter.
-* `--timeout=<num>`                Request timeout in seconds. Default is `3`.
+* `--timeout=<int>`                Request timeout in seconds. Default is `3`.
 
 #### Output settings
 
-* `--output=<value>`               Output type. Supported values: `text`, `json`. Default is `text`.
+* `--output=<val>`                 Output type. Supported values: `text`, `json`. Default is `text`.
 * `--headers-to-table=<values>`    Comma delimited list of HTTP response headers added to output table. A special case
   is the possibility to use `Title`, `Keywords` and `Description`. Also, you can set `DOM` to display number of DOM
   elements in HTML. You can set the expected length of the column in parentheses for better look - for example `X-Cache(10)`
@@ -189,7 +189,7 @@ required arguments:
 
 #### Advanced crawler settings
 
-* `--max-workers=<num>`            Maximum number of concurrent workers (threads). Use carefully. A high number of
+* `--max-workers=<int>`            Maximum number of concurrent workers (threads). Use carefully. A high number of
   threads can cause a DoS attack. Default is `3`.
 * `--crawl-assets=<values>`        Comma delimited list of frontend assets you want to crawl too. Otherwise, URLs with
   an extension are ignored. Supported values: `fonts`, `images`, `styles`, `scripts`, `files`.
@@ -197,7 +197,7 @@ required arguments:
   Argument can be specified multiple times. Example: `--include-regex='/^\/public\//'`
 * `--ignore-regex=<regex>`         Regular expression compatible with PHP preg_match() for URLs that should be ignored.
   Argument can be specified multiple times. Example: `--ignore-regex='/^.*\/downloads\/.*\.pdf$/i'`
-* `--accept-encoding=<value>`      Custom `Accept-Encoding` request header. Default is `gzip, deflate, br`.
+* `--accept-encoding=<val>`        Custom `Accept-Encoding` request header. Default is `gzip, deflate, br`.
 * `--remove-query-params`          Remove query parameters from found URLs. Useful on websites where a lot of links are
   made to the same pages, only with different irrelevant query parameters.
 * `--add-random-query-params`      Adds several random query parameters to each URL. With this, it is possible to bypass
@@ -209,16 +209,12 @@ required arguments:
 * `--max-url-length=<num>`         The maximum supported URL length in chars. Increase in case of very long URLs, but
   expect higher memory requirements. Default is `2000`.
 
-#### Export settings
+#### File export settings
 
 * `--output-html-file=<file>`      File path for HTML output. Extension `.html` is automatically added if not specified.
 * `--output-json-file=<file>`      File path for JSON output. Extension `.json` is automatically added if not
   specified.
 * `--output-text-file=<file>`      File path for text output. Extension `.txt` is automatically added if not specified.
-* `--output-sitemap-xml=<file>`    File path where generated XML Sitemap will be saved. Extension `.xml` is
-  automatically added if not specified.
-* `--output-sitemap-txt=<file>`    File path where generated TXT Sitemap will be saved. Extension `.txt` is
-  automatically added if not specified.
 * `--add-host-to-output-file`      Add host from initial URL as suffix to output file name. Example: you
   set `--output-json-file=/dir/report` and target filename will be `/dir/report.www.mydomain.tld.json`.
 * `--add-timestamp-to-output-file` Add timestamp as suffix to output file name. Example: you
@@ -226,13 +222,23 @@ required arguments:
 
 #### Mailer options
 
-* `--mail-to=<email>`              Optional but required for mailer activation. Send report to given email addresses.
-  You can specify multiple emails separated by comma.
-* `--mail-from=<email>`            Sender email address. Default is `siteone-website-crawler@your-hostname`.
+* `--mail-to=<email>`              Recipients of HTML e-mail reports. Optional but required for mailer activation. You can specify multiple emails separated by comma.
+* `--mail-from=<email>`            E-mail sender address. Default values is `siteone-website-crawler@your-hostname.com`.
+* `--mail-from-name=<val>`         E-mail sender name. Default values is `SiteOne Crawler`.
+* `--mail-subject-template=<val>`  E-mail subject template. You can use dynamic variables %domain%, %date% and %datetime%. Default values is `Crawler report for %domain% (%datetime%)`.
 * `--mail-smtp-host=<host>`        SMTP host for sending emails. Default is `localhost`.
 * `--mail-smtp-port=<port>`        SMTP port for sending emails. Default is `25`.
 * `--mail-smtp-user=<user>`        SMTP user, if your SMTP server requires authentication.
 * `--mail-smtp-pass=<pass>`        SMTP password, if your SMTP server requires authentication.
+
+#### Sitemap options
+
+* `--sitemap-xml-file=<file>`      File path where generated XML Sitemap will be saved. Extension `.xml` is
+  automatically added if not specified.
+* `--sitemap-txt-file=<file>`      File path where generated TXT Sitemap will be saved. Extension `.txt` is
+  automatically added if not specified. 
+* `--sitemap-base-priority=<num>`  Base priority for XML sitemap. Default values is `0.5`. 
+* `--sitemap-priority-increase=<num>`  Priority increase value based on slashes count in the URL. Default values is `0.1`.
 
 **NOTICE**: For now, only SMTP without encryption is supported, typically running on port 25. If you are interested in
 this tool, we can also implement secure SMTP support, or simply send me a pull request with lightweight implementation.

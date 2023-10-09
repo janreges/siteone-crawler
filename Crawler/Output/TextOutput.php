@@ -2,17 +2,17 @@
 
 namespace Crawler\Output;
 
-use Crawler\Options;
+use Crawler\CoreOptions;
 use Crawler\Utils;
 use Swoole\Coroutine\Http\Client;
 use Swoole\Table;
 
-class FormattedTextOutput implements Output
+class TextOutput implements Output
 {
 
     private string $version;
     private float $startTime;
-    private Options $options;
+    private CoreOptions $options;
     private string $command;
     private bool $printToOutput = true;
 
@@ -21,11 +21,11 @@ class FormattedTextOutput implements Output
     /**
      * @param string $version
      * @param float $startTime
-     * @param Options $options
+     * @param CoreOptions $options
      * @param string $command
      * @param bool $printToOutput
      */
-    public function __construct(string $version, float $startTime, Options $options, string $command, bool $printToOutput)
+    public function __construct(string $version, float $startTime, CoreOptions $options, string $command, bool $printToOutput)
     {
         $this->version = $version;
         $this->startTime = $startTime;
@@ -68,17 +68,17 @@ class FormattedTextOutput implements Output
         $urlForTable = $this->options->hideSchemeAndHost ? (preg_replace('/^https?:\/\/[^\/]+\//i', '/', $url)) : $url;
 
         if ($status == 200) {
-            $coloredStatus = Utils::getColorText(str_pad($status, 6, ' '), 'green');
+            $coloredStatus = Utils::getColorText(str_pad($status, 6), 'green');
         } else if ($status > 300 && $status < 400) {
-            $coloredStatus = Utils::getColorText(str_pad($status, 6, ' '), 'yellow', true);
+            $coloredStatus = Utils::getColorText(str_pad($status, 6), 'yellow', true);
         } elseif ($status == 404) {
-            $coloredStatus = Utils::getColorText(str_pad($status, 6, ' '), 'magenta', true);
+            $coloredStatus = Utils::getColorText(str_pad($status, 6), 'magenta', true);
         } elseif ($status == 429) {
-            $coloredStatus = Utils::getColorText(str_pad($status, 6, ' '), 'red', true);
+            $coloredStatus = Utils::getColorText(str_pad($status, 6), 'red', true);
         } elseif ($status > 400 && $status < 500) {
-            $coloredStatus = Utils::getColorText(str_pad($status, 6, ' '), 'cyan', true);
+            $coloredStatus = Utils::getColorText(str_pad($status, 6), 'cyan', true);
         } else {
-            $coloredStatus = Utils::getColorText(str_pad(Utils::getHttpClientCodeWithErrorDescription($status, true), 6, ' '), 'red', true);
+            $coloredStatus = Utils::getColorText(str_pad(Utils::getHttpClientCodeWithErrorDescription($status, true), 6), 'red', true);
         }
 
         $coloredElapsedTime = sprintf("%.3f", $elapsedTime);
@@ -112,7 +112,7 @@ class FormattedTextOutput implements Output
         }
 
         if (!$this->options->doNotTruncateUrl) {
-            $urlForTable = Utils::truncateInTwoThirds($urlForTable, $this->options->urlColumnSize, '...');
+            $urlForTable = Utils::truncateInTwoThirds($urlForTable, $this->options->urlColumnSize);
         }
 
         // put progress to stderr
@@ -171,7 +171,7 @@ class FormattedTextOutput implements Output
         ksort($info['countByStatus']);
         $statuses = '';
         foreach ($info['countByStatus'] as $status => $count) {
-            $statuses .= " " . Utils::getHttpClientCodeWithErrorDescription($status, false) . ": $count\n";
+            $statuses .= " " . Utils::getHttpClientCodeWithErrorDescription($status) . ": $count\n";
         }
         $this->addToOutput(Utils::getColorText(rtrim($statuses), 'yellow') . "\n");
         $this->addToOutput(str_repeat('=', 80) . "\n");
@@ -208,6 +208,6 @@ class FormattedTextOutput implements Output
 
     public function getType(): OutputType
     {
-        return OutputType::FORMATTED_TEXT;
+        return OutputType::TEXT;
     }
 }

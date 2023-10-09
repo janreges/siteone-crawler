@@ -2,12 +2,20 @@
 
 namespace Crawler;
 
-enum DeviceType implements \JsonSerializable
+use Exception;
+use JsonSerializable;
+
+enum DeviceType implements JsonSerializable
 {
     case DESKTOP;
     case MOBILE;
     case TABLET;
 
+    /**
+     * @param string $text
+     * @return self
+     * @throws Exception
+     */
     public static function fromText(string $text): self
     {
         $text = trim(strtolower($text));
@@ -18,7 +26,7 @@ enum DeviceType implements \JsonSerializable
         } elseif ($text === 'tablet') {
             return self::TABLET;
         } else {
-            throw new \Exception("Unknown device type '{$text}'. Supported values are: " . implode(', ', self::getAvailableTextTypes()));
+            throw new Exception("Unknown device type '{$text}'. Supported values are: " . implode(', ', self::getAvailableTextTypes()));
         }
     }
 
@@ -30,7 +38,11 @@ enum DeviceType implements \JsonSerializable
         return ['desktop', 'mobile', 'tablet'];
     }
 
-    public function jsonSerialize(): mixed
+    /**
+     * @return string
+     * @throws Exception
+     */
+    public function jsonSerialize(): string
     {
         if ($this === self::DESKTOP) {
             return 'desktop';
@@ -39,7 +51,7 @@ enum DeviceType implements \JsonSerializable
         } elseif ($this === self::TABLET) {
             return 'tablet';
         } else {
-            throw new \Exception("Unknown device type '{$this}'");
+            throw new Exception("Unknown device type");
         }
     }
 }
