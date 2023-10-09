@@ -119,6 +119,8 @@ class JsonOutput implements Output
         $this->json['results'][] = $row;
 
         if (!$this->options->hideProgressBar && $this->printToOutput) {
+            $textWidthWithoutUrl = 65;
+
             // put progress to stderr
             list($done, $total) = explode('/', $progressStatus);
             $progressToStdErr = sprintf(
@@ -126,7 +128,7 @@ class JsonOutput implements Output
                 str_pad($progressStatus, 7),
                 Utils::getProgressBar($done, $total, 25),
                 number_format($elapsedTime, 3, '.') . " sec",
-                $url
+                Utils::truncateInTwoThirds($url, Utils::getConsoleWidth() - $textWidthWithoutUrl)
             );
             $maxStdErrLength = max($maxStdErrLength, strlen($progressToStdErr));
             $progressContent = str_pad($progressToStdErr, $maxStdErrLength);

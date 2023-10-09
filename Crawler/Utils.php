@@ -213,4 +213,28 @@ class Utils
         return strval($httpCode);
     }
 
+    public static function getConsoleWidth(): int
+    {
+        static $width = null;
+        if ($width) {
+            return $width;
+        }
+        if (stripos(PHP_OS, 'WIN') === 0) {
+            $output = [];
+            exec('mode con', $output);
+            foreach ($output as $line) {
+                if (stripos($line, 'CON') !== false) {
+                    $parts = preg_split('/\s+/', $line);
+                    $width = intval($parts[1]);
+                    break;
+                }
+            }
+        } else {
+            $width = intval(shell_exec('tput cols'));
+        }
+
+        $width = max($width, 100);
+        return $width;
+    }
+
 }
