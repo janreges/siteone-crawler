@@ -6,6 +6,8 @@ use Crawler\Analysis\Analyzer;
 use Crawler\Export\Exporter;
 use Crawler\Options\Options;
 use Crawler\Options\Type;
+use Exception;
+use InvalidArgumentException;
 
 class Initiator
 {
@@ -28,12 +30,7 @@ class Initiator
     /**
      * @var CoreOptions
      */
-    private CoreOptions $crawlerOptions;
-
-    /**
-     * @var Output\Output
-     */
-    private Output\Output $output;
+    private CoreOptions $coreOptions;
 
     /**
      * @var Exporter[]
@@ -52,14 +49,12 @@ class Initiator
     private array $knownOptions = [];
 
     /**
-     * @param array $argv
-     * @param string $crawlerClassDir
-     * @throws \Exception
+     * @throws Exception
      */
     public function __construct(array $argv, string $crawlerClassDir)
     {
         if (!is_dir($crawlerClassDir) || !is_dir($crawlerClassDir . '/Export') || !is_dir($crawlerClassDir . '/Analysis')) {
-            throw new \InvalidArgumentException("Crawler class directory {$crawlerClassDir} does not exist or does not contain folders Export and Analysis.");
+            throw new InvalidArgumentException("Crawler class directory {$crawlerClassDir} does not exist or does not contain folders Export and Analysis.");
         }
 
         $this->argv = $argv;
@@ -71,7 +66,7 @@ class Initiator
 
     /**
      * @return void
-     * @throws \Exception
+     * @throws Exception
      */
     public function validateAndInit(): void
     {
@@ -81,8 +76,8 @@ class Initiator
         // check for given unknown options
         $this->checkUnknownOptions();
 
-        // import crawler options and fill with given parameters
-        $this->importCrawlerOptions();
+        // import core crawler options and fill with given parameters
+        $this->importCoreOptions();
 
         // import all auto-activated exporters thanks to filled CLI parameter(s)
         $this->importExporters();
@@ -118,18 +113,22 @@ class Initiator
         }
     }
 
+    /**
+     * @return void
+     * @throws Exception
+     */
     private function fillAllOptionsValues(): void
     {
         foreach ($this->options->getGroups() as $group) {
             foreach ($group->options as $option) {
                 if (in_array($option->name, $this->knownOptions)) {
-                    throw new \Exception("Detected duplicated option '{$option->name}' in more exporters/analyzers.");
+                    throw new Exception("Detected duplicated option '{$option->name}' in more exporters/analyzers.");
                 } else {
                     $this->knownOptions[] = $option->name;
                 }
 
                 if ($option->altName && in_array($option->altName, $this->knownOptions)) {
-                    throw new \Exception("Detected duplicated option '{$option->altName}' in more exporters/analyzers.");
+                    throw new Exception("Detected duplicated option '{$option->altName}' in more exporters/analyzers.");
                 } elseif ($option->altName) {
                     $this->knownOptions[] = $option->altName;
                 }
@@ -141,7 +140,7 @@ class Initiator
 
     /**
      * @return void
-     * @throws \Exception
+     * @throws Exception
      */
     private function checkUnknownOptions(): void
     {
@@ -156,13 +155,17 @@ class Initiator
         }
 
         if ($unknownOptions) {
-            throw new \Exception("Unknown options: " . implode(', ', $unknownOptions));
+            throw new Exception("Unknown options: " . implode(', ', $unknownOptions));
         }
     }
 
-    private function importCrawlerOptions(): void
+    /**
+     * @return void
+     * @throws Exception
+     */
+    private function importCoreOptions(): void
     {
-        $this->crawlerOptions = new CoreOptions($this->options);
+        $this->coreOptions = new CoreOptions($this->options);
     }
 
     /**
@@ -229,9 +232,9 @@ class Initiator
         return $classes;
     }
 
-    public function getCrawlerOptions(): CoreOptions
+    public function getCoreOptions(): CoreOptions
     {
-        return $this->crawlerOptions;
+        return $this->coreOptions;
     }
 
     /**

@@ -32,7 +32,7 @@ try {
 }
 
 // parse input parameters with internal error handling and output
-$options = $initiator->getCrawlerOptions();
+$options = $initiator->getCoreOptions();
 if ($options->noColor) {
     Utils::disableColors();
 }

@@ -150,12 +150,17 @@ required arguments:
   --output-html-file=/dir/report.html \
   --output-json-file=/dir/report.json \
   --output-text-file=/dir/report.txt \
-  --output-sitemap-xml=/dir/sitemap.xml \
-  --output-sitemap-txt=/dir/sitemap.txt \
   --add-timestamp-to-output-file \
   --add-host-to-output-file \
-  --mail-to=your.name@ymy-mail.tld \
+  --sitemap-xml-file==/dir/sitemap.xml \
+  --sitemap-txt-file==/dir/sitemap.txt \
+  --sitemap-base-priority=0.5 \
+  --sitemap-priority-increase=0.1 \
+  --mail-to=your.name@my-mail.tld \
+  --mail-to=your.friend.name@my-mail.tld \
   --mail-from=crawler@ymy-mail.tld \
+  --mail-from-name="SiteOne Crawler" \
+  --mail-subject-template="Crawler report for %domain% (%datetime%)" \
   --mail-smtp-host=smtp.my-mail.tld \
   --mail-smtp-port=25 \
   --mail-smtp-user=smtp.user \
