@@ -12,6 +12,10 @@ use Crawler\Output\JsonOutput;
 use Crawler\Output\MultiOutput;
 use Crawler\Output\Output;
 use Crawler\Output\OutputType;
+use Crawler\Result\Status;
+use Crawler\Result\Storage\FileStorage;
+use Crawler\Result\Storage\MemoryStorage;
+use Crawler\Result\Storage\StorageType;
 use Exception;
 
 class Manager
@@ -23,6 +27,7 @@ class Manager
     private Output $output;
     private string $command;
     private Crawler $crawler;
+    private Status $status;
 
     /**
      * @var Exporter[]
@@ -41,9 +46,10 @@ class Manager
      * @param string $command
      * @param Exporter[] $exporters
      * @param Analyzer[] $analyzers
+     * @param string $baseDir
      * @throws Exception
      */
-    public function __construct(string $version, float $startTime, CoreOptions $options, string $command, array $exporters, array $analyzers)
+    public function __construct(string $version, float $startTime, CoreOptions $options, string $command, array $exporters, array $analyzers, string $baseDir)
     {
         $this->version = $version;
         $this->startTime = $startTime;
@@ -51,9 +57,29 @@ class Manager
         $this->command = $command;
         $this->exporters = $exporters;
         $this->analyzers = $analyzers;
-        $this->output = $this->getOutputByOptions();
 
-        $this->crawler = new Crawler($this->options, $this->output);
+        $compression = true; // TODO from options
+
+        $info = [
+            'name' => 'SiteOne Website Crawler',
+            'version' => $this->version,
+            'executedAt' => date('Y-m-d H:i:s'),
+            'command' => $this->command,
+            'hostname' => gethostname(),
+        ];
+
+        $this->status = new Status(
+            $options->resultStorage === StorageType::MEMORY
+                ? new MemoryStorage($compression)
+                : new FileStorage($baseDir . '/tmp', $compression),
+            true, // TODO by options
+            $info,
+            $this->options,
+            $this->startTime
+        );
+
+        $this->output = $this->getOutputByOptions($this->status);
+        $this->crawler = new Crawler($this->options, $this->output, $this->status);
     }
 
     /**
@@ -74,18 +100,20 @@ class Manager
     }
 
     /**
+     * @param Status $status
      * @return Output
      * @throws Exception
      */
-    private function getOutputByOptions(): Output
+    private function getOutputByOptions(Status $status): Output
     {
         $requiredOutputs = [];
         if ($this->options->outputType == OutputType::TEXT || $this->hasExporter(FileExporter::class)) {
             $requiredOutputs[] = new TextOutput(
                 $this->version,
                 $this->startTime,
+                $this->status,
                 $this->options,
-                $this->getSafeCommand(),
+                Utils::getSafeCommand($this->command),
                 $this->options->outputType == OutputType::TEXT
             );
         }
@@ -93,19 +121,21 @@ class Manager
         $jsonOutputNeeded =
             $this->options->outputType == OutputType::JSON
             || $this->hasExporter(FileExporter::class)
+            || $this->hasExporter(MailerExporter::class)
             || $this->hasExporter(SitemapExporter::class);
 
         if ($jsonOutputNeeded) {
             $requiredOutputs[] = new JsonOutput(
                 $this->version,
                 $this->startTime,
+                $status,
                 $this->options,
-                $this->getSafeCommand(),
+                Utils::getSafeCommand($this->command),
                 $this->options->outputType == OutputType::JSON
             );
         }
 
-        $multiOutputRequired = count($requiredOutputs) > 1 || $this->hasExporter(MailerExporter::class);
+        $multiOutputRequired = count($requiredOutputs) > 1;
 
         if ($multiOutputRequired) {
             $result = new MultiOutput();
@@ -124,6 +154,7 @@ class Manager
     {
         foreach ($this->exporters as $exporter) {
             $exporter->setCrawler($this->crawler);
+            $exporter->setStatus($this->status);
             $exporter->setOutput($this->output);
             try {
                 $exporter->export();
@@ -136,8 +167,14 @@ class Manager
 
     private function runAnalyzers(): void
     {
+        // sort analyzers by order
+        usort($this->analyzers, function (Analyzer $a, Analyzer $b) {
+            return $a->getOrder() <=> $b->getOrder();
+        });
+
         foreach ($this->analyzers as $analyzer) {
             $analyzer->setCrawler($this->crawler);
+            $analyzer->setStatus($this->status);
             $analyzer->setOutput($this->output);
             try {
                 $analyzer->analyze();
@@ -146,15 +183,6 @@ class Manager
                 $this->output->addError("{$analyzerBasename} error: " . $e->getMessage());
             }
         }
-    }
-
-    public function getSafeCommand(): string
-    {
-        return preg_replace(
-            ['/(pass[a-z]{0,5})=\S+/i', '/(keys?)=\S+/i', '/(secrets?)=\S+/i'],
-            ['$1=***', '$1=***', '$1=***'],
-            $this->command
-        );
     }
 
     private function hasExporter(string $exporterClass): bool

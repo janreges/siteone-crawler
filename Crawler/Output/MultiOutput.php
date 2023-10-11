@@ -2,6 +2,7 @@
 
 namespace Crawler\Output;
 
+use Crawler\Components\SuperTable;
 use Swoole\Coroutine\Http\Client;
 use Swoole\Table;
 
@@ -61,6 +62,13 @@ class MultiOutput implements Output
     {
         foreach ($this->outputs as $output) {
             $output->addTableRow($httpClient, $url, $status, $elapsedTime, $size, $type, $extraParsedContent, $progressStatus);
+        }
+    }
+
+    public function addSuperTable(SuperTable $table): void
+    {
+        foreach ($this->outputs as $output) {
+            $output->addSuperTable($table);
         }
     }
 

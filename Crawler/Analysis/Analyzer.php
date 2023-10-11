@@ -5,6 +5,7 @@ namespace Crawler\Analysis;
 use Crawler\Crawler;
 use Crawler\Options\Options;
 use Crawler\Output\Output;
+use Crawler\Result\Status;
 
 interface Analyzer
 {
@@ -31,6 +32,13 @@ interface Analyzer
     public function setCrawler(Crawler $crawler): void;
 
     /**
+     * Set status to get data from it
+     * @param Status $status
+     * @return void
+     */
+    public function setStatus(Status $status): void;
+
+    /**
      * Do your analysis and set results to output
      * @return void
      */
@@ -41,6 +49,12 @@ interface Analyzer
      * @return bool
      */
     public function shouldBeActivated(): bool;
+
+    /**
+     * Get order of this analyzer (lower = earlier)
+     * @return int
+     */
+    public function getOrder(): int;
 
     /**
      * Get options for this analyzer

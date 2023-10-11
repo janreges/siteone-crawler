@@ -5,6 +5,7 @@ namespace Crawler\Export;
 use Crawler\Crawler;
 use Crawler\Options\Options;
 use Crawler\Output\Output;
+use Crawler\Result\Status;
 use Exception;
 
 abstract class BaseExporter implements Exporter
@@ -13,6 +14,7 @@ abstract class BaseExporter implements Exporter
     protected Options $config;
     protected Output $output;
     protected Crawler $crawler;
+    protected Status $status;
 
     /**
      * @param Options $options
@@ -46,6 +48,14 @@ abstract class BaseExporter implements Exporter
     public function setCrawler(Crawler $crawler): void
     {
         $this->crawler = $crawler;
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function setStatus(Status $status): void
+    {
+        $this->status = $status;
     }
 
     /**

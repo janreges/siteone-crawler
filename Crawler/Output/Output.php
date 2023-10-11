@@ -2,6 +2,7 @@
 
 namespace Crawler\Output;
 
+use Crawler\Components\SuperTable;
 use Swoole\Coroutine\Http\Client;
 use Swoole\Table;
 
@@ -14,6 +15,8 @@ interface Output
     public function addTableHeader(): void;
 
     public function addTableRow(Client $httpClient, string $url, int $status, float $elapsedTime, int $size, int $type, array $extraParsedContent, string $progressStatus): void;
+
+    public function addSuperTable(SuperTable $table): void;
 
     public function addTotalStats(Table $visited): void;
 

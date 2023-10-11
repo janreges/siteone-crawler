@@ -2,14 +2,11 @@
 
 namespace Crawler\Export;
 
-use Crawler\Crawler;
 use Crawler\Options\Group;
 use Crawler\Options\Options;
 use Crawler\Options\Option;
 use Crawler\Options\Type;
-use Crawler\Output\JsonOutput;
-use Crawler\Output\MultiOutput;
-use Crawler\Output\OutputType;
+use Crawler\Result\VisitedUrl;
 use Exception;
 use SimpleXMLElement;
 
@@ -29,7 +26,12 @@ class SitemapExporter extends BaseExporter implements Exporter
 
     public function export(): void
     {
-        $urls = $this->getJsonOutput()->getUrlsForSitemap(Crawler::URL_TYPE_HTML);
+        $urls = [];
+        foreach ($this->status->getVisitedUrls() as $visitedUrl) {
+            if ($visitedUrl->type === VisitedUrl::TYPE_HTML) {
+                $urls[] = $visitedUrl->url;
+            }
+        }
         if ($this->outputSitemapXml) {
             try {
                 $sitemapFile = $this->generateXmlSitemap($this->outputSitemapXml, $urls);
@@ -94,15 +96,6 @@ class SitemapExporter extends BaseExporter implements Exporter
         file_put_contents($outputFile, $sitemapContent);
 
         return $outputFile;
-    }
-
-    private function getJsonOutput(): JsonOutput
-    {
-        $multiOutput = $this->output;
-        /* @var $multiOutput MultiOutput */
-        $jsonOutput = $multiOutput->getOutputByType(OutputType::JSON);
-        /* @var $jsonOutput JsonOutput */
-        return $jsonOutput;
     }
 
     public static function getOptions(): Options

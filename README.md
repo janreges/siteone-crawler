@@ -131,6 +131,7 @@ required arguments:
 ./swoole-cli crawler.php --url=https://mydomain.tld/ \
   --output=text \
   --max-workers=2 \
+  --memory-limit=512M \
   --timeout=5 \
   --user-agent="My User-Agent String" \
   --headers-to-table="DOM,X-Cache(10),Title,Keywords,Description" \
@@ -196,6 +197,7 @@ required arguments:
 
 * `--max-workers=<int>`            Maximum number of concurrent workers (threads). Use carefully. A high number of
   threads can cause a DoS attack. Default is `3`.
+* `--memory-limit=<size>`          Memory limit in units `M` (Megabytes) or `G` (Gigabytes). Default is `512M`.
 * `--crawl-assets=<values>`        Comma delimited list of frontend assets you want to crawl too. Otherwise, URLs with
   an extension are ignored. Supported values: `fonts`, `images`, `styles`, `scripts`, `files`.
 * `--include-regex=<regex>`        Regular expression compatible with PHP preg_match() for URLs that should be included.
@@ -208,11 +210,11 @@ required arguments:
 * `--add-random-query-params`      Adds several random query parameters to each URL. With this, it is possible to bypass
   certain forms of server and CDN caches.
 * `--max-queue-length=<num>`       The maximum length of the waiting URL queue. Increase in case of large websites, but
-  expect higher memory requirements. Default is `2000`.
+  expect higher memory requirements. Default is `9000`.
 * `--max-visited-urls=<num>`       The maximum number of the visited URLs. Increase in case of large websites, but
-  expect higher memory requirements. Default is `5000`.
+  expect higher memory requirements. Default is `10000`.
 * `--max-url-length=<num>`         The maximum supported URL length in chars. Increase in case of very long URLs, but
-  expect higher memory requirements. Default is `2000`.
+  expect higher memory requirements. Default is `2083`.
 
 #### File export settings
 

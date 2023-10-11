@@ -7,9 +7,6 @@ use Crawler\Options\Group;
 use Crawler\Options\Options;
 use Crawler\Options\Option;
 use Crawler\Options\Type;
-use Crawler\Output\JsonOutput;
-use Crawler\Output\MultiOutput;
-use Crawler\Output\OutputType;
 use Crawler\ParsedUrl;
 use Exception;
 
@@ -33,11 +30,7 @@ class MailerExporter extends BaseExporter implements Exporter
 
     public function export(): void
     {
-        $multiOutput = $this->output;
-        /* @var $multiOutput MultiOutput */
-        $jsonOutput = $multiOutput->getOutputByType(OutputType::JSON);
-        /* @var $jsonOutput JsonOutput */
-        $htmlReport = HtmlReport::generate($jsonOutput->getJson());
+        $htmlReport = HtmlReport::generate($this->status);
         $this->sendEmail($htmlReport);
         $this->output->addNotice("HTML report sent to " . implode(', ', $this->mailTo) . ".");
     }

@@ -84,6 +84,9 @@ class Initiator
 
         // import all auto-activated analyzers thanks to filled CLI parameters(s)
         $this->importAnalyzers();
+
+        // apply system settings
+        $this->importSystemSettings();
     }
 
     /**
@@ -202,6 +205,11 @@ class Initiator
         }
     }
 
+    private function importSystemSettings(): void
+    {
+        ini_set('memory_limit', $this->coreOptions->memoryLimit);
+    }
+
     /**
      * @return string[]
      */
@@ -271,6 +279,8 @@ class Initiator
                     $nameAndValue .= '=<val>';
                 } elseif ($option->type === Type::FLOAT) {
                     $nameAndValue .= '=<val>';
+                } elseif ($option->type === Type::SIZE_M_G) {
+                    $nameAndValue .= '=<size>';
                 } elseif ($option->type === Type::REGEX) {
                     $nameAndValue .= '=<regex>';
                 } elseif ($option->type === Type::EMAIL) {

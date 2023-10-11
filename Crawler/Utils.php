@@ -237,4 +237,19 @@ class Utils
         return $width;
     }
 
+    public static function getUrlWithoutSchemeAndHost(string $url): string
+    {
+        $parsedUrl = parse_url($url);
+        return $parsedUrl['path'] ?? '/';
+    }
+
+    public static function getSafeCommand(string $command): string
+    {
+        return preg_replace(
+            ['/(pass[a-z]{0,5})=\S+/i', '/(keys?)=\S+/i', '/(secrets?)=\S+/i'],
+            ['$1=***', '$1=***', '$1=***'],
+            $command
+        );
+    }
+
 }

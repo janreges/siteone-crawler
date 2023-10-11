@@ -2,7 +2,9 @@
 
 namespace Crawler\Output;
 
+use Crawler\Components\SuperTable;
 use Crawler\CoreOptions;
+use Crawler\Result\Status;
 use Crawler\Utils;
 use Swoole\Coroutine\Http\Client;
 use Swoole\Table;
@@ -12,6 +14,7 @@ class TextOutput implements Output
 
     private string $version;
     private float $startTime;
+    private Status $status;
     private CoreOptions $options;
     private string $command;
     private bool $printToOutput = true;
@@ -21,14 +24,16 @@ class TextOutput implements Output
     /**
      * @param string $version
      * @param float $startTime
+     * @param Status $status
      * @param CoreOptions $options
      * @param string $command
      * @param bool $printToOutput
      */
-    public function __construct(string $version, float $startTime, CoreOptions $options, string $command, bool $printToOutput)
+    public function __construct(string $version, float $startTime, Status $status, CoreOptions $options, string $command, bool $printToOutput)
     {
         $this->version = $version;
         $this->startTime = $startTime;
+        $this->status = $status;;
         $this->options = $options;
         $this->command = $command;
         $this->printToOutput = $printToOutput;
@@ -50,7 +55,7 @@ class TextOutput implements Output
 
     public function addTableHeader(): void
     {
-        $header = str_pad("URL", $this->options->urlColumnSize) . " |" . " Status " . "|" . " Time  " . "|" . " Size     ";
+        $header = str_pad("URL", $this->options->urlColumnSize) . " |" . " Result " . "|" . " Time  " . "|" . " Size     ";
         if (!$this->options->hideProgressBar) {
             $header = str_pad("Progress report", 26) . "| " . $header;
         }
@@ -138,39 +143,29 @@ class TextOutput implements Output
             ), '|') . "\n");
     }
 
+    public function addSuperTable(SuperTable $table): void
+    {
+        $this->addToOutput("\n");
+        $this->addToOutput($table->getConsoleOutput());
+    }
+
     public function addTotalStats(Table $visited): void
     {
-        $info = [
-            'totalUrls' => $visited->count(),
-            'totalSize' => 0,
-            'countByStatus' => [],
-            'totalTime' => 0,
-            'minTime' => null,
-            'maxTime' => null,
-        ];
-
-        foreach ($visited as $row) {
-            $info['totalTime'] += $row['time'];
-            $info['totalSize'] += $row['size'];
-            $info['countByStatus'][$row['status']] = ($info['countByStatus'][$row['status']] ?? 0) + 1;
-            $info['minTime'] = $info['minTime'] === null ? $row['time'] : min($row['time'], $info['minTime']);
-            $info['maxTime'] = $info['maxTime'] === null ? $row['time'] : max($row['time'], $info['maxTime']);
-        }
+        $stats = $this->status->getBasicStats();
 
         $this->addToOutput("\n");
-        $resultHeader = "Total execution time: " . Utils::getColorText(number_format(microtime(true) - $this->startTime, 2, '.', ' ') . " sec", 'cyan');
+        $resultHeader = "Total execution time: " . Utils::getColorText(number_format($stats->totalExecutionTime, 2, '.', ' ') . " sec", 'cyan');
         $this->addToOutput(str_repeat('=', 80) . "\n");
         $this->addToOutput("{$resultHeader}\n");
-        $this->addToOutput("Total processed URLs: " . Utils::getColorText($info['totalUrls'], 'cyan') . " with total size " . Utils::getColorText(Utils::getFormattedSize($info['totalSize']), 'cyan') . "\n");
+        $this->addToOutput("Total processed URLs: " . Utils::getColorText($stats->totalUrls, 'cyan') . " with total size " . Utils::getColorText($stats->totalSizeFormatted, 'cyan') . "\n");
         $this->addToOutput("Response times: "
-            . " AVG " . Utils::getColorText(number_format($info['totalTime'] / $info['totalUrls'], 3, '.', ' ') . ' sec', 'magenta', true)
-            . " MIN " . Utils::getColorText(number_format($info['minTime'], 3, '.', ' ') . ' sec', 'green', true)
-            . " MAX " . Utils::getColorText(number_format($info['maxTime'], 3, '.', ' ') . ' sec', 'red', true)
-            . " TOTAL " . Utils::getColorText(number_format($info['totalTime'], 3, '.', ' ') . ' sec', 'cyan', true) . "\n");
+            . " AVG " . Utils::getColorText(number_format($stats->totalRequestsTimesAvg, 3, '.', ' ') . ' sec', 'magenta', true)
+            . " MIN " . Utils::getColorText(number_format($stats->totalRequestsTimesMin, 3, '.', ' ') . ' sec', 'green', true)
+            . " MAX " . Utils::getColorText(number_format($stats->totalRequestsTimesMax, 3, '.', ' ') . ' sec', 'red', true)
+            . " TOTAL " . Utils::getColorText(number_format($stats->totalRequestsTimes, 3, '.', ' ') . ' sec', 'cyan', true) . "\n");
         $this->addToOutput("URLs by status:\n");
-        ksort($info['countByStatus']);
         $statuses = '';
-        foreach ($info['countByStatus'] as $status => $count) {
+        foreach ($stats->countByStatus as $status => $count) {
             $statuses .= " " . Utils::getHttpClientCodeWithErrorDescription($status) . ": $count\n";
         }
         $this->addToOutput(Utils::getColorText(rtrim($statuses), 'yellow') . "\n");

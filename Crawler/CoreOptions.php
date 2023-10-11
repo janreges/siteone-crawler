@@ -7,6 +7,7 @@ use Crawler\Options\Options;
 use Crawler\Options\Option;
 use Crawler\Options\Type;
 use Crawler\Output\OutputType;
+use Crawler\Result\Storage\StorageType;
 use Exception;
 
 class CoreOptions
@@ -35,10 +36,12 @@ class CoreOptions
 
     // advanced crawler settings
     public int $maxWorkers = 3;
+    public string $memoryLimit = '512M';
+    public StorageType $resultStorage = StorageType::MEMORY;
     public string $acceptEncoding = 'gzip, deflate, br';
-    public int $maxQueueLength = 2000;
-    public int $maxVisitedUrls = 5000;
-    public int $maxUrlLength = 2000;
+    public int $maxQueueLength = 9000;
+    public int $maxVisitedUrls = 10000;
+    public int $maxUrlLength = 2083; // https://stackoverflow.com/a/417184/1118709
     public array $crawlAssets = [];
     public array $includeRegex = [];
     public array $ignoreRegex = [];
@@ -58,6 +61,8 @@ class CoreOptions
                         $this->device = DeviceType::fromText($option->getValue());
                     } else if ($option->propertyToFill === 'outputType') {
                         $this->outputType = OutputType::fromText($option->getValue());
+                    } else if ($option->propertyToFill === 'resultStorage') {
+                        $this->resultStorage = StorageType::fromText($option->getValue());
                     } elseif ($option->propertyToFill === 'crawlAssets') {
                         foreach ($option->getValue() as $value) {
                             $this->crawlAssets[] = AssetType::fromText($value);
@@ -111,15 +116,17 @@ class CoreOptions
             self::GROUP_ADVANCED_CRAWLER_SETTINGS,
             'Advanced crawler settings', [
             new Option('--max-workers', null, 'maxWorkers', Type::INT, false, 'Max concurrent workers (threads).', 3, false),
+            new Option('--memory-limit', null, 'memoryLimit', Type::SIZE_M_G, false, 'Memory limit in units M (Megabytes) or G (Gigabytes).', '512M', false),
+            new Option('--result-storage', null, 'resultStorage', Type::STRING, false, 'Result storage type. Values: `memory` or `file-system`. Use `file-system` for large websites.', 'memory', false),
             new Option('--crawl-assets', null, 'crawlAssets', Type::STRING, true, 'Static assets to crawl. Comma delimited. Values: `fonts`, `images`, `styles`, `scripts`, `files`', [], false, true),
             new Option('--include-regex', '--include-regexp', 'includeRegex', Type::REGEX, true, 'Include URLs matching regex. Can be specified multiple times.', [], false, true),
             new Option('--ignore-regex', '--ignore-regexp', 'ignoreRegex', Type::REGEX, true, 'Ignore URLs matching regex. Can be specified multiple times.', [], false, true),
             new Option('--accept-encoding', null, 'acceptEncoding', Type::STRING, false, 'Set `Accept-Encoding` request header.', 'gzip, deflate, br', false),
             new Option('--remove-query-params', null, 'removeQueryParams', Type::BOOL, false, 'Remove URL query parameters from crawled URLs.', false, false),
             new Option('--add-random-query-params', null, 'addRandomQueryParams', Type::BOOL, false, 'Add random query parameters to each crawled URL.', false, false),
-            new Option('--max-queue-length', null, 'maxQueueLength', Type::INT, false, 'Max URL queue length. It affects memory requirements.', 2000, false),
-            new Option('--max-visited-urls', null, 'maxVisitedUrls', Type::INT, false, 'Max visited URLs. It affects memory requirements.', 5000, false),
-            new Option('--max-url-length', null, 'maxUrlLength', Type::INT, false, 'Max URL length in chars. It affects memory requirements.', 2000, false),
+            new Option('--max-queue-length', null, 'maxQueueLength', Type::INT, false, 'Max URL queue length. It affects memory requirements.', 9000, false),
+            new Option('--max-visited-urls', null, 'maxVisitedUrls', Type::INT, false, 'Max visited URLs. It affects memory requirements.', 10000, false),
+            new Option('--max-url-length', null, 'maxUrlLength', Type::INT, false, 'Max URL length in chars. It affects memory requirements.', 2083, false),
         ]));
 
         return $options;

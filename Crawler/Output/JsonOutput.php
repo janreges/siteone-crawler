@@ -2,7 +2,9 @@
 
 namespace Crawler\Output;
 
+use Crawler\Components\SuperTable;
 use Crawler\CoreOptions;
+use Crawler\Result\Status;
 use Crawler\Utils;
 use Swoole\Coroutine\Http\Client;
 use Swoole\Table;
@@ -12,6 +14,7 @@ class JsonOutput implements Output
 
     private string $version;
     private float $startTime;
+    private Status $status;
     private CoreOptions $options;
     private string $command;
     private bool $printToOutput = true;
@@ -21,14 +24,16 @@ class JsonOutput implements Output
     /**
      * @param string $version
      * @param float $startTime
+     * @param Status $status
      * @param CoreOptions $options
      * @param string $command
      * @param bool $printToOutput
      */
-    public function __construct(string $version, float $startTime, CoreOptions $options, string $command, bool $printToOutput = true)
+    public function __construct(string $version, float $startTime, Status $status, CoreOptions $options, string $command, bool $printToOutput = true)
     {
         $this->version = $version;
         $this->startTime = $startTime;
+        $this->status = $status;
         $this->options = $options;
         $this->command = $command;
         $this->printToOutput = $printToOutput;
@@ -36,13 +41,7 @@ class JsonOutput implements Output
 
     public function addBanner(): void
     {
-        $this->json['crawler'] = [
-            'name' => 'SiteOne Website Crawler',
-            'version' => $this->version,
-            'executedAt' => date('Y-m-d H:i:s'),
-            'command' => $this->command,
-            'hostname' => gethostname()
-        ];
+        $this->json['crawler'] = $this->status->getInfo();
     }
 
     public function addUsedOptions(string $finalUserAgent): void
@@ -57,34 +56,7 @@ class JsonOutput implements Output
             fwrite(STDERR, "\n\n");
         }
 
-        $info = [
-            'totalUrls' => $visited->count(),
-            'totalSize' => 0,
-            'countByStatus' => [],
-            'totalTime' => 0,
-            'minTime' => null,
-            'maxTime' => null,
-        ];
-
-        foreach ($visited as $row) {
-            $info['totalTime'] += $row['time'];
-            $info['totalSize'] += $row['size'];
-            $info['countByStatus'][$row['status']] = ($info['countByStatus'][$row['status']] ?? 0) + 1;
-            $info['minTime'] = $info['minTime'] === null ? $row['time'] : min($row['time'], $info['minTime']);
-            $info['maxTime'] = $info['maxTime'] === null ? $row['time'] : max($row['time'], $info['maxTime']);
-        }
-
-        $this->json['stats'] = [
-            'totalExecutionTime' => round(microtime(true) - $this->startTime, 3),
-            'totalUrls' => $info['totalUrls'],
-            'totalSize' => $info['totalSize'],
-            'totalSizeFormatted' => Utils::getFormattedSize($info['totalSize']),
-            'totalRequestsTimes' => round($info['totalTime'], 3),
-            'totalRequestsTimesAvg' => round($info['totalTime'] / $info['totalUrls'], 3),
-            'totalRequestsTimesMin' => round($info['minTime'], 3),
-            'totalRequestsTimesMax' => round($info['maxTime'], 3),
-            'countByStatus' => $info['countByStatus']
-        ];
+        $this->json['stats'] = (array)$this->status->getBasicStats();
     }
 
     public function addTableHeader(): void
@@ -140,6 +112,14 @@ class JsonOutput implements Output
                 fwrite(STDERR, $progressContent);
             }
         }
+    }
+
+    public function addSuperTable(SuperTable $table): void
+    {
+        if (!isset($this->json['tables'])) {
+            $this->json['tables'] = [];
+        }
+        $this->json['tables'][$table->aplCode] = $table->getJsonOutput();
     }
 
     public function addNotice(string $text): void

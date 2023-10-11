@@ -8,6 +8,7 @@ enum Type
     case FLOAT;
     case BOOL;
     case STRING;
+    case SIZE_M_G;
     case EMAIL;
     case URL;
     case REGEX;

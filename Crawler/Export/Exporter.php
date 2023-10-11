@@ -5,6 +5,7 @@ namespace Crawler\Export;
 use Crawler\Crawler;
 use Crawler\Options\Options;
 use Crawler\Output\Output;
+use Crawler\Result\Status;
 
 interface Exporter
 {
@@ -29,6 +30,13 @@ interface Exporter
      * @return void
      */
     public function setCrawler(Crawler $crawler): void;
+
+    /**
+     * Set status to get data from it
+     * @param Status $status
+     * @return void
+     */
+    public function setStatus(Status $status): void;
 
     /**
      * Should this exporter be activated based on options?

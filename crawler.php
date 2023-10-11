@@ -5,7 +5,7 @@ use Crawler\Manager;
 use Crawler\Output\OutputType;
 use Crawler\Utils;
 
-const VERSION = '2023.10.4';
+const VERSION = '2023.10.5';
 $startTime = microtime(true);
 
 // class loader
@@ -45,7 +45,8 @@ try {
         $options,
         implode(' ', $argv),
         $initiator->getExporters(),
-        $initiator->getAnalyzers()
+        $initiator->getAnalyzers(),
+        dirname(platformCompatiblePath($_SERVER['PHP_SELF']))
     );
 
     $manager->run();
