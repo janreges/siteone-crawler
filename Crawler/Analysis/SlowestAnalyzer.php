@@ -4,6 +4,7 @@ namespace Crawler\Analysis;
 
 use Crawler\Components\SuperTable;
 use Crawler\Components\SuperTableColumn;
+use Crawler\Crawler;
 use Crawler\Options\Group;
 use Crawler\Options\Option;
 use Crawler\Options\Options;
@@ -15,7 +16,7 @@ class SlowestAnalyzer extends BaseAnalyzer implements Analyzer
     const GROUP_SLOWEST_ANALYZER = 'slowest-analyzer';
 
     protected int $slowestTopLimit = 10;
-    protected float $slowestMinTime = 0.1;
+    protected float $slowestMinTime = 0.01;
 
     public function shouldBeActivated(): bool
     {
@@ -25,7 +26,7 @@ class SlowestAnalyzer extends BaseAnalyzer implements Analyzer
     public function analyze(): void
     {
         $slowUrls = array_filter($this->status->getVisitedUrls(), function ($visitedUrl) {
-            return $visitedUrl->requestTime >= $this->slowestMinTime;
+            return $visitedUrl->contentType === Crawler::CONTENT_TYPE_ID_HTML && $visitedUrl->requestTime >= $this->slowestMinTime;
         });
         usort($slowUrls, function ($a, $b) {
             return $b->requestTime <=> $a->requestTime;
@@ -65,7 +66,7 @@ class SlowestAnalyzer extends BaseAnalyzer implements Analyzer
             self::GROUP_SLOWEST_ANALYZER,
             'Slowest URL analyzer', [
             new Option('--slowest-urls-top-limit', null, 'slowestTopLimit', Type::INT, false, 'Number of URL addresses in TOP slowest URL addresses.', 10, false, false),
-            new Option('--slowest-urls-min-time', null, 'slowestMinTime', Type::FLOAT, false, 'The minimum response time for an URL address to be evaluated as slow.', 0.1, false),
+            new Option('--slowest-urls-min-time', null, 'slowestMinTime', Type::FLOAT, false, 'The minimum response time for an URL address to be evaluated as slow.', 0.01, false),
         ]));
         return $options;
     }

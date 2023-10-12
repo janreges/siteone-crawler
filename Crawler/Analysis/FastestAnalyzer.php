@@ -4,6 +4,7 @@ namespace Crawler\Analysis;
 
 use Crawler\Components\SuperTable;
 use Crawler\Components\SuperTableColumn;
+use Crawler\Crawler;
 use Crawler\Options\Group;
 use Crawler\Options\Option;
 use Crawler\Options\Options;
@@ -25,7 +26,7 @@ class FastestAnalyzer extends BaseAnalyzer implements Analyzer
     public function analyze(): void
     {
         $fastUrls = array_filter($this->status->getVisitedUrls(), function ($visitedUrl) {
-            return $visitedUrl->requestTime <= $this->fastestMaxTime;
+            return $visitedUrl->contentType === Crawler::CONTENT_TYPE_ID_HTML && $visitedUrl->requestTime <= $this->fastestMaxTime;
         });
         usort($fastUrls, function ($a, $b) {
             return $a->requestTime <=> $b->requestTime;
