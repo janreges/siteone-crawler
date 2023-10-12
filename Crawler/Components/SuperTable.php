@@ -76,7 +76,7 @@ class SuperTable
             return $output;
         }
 
-        $output .= "<table id='" . htmlspecialchars($this->uniqueId) . "' border='1' class='table table-bordered table-hover'>";
+        $output .= "<table id='" . htmlspecialchars($this->uniqueId) . "' border='1' class='table table-bordered table-hover' style='border-collapse: collapse;'>";
         $output .= "<thead>";
         foreach ($this->columns as $key => $column) {
             $direction = ($this->currentOrderColumn === $key && $this->currentOrderDirection === 'ASC') ? 'DESC' : 'ASC';
@@ -88,11 +88,16 @@ class SuperTable
         foreach ($this->data as $row) {
             $output .= "<tr>";
             foreach ($this->columns as $key => $column) {
-                $value = $row->{$key} ?? '';
+                $value = is_object($row) ? ($row->{$key} ?? '') : ($row[$key] ?? '');
                 $formattedValue = $value;
                 if ($column->formatter) {
                     $formattedValue = call_user_func($column->formatter, $value);
                 }
+
+                if (is_string($formattedValue) && (str_contains($formattedValue, '[0;') || str_contains($formattedValue, '[1;'))) {
+                    $formattedValue = Utils::convertBashColorsInTextToHtml($formattedValue);
+                }
+
                 $output .= "<td data-value='" . htmlspecialchars($value) . "'>{$formattedValue}</td>";
             }
             $output .= "</tr>";
@@ -169,7 +174,7 @@ class SuperTable
         foreach ($this->data as $row) {
             $rowData = [];
             foreach ($this->columns as $key => $column) {
-                $value = $row->{$key} ?? '';
+                $value = is_object($row) ? ($row->{$key} ?? '') : ($row[$key] ?? '');
                 if (isset($column->formatter)) {
                     $value = call_user_func($column->formatter, $value);
                 } else if (isset($column->renderer)) {

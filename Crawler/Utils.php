@@ -87,14 +87,14 @@ class Utils
         ];
 
         $bgColors = [
-            'black' => '40',
-            'red' => '41',
-            'green' => '42',
-            'yellow' => '43',
-            'blue' => '44',
-            'magenta' => '45',
-            'cyan' => '46',
-            'white' => '47',
+            'black' => '1;40',
+            'red' => '1;41',
+            'green' => '1;42',
+            'yellow' => '1;43',
+            'blue' => '1;44',
+            'magenta' => '1;45',
+            'cyan' => '1;46',
+            'white' => '1;47',
         ];
 
         if ($setBackground) {
@@ -106,6 +106,64 @@ class Utils
         $coloredString .= $text . "\033[0m";
 
         return $coloredString;
+    }
+
+    public static function convertBashColorsInTextToHtml(string $text): string
+    {
+        $text = preg_replace_callback('/\033\[(.*?)m(.*?)\033\[0m/', function ($matches) {
+            $styles = explode(';', $matches[1]);
+            $fontColor = null;
+            $backgroundColor = null;
+            foreach ($styles as $style) {
+                if (in_array($style, ['30', '31', '32', '33', '34', '35', '36', '37'])) {
+                    $fontColor = $style;
+                } else if (in_array($style, ['40', '41', '42', '43', '44', '45', '46', '47'])) {
+                    $backgroundColor = $style;
+                }
+            }
+
+            $style = '';
+            if ($fontColor) {
+                $style .= 'color: ' . self::getHtmlColorByBashColor($fontColor) . ';';
+            }
+            if ($backgroundColor) {
+                $style .= 'background-color: ' . self::getHtmlColorByBashColor($backgroundColor) . ';';
+            }
+
+            $style = trim($style, ';');
+            if ($style) {
+                return '<span style="' . $style . '">' . $matches[2] . '</span>';
+            } else {
+                return $matches[2];
+            }
+        }, $text);
+
+        return $text;
+
+    }
+
+    private static function getHtmlColorByBashColor(string $color): string
+    {
+        static $colors = [
+            '30' => '#000000',
+            '31' => '#ff0000',
+            '32' => '#00ff00',
+            '33' => '#ffff00',
+            '34' => '#0000ff',
+            '35' => '#ff00ff',
+            '36' => '#00ffff',
+            '37' => '#ffffff',
+            '40' => '#000000',
+            '41' => '#ff0000',
+            '42' => '#00ff00',
+            '43' => '#ffff00',
+            '44' => '#0000ff',
+            '45' => '#ff00ff',
+            '46' => '#00ffff',
+            '47' => '#ffffff',
+        ];
+
+        return $colors[$color] ?? '#000000';
     }
 
     public static function addRandomQueryParams(string $url): string
