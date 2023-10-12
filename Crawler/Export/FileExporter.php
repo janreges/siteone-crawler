@@ -71,7 +71,7 @@ class FileExporter extends BaseExporter implements Exporter
         // html file
         if ($this->outputHtmlFile) {
             $jsonOutput = $jsonOutput ?: $multiOutput->getOutputByType(OutputType::JSON);
-            $htmlReport = HtmlReport::generate($jsonOutput->getJson());
+            $htmlReport = HtmlReport::generate($this->status);
             $reportFile = $this->getExportFilePath($this->outputHtmlFile, 'html');
             file_put_contents(
                 $reportFile,
