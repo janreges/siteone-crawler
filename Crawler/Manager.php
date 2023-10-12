@@ -91,13 +91,19 @@ class Manager
     {
         $this->output->addBanner();
 
-        $this->crawler->run();
-        $this->output->addUsedOptions();
+        $this->crawler->run([$this, 'crawlerDoneCallback']);
+    }
 
+    public function crawlerDoneCallback(): void
+    {
         $this->runAnalyzers();
         $this->runExporters();
 
+        $this->output->addUsedOptions();
+        $this->output->addTotalStats($this->crawler->getVisited());
+        $this->output->addSummary($this->status->getSummary());
         $this->output->end();
+
     }
 
     /**
@@ -161,7 +167,7 @@ class Manager
                 $exporter->export();
             } catch (Exception $e) {
                 $exporterBasename = basename(str_replace('\\', '/', get_class($exporter)));
-                $this->output->addError("{$exporterBasename} error: " . $e->getMessage());
+                $this->status->addErrorToSummary($exporterBasename, "{$exporterBasename} error: " . $e->getMessage());
             }
         }
     }
@@ -181,7 +187,7 @@ class Manager
                 $analyzer->analyze();
             } catch (Exception $e) {
                 $analyzerBasename = basename(str_replace('\\', '/', get_class($analyzer)));
-                $this->output->addError("{$analyzerBasename} error: " . $e->getMessage());
+                $this->status->addErrorToSummary($analyzerBasename, "{$analyzerBasename} error: " . $e->getMessage());
             }
         }
     }

@@ -49,7 +49,7 @@ class FileExporter extends BaseExporter implements Exporter
                 Utils::removeAnsiColors($textOutput->getOutputText())
             );
 
-            $this->output->addNotice("Text report saved to '{$reportFile}'.");
+            $this->status->addInfoToSummary('export-to-text', "Text report saved to '{$reportFile}'");
         }
 
         $jsonOutput = null;
@@ -65,7 +65,7 @@ class FileExporter extends BaseExporter implements Exporter
                 $jsonOutput->getJson()
             );
 
-            $this->output->addNotice("JSON report saved to '{$reportFile}'.");
+            $this->status->addInfoToSummary('export-to-json', "JSON report saved to '{$reportFile}'");
         }
 
         // html file
@@ -78,7 +78,7 @@ class FileExporter extends BaseExporter implements Exporter
                 $htmlReport
             );
 
-            $this->output->addNotice("HTML report saved to '{$reportFile}'.");
+            $this->status->addInfoToSummary('export-to-html', "HTML report saved to '{$reportFile}'");
         }
     }
 

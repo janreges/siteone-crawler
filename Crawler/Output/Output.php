@@ -3,6 +3,7 @@
 namespace Crawler\Output;
 
 use Crawler\Components\SuperTable;
+use Crawler\Result\Summary\Summary;
 use Swoole\Coroutine\Http\Client;
 use Swoole\Table;
 
@@ -23,6 +24,8 @@ interface Output
     public function addNotice(string $text): void;
 
     public function addError(string $text): void;
+
+    public function addSummary(Summary $summary): void;
 
     public function getType(): OutputType;
 

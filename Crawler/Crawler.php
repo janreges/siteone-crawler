@@ -24,6 +24,7 @@ class Crawler
 
     private ParsedUrl $initialParsedUrl;
     private string $finalUserAgent;
+    private ?array $doneCallback = null;
 
     private static array $htmlPagesExtensions = ['htm', 'html', 'shtml', 'php', 'phtml', 'ashx', 'xhtml', 'asp', 'aspx', 'jsp', 'jspx', 'do', 'cfm', 'cgi', 'pl'];
 
@@ -87,11 +88,14 @@ class Crawler
     }
 
     /**
+     * @param callable $doneCallback
      * @return void
      * @throws Exception
      */
-    public function run(): void
+    public function run(callable $doneCallback): void
     {
+        $this->doneCallback = $doneCallback;
+
         // add initial URL to queue
         $this->addUrlToQueue($this->options->url);
 
@@ -103,8 +107,8 @@ class Crawler
 
             // catch SIGINT (Ctrl+C), print statistics and stop crawler
             Process::signal(SIGINT, function () {
-                $this->output->addTotalStats($this->visited);
                 Coroutine::cancel(Coroutine::getCid());
+                call_user_func($this->doneCallback);
                 throw new ExitException(Utils::getColorText('I caught the manual stop of the script. Therefore, the statistics only contain processed URLs until the script stops.', 'red', true));
             });
 
@@ -305,8 +309,8 @@ class Crawler
 
         // check if crawler is done and exit or start new coroutine to process next URL
         if ($this->queue->count() === 0 && $this->getActiveWorkersNumber() === 0) {
-            $this->output->addTotalStats($this->visited);
             Coroutine::cancel(Coroutine::getCid());
+            call_user_func($this->doneCallback);
         } else {
             while ($this->getActiveWorkersNumber() < $this->options->maxWorkers && $this->queue->count() > 0) {
                 Coroutine::create([$this, 'processNextUrl']);
@@ -488,6 +492,11 @@ class Crawler
             DeviceType::TABLET => 'Mozilla/5.0 (Linux; Android 11; SAMSUNG SM-T875) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/14.0 Chrome/87.0.4280.141 Safari/537.36',
             default => throw new Exception("Unsupported device '{$this->options->device}'"),
         };
+    }
+
+    public function getVisited(): Table
+    {
+        return $this->visited;
     }
 
     public function getOutput(): Output

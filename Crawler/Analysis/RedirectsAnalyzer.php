@@ -46,6 +46,13 @@ class RedirectsAnalyzer extends BaseAnalyzer implements Analyzer
         $superTable->setData($urlRedirects);
         $this->status->addSuperTableAtBeginning($superTable);
         $this->output->addSuperTable($superTable);
+
+        $this->status->addSummaryItemByRanges(
+            'redirects',
+            count($urlRedirects),
+            [[0, 0], [1, 5], [6, PHP_INT_MAX]],
+            ["Redirects OK - no redirects found", "Redirects WARNING - %s redirect(s) found", "Redirects CRITICAL - %s redirects found"]
+        );
     }
 
     public function getOrder(): int

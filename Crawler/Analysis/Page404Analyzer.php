@@ -28,7 +28,7 @@ class Page404Analyzer extends BaseAnalyzer implements Analyzer
             '404 URLs',
             'No 404 URLs found.',
             [
-                new SuperTableColumn('statusCode', 'Status', 6, function($value) {
+                new SuperTableColumn('statusCode', 'Status', 6, function ($value) {
                     return Utils::getColoredStatusCode($value);
                 }),
                 new SuperTableColumn('url', 'URL 404', $urlColumnSize, null),
@@ -40,6 +40,13 @@ class Page404Analyzer extends BaseAnalyzer implements Analyzer
         $superTable->setData($urls404);
         $this->status->addSuperTableAtBeginning($superTable);
         $this->output->addSuperTable($superTable);
+
+        $this->status->addSummaryItemByRanges(
+            '404',
+            count($urls404),
+            [[0, 0], [1, 5], [6, PHP_INT_MAX]],
+            ["404 OK - all pages exists, no non-existent pages found", "404 WARNING - %s non-existent page(s) found", "404 CRITICAL - %s non-existent pages found"]
+        );
     }
 
     public function getOrder(): int

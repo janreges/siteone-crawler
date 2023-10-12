@@ -5,6 +5,7 @@ namespace Crawler\Output;
 use Crawler\Components\SuperTable;
 use Crawler\CoreOptions;
 use Crawler\Result\Status;
+use Crawler\Result\Summary\Summary;
 use Crawler\Utils;
 use Swoole\Coroutine\Http\Client;
 use Swoole\Table;
@@ -135,6 +136,11 @@ class JsonOutput implements Output
             $this->json['error'] = [];
         }
         $this->json['error'][] = date('Y-m-d H:i:s') . ' | ' . $text;
+    }
+
+    public function addSummary(Summary $summary): void
+    {
+        $this->json['summary'] = $summary;
     }
 
     public function getJson(): string

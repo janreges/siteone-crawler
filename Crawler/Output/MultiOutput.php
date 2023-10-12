@@ -3,6 +3,7 @@
 namespace Crawler\Output;
 
 use Crawler\Components\SuperTable;
+use Crawler\Result\Summary\Summary;
 use Swoole\Coroutine\Http\Client;
 use Swoole\Table;
 
@@ -90,6 +91,13 @@ class MultiOutput implements Output
     {
         foreach ($this->outputs as $output) {
             $output->addError($text);
+        }
+    }
+
+    public function addSummary(Summary $summary): void
+    {
+        foreach ($this->outputs as $output) {
+            $output->addSummary($summary);
         }
     }
 

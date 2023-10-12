@@ -2,6 +2,7 @@
 
 namespace Crawler\Export;
 
+use Crawler\Crawler;
 use Crawler\Options\Group;
 use Crawler\Options\Options;
 use Crawler\Options\Option;
@@ -28,25 +29,25 @@ class SitemapExporter extends BaseExporter implements Exporter
     {
         $urls = [];
         foreach ($this->status->getVisitedUrls() as $visitedUrl) {
-            if ($visitedUrl->contentType === VisitedUrl::TYPE_HTML) {
+            if ($visitedUrl->contentType === Crawler::CONTENT_TYPE_ID_HTML) {
                 $urls[] = $visitedUrl->url;
             }
         }
         if ($this->outputSitemapXml) {
             try {
                 $sitemapFile = $this->generateXmlSitemap($this->outputSitemapXml, $urls);
-                $this->output->addNotice("XML sitemap generated to '{$sitemapFile}'.");
+                $this->status->addInfoToSummary('sitemap-xml', "XML sitemap generated to '{$sitemapFile}'");
             } catch (Exception $e) {
-                $this->output->addError("Sitemap XML ERROR: {$e->getMessage()}");
+                $this->status->addErrorToSummary('sitemap-xml', "Sitemap XML ERROR: {$e->getMessage()}");
             }
         }
 
         if ($this->outputSitemapTxt) {
             try {
                 $sitemapFile = $this->generateTxtSitemap($this->outputSitemapTxt, $urls);
-                $this->output->addNotice("TXT sitemap generated to '{$sitemapFile}'.");
+                $this->status->addInfoToSummary('sitemap-txt', "TXT sitemap generated to '{$sitemapFile}'");
             } catch (Exception $e) {
-                $this->output->addError("Sitemap TXT ERROR: {$e->getMessage()}");
+                $this->status->addErrorToSummary('sitemap-txt', "Sitemap TXT ERROR: {$e->getMessage()}");
             }
         }
     }

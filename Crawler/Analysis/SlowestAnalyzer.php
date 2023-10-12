@@ -17,6 +17,7 @@ class SlowestAnalyzer extends BaseAnalyzer implements Analyzer
 
     protected int $slowestTopLimit = 10;
     protected float $slowestMinTime = 0.01;
+    protected float $slowestMaxTime = 3;
 
     public function shouldBeActivated(): bool
     {
@@ -54,6 +55,21 @@ class SlowestAnalyzer extends BaseAnalyzer implements Analyzer
         $superTable->setData($slowUrls);
         $this->status->addSuperTableAtBeginning($superTable);
         $this->output->addSuperTable($superTable);
+
+        $verySlowUrls = array_filter($this->status->getVisitedUrls(), function ($visitedUrl) {
+            return $visitedUrl->contentType === Crawler::CONTENT_TYPE_ID_HTML && $visitedUrl->requestTime >= $this->slowestMaxTime;
+        });
+
+        $this->status->addSummaryItemByRanges(
+            'slowUrls',
+            count($verySlowUrls),
+            [[0, 0], [1, 5], [6, PHP_INT_MAX]],
+            [
+                "Performance OK - all URLs are faster than {$this->slowestMaxTime} seconds",
+                "Performance WARNING - %s slow URLs found (slowest than {$this->slowestMaxTime} seconds)",
+                "Performance CRITICAL - %s slow URLs found (slowest than {$this->slowestMaxTime} seconds)"
+            ]
+        );
     }
 
     public function getOrder(): int
@@ -68,7 +84,8 @@ class SlowestAnalyzer extends BaseAnalyzer implements Analyzer
             self::GROUP_SLOWEST_ANALYZER,
             'Slowest URL analyzer', [
             new Option('--slowest-urls-top-limit', null, 'slowestTopLimit', Type::INT, false, 'Number of URL addresses in TOP slowest URL addresses.', 10, false, false),
-            new Option('--slowest-urls-min-time', null, 'slowestMinTime', Type::FLOAT, false, 'The minimum response time for an URL address to be evaluated as slow.', 0.01, false),
+            new Option('--slowest-urls-min-time', null, 'slowestMinTime', Type::FLOAT, false, 'The minimum response time for an URL address to be added to TOP slow selection.', 0.01, false),
+            new Option('--slowest-urls-max-time', null, 'slowestMaxTime', Type::FLOAT, false, 'The maximum response time for an URL address to be evaluated as very slow.', 3, false),
         ]));
         return $options;
     }

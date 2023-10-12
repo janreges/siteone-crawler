@@ -32,7 +32,7 @@ class MailerExporter extends BaseExporter implements Exporter
     {
         $htmlReport = HtmlReport::generate($this->status);
         $this->sendEmail($htmlReport);
-        $this->output->addNotice("HTML report sent to " . implode(', ', $this->mailTo) . ".");
+        $this->status->addInfoToSummary('mail-report-sent', "HTML report sent to " . implode(', ', $this->mailTo) . ' using ' . $this->mailSmtpHost . ':' . $this->mailSmtpPort);
     }
 
     /**

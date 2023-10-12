@@ -4,6 +4,7 @@ namespace Crawler;
 
 use Crawler\Components\SuperTable;
 use Crawler\Result\Status;
+use Crawler\Result\Summary\Summary;
 
 class HtmlReport
 {
@@ -72,6 +73,10 @@ class HtmlReport
                         </table>
                     </section>
             
+                    ';
+
+        $html .= self::getHtmlForSummary($status->getSummary());
+        $html .= '
                  
                     <section class="mb-5">
                         <h2>Stats</h2>
@@ -155,6 +160,18 @@ class HtmlReport
         foreach ($supertables as $supertable) {
             $result .= $supertable->getHtmlOutput() . "\n";
         }
+        return $result;
+    }
+
+    /**
+     * @param Summary $summary
+     * @return string
+     */
+    private static function getHtmlForSummary(Summary $summary): string
+    {
+        $result = '<section class="mb-5"><h2>Stats</h2>' . "\n";
+        $result .= $summary->getAsHtml();
+        $result .= '</section>';
         return $result;
     }
 }

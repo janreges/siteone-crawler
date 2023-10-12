@@ -6,6 +6,9 @@ use Crawler\Components\SuperTable;
 use Crawler\CoreOptions;
 use Crawler\Info;
 use Crawler\Result\Storage\Storage;
+use Crawler\Result\Summary\Item;
+use Crawler\Result\Summary\ItemStatus;
+use Crawler\Result\Summary\Summary;
 use Crawler\Utils;
 
 class Status
@@ -17,6 +20,7 @@ class Status
     private float $startTime;
 
     private ?BasicStats $basicStats = null;
+    private Summary $summary;
 
     /**
      * SuperTables that are at the beginning of the page
@@ -55,6 +59,7 @@ class Status
         $this->crawlerInfo = $crawlerInfo;
         $this->options = $options;
         $this->startTime = $startTime;
+        $this->summary = new Summary();
     }
 
     public function addVisitedUrl(VisitedUrl $url, ?string $body): void
@@ -63,6 +68,35 @@ class Status
         if ($this->saveContent && $body !== null) {
             $this->storage->save($url->uqId, trim($body));
         }
+    }
+
+    public function addSummaryItemByRanges(string $aplCode, float $value, array $ranges, array $textPerRange): void
+    {
+        $status = ItemStatus::INFO;
+        $text = "{$aplCode} out of range ({$value})";
+        foreach ($ranges as $rangeId=>$range) {
+            if ($value >= $range[0] && $value <= $range[1]) {
+                $status = ItemStatus::fromRangeId($rangeId);
+                $text = sprintf($textPerRange[$rangeId] ?? $text, $value);
+                break;
+            }
+        }
+        $this->summary->addItem(new Item($aplCode, $text, $status));
+    }
+
+    public function addInfoToSummary(string $aplCode, string $text): void
+    {
+        $this->summary->addItem(new Item($aplCode, $text, ItemStatus::INFO));
+    }
+
+    public function addErrorToSummary(string $aplCode, string $text): void
+    {
+        $this->summary->addItem(new Item($aplCode, $text, ItemStatus::ERROR));
+    }
+
+    public function getSummary(): Summary
+    {
+        return $this->summary;
     }
 
     public function getUrlBody(string $uqId): ?string

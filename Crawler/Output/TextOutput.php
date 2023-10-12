@@ -5,6 +5,7 @@ namespace Crawler\Output;
 use Crawler\Components\SuperTable;
 use Crawler\CoreOptions;
 use Crawler\Result\Status;
+use Crawler\Result\Summary\Summary;
 use Crawler\Utils;
 use Swoole\Coroutine\Http\Client;
 use Swoole\Table;
@@ -146,9 +147,10 @@ class TextOutput implements Output
         $this->addToOutput(str_repeat('=', Utils::getConsoleWidth()) . "\n");
         $this->addToOutput($resultHeader);
         $this->addToOutput(
-            sprintf("Total of %s visited URLs with a total size of %s\n",
+            sprintf("Total of %s visited URLs with a total size of %s and power of %s\n",
                 Utils::getColorText($stats->totalUrls, 'cyan'),
-                Utils::getColorText($stats->totalSizeFormatted, 'cyan')
+                Utils::getColorText($stats->totalSizeFormatted, 'cyan'),
+                Utils::getColorText(intval($stats->totalUrls / $stats->totalExecutionTime) . " reqs/s", 'magenta'),
             )
         );
         $this->addToOutput(
@@ -183,9 +185,15 @@ class TextOutput implements Output
         $this->addToOutput(Utils::getColorText($text, 'red') . "\n");
     }
 
+    public function addSummary(Summary $summary): void
+    {
+        $this->addToOutput("\n");
+        $this->addToOutput($summary->getAsConsoleText());
+    }
+
     public function end(): void
     {
-        // nothing to do
+        $this->addToOutput("\n");
     }
 
     public function addToOutput(string $output): void
