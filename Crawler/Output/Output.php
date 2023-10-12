@@ -10,7 +10,7 @@ interface Output
 {
     public function addBanner(): void;
 
-    public function addUsedOptions(string $finalUserAgent): void;
+    public function addUsedOptions(): void;
 
     public function addTableHeader(): void;
 

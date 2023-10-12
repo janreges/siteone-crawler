@@ -310,4 +310,21 @@ class Utils
         );
     }
 
+    public static function getContentTypeNameById(int $contentTypeId): string
+    {
+        static $typeToName = [
+            Crawler::CONTENT_TYPE_ID_HTML => 'HTML',
+            Crawler::CONTENT_TYPE_ID_SCRIPT => 'JS',
+            Crawler::CONTENT_TYPE_ID_STYLESHEET => 'CSS',
+            Crawler::CONTENT_TYPE_ID_IMAGE => 'Image',
+            Crawler::CONTENT_TYPE_ID_FONT => 'Font',
+            Crawler::CONTENT_TYPE_ID_DOCUMENT => 'Document',
+            Crawler::CONTENT_TYPE_ID_JSON => 'JSON',
+            Crawler::CONTENT_TYPE_ID_REDIRECT => 'Redirect',
+            Crawler::CONTENT_TYPE_ID_OTHER => 'Other',
+        ];
+
+        return $typeToName[$contentTypeId] ?? 'Unknown';
+    }
+
 }

@@ -60,20 +60,21 @@ class Manager
 
         $compression = true; // TODO from options
 
-        $info = [
-            'name' => 'SiteOne Website Crawler',
-            'version' => $this->version,
-            'executedAt' => date('Y-m-d H:i:s'),
-            'command' => $this->command,
-            'hostname' => gethostname(),
-        ];
+        $crawlerInfo = new Info(
+            'SiteOne Website Crawler',
+            $this->version,
+            date('Y-m-d H:i:s'),
+            Utils::getSafeCommand($this->command),
+            gethostname(),
+            $this->options->userAgent ?? 'default'
+        );
 
         $this->status = new Status(
             $options->resultStorage === StorageType::MEMORY
                 ? new MemoryStorage($compression)
                 : new FileStorage($baseDir . '/tmp', $compression),
             true, // TODO by options
-            $info,
+            $crawlerInfo,
             $this->options,
             $this->startTime
         );
@@ -91,7 +92,7 @@ class Manager
         $this->output->addBanner();
 
         $this->crawler->run();
-        $this->output->addUsedOptions($this->crawler->getFinalUserAgent());
+        $this->output->addUsedOptions();
 
         $this->runAnalyzers();
         $this->runExporters();

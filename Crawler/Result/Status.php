@@ -4,6 +4,7 @@ namespace Crawler\Result;
 
 use Crawler\Components\SuperTable;
 use Crawler\CoreOptions;
+use Crawler\Info;
 use Crawler\Result\Storage\Storage;
 use Crawler\Utils;
 
@@ -12,7 +13,7 @@ class Status
 
     private Storage $storage;
     private CoreOptions $options;
-    private bool $saveBodies;
+    private bool $saveContent;
     private float $startTime;
 
     private ?BasicStats $basicStats = null;
@@ -29,14 +30,11 @@ class Status
      */
     private array $superTablesAtEnd = [];
 
-    private array $info = [
-        'name' => 'SiteOne Website Crawler',
-        'version' => null,
-        'executedAt' => null,
-        'command' => null,
-        'hostname' => null,
-        'finalUserAgent' => null
-    ];
+    /**
+     * Crawler info
+     * @var Info
+     */
+    private Info $crawlerInfo;
 
     /**
      * @var VisitedUrl[]
@@ -45,35 +43,36 @@ class Status
 
     /**
      * @param Storage $storage
-     * @param bool $saveBodies
-     * @param array $info
+     * @param bool $saveContent
+     * @param Info $crawlerInfo
      * @param CoreOptions $options
      * @param float $startTime
      */
-    public function __construct(Storage $storage, bool $saveBodies, array $info, CoreOptions $options, float $startTime)
+    public function __construct(Storage $storage, bool $saveContent, Info $crawlerInfo, CoreOptions $options, float $startTime)
     {
         $this->storage = $storage;
-        $this->saveBodies = $saveBodies;
-        $this->info = array_merge($this->info, $info);
+        $this->saveContent = $saveContent;
+        $this->crawlerInfo = $crawlerInfo;
         $this->options = $options;
         $this->startTime = $startTime;
-
-        $this->maskSensitiveInfoData();
     }
 
     public function addVisitedUrl(VisitedUrl $url, ?string $body): void
     {
         $this->visitedUrls[$url->uqId] = $url;
-        if ($this->saveBodies && $body !== null) {
+        if ($this->saveContent && $body !== null) {
             $this->storage->save($url->uqId, trim($body));
         }
     }
 
     public function getUrlBody(string $uqId): ?string
     {
-        return $this->saveBodies ? $this->storage->load($uqId) : null;
+        return $this->saveContent ? $this->storage->load($uqId) : null;
     }
 
+    /**
+     * @return VisitedUrl[]
+     */
     public function getVisitedUrls(): array
     {
         return $this->visitedUrls;
@@ -89,14 +88,14 @@ class Status
         return $this->options->{$option} ?? null;
     }
 
-    public function getInfo(): array
+    public function getCrawlerInfo(): Info
     {
-        return $this->info;
+        return $this->crawlerInfo;
     }
 
     public function setFinalUserAgent(string $value): void
     {
-        $this->info['finalUserAgent'] = $value;
+        $this->crawlerInfo->finalUserAgent = $value;
     }
 
     public function getBasicStats(): BasicStats
@@ -138,11 +137,5 @@ class Status
     {
         return $this->visitedUrls[$uqId]->url ?? null;
     }
-
-    public function maskSensitiveInfoData(): void
-    {
-        $this->info['command'] = Utils::getSafeCommand($this->info['command']);
-    }
-
 
 }

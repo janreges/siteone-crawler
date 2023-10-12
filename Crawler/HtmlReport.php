@@ -10,6 +10,8 @@ class HtmlReport
 
     public static function generate(Status $status): string
     {
+        $crawlerInfo = $status->getCrawlerInfo();
+
         $html = '<!DOCTYPE html>
             <html lang="en">
             <head>
@@ -35,7 +37,7 @@ class HtmlReport
             <body>
                 <div class="container mt-4" style="max-width: 1880px;">
                     <h1 class="mb-4">
-                        <a href="https://www.siteone.io/?utm_source=siteone_crawler&utm_medium=logo&utm_campaign=crawler_report&utm_content=v' . htmlspecialchars($status->getInfo()['version']) . '" target="_blank" style="color: #ffffff; text-decoration: none;">  
+                        <a href="https://www.siteone.io/?utm_source=siteone_crawler&utm_medium=logo&utm_campaign=crawler_report&utm_content=v' . htmlspecialchars($crawlerInfo->version) . '" target="_blank" style="color: #ffffff; text-decoration: none;">  
                             <svg viewBox="0 0 119 70" width="61px" height="34px" fill="none" xmlns="http://www.w3.org/2000/svg">
                                 <path d="M92.0551 14.9476V48.07H75.2954V58.0351H118.638V48.07H102.303V0H92.9895L66.8594 26.13L73.8804 33.1223C73.9083 33.1223 92.0551 14.9476 92.0551 14.9476Z" fill="#999999"></path>
                                 <path fill-rule="evenodd" clip-rule="evenodd" d="M0 0.0527344H57.9785V58.0312H0V0.0527344ZM10.25 48.0639H47.7323V10.0156H10.25V48.0639Z" fill="#333333"></path>
@@ -46,26 +48,26 @@ class HtmlReport
                     
                     <section class="mb-5">
                         <h2>Basic info</h2>
-                        <table class="table table-bordered table-hover table-two-col">
+                        <table class="table table-bordered table-hover table-two-col" style="border-collapse: collapse;">
                             <tr>
                                 <th>Version</th>
-                                <td>' . htmlspecialchars($status->getInfo()['version']) . '</td>
+                                <td>' . htmlspecialchars($crawlerInfo->version) . '</td>
                             </tr>
                             <tr>
                                 <th>Executed At</th>
-                                <td>' . htmlspecialchars($status->getInfo()['executedAt']) . '</td>
+                                <td>' . htmlspecialchars($crawlerInfo->executedAt) . '</td>
                             </tr>
                             <tr>
                                 <th>Command</th>
-                                <td>' . htmlspecialchars($status->getInfo()['command']) . '</td>
+                                <td>' . htmlspecialchars($crawlerInfo->command) . '</td>
                             </tr>
                             <tr>
                                 <th>Hostname</th>
-                                <td>' . htmlspecialchars($status->getInfo()['hostname']) . '</td>
+                                <td>' . htmlspecialchars($crawlerInfo->hostname) . '</td>
                             </tr>
                             <tr>
                                 <th>User-Agent</th>
-                                <td>' . htmlspecialchars($status->getInfo()['finalUserAgent']) . '</td>
+                                <td>' . htmlspecialchars($crawlerInfo->finalUserAgent) . '</td>
                             </tr>
                         </table>
                     </section>
@@ -73,7 +75,7 @@ class HtmlReport
                  
                     <section class="mb-5">
                         <h2>Stats</h2>
-                        <table class="table table-bordered table-hover table-two-col">';
+                        <table class="table table-bordered table-hover table-two-col" style="border-collapse: collapse;">';
         foreach ((array)$status->getBasicStats() as $key => $value) {
             $html .= '<tr>
                                     <th>' . htmlspecialchars(ucfirst(str_replace('_', ' ', $key))) . '</th>
@@ -95,15 +97,18 @@ class HtmlReport
 
         $html .= '<section class="mb-5">
                         <h2>Results</h2>
-                        <table class="table table-bordered table-hover table-compact">
+                        <table class="table table-bordered table-hover table-compact" style="border-collapse: collapse;">
                             <thead>
                                 <tr>
                                     <th>URL</th>
-                                    <th>Result</th>
-                                    <th style="width: 80px">Elapsed Time</th>
+                                    <th>Status</th>
+                                    <th>Type</th>
+                                    <th style="width: 80px">Time (s)</th>
                                     <th style="width: 80px">Size</th>';
-        foreach (array_values($status->getVisitedUrls())[0]->extras ?: [] as $key => $value) {
-            $html .= '<th>' . htmlspecialchars($key) . '</th>';
+
+        $extraHeaders = $status->getOptions()->headersToTableNamesOnly;
+        foreach ($extraHeaders as $headerName) {
+            $html .= '<th>' . htmlspecialchars($headerName) . '</th>';
         }
         $html .= ' </tr>
                             </thead>
@@ -112,10 +117,12 @@ class HtmlReport
             $html .= '<tr>
                                     <td><a href="' . htmlspecialchars($visitedUrl->url, ENT_QUOTES, 'UTF-8') . '" target="_blank">' . htmlspecialchars($visitedUrl->url) . '</a></td>
                                     <td>' . htmlspecialchars($visitedUrl->statusCode) . '</td>
+                                    <td>' . htmlspecialchars(Utils::getContentTypeNameById($visitedUrl->contentType)) . '</td>
                                     <td>' . htmlspecialchars($visitedUrl->requestTimeFormatted) . ' sec</td>
                                     <td>' . htmlspecialchars($visitedUrl->sizeFormatted) . '</td>';
-            foreach ($visitedUrl->extras ?: [] as $extra) {
-                $html .= '<td>' . htmlspecialchars($extra) . '</td>';
+            foreach ($extraHeaders as $headerName) {
+                $value = $visitedUrl->extras[$headerName] ?? '';
+                $html .= '<td>' . htmlspecialchars($value) . '</td>';
             }
             $html .= '</tr>';
         }

@@ -27,14 +27,15 @@ class Crawler
 
     private static array $htmlPagesExtensions = ['htm', 'html', 'shtml', 'php', 'phtml', 'ashx', 'xhtml', 'asp', 'aspx', 'jsp', 'jspx', 'do', 'cfm', 'cgi', 'pl'];
 
-    const URL_TYPE_HTML = 1;
-    const URL_TYPE_SCRIPT = 2;
-    const URL_TYPE_STYLESHEET = 3;
-    const URL_TYPE_IMAGE = 4;
-    const URL_TYPE_FONT = 5;
-    const URL_TYPE_DOCUMENT = 6;
-    const URL_TYPE_JSON = 7;
-    const URL_TYPE_OTHER_FILE = 9;
+    const CONTENT_TYPE_ID_HTML = 1;
+    const CONTENT_TYPE_ID_SCRIPT = 2;
+    const CONTENT_TYPE_ID_STYLESHEET = 3;
+    const CONTENT_TYPE_ID_IMAGE = 4;
+    const CONTENT_TYPE_ID_FONT = 5;
+    const CONTENT_TYPE_ID_DOCUMENT = 6;
+    const CONTENT_TYPE_ID_JSON = 7;
+    const CONTENT_TYPE_ID_REDIRECT = 8;
+    const CONTENT_TYPE_ID_OTHER = 9;
 
     /**
      * @param CoreOptions $options
@@ -75,10 +76,11 @@ class Crawler
         $this->visited->column('time', Table::TYPE_FLOAT, 8);
         $this->visited->column('status', Table::TYPE_INT, 8);
         $this->visited->column('size', Table::TYPE_INT, 8);
-        $this->visited->column('type', Table::TYPE_INT, 1); // @see self::URL_TYPE_*
+        $this->visited->column('type', Table::TYPE_INT, 1); // @see self::CONTENT_TYPE_ID_*
         $this->visited->create();
 
         $this->finalUserAgent = $this->getFinalUserAgent();
+        $this->status->setFinalUserAgent($this->finalUserAgent);
         $this->initialParsedUrl = ParsedUrl::parse($this->options->url);
 
         $this->status->setFinalUserAgent($this->finalUserAgent);
@@ -283,26 +285,15 @@ class Crawler
             $extraParsedContent = $this->parseHtmlBodyAndFillQueue($body, $url);
         }
         if ($status >= 301 && $status <= 308) {
-            $extraParsedContent['Redirect'] = $client->headers['location'] ?? '';
+            $extraParsedContent['Location'] = $client->headers['location'] ?? '';
         }
 
         // get type self::URL_TYPE_* based on content-type header
         $contentType = $client->headers['content-type'] ?? '';
-        $type = self::URL_TYPE_OTHER_FILE;
-        if (str_contains($contentType, 'text/html')) {
-            $type = self::URL_TYPE_HTML;
-        } elseif (str_contains($contentType, 'text/javascript')) {
-            $type = self::URL_TYPE_SCRIPT;
-        } elseif (str_contains($contentType, 'text/css')) {
-            $type = self::URL_TYPE_STYLESHEET;
-        } elseif (str_contains($contentType, 'image/')) {
-            $type = self::URL_TYPE_IMAGE;
-        } elseif (str_contains($contentType, 'font/')) {
-            $type = self::URL_TYPE_FONT;
-        } elseif (str_contains($contentType, 'application/json')) {
-            $type = self::URL_TYPE_JSON;
-        } elseif (str_contains($contentType, 'application/pdf') || str_contains($type, 'application/msword') || str_contains($type, 'application/vnd.ms-excel') || str_contains($type, 'application/vnd.ms-powerpoint')) {
-            $type = self::URL_TYPE_DOCUMENT;
+        if (isset($extraParsedContent['Location'])) {
+            $type = self::CONTENT_TYPE_ID_REDIRECT;
+        } else {
+            $type = $this->getContentTypeIdByContentTypeHeader($contentType);
         }
 
         // update info about visited URL
@@ -460,6 +451,27 @@ class Crawler
         return substr(md5($url), 0, 8);
     }
 
+    private function getContentTypeIdByContentTypeHeader(string $contentTypeHeader): int
+    {
+        $typeId = self::CONTENT_TYPE_ID_OTHER;
+        if (str_contains($contentTypeHeader, 'text/html')) {
+            $typeId = self::CONTENT_TYPE_ID_HTML;
+        } elseif (str_contains($contentTypeHeader, 'text/javascript')) {
+            $typeId = self::CONTENT_TYPE_ID_SCRIPT;
+        } elseif (str_contains($contentTypeHeader, 'text/css')) {
+            $typeId = self::CONTENT_TYPE_ID_STYLESHEET;
+        } elseif (str_contains($contentTypeHeader, 'image/')) {
+            $typeId = self::CONTENT_TYPE_ID_IMAGE;
+        } elseif (str_contains($contentTypeHeader, 'font/')) {
+            $typeId = self::CONTENT_TYPE_ID_FONT;
+        } elseif (str_contains($contentTypeHeader, 'application/json')) {
+            $typeId = self::CONTENT_TYPE_ID_JSON;
+        } elseif (str_contains($contentTypeHeader, 'application/pdf') || str_contains($typeId, 'application/msword') || str_contains($typeId, 'application/vnd.ms-excel') || str_contains($typeId, 'application/vnd.ms-powerpoint')) {
+            $typeId = self::CONTENT_TYPE_ID_DOCUMENT;
+        }
+        return $typeId;
+    }
+
     /**
      * @return string
      * @throws Exception
@@ -486,6 +498,24 @@ class Crawler
     public function getCoreOptions(): CoreOptions
     {
         return $this->options;
+    }
+
+    /**
+     * @return int[]
+     */
+    public static function getContentTypeIds(): array
+    {
+        return [
+            self::CONTENT_TYPE_ID_HTML,
+            self::CONTENT_TYPE_ID_SCRIPT,
+            self::CONTENT_TYPE_ID_STYLESHEET,
+            self::CONTENT_TYPE_ID_IMAGE,
+            self::CONTENT_TYPE_ID_FONT,
+            self::CONTENT_TYPE_ID_DOCUMENT,
+            self::CONTENT_TYPE_ID_JSON,
+            self::CONTENT_TYPE_ID_REDIRECT,
+            self::CONTENT_TYPE_ID_OTHER,
+        ];
     }
 
 }

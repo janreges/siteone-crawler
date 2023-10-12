@@ -41,13 +41,12 @@ class JsonOutput implements Output
 
     public function addBanner(): void
     {
-        $this->json['crawler'] = $this->status->getInfo();
+        $this->json['crawler'] = $this->status->getCrawlerInfo();
     }
 
-    public function addUsedOptions(string $finalUserAgent): void
+    public function addUsedOptions(): void
     {
-        $this->json['options'] = $this->options->toArray();
-        $this->json['crawler']['finalUserAgent'] = $finalUserAgent;
+        $this->json['options'] = $this->options;
     }
 
     public function addTotalStats(Table $visited): void

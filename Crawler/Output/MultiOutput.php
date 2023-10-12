@@ -44,10 +44,10 @@ class MultiOutput implements Output
         }
     }
 
-    public function addUsedOptions(string $finalUserAgent): void
+    public function addUsedOptions(): void
     {
         foreach ($this->outputs as $output) {
-            $output->addUsedOptions($finalUserAgent);
+            $output->addUsedOptions();
         }
     }
 

@@ -48,14 +48,14 @@ class TextOutput implements Output
         $this->addToOutput("===========================\n\n");
     }
 
-    public function addUsedOptions(string $finalUserAgent): void
+    public function addUsedOptions(): void
     {
         // $this->addToOutput("Used options: " . Utils::getColorText(print_r($this->options, true), 'gray') . "\n");
     }
 
     public function addTableHeader(): void
     {
-        $header = str_pad("URL", $this->options->urlColumnSize) . " |" . " Result " . "|" . " Time  " . "|" . " Size     ";
+        $header = str_pad("URL", $this->options->urlColumnSize) . " |" . " Status " . "|" . " Type     " . "|" . " Time  " . "|" . " Size     ";
         if (!$this->options->hideProgressBar) {
             $header = str_pad("Progress report", 26) . "| " . $header;
         }
@@ -85,6 +85,8 @@ class TextOutput implements Output
         } else {
             $coloredStatus = Utils::getColorText(str_pad(Utils::getHttpClientCodeWithErrorDescription($status, true), 6), 'red', true);
         }
+
+        $contentType = str_pad(Utils::getContentTypeNameById($type), 8);
 
         $coloredElapsedTime = sprintf("%.3f", $elapsedTime);
         if ($coloredElapsedTime >= 2) {
@@ -133,10 +135,11 @@ class TextOutput implements Output
         }
 
         $this->addToOutput(trim(sprintf(
-                '%s %s | %s | %s | %s %s',
+                '%s %s | %s | %s | %s | %s %s',
                 $progressContent,
                 str_pad($urlForTable, $this->options->urlColumnSize),
                 $coloredStatus,
+                $contentType,
                 $coloredElapsedTime,
                 $coloredSize,
                 $extraHeadersContent
