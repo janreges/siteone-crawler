@@ -67,17 +67,17 @@ class ContentTypeAnalyzer extends BaseAnalyzer implements Analyzer
                 new SuperTableColumn('totalTime', 'Total time', 10, function ($value) {
                     return sprintf("%.3f", $value) . ' sec';
                 }),
-                new SuperTableColumn('avgTime', 'Avg time', 9, function ($value) {
-                    return sprintf("%.3f", $value) . ' sec';
+                new SuperTableColumn('avgTime', 'Avg time', 8, function ($value) {
+                    return Utils::getColoredRequestTime($value, 8);
                 }),
                 new SuperTableColumn('status20x', 'Status 20x', 10, function ($value) {
                     return $value > 0 ? Utils::getColorText(str_pad($value, 10), 'green') : $value;
                 }),
                 new SuperTableColumn('status30x', 'Status 30x', 10, function ($value) {
-                    return $value > 0 ? Utils::getColorText(str_pad($value, 10), 'yellow') : $value;
+                    return $value > 0 ? Utils::getColorText(str_pad($value, 10), 'yellow', true) : $value;
                 }),
                 new SuperTableColumn('status40x', 'Status 40x', 10, function ($value) {
-                    return $value > 0 ? Utils::getColorText(str_pad($value, 10), 'red', true) : $value;
+                    return $value > 0 ? Utils::getColorText(str_pad($value, 10), 'magenta', true) : $value;
                 }),
                 new SuperTableColumn('status50x', 'Status 50x', 10, function ($value) {
                     return $value > 0 ? Utils::getColorText(str_pad($value, 10), 'red', true) : $value;

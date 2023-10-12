@@ -55,7 +55,7 @@ class TextOutput implements Output
 
     public function addTableHeader(): void
     {
-        $header = str_pad("URL", $this->options->urlColumnSize) . " |" . " Status " . "|" . " Type     " . "|" . " Time  " . "|" . " Size     ";
+        $header = str_pad("URL", $this->options->urlColumnSize) . " |" . " Status " . "|" . " Type     " . "|" . " Time   " . "|" . " Size     ";
         if (!$this->options->hideProgressBar) {
             $header = str_pad("Progress report", 26) . "| " . $header;
         }
@@ -65,36 +65,16 @@ class TextOutput implements Output
             $header .= " | " . str_pad($headerInfo['name'], max($headerInfo['size'], 4));
         }
         $header .= "\n";
-        $this->addToOutput($header . str_repeat("-", strlen(trim($header))) . "\n");
+        $this->addToOutput(Utils::getColorText($header, 'gray') . str_repeat("-", strlen($header)) . "\n");
     }
 
     public function addTableRow(Client $httpClient, string $url, int $status, float $elapsedTime, int $size, int $type, array $extraParsedContent, string $progressStatus): void
     {
         $urlForTable = $this->options->hideSchemeAndHost ? (preg_replace('/^https?:\/\/[^\/]+\//i', '/', $url)) : $url;
 
-        if ($status == 200) {
-            $coloredStatus = Utils::getColorText(str_pad($status, 6), 'green');
-        } else if ($status > 300 && $status < 400) {
-            $coloredStatus = Utils::getColorText(str_pad($status, 6), 'yellow', true);
-        } elseif ($status == 404) {
-            $coloredStatus = Utils::getColorText(str_pad($status, 6), 'magenta', true);
-        } elseif ($status == 429) {
-            $coloredStatus = Utils::getColorText(str_pad($status, 6), 'red', true);
-        } elseif ($status > 400 && $status < 500) {
-            $coloredStatus = Utils::getColorText(str_pad($status, 6), 'cyan', true);
-        } else {
-            $coloredStatus = Utils::getColorText(str_pad(Utils::getHttpClientCodeWithErrorDescription($status, true), 6), 'red', true);
-        }
-
+        $coloredStatus = Utils::getColoredStatusCode($status);
         $contentType = str_pad(Utils::getContentTypeNameById($type), 8);
-
-        $coloredElapsedTime = sprintf("%.3f", $elapsedTime);
-        if ($coloredElapsedTime >= 2) {
-            $coloredElapsedTime = Utils::getColorText($coloredElapsedTime, 'red', true);
-        } else if ($coloredElapsedTime >= 1) {
-            $coloredElapsedTime = Utils::getColorText($coloredElapsedTime, 'magenta', true);
-        }
-
+        $coloredElapsedTime = Utils::getColoredRequestTime($elapsedTime);
         $coloredSize =
             $size > 1024 * 1024
                 ? Utils::getColorText(str_pad(Utils::getFormattedSize($size), 8), 'red')
@@ -157,22 +137,40 @@ class TextOutput implements Output
         $stats = $this->status->getBasicStats();
 
         $this->addToOutput("\n");
-        $resultHeader = "Total execution time: " . Utils::getColorText(number_format($stats->totalExecutionTime, 2, '.', ' ') . " sec", 'cyan');
-        $this->addToOutput(str_repeat('=', 80) . "\n");
-        $this->addToOutput("{$resultHeader}\n");
-        $this->addToOutput("Total processed URLs: " . Utils::getColorText($stats->totalUrls, 'cyan') . " with total size " . Utils::getColorText($stats->totalSizeFormatted, 'cyan') . "\n");
-        $this->addToOutput("Response times: "
-            . " AVG " . Utils::getColorText(number_format($stats->totalRequestsTimesAvg, 3, '.', ' ') . ' sec', 'magenta', true)
-            . " MIN " . Utils::getColorText(number_format($stats->totalRequestsTimesMin, 3, '.', ' ') . ' sec', 'green', true)
-            . " MAX " . Utils::getColorText(number_format($stats->totalRequestsTimesMax, 3, '.', ' ') . ' sec', 'red', true)
-            . " TOTAL " . Utils::getColorText(number_format($stats->totalRequestsTimes, 3, '.', ' ') . ' sec', 'cyan', true) . "\n");
+        $resultHeader = sprintf(
+            "Total execution time %s using %s workers and %s memory limit\n",
+            Utils::getColorText(number_format($stats->totalExecutionTime, 3, '.', ' ') . " sec", 'cyan'),
+            Utils::getColorText($this->options->maxWorkers, 'cyan'),
+            Utils::getColorText($this->options->memoryLimit, 'cyan')
+        );
+        $this->addToOutput(str_repeat('=', Utils::getConsoleWidth()) . "\n");
+        $this->addToOutput($resultHeader);
+        $this->addToOutput(
+            sprintf("Total of %s visited URLs with a total size of %s\n",
+                Utils::getColorText($stats->totalUrls, 'cyan'),
+                Utils::getColorText($stats->totalSizeFormatted, 'cyan')
+            )
+        );
+        $this->addToOutput(
+            sprintf(
+                "Response times: AVG %s MIN %s MAX %s TOTAL %s\n",
+                Utils::getColorText(number_format($stats->totalRequestsTimesAvg, 3, '.', ' ') . ' sec', 'magenta'),
+                Utils::getColorText(number_format($stats->totalRequestsTimesMin, 3, '.', ' ') . ' sec', 'green'),
+                Utils::getColorText(number_format($stats->totalRequestsTimesMax, 3, '.', ' ') . ' sec', 'red'),
+                Utils::getColorText(number_format($stats->totalRequestsTimes, 3, '.', ' ') . ' sec', 'cyan')
+            )
+        );
+
+        /*
         $this->addToOutput("URLs by status:\n");
         $statuses = '';
         foreach ($stats->countByStatus as $status => $count) {
             $statuses .= " " . Utils::getHttpClientCodeWithErrorDescription($status) . ": $count\n";
         }
         $this->addToOutput(Utils::getColorText(rtrim($statuses), 'yellow') . "\n");
-        $this->addToOutput(str_repeat('=', 80) . "\n");
+        */
+
+        $this->addToOutput(str_repeat('=', Utils::getConsoleWidth()) . "\n");
     }
 
     public function addNotice(string $text): void

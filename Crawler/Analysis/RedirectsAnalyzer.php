@@ -21,7 +21,7 @@ class RedirectsAnalyzer extends BaseAnalyzer implements Analyzer
         });
 
         $consoleWidth = Utils::getConsoleWidth();
-        $urlColumnWidth = intval(($consoleWidth - 6) / 3.3);
+        $urlColumnWidth = intval(($consoleWidth - 20) / 3);
 
         $status = $this->status;
         $superTable = new SuperTable(
@@ -29,16 +29,18 @@ class RedirectsAnalyzer extends BaseAnalyzer implements Analyzer
             'Redirected URLs',
             'No redirects found.',
             [
-                new SuperTableColumn('statusCode', 'Status', 6, null),
+                new SuperTableColumn('statusCode', 'Status', 6, function ($value) {
+                    return Utils::getColoredStatusCode($value);
+                }),
                 new SuperTableColumn('url', 'Redirected URL', $urlColumnWidth, function ($value) {
                     return Utils::getUrlWithoutSchemeAndHost($value);
-                }),
+                }, null, true),
                 new SuperTableColumn('targetUrl', 'Target URL', $urlColumnWidth, null, function ($row) {
-                    return Utils::getUrlWithoutSchemeAndHost($row->extras['Redirect'] ?? '?');
-                }),
+                    return Utils::getUrlWithoutSchemeAndHost($row->extras['Location'] ?? '?');
+                }, true),
                 new SuperTableColumn('sourceUqId', 'Found at URL', $urlColumnWidth, function ($value) use ($status) {
                     return $value ? Utils::getUrlWithoutSchemeAndHost($status->getUrlByUqId($value)) : '';
-                }),
+                }, null, true),
             ], true, 'url', 'ASC');
 
         $superTable->setData($urlRedirects);

@@ -153,7 +153,7 @@ class SuperTable
     public function getConsoleOutput(): string
     {
         $titleOutput = $this->title . PHP_EOL . str_repeat('-', mb_strlen($this->title)) . PHP_EOL . PHP_EOL;;
-        $output = Utils::getColorText($titleOutput, 'yellow');
+        $output = Utils::getColorText($titleOutput, 'blue');
 
         if (!$this->data) {
             $output .= Utils::getColorText($this->emptyTableMessage, 'gray') . PHP_EOL . PHP_EOL;
@@ -164,7 +164,7 @@ class SuperTable
         foreach ($this->columns as $key => $column) {
             $headers[] = str_pad($column->name, $column->width);
         }
-        $output .= implode(' | ', $headers) . PHP_EOL;
+        $output .= Utils::getColorText(implode(' | ', $headers), 'gray') . PHP_EOL;
 
         $repeat = array_sum(array_map(function ($column) {
                 return $column->width;
@@ -181,8 +181,8 @@ class SuperTable
                     $value = call_user_func($column->renderer, $row);
                 }
 
-                if ($value && mb_strlen($value) > $column->width) {
-                    // $value = Utils::truncateInTwoThirds($value, $column->width);
+                if ($value && mb_strlen($value) > $column->width && $column->truncateIfLonger) {
+                    $value = Utils::truncateInTwoThirds($value, $column->width);
                 }
 
                 $rowData[] = str_pad($value, $column->width);

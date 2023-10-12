@@ -310,6 +310,36 @@ class Utils
         );
     }
 
+    public static function getColoredRequestTime(float $requestTime, int $strPadTo = 6): string
+    {
+        $result = str_pad(sprintf("%.3f", $requestTime), $strPadTo);
+        if ($requestTime >= 2) {
+            $result = Utils::getColorText($result, 'red', true);
+        } else if ($requestTime >= 1) {
+            $result = Utils::getColorText($result, 'magenta', true);
+        } else if ($requestTime >= 0.5) {
+            $result = Utils::getColorText($result, 'yellow');
+        } else {
+            $result = Utils::getColorText($result, 'green');
+        }
+        return $result;
+    }
+
+    public static function getColoredStatusCode(int $statusCode, int $strPadTo = 6): string
+    {
+        if ($statusCode >= 200 && $statusCode < 300) {
+            return Utils::getColorText(str_pad($statusCode, $strPadTo), 'green');
+        } else if ($statusCode >= 300 && $statusCode < 400) {
+            return Utils::getColorText(str_pad($statusCode, $strPadTo), 'yellow', true);
+        } else if ($statusCode >= 400 && $statusCode < 500) {
+            return Utils::getColorText(str_pad($statusCode, $strPadTo), 'magenta', true);
+        } else if ($statusCode >= 500 && $statusCode < 600) {
+            return Utils::getColorText(str_pad($statusCode, $strPadTo), 'red', true);
+        } else {
+            return Utils::getColorText(str_pad(Utils::getHttpClientCodeWithErrorDescription($statusCode, true), $strPadTo), 'red', true);
+        }
+    }
+
     public static function getContentTypeNameById(int $contentTypeId): string
     {
         static $typeToName = [

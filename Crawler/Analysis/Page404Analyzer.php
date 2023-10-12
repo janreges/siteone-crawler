@@ -5,6 +5,7 @@ namespace Crawler\Analysis;
 use Crawler\Components\SuperTable;
 use Crawler\Components\SuperTableColumn;
 use Crawler\Options\Options;
+use Crawler\Utils;
 
 class Page404Analyzer extends BaseAnalyzer implements Analyzer
 {
@@ -19,15 +20,19 @@ class Page404Analyzer extends BaseAnalyzer implements Analyzer
             return $visitedUrl->statusCode === 404;
         });
 
+        $urlColumnSize = intval((Utils::getConsoleWidth() - 16) / 2);
+
         $status = $this->status;
         $superTable = new SuperTable(
             '404',
             '404 URLs',
             'No 404 URLs found.',
             [
-                new SuperTableColumn('statusCode', 'Status', 6, null),
-                new SuperTableColumn('url', 'URL 404', 100, null),
-                new SuperTableColumn('sourceUqId', 'Found at URL', 100, function ($value) use ($status) {
+                new SuperTableColumn('statusCode', 'Status', 6, function($value) {
+                    return Utils::getColoredStatusCode($value);
+                }),
+                new SuperTableColumn('url', 'URL 404', $urlColumnSize, null),
+                new SuperTableColumn('sourceUqId', 'Found at URL', $urlColumnSize, function ($value) use ($status) {
                     return $value ? $status->getUrlByUqId($value) : '';
                 }),
             ], true, 'url', 'ASC');

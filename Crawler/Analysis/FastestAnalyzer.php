@@ -42,11 +42,13 @@ class FastestAnalyzer extends BaseAnalyzer implements Analyzer
             "TOP {$this->fastestTopLimit} fastest URLs",
             "No fast URLs fastest than {$this->fastestMaxTime} second(s) found.",
             [
-                new SuperTableColumn('requestTimeFormatted', 'Time(s)', 7, null),
-                new SuperTableColumn('statusCode', 'Status', 6, null),
-                new SuperTableColumn('url', 'Fast URL', $urlColumnWidth, function ($value) {
-                    return Utils::getUrlWithoutSchemeAndHost($value);
+                new SuperTableColumn('requestTime', 'Time', 6, function ($value) {
+                    return Utils::getColoredRequestTime($value, 6);
                 }),
+                new SuperTableColumn('statusCode', 'Status', 6, function ($value) {
+                    return Utils::getColoredStatusCode($value);
+                }),
+                new SuperTableColumn('url', 'Fast URL', $urlColumnWidth),
             ], true, 'requestTime', 'ASC'
         );
 

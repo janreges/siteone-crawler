@@ -42,11 +42,13 @@ class SlowestAnalyzer extends BaseAnalyzer implements Analyzer
             "TOP {$this->slowestTopLimit} slowest URLs",
             "No slow URLs slowest than {$this->slowestMinTime} second(s) found.",
             [
-                new SuperTableColumn('requestTimeFormatted', 'Time(s)', 7, null),
-                new SuperTableColumn('statusCode', 'Status', 6, null),
-                new SuperTableColumn('url', 'Slow URL', $urlColumnWidth, function ($value) {
-                    return Utils::getUrlWithoutSchemeAndHost($value);
+                new SuperTableColumn('requestTime', 'Time', 6, function ($value) {
+                    return Utils::getColoredRequestTime($value, 6);
                 }),
+                new SuperTableColumn('statusCode', 'Status', 6, function ($value) {
+                    return Utils::getColoredStatusCode($value);
+                }),
+                new SuperTableColumn('url', 'Slow URL', $urlColumnWidth),
             ], true, 'requestTime', 'DESC');
 
         $superTable->setData($slowUrls);
