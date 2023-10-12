@@ -169,7 +169,7 @@ class HtmlReport
      */
     private static function getHtmlForSummary(Summary $summary): string
     {
-        $result = '<section class="mb-5"><h2>Stats</h2>' . "\n";
+        $result = '<section class="mb-5"><h2>Summary</h2>' . "\n";
         $result .= $summary->getAsHtml();
         $result .= '</section>';
         return $result;

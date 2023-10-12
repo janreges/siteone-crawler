@@ -43,6 +43,7 @@ class Summary
         foreach ($this->items as $item) {
             $result .= '    <li>' . $item->getAsHtml() . "</li>\n";
         }
+        $result .= '</ul>';
         return $result;
 
     }
