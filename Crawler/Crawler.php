@@ -339,7 +339,7 @@ class Crawler
         $isInQueue = $this->queue->exist($urlKey);
         $isAlreadyVisited = $this->visited->exist($urlKey);
         $isParsable = @parse_url($url) !== false;
-        $isUrlWithHtml = preg_match('/\.[a-z0-9]{2,5}(|\?.*)$/i', $url) === 0 || preg_match($regexForHtmlExtensions, $url) === 1;
+        $isUrlWithHtml = preg_match('/\.[a-z0-9]{1,10}(|\?.*)$/i', $url) === 0 || preg_match($regexForHtmlExtensions, $url) === 1;
         $parseableAreOnlyHtmlFiles = empty($this->options->crawlAssets);
 
         return !$isInQueue && !$isAlreadyVisited && $isParsable && ($isUrlWithHtml || !$parseableAreOnlyHtmlFiles);

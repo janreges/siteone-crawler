@@ -90,16 +90,16 @@ class FileExporter extends BaseExporter implements Exporter
      */
     private function getExportFilePath(string $file, string $extension): string
     {
-        $hasExtension = preg_match('/\.[a-z0-9]{2,10}$/i', $file) === 1;
+        $hasExtension = preg_match('/\.[a-z0-9]{1,10}$/i', $file) === 1;
         if (!$hasExtension) {
             $file .= ".{$extension}";
         }
         if ($this->addHostToOutputFile) {
             $host = ParsedUrl::parse($this->crawler->getCoreOptions()->url)->host;
-            $file = preg_replace('/\.[a-z0-9]{2,10}$/i', '.' . $host . '$0', $file);
+            $file = preg_replace('/\.[a-z0-9]{1,10}$/i', '.' . $host . '$0', $file);
         }
         if ($this->addTimestampToOutputFile) {
-            $file = preg_replace('/\.[a-z0-9]{2,10}$/i', '.' . date('Y-m-d.H-i-s') . '$0', $file);
+            $file = preg_replace('/\.[a-z0-9]{1,10}$/i', '.' . date('Y-m-d.H-i-s') . '$0', $file);
         }
 
         if (!is_writable(dirname($file)) && !is_writable($file)) {
