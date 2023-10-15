@@ -72,9 +72,9 @@ class BasicStats
             $info['totalSize'],
             Utils::getFormattedSize($info['totalSize']),
             round($info['totalTime'], 3),
-            round($info['totalTime'] / $info['totalUrls'], 3),
-            round($info['minTime'], 3),
-            round($info['maxTime'], 3),
+            round($info['totalTime'] / max($info['totalUrls'], 1), 3),
+            round($info['minTime'] ?: 0, 3),
+            round($info['maxTime'] ?: 0, 3),
             $info['countByStatus']
         );
     }
