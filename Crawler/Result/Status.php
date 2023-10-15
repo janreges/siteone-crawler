@@ -4,6 +4,7 @@ namespace Crawler\Result;
 
 use Crawler\Components\SuperTable;
 use Crawler\CoreOptions;
+use Crawler\Crawler;
 use Crawler\Info;
 use Crawler\Result\Storage\Storage;
 use Crawler\Result\Summary\Item;
@@ -66,7 +67,7 @@ class Status
     {
         $this->visitedUrls[$url->uqId] = $url;
         if ($this->saveContent && $body !== null) {
-            $this->storage->save($url->uqId, trim($body));
+            $this->storage->save($url->uqId, $url->contentType === Crawler::CONTENT_TYPE_ID_HTML ? trim($body) : $body);
         }
     }
 
@@ -74,7 +75,7 @@ class Status
     {
         $status = ItemStatus::INFO;
         $text = "{$aplCode} out of range ({$value})";
-        foreach ($ranges as $rangeId=>$range) {
+        foreach ($ranges as $rangeId => $range) {
             if ($value >= $range[0] && $value <= $range[1]) {
                 $status = ItemStatus::fromRangeId($rangeId);
                 $text = sprintf($textPerRange[$rangeId] ?? $text, $value);
@@ -125,6 +126,11 @@ class Status
     public function getCrawlerInfo(): Info
     {
         return $this->crawlerInfo;
+    }
+
+    public function getStorage(): Storage
+    {
+        return $this->storage;
     }
 
     public function setFinalUserAgent(string $value): void
