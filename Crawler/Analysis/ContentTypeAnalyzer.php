@@ -36,6 +36,7 @@ class ContentTypeAnalyzer extends BaseAnalyzer implements Analyzer
                 'status20x' => 0,
                 'status30x' => 0,
                 'status40x' => 0,
+                'status42x' => 0,
                 'status50x' => 0,
                 'statusOther' => 0,
             ];
@@ -65,7 +66,7 @@ class ContentTypeAnalyzer extends BaseAnalyzer implements Analyzer
                     }
                 }),
                 new SuperTableColumn('totalTime', 'Total time', 10, function ($value) {
-                    return sprintf("%.3f", $value) . ' sec';
+                    return sprintf("%.3f", $value) . ' s';
                 }),
                 new SuperTableColumn('avgTime', 'Avg time', 8, function ($value) {
                     return Utils::getColoredRequestTime($value, 8);
@@ -77,6 +78,9 @@ class ContentTypeAnalyzer extends BaseAnalyzer implements Analyzer
                     return $value > 0 ? Utils::getColorText(str_pad($value, 10), 'yellow', true) : $value;
                 }),
                 new SuperTableColumn('status40x', 'Status 40x', 10, function ($value) {
+                    return $value > 0 ? Utils::getColorText(str_pad($value, 10), 'magenta', true) : $value;
+                }),
+                new SuperTableColumn('status42x', 'Status 42x', 10, function ($value) {
                     return $value > 0 ? Utils::getColorText(str_pad($value, 10), 'magenta', true) : $value;
                 }),
                 new SuperTableColumn('status50x', 'Status 50x', 10, function ($value) {
