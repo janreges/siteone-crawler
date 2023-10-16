@@ -139,18 +139,20 @@ class TextOutput implements Output
 
         $this->addToOutput("\n");
         $resultHeader = sprintf(
-            "Total execution time %s using %s workers and %s memory limit\n",
+            "Total execution time %s using %s workers and %s memory limit (max used %s)\n",
             Utils::getColorText(number_format($stats->totalExecutionTime, 3, '.', ' ') . " sec", 'cyan'),
             Utils::getColorText($this->options->maxWorkers, 'cyan'),
-            Utils::getColorText($this->options->memoryLimit, 'cyan')
+            Utils::getColorText($this->options->memoryLimit, 'cyan'),
+            Utils::getColorText(Utils::getFormattedSize(memory_get_peak_usage(true)), 'cyan')
         );
         $this->addToOutput(str_repeat('=', Utils::getConsoleWidth()) . "\n");
         $this->addToOutput($resultHeader);
         $this->addToOutput(
-            sprintf("Total of %s visited URLs with a total size of %s and power of %s\n",
+            sprintf("Total of %s visited URLs with a total size of %s and power of %s with download speed %s\n",
                 Utils::getColorText($stats->totalUrls, 'cyan'),
                 Utils::getColorText($stats->totalSizeFormatted, 'cyan'),
                 Utils::getColorText(intval($stats->totalUrls / $stats->totalExecutionTime) . " reqs/s", 'magenta'),
+                Utils::getColorText(Utils::getFormattedSize(intval($stats->totalSize / $stats->totalExecutionTime), 2) . "/s", 'magenta'),
             )
         );
         $this->addToOutput(
