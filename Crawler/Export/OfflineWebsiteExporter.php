@@ -46,7 +46,7 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
     public function export(): void
     {
         $visitedUrls = $this->status->getVisitedUrls();
-        $this->offlineExportDirectory = rtrim($this->offlineExportDirectory, '/');
+        $this->offlineExportDirectory = $this->offlineExportDirectory ? rtrim($this->offlineExportDirectory, '/') : null;
         $this->initialUrlHost = parse_url($this->status->getOptions()->url, PHP_URL_HOST);
 
         $exportedUrls = array_filter($visitedUrls, function (VisitedUrl $visitedUrl) {
