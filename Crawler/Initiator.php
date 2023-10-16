@@ -152,7 +152,7 @@ class Initiator
         $unknownOptions = [];
         foreach ($this->argv as $arg) {
             $argWithoutValue = preg_replace('/\s*=.*/', '', $arg);
-            if (!in_array($argWithoutValue, $this->knownOptions) && $arg !== $scriptName) {
+            if (!in_array($argWithoutValue, $this->knownOptions) && basename($arg) !== $scriptName) {
                 $unknownOptions[] = $arg;
             }
         }
