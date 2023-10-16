@@ -1,0 +1,23 @@
+{
+    "name": "janreges/siteone-website-crawler",
+    "description": "The best and easy-to-use command-line website crawler, sitemap and offline-website generator for Linux/Windows/macOS you've ever seen.",
+    "type": "project",
+    "require-dev": {
+        "phpunit/phpunit": "^10.4"
+    },
+    "license": "CC BY 4.0",
+    "autoload": {
+        "psr-4": {
+            "Crawler\\": "Crawler/"
+        }
+    },
+    "authors": [
+        {
+            "name": "jan.reges",
+            "email": "jan.reges@siteone.cz"
+        }
+    ],
+    "require": {
+      "ext-mbstring": "*"
+    }
+}

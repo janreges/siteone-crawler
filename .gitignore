@@ -1,3 +1,5 @@
 .idea
 log
 tmp
+.phpunit.*
+/vendor/
