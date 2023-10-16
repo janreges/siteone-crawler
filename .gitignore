@@ -1,5 +1,5 @@
 .idea
-log
-tmp
+log/*
+tmp/*
 .phpunit.*
 /vendor/
