@@ -347,6 +347,7 @@ class Utils
             Crawler::CONTENT_TYPE_ID_SCRIPT => 'JS',
             Crawler::CONTENT_TYPE_ID_STYLESHEET => 'CSS',
             Crawler::CONTENT_TYPE_ID_IMAGE => 'Image',
+            Crawler::CONTENT_TYPE_ID_VIDEO => 'Video',
             Crawler::CONTENT_TYPE_ID_FONT => 'Font',
             Crawler::CONTENT_TYPE_ID_DOCUMENT => 'Document',
             Crawler::CONTENT_TYPE_ID_JSON => 'JSON',

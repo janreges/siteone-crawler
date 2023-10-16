@@ -32,11 +32,12 @@ class Crawler
     const CONTENT_TYPE_ID_SCRIPT = 2;
     const CONTENT_TYPE_ID_STYLESHEET = 3;
     const CONTENT_TYPE_ID_IMAGE = 4;
-    const CONTENT_TYPE_ID_FONT = 5;
-    const CONTENT_TYPE_ID_DOCUMENT = 6;
-    const CONTENT_TYPE_ID_JSON = 7;
-    const CONTENT_TYPE_ID_REDIRECT = 8;
-    const CONTENT_TYPE_ID_OTHER = 9;
+    const CONTENT_TYPE_ID_VIDEO = 5;
+    const CONTENT_TYPE_ID_FONT = 6;
+    const CONTENT_TYPE_ID_DOCUMENT = 7;
+    const CONTENT_TYPE_ID_JSON = 8;
+    const CONTENT_TYPE_ID_REDIRECT = 9;
+    const CONTENT_TYPE_ID_OTHER = 10;
 
     /**
      * @param CoreOptions $options
@@ -460,12 +461,14 @@ class Crawler
         $typeId = self::CONTENT_TYPE_ID_OTHER;
         if (str_contains($contentTypeHeader, 'text/html')) {
             $typeId = self::CONTENT_TYPE_ID_HTML;
-        } elseif (str_contains($contentTypeHeader, 'text/javascript')) {
+        } elseif (str_contains($contentTypeHeader, 'text/javascript') || str_contains($contentTypeHeader, 'application/javascript') || str_contains($contentTypeHeader, 'application/x-javascript')) {
             $typeId = self::CONTENT_TYPE_ID_SCRIPT;
         } elseif (str_contains($contentTypeHeader, 'text/css')) {
             $typeId = self::CONTENT_TYPE_ID_STYLESHEET;
         } elseif (str_contains($contentTypeHeader, 'image/')) {
             $typeId = self::CONTENT_TYPE_ID_IMAGE;
+        } elseif (str_contains($contentTypeHeader, 'video/')) {
+            $typeId = self::CONTENT_TYPE_ID_VIDEO;
         } elseif (str_contains($contentTypeHeader, 'font/')) {
             $typeId = self::CONTENT_TYPE_ID_FONT;
         } elseif (str_contains($contentTypeHeader, 'application/json')) {
@@ -519,6 +522,7 @@ class Crawler
             self::CONTENT_TYPE_ID_SCRIPT,
             self::CONTENT_TYPE_ID_STYLESHEET,
             self::CONTENT_TYPE_ID_IMAGE,
+            self::CONTENT_TYPE_ID_VIDEO,
             self::CONTENT_TYPE_ID_FONT,
             self::CONTENT_TYPE_ID_DOCUMENT,
             self::CONTENT_TYPE_ID_JSON,
