@@ -11,44 +11,6 @@ class Utils
         self::$colorsEnabled = false;
     }
 
-    public static function relativeToAbsoluteUrl(string $relativeUrl, string $baseUrl): ?string
-    {
-        if (str_starts_with($relativeUrl, '/') || preg_match('/^https?:\/\//', $relativeUrl) === 1) {
-            return $relativeUrl;
-        }
-
-        // handle href="./xyz" - it is equivalent to href="xyz"
-        if (str_starts_with($relativeUrl, './')) {
-            $relativeUrl = substr($relativeUrl, 2);
-        }
-
-        // remove query params and hash from base URL
-        $baseUrl = preg_replace(['/\?.*$/', '/#.*$/'], ['', ''], $baseUrl);
-
-        // remove file name from base URL and trim trailing slash
-        $baseUrl = preg_match('/\.[a-z0-9]{2,10}$/i', $baseUrl) === 1 ? rtrim(preg_replace('/\/[^\/]+$/i', '', $baseUrl), ' /') : rtrim($baseUrl, ' /');
-
-        // explode base URL and relative URL to segments
-        $baseSegments = explode('/', trim($baseUrl, '/'));
-        $relativeSegments = explode('/', $relativeUrl);
-
-        foreach ($relativeSegments as $segment) {
-            if ($segment === '..') {
-                // remove last segment from base URL if it is a 'dotting' to the level above
-                array_pop($baseSegments);
-            } else {
-                $baseSegments[] = $segment;
-            }
-        }
-
-        // build and validate final URL
-        $finalUrl = implode('/', $baseSegments);
-        if (!filter_var($finalUrl, FILTER_VALIDATE_URL)) {
-            $finalUrl = null;
-        }
-        return $finalUrl;
-    }
-
     public static function getFormattedSize(int $bytes, int $precision = 1): string
     {
         $units = array('B', 'kB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB');
@@ -356,6 +318,279 @@ class Utils
         ];
 
         return $typeToName[$contentTypeId] ?? 'Unknown';
+    }
+
+    /**
+     * Apply specific changes to HTML related to the crawler options
+     *
+     * @param string $html
+     * @param string $baseUrl
+     * @param bool $removeExternalJs
+     * @param bool $removeCrossOrigins
+     * @param bool $removeAnalytics
+     * @param bool $removeSocnets
+     * @param bool $removeCookiesRelated
+     * @return string
+     */
+    public static function applySpecificHtmlChanges(string $html, string $baseUrl, bool $removeExternalJs, bool $removeCrossOrigins, bool $removeAnalytics, bool $removeSocnets, bool $removeCookiesRelated): string
+    {
+        $baseHost = parse_url($baseUrl, PHP_URL_HOST);
+
+        if ($removeExternalJs) {
+            $html = preg_replace_callback('#<script[^>]*src=["\']?(.*?)["\']?[^>]*>.*?</script>#is', function ($matches) use ($baseHost) {
+                if (preg_match("/^(https?:)?\/\//i", $matches[1]) === 1 && parse_url($matches[1], PHP_URL_HOST) !== $baseHost) {
+                    return '';
+                }
+                return $matches[0];
+            }, $html);
+        }
+
+        if ($removeCrossOrigins) {
+            $html = preg_replace('/(<link[^>]+)\s*crossorigin(\s*=\s*["\']?.*?["\']?)?(\s*[^>]*>)/i', '$1$3', $html);
+            $html = preg_replace('/(<script[^>]+)\s*crossorigin(\s*=\s*["\']?.*?["\']?)?(\s*[^>]*>)/i', '$1$3', $html);
+        }
+
+        if ($removeAnalytics || $removeSocnets) {
+            $patterns = [];
+
+            if ($removeAnalytics) {
+                $patternsAnalytics = [
+                    'googletagmanager.com',
+                    'google-analytics.com',
+                    'ga.js',
+                    'gtag.js',
+                    'gtag(',
+                    'analytics.',
+                    'connect.facebook.net',
+                    'fbq(', // Facebook Pixel
+                ];
+                $patterns = array_merge($patterns, $patternsAnalytics);
+            }
+
+            if ($removeSocnets) {
+                $patternsSocnets = [
+                    'connect.facebook.net',
+                    'connect.facebook.com',
+                    'twitter.com',
+                    '.x.com',
+                    'linkedin.com',
+                    'instagram.com',
+                    'pinterest.com',
+                    'tumblr.com',
+                    'plus.google.com',
+                    'curator.io',
+                ];
+                $patterns = array_merge($patterns, $patternsSocnets);
+            }
+
+            if ($removeCookiesRelated) {
+                $patternsCookies = [
+                    'cookies',
+                    'cookiebot',
+                ];
+                $patterns = array_merge($patterns, $patternsCookies);
+            }
+
+            $patterns = array_unique($patterns);
+
+            $html = preg_replace_callback('/<script[^>]*>(.*?)<\/script>/is', function ($matches) use ($patterns) {
+                if ($matches[0]) {
+                    foreach ($patterns as $keyword) {
+                        if (stripos($matches[0], $keyword) !== false) {
+                            return '';
+                        }
+                    }
+                }
+                return $matches[0];
+            }, $html);
+
+            if ($removeSocnets) {
+                $html = preg_replace('/<iframe[^>]*(facebook\.com|twitter\.com|linkedin\.com)[^>]*>.*?<\/iframe>/is', '', $html);
+            }
+        }
+
+        return $html;
+    }
+
+    /**
+     * Check HTML and get all found errors
+     * @param string $html
+     * @return string[]
+     */
+    public static function getHtmlErrors(string $html): array
+    {
+        libxml_use_internal_errors(true);
+        $document = new \DOMDocument();
+        @$document->loadHTML(mb_convert_encoding($html, 'HTML-ENTITIES', 'UTF-8'));
+        $errors = libxml_get_errors();
+        $errorMessages = [];
+        foreach ($errors as $error) {
+            $errorMessages[] = $error->message;
+        }
+        libxml_clear_errors();
+        libxml_use_internal_errors(false);
+        return $errorMessages;
+    }
+
+    /**
+     * Is this href a valid URL for "requestable" resource through HTTP(S) request?
+     * Non-requestable resources starts with "xyz:" (e.g. data:, javascript:, mailto:, tel:, ftp:, file:) but is not http:// or https://
+     *
+     * @param string $href
+     * @return bool
+     */
+    public static function isHrefForRequestableResource(string $href): bool
+    {
+        if (str_starts_with($href, '#')) {
+            // ignore anchors
+            return false;
+        } else if (str_contains($href, '{')) {
+            // "{" is used by some frameworks (e.g. Angular) for dynamic URLs
+            return false;
+        } else if (str_contains($href, '<')) {
+            // "<" is quite often visible in HTML code, but it is not valid URL
+            return false;
+        } else if (str_contains($href, '&#')) {
+            // "&#" is quite often visible in HTML code, but it is not valid URL
+            return false;
+        } else if (preg_match('/^[a-z0-9]+:/i', $href) === 1 && preg_match('/^https?:\//i', $href) === 0) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Takes a base URL, and a target URL from href, and resolves them as a browser would for an anchor tag.
+     * Examples of handled targetUrl are:
+     *  - /about
+     *  - /about?foo=bar
+     *  - /about#contact
+     *  - //example.com/about
+     *  - ../about
+     *  - ./about
+     *  - https://example.com/about
+     *
+     * @author https://github.com/dldnh/rel2abs
+     * @param string $baseUrl
+     * @param string $targetUrl
+     * @return string
+     */
+    public static function getAbsoluteUrlByBaseUrl(string $baseUrl, string $targetUrl): string
+    {
+        // init
+        $base = parse_url($baseUrl);
+        $rel = parse_url($targetUrl);
+
+        if (!$rel) {
+            return $targetUrl;
+        }
+
+        // init paths so we can blank the base path if we have a rel host
+        if (array_key_exists("path", $rel)) {
+            $relPath = $rel["path"];
+        } else {
+            $relPath = "";
+        }
+        if (array_key_exists("path", $base)) {
+            $basePath = $base["path"];
+        } else {
+            $basePath = "";
+        }
+
+        // if rel has scheme, it has everything
+        if (array_key_exists("scheme", $rel)) {
+            return $targetUrl;
+        }
+
+        // else use base scheme
+        if (array_key_exists("scheme", $base)) {
+            $abs = $base["scheme"];
+        } else {
+            $abs = "";
+        }
+
+        if (strlen($abs) > 0) {
+            $abs .= "://";
+        }
+
+        // if rel has host, it has everything, so blank the base path
+        // else use base host and carry on
+        if (array_key_exists("host", $rel)) {
+            $abs .= $rel["host"];
+            if (array_key_exists("port", $rel)) {
+                $abs .= ":";
+                $abs .= $rel["port"];
+            }
+            $basePath = "";
+        } else if (array_key_exists("host", $base)) {
+            $abs .= $base["host"];
+            if (array_key_exists("port", $base)) {
+                $abs .= ":";
+                $abs .= $base["port"];
+            }
+        }
+
+        // if rel starts with slash, that's it
+        if (strlen($relPath) > 0 && $relPath[0] == "/") {
+            return $abs . $relPath;
+        }
+
+        // split the base path parts
+        $parts = array();
+        $absParts = explode("/", $basePath);
+        foreach ($absParts as $part) {
+            array_push($parts, $part);
+        }
+
+        // remove the first empty part
+        while (count($parts) >= 1 && strlen($parts[0]) == 0) {
+            array_shift($parts);
+        }
+
+        // split the rel base parts
+        $relParts = explode("/", $relPath);
+
+        if (count($relParts) > 0 && strlen($relParts[0]) > 0) {
+            array_pop($parts);
+        }
+
+        // iterate over rel parts and do the math
+        $addSlash = false;
+        foreach ($relParts as $part) {
+            if ($part == "") {
+            } else if ($part == ".") {
+                $addSlash = true;
+            } else if ($part == "..") {
+                array_pop($parts);
+                $addSlash = true;
+            } else {
+                array_push($parts, $part);
+                $addSlash = false;
+            }
+        }
+
+        // combine the result
+        foreach ($parts as $part) {
+            $abs .= "/";
+            $abs .= $part;
+        }
+
+        if ($addSlash) {
+            $abs .= "/";
+        }
+
+        if (array_key_exists("query", $rel)) {
+            $abs .= "?";
+            $abs .= $rel["query"];
+        }
+
+        if (array_key_exists("fragment", $rel)) {
+            $abs .= "#";
+            $abs .= $rel["fragment"];
+        }
+
+        return $abs;
     }
 
 }
