@@ -3,8 +3,8 @@
 namespace Crawler\Output;
 
 use Crawler\Components\SuperTable;
+use Crawler\HttpClient\HttpResponse;
 use Crawler\Result\Summary\Summary;
-use Swoole\Coroutine\Http\Client;
 use Swoole\Table;
 
 class MultiOutput implements Output
@@ -59,10 +59,10 @@ class MultiOutput implements Output
         }
     }
 
-    public function addTableRow(Client $httpClient, string $url, int $status, float $elapsedTime, int $size, int $type, array $extraParsedContent, string $progressStatus): void
+    public function addTableRow(HttpResponse $httpResponse, string $url, int $status, float $elapsedTime, int $size, int $type, array $extraParsedContent, string $progressStatus): void
     {
         foreach ($this->outputs as $output) {
-            $output->addTableRow($httpClient, $url, $status, $elapsedTime, $size, $type, $extraParsedContent, $progressStatus);
+            $output->addTableRow($httpResponse, $url, $status, $elapsedTime, $size, $type, $extraParsedContent, $progressStatus);
         }
     }
 

@@ -4,10 +4,10 @@ namespace Crawler\Output;
 
 use Crawler\Components\SuperTable;
 use Crawler\CoreOptions;
+use Crawler\HttpClient\HttpResponse;
 use Crawler\Result\Status;
 use Crawler\Result\Summary\Summary;
 use Crawler\Utils;
-use Swoole\Coroutine\Http\Client;
 use Swoole\Table;
 
 class JsonOutput implements Output
@@ -64,7 +64,7 @@ class JsonOutput implements Output
         $this->json['results'] = [];
     }
 
-    public function addTableRow(Client $httpClient, string $url, int $status, float $elapsedTime, int $size, int $type, array $extraParsedContent, string $progressStatus): void
+    public function addTableRow(HttpResponse $httpResponse, string $url, int $status, float $elapsedTime, int $size, int $type, array $extraParsedContent, string $progressStatus): void
     {
         static $maxStdErrLength = 0;
         $row = [
@@ -82,8 +82,8 @@ class JsonOutput implements Output
             $headerName = $headerInfo['name'];
             if (array_key_exists($headerName, $extraParsedContent)) {
                 $value = trim($extraParsedContent[$headerName]);
-            } elseif (array_key_exists(strtolower($headerName), $httpClient->headers ?: [])) {
-                $value = trim($httpClient->headers[strtolower($headerName)]);
+            } elseif (array_key_exists(strtolower($headerName), $httpResponse->headers ?: [])) {
+                $value = trim($httpResponse->headers[strtolower($headerName)]);
             }
             $row['extras'][$headerName] = $value;
         }

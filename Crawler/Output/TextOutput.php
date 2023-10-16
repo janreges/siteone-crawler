@@ -4,10 +4,10 @@ namespace Crawler\Output;
 
 use Crawler\Components\SuperTable;
 use Crawler\CoreOptions;
+use Crawler\HttpClient\HttpResponse;
 use Crawler\Result\Status;
 use Crawler\Result\Summary\Summary;
 use Crawler\Utils;
-use Swoole\Coroutine\Http\Client;
 use Swoole\Table;
 
 class TextOutput implements Output
@@ -69,7 +69,7 @@ class TextOutput implements Output
         $this->addToOutput(Utils::getColorText($header, 'gray') . str_repeat("-", strlen($header)) . "\n");
     }
 
-    public function addTableRow(Client $httpClient, string $url, int $status, float $elapsedTime, int $size, int $type, array $extraParsedContent, string $progressStatus): void
+    public function addTableRow(HttpResponse $httpResponse, string $url, int $status, float $elapsedTime, int $size, int $type, array $extraParsedContent, string $progressStatus): void
     {
         $urlForTable = $this->options->hideSchemeAndHost ? (preg_replace('/^https?:\/\/[^\/]+\//i', '/', $url)) : $url;
 
@@ -88,8 +88,8 @@ class TextOutput implements Output
             $headerName = $headerInfo['name'];
             if (array_key_exists($headerName, $extraParsedContent)) {
                 $value = trim($extraParsedContent[$headerName]);
-            } elseif ($httpClient->headers && array_key_exists(strtolower($headerName), $httpClient->headers)) {
-                $value = trim($httpClient->headers[strtolower($headerName)]);
+            } elseif ($httpResponse->headers && array_key_exists(strtolower($headerName), $httpResponse->headers)) {
+                $value = trim($httpResponse->headers[strtolower($headerName)]);
             }
 
             $extraHeadersContent .= (' | ' . str_pad($value, max($headerInfo['size'], 4)));

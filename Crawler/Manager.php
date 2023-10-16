@@ -7,6 +7,7 @@ use Crawler\Export\Exporter;
 use Crawler\Export\FileExporter;
 use Crawler\Export\MailerExporter;
 use Crawler\Export\SitemapExporter;
+use Crawler\HttpClient\HttpClient;
 use Crawler\Output\TextOutput;
 use Crawler\Output\JsonOutput;
 use Crawler\Output\MultiOutput;
@@ -72,7 +73,7 @@ class Manager
         $this->status = new Status(
             $options->resultStorage === StorageType::MEMORY
                 ? new MemoryStorage($compression)
-                : new FileStorage($baseDir . '/tmp', $compression),
+                : new FileStorage($baseDir . '/tmp/result-storage', $compression),
             true, // TODO by options
             $crawlerInfo,
             $this->options,
@@ -80,7 +81,9 @@ class Manager
         );
 
         $this->output = $this->getOutputByOptions($this->status);
-        $this->crawler = new Crawler($this->options, $this->output, $this->status);
+
+        $httpClient = new HttpClient($baseDir. '/tmp/http-client-cache');
+        $this->crawler = new Crawler($this->options, $httpClient, $this->output, $this->status);
     }
 
     /**
@@ -91,6 +94,7 @@ class Manager
     {
         $this->output->addBanner();
 
+        $this->crawler->init();
         $this->crawler->run([$this, 'crawlerDoneCallback']);
     }
 
