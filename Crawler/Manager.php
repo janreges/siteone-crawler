@@ -96,10 +96,19 @@ class Manager
 
         $this->crawler->init();
         $this->crawler->run([$this, 'crawlerDoneCallback']);
+
+        // for cases when callback is not called
+        $this->crawlerDoneCallback();
     }
 
     public function crawlerDoneCallback(): void
     {
+        static $alreadyDone = false;
+        if ($alreadyDone) {
+            return;
+        }
+        $alreadyDone = true;
+
         $this->runAnalyzers();
         $this->runExporters();
 
@@ -107,7 +116,6 @@ class Manager
         $this->output->addTotalStats($this->crawler->getVisited());
         $this->output->addSummary($this->status->getSummary());
         $this->output->end();
-
     }
 
     /**
