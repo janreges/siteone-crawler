@@ -16,6 +16,7 @@ class CoreOptions
     const GROUP_BASIC_SETTINGS = 'basic-settings';
     const GROUP_OUTPUT_SETTINGS = 'output-settings';
     const GROUP_ADVANCED_CRAWLER_SETTINGS = 'advanced-crawler-settings';
+    const GROUP_EXPERT_SETTINGS = 'expert-settings';
 
     // basic settings
     public string $url;
@@ -37,6 +38,20 @@ class CoreOptions
     // advanced crawler settings
     public int $maxWorkers = 3;
     public string $memoryLimit = '512M';
+
+    /**
+     * Domains that are allowed for static files (e.g. CDN) but not for crawling.
+     * You can use also '*', or '*.domain.tld' or '*.domain.*'
+     * @var string[]
+     */
+    public array $allowedDomainsForExternalFiles = [];
+
+    /**
+     * Domains that are allowed for crawling. You can use also '*', or '*.domain.tld' or '*.domain.*'
+     * @var string[]
+     */
+    public array $allowedDomainsForCrawling = [];
+
     public StorageType $resultStorage = StorageType::MEMORY;
     public string $acceptEncoding = 'gzip, deflate, br';
     public int $maxQueueLength = 9000;
@@ -47,6 +62,21 @@ class CoreOptions
     public array $ignoreRegex = [];
     public bool $addRandomQueryParams = false;
     public bool $removeQueryParams = false;
+
+    // experts settings
+
+    public bool $debug = false;
+    public ?string $debugLogFile = null;
+
+    /**
+     * Regexes for URLs to debug. When crawled URL is matched, parsing, URL replacing and other actions are printed to output.
+     * Regexes have to be PCRE compatible and are applied to full URL (including scheme and host).
+     * Examples:
+     *  - `/^https://www\.siteone\.io\/blog\//` - debug all URLs starting with `https://www.siteone.io/blog/`
+     *  - `/contact\.html/` - debug all URLs containing `contact.html`
+     *  - `/./` - debug all URLs
+     */
+    public array $debugUrlRegex = [];
 
     /**
      * @param Options $options
@@ -84,6 +114,8 @@ class CoreOptions
         foreach ($this->headersToTable as $value) {
             $this->headersToTableNamesOnly[] = preg_replace('/\s*\(.+$/', '', $value);
         }
+
+        Debugger::setConfig($this->debug, $this->debugLogFile);
     }
 
 
@@ -117,16 +149,26 @@ class CoreOptions
             'Advanced crawler settings', [
             new Option('--max-workers', null, 'maxWorkers', Type::INT, false, 'Max concurrent workers (threads).', 3, false),
             new Option('--memory-limit', null, 'memoryLimit', Type::SIZE_M_G, false, 'Memory limit in units M (Megabytes) or G (Gigabytes).', '512M', false),
+            new Option('--allowed-domain-for-external-files', null, 'allowedDomainsForExternalFiles', Type::STRING, true, "Primarily, the crawler crawls only the URL within the domain for initial URL. This allows you to enable loading of file content from another domain as well (e.g. if you want to load assets from a CDN). Can be specified multiple times. Use can use domains with wildcard '*'.", [], true, true),
+            new Option('--allowed-domain-for-crawling', null, 'allowedDomainsForCrawling', Type::STRING, true, "This option will allow you to crawl all content from other listed domains - typically in the case of language mutations on other domains. Can be specified multiple times. Use can use domains with wildcard '*'.", [], true, true),
             new Option('--result-storage', null, 'resultStorage', Type::STRING, false, 'Result storage type. Values: `memory` or `file-system`. Use `file-system` for large websites.', 'memory', false),
             new Option('--crawl-assets', null, 'crawlAssets', Type::STRING, true, 'Static assets to crawl. Comma delimited. Values: `fonts`, `images`, `styles`, `scripts`, `files`', [], false, true),
-            new Option('--include-regex', '--include-regexp', 'includeRegex', Type::REGEX, true, 'Include URLs matching regex. Can be specified multiple times.', [], false, true),
-            new Option('--ignore-regex', '--ignore-regexp', 'ignoreRegex', Type::REGEX, true, 'Ignore URLs matching regex. Can be specified multiple times.', [], false, true),
+            new Option('--include-regex', '--include-regexp', 'includeRegex', Type::REGEX, true, 'Include only URLs matching at least one PCRE regex. Can be specified multiple times.', [], false, true),
+            new Option('--ignore-regex', '--ignore-regexp', 'ignoreRegex', Type::REGEX, true, 'Ignore URLs matching any PCRE regex. Can be specified multiple times.', [], false, true),
             new Option('--accept-encoding', null, 'acceptEncoding', Type::STRING, false, 'Set `Accept-Encoding` request header.', 'gzip, deflate, br', false),
             new Option('--remove-query-params', null, 'removeQueryParams', Type::BOOL, false, 'Remove URL query parameters from crawled URLs.', false, false),
             new Option('--add-random-query-params', null, 'addRandomQueryParams', Type::BOOL, false, 'Add random query parameters to each crawled URL.', false, false),
             new Option('--max-queue-length', null, 'maxQueueLength', Type::INT, false, 'Max URL queue length. It affects memory requirements.', 9000, false),
             new Option('--max-visited-urls', null, 'maxVisitedUrls', Type::INT, false, 'Max visited URLs. It affects memory requirements.', 10000, false),
             new Option('--max-url-length', null, 'maxUrlLength', Type::INT, false, 'Max URL length in chars. It affects memory requirements.', 2083, false),
+        ]));
+
+        $options->addGroup(new Group(
+            self::GROUP_EXPERT_SETTINGS,
+            'Expert settings', [
+            new Option('--debug', null, 'debug', Type::BOOL, false, 'Activate debug mode.', false, true),
+            new Option('--debug-log-file', null, 'debugLogFile', Type::FILE, false, 'Log file where to save debug messages. When --debug is not set and --debug-log-file is set, logging will be active without visible output.', null, true),
+            new Option('--debug-url-regex', null, 'debugUrlRegex', Type::REGEX, true, 'Regex for URL(s) to debug. When crawled URL is matched, parsing, URL replacing and other actions are printed to output. Can be specified multiple times.', [], true, true),
         ]));
 
         return $options;
@@ -141,6 +183,21 @@ class CoreOptions
     public function hasCrawlAsset(AssetType $assetType): bool
     {
         return in_array($assetType, $this->crawlAssets);
+    }
+
+    public function isUrlSelectedForDebug(string $url): bool
+    {
+        if (!$this->debugUrlRegex) {
+            return false;
+        }
+
+        foreach ($this->debugUrlRegex as $regex) {
+            if (preg_match($regex, $url) === 1) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function toArray(bool $maskSensitive = true): array

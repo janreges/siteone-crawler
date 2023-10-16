@@ -211,8 +211,10 @@ class Option
             throw new Exception("Option {$this->name} ({$value}) must be valid email '{$value}'");
         } else if ($this->type === Type::FILE && !is_writable(dirname($value)) && !is_writable($value)) {
             throw new Exception("Option {$this->name} ({$value}) must be valid writable file. Check permissions.");
-        } else if ($this->type === Type::DIR && !is_dir($value)) {
-            throw new Exception("Option {$this->name} ({$value}) must be valid and existing directory");
+        } else if ($this->type === Type::DIR && (!is_dir($value) || !is_writable(dirname($value)))) {
+            if (mkdir($value, 0777, true) === false) {
+                throw new Exception("Option {$this->name} ({$value}) must be valid and writable directory. Check permissions.");
+            }
         }
     }
 
