@@ -22,6 +22,7 @@ class VisitedUrl
     public readonly string $sourceUqId;
 
     /**
+     * Full URL with scheme, domain, path and query
      * @var string URL
      */
     public readonly string $url;
@@ -70,6 +71,16 @@ class VisitedUrl
     public readonly ?array $extras;
 
     /**
+     * @var bool
+     */
+    public readonly bool $isExternal;
+
+    /**
+     * @var bool
+     */
+    public readonly bool $isAllowedForCrawling;
+
+    /**
      * @param string $uqId
      * @param string $sourceUqId
      * @param string $url
@@ -78,8 +89,10 @@ class VisitedUrl
      * @param int|null $size
      * @param int $contentType
      * @param array|null $extras
+     * @param bool $isExternal
+     * @param bool $isAllowedForCrawling
      */
-    public function __construct(string $uqId, string $sourceUqId, string $url, int $statusCode, float $requestTime, ?int $size, int $contentType, ?array $extras)
+    public function __construct(string $uqId, string $sourceUqId, string $url, int $statusCode, float $requestTime, ?int $size, int $contentType, ?array $extras, bool $isExternal, bool $isAllowedForCrawling)
     {
         $this->uqId = $uqId;
         $this->sourceUqId = $sourceUqId;
@@ -91,6 +104,8 @@ class VisitedUrl
         $this->sizeFormatted = $size !== null ? Utils::getFormattedSize($size) : null;
         $this->contentType = $contentType;
         $this->extras = $extras;
+        $this->isExternal = $isExternal;
+        $this->isAllowedForCrawling = $isAllowedForCrawling;
     }
 
 }
