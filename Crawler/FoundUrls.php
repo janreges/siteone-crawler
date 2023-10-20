@@ -15,7 +15,7 @@ class FoundUrls
         $this->foundUrls[md5($foundUrl->url)] = $foundUrl;
     }
 
-    public function addUrlsFromTextArray(array $urls, string $sourceUrl, string $source): void
+    public function addUrlsFromTextArray(array $urls, string $sourceUrl, int $source): void
     {
         foreach ($urls as $url) {
             $this->addUrl(new FoundUrl($url, $sourceUrl, $source));

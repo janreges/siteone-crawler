@@ -4,12 +4,12 @@ namespace Crawler;
 
 class FoundUrl
 {
-    const SOURCE_A_HREF = 'href';
-    const SOURCE_IMG_SRC = 'img-src';
-    const SOURCE_SCRIPT_SRC = 'script-src';
-    const SOURCE_INLINE_SCRIPT_SRC = 'inline-script-src';
-    const SOURCE_LINK_HREF = 'link-href';
-    const SOURCE_CSS_URL = 'css-url';
+    const SOURCE_A_HREF = 10;
+    const SOURCE_IMG_SRC = 20;
+    const SOURCE_SCRIPT_SRC = 30;
+    const SOURCE_INLINE_SCRIPT_SRC = 40;
+    const SOURCE_LINK_HREF = 50;
+    const SOURCE_CSS_URL = 60;
 
     /**
      * Founded URL, parsed from $this->sourceUrl
@@ -26,16 +26,16 @@ class FoundUrl
     /**
      * Source of this URL - where in HTML/CSS was found
      * Values are constants self::SOURCE_* from this class
-     * @var string
+     * @var int
      */
-    public readonly string $source;
+    public readonly int $source;
 
     /**
      * @param string $url
      * @param string $sourceUrl
-     * @param string $source
+     * @param int $source
      */
-    public function __construct(string $url, string $sourceUrl, string $source)
+    public function __construct(string $url, string $sourceUrl, int $source)
     {
         $this->url = $this->normalizeUrl($url);
         $this->sourceUrl = $sourceUrl;
@@ -65,8 +65,8 @@ class FoundUrl
     private function normalizeUrl(string $url): string
     {
         $url = str_replace(
-            ['&#38;', '&amp;'],
-            ['&', '&'], $url);
+            ['&#38;', '&amp;', "\\ ", ' '],
+            ['&', '&', '%20', '%20'], $url);
         
         $url = ltrim($url, "\"'\t ");
         return rtrim($url, "&\"'\t ");
