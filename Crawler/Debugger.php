@@ -74,6 +74,15 @@ class Debugger
         self::log($message);
     }
 
+    public static function forceEnabledDebug(?string $logFile): void
+    {
+        self::$debug = true;
+        self::$debugPrintToOutput = true;
+        if ($logFile) {
+            self::$debugLogFile = $logFile;
+        }
+    }
+
     /**
      * Set debugger configuration - enable/disable debug mode, printing to output and set debug log file
      *

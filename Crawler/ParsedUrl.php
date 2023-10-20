@@ -12,6 +12,8 @@ class ParsedUrl
     public ?string $query;
     public ?string $extension = null;
 
+    private bool $debug = false;
+
     /**
      * @param string $url
      * @param string|null $scheme
@@ -30,6 +32,14 @@ class ParsedUrl
         $this->path = $path;
         $this->query = $query;
         $this->extension = $extension;
+    }
+
+    public function setDebug(bool $debug): void
+    {
+        $this->debug = $debug;
+        if ($this->debug) {
+            Debugger::forceEnabledDebug('log/debug.log');
+        }
     }
 
     public static function parse(string $url): self
