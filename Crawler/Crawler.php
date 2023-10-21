@@ -573,15 +573,20 @@ class Crawler
     public function getFinalUserAgent(): string
     {
         if ($this->options->userAgent) {
-            return $this->options->userAgent;
+            $result = $this->options->userAgent;
+        } else {
+            $result = match ($this->options->device) {
+                DeviceType::DESKTOP => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/' . date('y') . '.0.0.0 Safari/537.36',
+                DeviceType::MOBILE => 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15A5370a Safari/604.1',
+                DeviceType::TABLET => 'Mozilla/5.0 (Linux; Android 11; SAMSUNG SM-T875) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/14.0 Chrome/87.0.4280.141 Safari/537.36',
+                default => throw new Exception("Unsupported device '{$this->options->device}'"),
+            };
         }
 
-        return match ($this->options->device) {
-            DeviceType::DESKTOP => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/' . date('y') . '.0.0.0 Safari/537.36',
-            DeviceType::MOBILE => 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15A5370a Safari/604.1',
-            DeviceType::TABLET => 'Mozilla/5.0 (Linux; Android 11; SAMSUNG SM-T875) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/14.0 Chrome/87.0.4280.141 Safari/537.36',
-            default => throw new Exception("Unsupported device '{$this->options->device}'"),
-        };
+        // WARNING: Please do not remove this signature, it's used to detect crawler
+        // in logs and also for possibility to block our crawler by website owner
+
+        return $result . ' ' . self::getCrawlerUserAgentSignature();
     }
 
     public function getVisited(): Table

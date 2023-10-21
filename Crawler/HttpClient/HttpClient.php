@@ -29,36 +29,42 @@ class HttpClient
      * @param string $httpMethod
      * @param int $timeout
      * @param string $userAgent
+     * @param string $accept
      * @param string $acceptEncoding
+     * @param ?string $origin
      * @return HttpResponse
      */
-    public function request(string $host, int $port, string $scheme, string $url, string $httpMethod, int $timeout, string $userAgent, string $acceptEncoding): HttpResponse
+    public function request(string $host, int $port, string $scheme, string $url, string $httpMethod, int $timeout, string $userAgent, string $accept, string $acceptEncoding, ?string $origin = null): HttpResponse
     {
-        $cacheKey = $this->getRequestCacheKey($host, $port, $url, $httpMethod);
+        $extension = @pathinfo(@parse_url($url, PHP_URL_PATH), PATHINFO_EXTENSION);
+        $cacheKey = $host . '.' . md5(serialize(func_get_args())) . ($extension ? ".{$extension}" : '');
         $cachedResult = $this->getFromCache($cacheKey);
-        if ($cachedResult !== null) {
+        if ($cachedResult !== null && str_contains($url, ' ') === false) {
             return $cachedResult;
+        }
+
+        $requestHeaders = [
+            'X-Crawler-Info' => 'siteone-website-crawler/' . VERSION,
+            'User-Agent' => $userAgent,
+            'Accept' => $accept,
+            'Accept-Encoding' => $acceptEncoding,
+        ];
+        if ($origin) {
+            $requestHeaders['Origin'] = $origin;
         }
 
         $startTime = microtime(true);
         $client = new Client($host, $port, $scheme === 'https');
-        $client->setHeaders([
-                'User-Agent' => $userAgent,
-                'Accept-Encoding' => $acceptEncoding
-            ]
-        );
+        $client->setHeaders($requestHeaders);
         $client->set(['timeout' => $timeout]);
         $client->setMethod($httpMethod);
+
+        $url = str_replace(["\\ ", ' '], ['%20', '%20'], $url); // fix for HTTP 400 Bad Request for URLs with spaces
         $client->execute($url);
 
         $result = new HttpResponse($url, $client->statusCode, $client->body, $client->headers ?? [], microtime(true) - $startTime);
         $this->saveToCache($cacheKey, $result);
         return $result;
-    }
-
-    private function getRequestCacheKey(string $host, int $port, string $url, string $httpMethod): string
-    {
-        return $host . '.' . md5("{$host}_{$port}_{$url}_{$httpMethod}");
     }
 
     private function getFromCache(string $cacheKey): ?HttpResponse
