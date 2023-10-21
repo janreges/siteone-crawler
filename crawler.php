@@ -14,6 +14,10 @@ spl_autoload_register(function ($class) {
     require_once($classFile);
 });
 
+// increase PCRE limits for large HTML/CSS/JS parsing
+ini_set('pcre.backtrack_limit', '100000000');
+ini_set('pcre.recursion_limit', '10000000');
+
 // initiator
 try {
     $initiator = new Initiator($argv, dirname(platformCompatiblePath($_SERVER['PHP_SELF'])) . '/Crawler');
