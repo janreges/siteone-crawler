@@ -37,6 +37,7 @@ class CoreOptions
 
     // advanced crawler settings
     public int $maxWorkers = 3;
+    public float $maxReqsPerSec = 10;
     public string $memoryLimit = '512M';
 
     /**
@@ -148,6 +149,7 @@ class CoreOptions
             self::GROUP_ADVANCED_CRAWLER_SETTINGS,
             'Advanced crawler settings', [
             new Option('--max-workers', null, 'maxWorkers', Type::INT, false, 'Max concurrent workers (threads).', 3, false),
+            new Option('--max-reqs-per-sec', null, 'maxReqsPerSec', Type::FLOAT, false, 'Max requests/s for whole crawler. Be careful not to cause a DoS attack.', 10, false),
             new Option('--memory-limit', null, 'memoryLimit', Type::SIZE_M_G, false, 'Memory limit in units M (Megabytes) or G (Gigabytes).', '512M', false),
             new Option('--allowed-domain-for-external-files', null, 'allowedDomainsForExternalFiles', Type::STRING, true, "Primarily, the crawler crawls only the URL within the domain for initial URL. This allows you to enable loading of file content from another domain as well (e.g. if you want to load assets from a CDN). Can be specified multiple times. Use can use domains with wildcard '*'.", [], true, true),
             new Option('--allowed-domain-for-crawling', null, 'allowedDomainsForCrawling', Type::STRING, true, "This option will allow you to crawl all content from other listed domains - typically in the case of language mutations on other domains. Can be specified multiple times. Use can use domains with wildcard '*'.", [], true, true),

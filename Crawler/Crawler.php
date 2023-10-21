@@ -30,6 +30,9 @@ class Crawler
     private ?array $doneCallback = null;
 
     private static array $htmlPagesExtensions = ['htm', 'html', 'shtml', 'php', 'phtml', 'ashx', 'xhtml', 'asp', 'aspx', 'jsp', 'jspx', 'do', 'cfm', 'cgi', 'pl'];
+    // rate limiting
+    private ?float $optimalDelayBetweenRequests;
+    private float $lastRequestTime = 0;
 
     const CONTENT_TYPE_ID_HTML = 1;
     const CONTENT_TYPE_ID_SCRIPT = 2;
@@ -101,6 +104,7 @@ class Crawler
     public function run(callable $doneCallback): void
     {
         $this->doneCallback = $doneCallback;
+        $this->optimalDelayBetweenRequests = max(1 / ($this->options->maxReqsPerSec), 0.001);
 
         // add initial URL to queue
         $this->addUrlToQueue($this->options->url);
@@ -382,8 +386,17 @@ class Crawler
             Coroutine::cancel(Coroutine::getCid());
         } else {
             while ($this->getActiveWorkersNumber() < $this->options->maxWorkers && $this->queue->count() > 0) {
+                // rate limiting
+                $currentTimestamp = microtime(true);
+                if (($currentTimestamp - $this->lastRequestTime) < $this->optimalDelayBetweenRequests) {
+                    $sleep = $this->optimalDelayBetweenRequests - ($currentTimestamp - $this->lastRequestTime);
+                    Coroutine::sleep(max($sleep, 0.001));
+                    continue;
+                } else {
+                    $this->lastRequestTime = $currentTimestamp;
+                }
+
                 Coroutine::create([$this, 'processNextUrl']);
-                Coroutine::sleep(0.001);
             }
         }
     }
