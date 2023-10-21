@@ -402,7 +402,7 @@ class Crawler
             call_user_func($this->doneCallback);
             Coroutine::cancel(Coroutine::getCid());
         } else {
-            while ($this->getActiveWorkersNumber() < $this->options->maxWorkers && $this->queue->count() > 0) {
+            while ($this->getActiveWorkersNumber() < $this->options->workers && $this->queue->count() > 0) {
                 // rate limiting
                 $currentTimestamp = microtime(true);
                 if (($currentTimestamp - $this->lastRequestTime) < $this->optimalDelayBetweenRequests) {
@@ -880,7 +880,7 @@ class Crawler
     private function setupCoroutines(): void
     {
         $options = [
-            'max_concurrency' => $this->options->maxWorkers,
+            'max_concurrency' => $this->options->workers,
             'max_coroutine' => 4096,
             'stack_size' => 2 * 1024 * 1024,
             'socket_connect_timeout' => $this->options->timeout + 1,
@@ -894,8 +894,8 @@ class Crawler
             'dns_cache_capacity' => 1000,
             'dns_server' => '8.8.8.8',
             'display_errors' => false,
-            'aio_core_worker_num' => $this->options->maxWorkers + 1,
-            'aio_worker_num' => $this->options->maxWorkers + 1,
+            'aio_core_worker_num' => $this->options->workers + 1,
+            'aio_worker_num' => $this->options->workers + 1,
             'aio_max_wait_time' => 1,
             'aio_max_idle_time' => 1,
             'exit_condition' => function () {

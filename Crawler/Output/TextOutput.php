@@ -139,7 +139,7 @@ class TextOutput implements Output
         $resultHeader = sprintf(
             "Total execution time %s using %s workers and %s memory limit (max used %s)\n",
             Utils::getColorText(number_format($stats->totalExecutionTime, 3, '.', ' ') . " sec", 'cyan'),
-            Utils::getColorText($this->options->maxWorkers, 'cyan'),
+            Utils::getColorText($this->options->workers, 'cyan'),
             Utils::getColorText($this->options->memoryLimit, 'cyan'),
             Utils::getColorText(Utils::getFormattedSize(memory_get_peak_usage(true)), 'cyan')
         );

@@ -203,7 +203,7 @@ required arguments:
 ```bash
 ./swoole-cli crawler.php --url=https://mydomain.tld/ \
   --output=text \
-  --max-workers=2 \
+  --workers=2 \
   --memory-limit=512M \
   --timeout=5 \
   --user-agent="My User-Agent String" \
@@ -295,8 +295,9 @@ through the file:// protocol.
 
 #### Advanced crawler settings
 
-* `--max-workers=<int>`            Maximum number of concurrent workers (threads). Use carefully. A high number of
-  threads can cause a DoS attack. Default is `3`.
+* `--workers=<int>`                Maximum number of concurrent workers (threads). Crawler will not make more 
+  simultaneous requests to the server than this number. Use carefully! A high number of workers can cause a DoS attack.
+  Default is `3`.
 * `--memory-limit=<size>`          Memory limit in units `M` (Megabytes) or `G` (Gigabytes). Default is `512M`.
 * `--include-regex=<regex>`        Regular expression compatible with PHP preg_match() for URLs that should be included.
   Argument can be specified multiple times. Example: `--include-regex='/^\/public\//'`
@@ -403,13 +404,13 @@ Output is truncated (only 3 URLs in results) for better readability.
     "name": "SiteOne Website Crawler",
     "version": "2023.10.2",
     "executedAt": "2023-10-05 16:50:27",
-    "command": "crawler.php --url=https:\/\/www.siteone.io\/ --extra-columns=Title --max-workers=2 --do-not-truncate-url --url-column-size=72 --output=json"
+    "command": "crawler.php --url=https:\/\/www.siteone.io\/ --extra-columns=Title --workers=2 --do-not-truncate-url --url-column-size=72 --output=json"
   },
   "options": {
     "url": "https:\/\/www.siteone.io\/",
     "device": "desktop",
     "outputType": "json",
-    "maxWorkers": 2,
+    "workers": 2,
     "timeout": 10,
     "urlColumnSize": 72,
     "acceptEncoding": "gzip, deflate, br",
