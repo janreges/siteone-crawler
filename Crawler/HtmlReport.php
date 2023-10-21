@@ -111,7 +111,7 @@ class HtmlReport
                                     <th style="width: 80px">Time (s)</th>
                                     <th style="width: 80px">Size</th>';
 
-        $extraHeaders = $status->getOptions()->headersToTableNamesOnly;
+        $extraHeaders = $status->getOptions()->extraColumnsNamesOnly;
         foreach ($extraHeaders as $headerName) {
             $html .= '<th>' . htmlspecialchars($headerName) . '</th>';
         }

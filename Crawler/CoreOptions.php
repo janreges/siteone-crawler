@@ -27,8 +27,8 @@ class CoreOptions
     // output setting
     public OutputType $outputType = OutputType::TEXT;
     public int $urlColumnSize = 80;
-    public array $headersToTable = [];
-    public array $headersToTableNamesOnly = [];
+    public array $extraColumns = [];
+    public array $extraColumnsNamesOnly = [];
     public bool $hideSchemeAndHost = false;
     public bool $doNotTruncateUrl = false;
     public bool $hideProgressBar = false;
@@ -110,9 +110,9 @@ class CoreOptions
             throw new Exception("Invalid value '{$this->maxWorkers}' (minimum is 1) for --max-workers");
         }
 
-        $this->headersToTableNamesOnly = [];
-        foreach ($this->headersToTable as $value) {
-            $this->headersToTableNamesOnly[] = preg_replace('/\s*\(.+$/', '', $value);
+        $this->extraColumnsNamesOnly = [];
+        foreach ($this->extraColumns as $value) {
+            $this->extraColumnsNamesOnly[] = preg_replace('/\s*\(.+$/', '', $value);
         }
 
         Debugger::setConfig($this->debug, $this->debugLogFile);
@@ -136,8 +136,8 @@ class CoreOptions
             self::GROUP_OUTPUT_SETTINGS,
             'Output settings', [
             new Option('--output', '-o', 'outputType', Type::STRING, false, 'Output type `text` or `json`.', 'text', false),
-            new Option('--headers-to-table', null, 'headersToTable', Type::STRING, true, 'HTTP headers for output table, e.g., `DOM,X-Cache(10),Title`.', null, true, true),
-            new Option('--url-column-size', null, 'urlToColumnSize', Type::INT, false, 'URL column width.', 80, false),
+            new Option('--extra-columns', null, 'extraColumns', Type::STRING, true, 'HTTP headers for output table, e.g., `DOM,X-Cache(10),Title`.', null, true, true),
+            new Option('--url-column-size', null, 'urlColumnSize', Type::INT, false, 'URL column width.', 80, false),
             new Option('--do-not-truncate-url', null, 'doNotTruncateUrl', Type::BOOL, false, 'Avoid truncating URLs to `--url-column-size`.', false, false),
             new Option('--hide-scheme-and-host', null, 'hideSchemeAndHost', Type::BOOL, false, 'Hide URL scheme/host in output.', false, false),
             new Option('--hide-progress-bar', null, 'hideProgressBar', Type::BOOL, false, 'Suppress progress bar in output.', false, false),

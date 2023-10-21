@@ -61,7 +61,7 @@ class TextOutput implements Output
             $header = str_pad("Progress report", 26) . "| " . $header;
         }
 
-        foreach ($this->options->headersToTable as $headerName) {
+        foreach ($this->options->extraColumns as $headerName) {
             $headerInfo = Utils::getColumnInfo($headerName);
             $header .= " | " . str_pad($headerInfo['name'], max($headerInfo['size'], 4));
         }
@@ -82,7 +82,7 @@ class TextOutput implements Output
                 : str_pad(Utils::getFormattedSize($size), 8);
 
         $extraHeadersContent = '';
-        foreach ($this->options->headersToTable as $header) {
+        foreach ($this->options->extraColumns as $header) {
             $value = '';
             $headerInfo = Utils::getColumnInfo($header);
             $headerName = $headerInfo['name'];

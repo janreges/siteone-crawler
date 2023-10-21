@@ -76,7 +76,7 @@ class JsonOutput implements Output
             'extras' => [],
         ];
 
-        foreach ($this->options->headersToTable as $header) {
+        foreach ($this->options->extraColumns as $header) {
             $value = '';
             $headerInfo = Utils::getColumnInfo($header);
             $headerName = $headerInfo['name'];
