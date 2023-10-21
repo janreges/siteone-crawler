@@ -28,6 +28,10 @@ class CoreOptions
     // output setting
     public OutputType $outputType = OutputType::TEXT;
     public int $urlColumnSize = 80;
+
+    /**
+     * @var ExtraColumn[]
+     */
     public array $extraColumns = [];
     public array $extraColumnsNamesOnly = [];
     public bool $hideSchemeAndHost = false;
@@ -102,6 +106,10 @@ class CoreOptions
                         $this->outputType = OutputType::fromText($option->getValue());
                     } else if ($option->propertyToFill === 'resultStorage') {
                         $this->resultStorage = StorageType::fromText($option->getValue());
+                    } else if ($option->propertyToFill === 'extraColumns') {
+                        foreach ($option->getValue() as $columnText) {
+                            $this->extraColumns[] = ExtraColumn::fromText($columnText);
+                        }
                     } else {
                         $this->{$option->propertyToFill} = $option->getValue();
                     }
@@ -116,8 +124,8 @@ class CoreOptions
         }
 
         $this->extraColumnsNamesOnly = [];
-        foreach ($this->extraColumns as $value) {
-            $this->extraColumnsNamesOnly[] = preg_replace('/\s*\(.+$/', '', $value);
+        foreach ($this->extraColumns as $extraColumn) {
+            $this->extraColumnsNamesOnly[] = preg_replace('/\s*\(.+$/', '', $extraColumn->name);
         }
 
         Debugger::setConfig($this->debug, $this->debugLogFile);
@@ -141,7 +149,7 @@ class CoreOptions
             self::GROUP_OUTPUT_SETTINGS,
             'Output settings', [
             new Option('--output', '-o', 'outputType', Type::STRING, false, 'Output type `text` or `json`.', 'text', false),
-            new Option('--extra-columns', null, 'extraColumns', Type::STRING, true, 'HTTP headers for output table, e.g., `DOM,X-Cache(10),Title`.', null, true, true),
+            new Option('--extra-columns', null, 'extraColumns', Type::STRING, true, 'Extra table headers for output table with option to set width and truncate (!), e.g., `DOM,X-Cache(10),Title(40!)`.', null, true, true),
             new Option('--url-column-size', null, 'urlColumnSize', Type::INT, false, 'URL column width.', 80, false),
             new Option('--do-not-truncate-url', null, 'doNotTruncateUrl', Type::BOOL, false, 'Avoid truncating URLs to `--url-column-size`.', false, false),
             new Option('--hide-scheme-and-host', null, 'hideSchemeAndHost', Type::BOOL, false, 'Hide URL scheme/host in output.', false, false),

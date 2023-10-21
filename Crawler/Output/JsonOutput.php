@@ -76,10 +76,9 @@ class JsonOutput implements Output
             'extras' => [],
         ];
 
-        foreach ($this->options->extraColumns as $header) {
+        foreach ($this->options->extraColumns as $extraColumn) {
             $value = '';
-            $headerInfo = Utils::getColumnInfo($header);
-            $headerName = $headerInfo['name'];
+            $headerName = $extraColumn->name;
             if (array_key_exists($headerName, $extraParsedContent)) {
                 $value = trim($extraParsedContent[$headerName]);
             } elseif (array_key_exists(strtolower($headerName), $httpResponse->headers ?: [])) {

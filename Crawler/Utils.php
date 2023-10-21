@@ -190,28 +190,6 @@ class Utils
         return sprintf("%s|%s|", str_pad(intval($percentage) . '%', 5), $progressBar);
     }
 
-    /**
-     * Get column name and size from column definition such as 'X-Cache(10)'
-     *
-     * @param string $column
-     * @return array ['name' => string, 'size' => int]
-     */
-    public static function getColumnInfo(string $column): array
-    {
-        static $cache = [];
-        if (isset($cache[$column])) {
-            return $cache[$column];
-        }
-
-        if (preg_match('/^([^(]+)\s*\(\s*([0-9]+)\s*\)/', $column, $matches) === 1) {
-            $result = ['name' => trim($matches[1]), 'size' => (int)$matches[2]];
-        } else {
-            $result = ['name' => trim($column), 'size' => strlen(trim($column))];
-        }
-        $cache[$column] = $result;
-        return $result;
-    }
-
     public static function removeAnsiColors(string $text): string
     {
         return preg_replace('/\033\[\d+(;\d+)*m/', '', $text);

@@ -61,9 +61,8 @@ class TextOutput implements Output
             $header = str_pad("Progress report", 26) . "| " . $header;
         }
 
-        foreach ($this->options->extraColumns as $headerName) {
-            $headerInfo = Utils::getColumnInfo($headerName);
-            $header .= " | " . str_pad($headerInfo['name'], max($headerInfo['size'], 4));
+        foreach ($this->options->extraColumns as $extraColumn) {
+            $header .= " | " . str_pad($extraColumn->name, max($extraColumn->getLength(), 4));
         }
         $header .= "\n";
         $this->addToOutput(Utils::getColorText($header, 'gray') . str_repeat("-", strlen($header)) . "\n");
@@ -82,17 +81,16 @@ class TextOutput implements Output
                 : str_pad(Utils::getFormattedSize($size), 8);
 
         $extraHeadersContent = '';
-        foreach ($this->options->extraColumns as $header) {
+        foreach ($this->options->extraColumns as $extraColumn) {
             $value = '';
-            $headerInfo = Utils::getColumnInfo($header);
-            $headerName = $headerInfo['name'];
+            $headerName = $extraColumn->name;
             if (array_key_exists($headerName, $extraParsedContent)) {
                 $value = trim($extraParsedContent[$headerName]);
             } elseif ($httpResponse->headers && array_key_exists(strtolower($headerName), $httpResponse->headers)) {
                 $value = trim($httpResponse->headers[strtolower($headerName)]);
             }
 
-            $extraHeadersContent .= (' | ' . str_pad($value, max($headerInfo['size'], 4)));
+            $extraHeadersContent .= (' | ' . str_pad($extraColumn->getTruncatedValue($value), max($extraColumn->getLength(), 4)));
         }
 
         if ($this->options->addRandomQueryParams) {

@@ -207,7 +207,7 @@ required arguments:
   --memory-limit=512M \
   --timeout=5 \
   --user-agent="My User-Agent String" \
-  --extra-columns="DOM,X-Cache(10),Title,Keywords,Description" \
+  --extra-columns="DOM,X-Cache(10),Title(40!),Keywords(50!),Description(50!)" \
   --accept-encoding="gzip, deflate" \
   --url-column-size=100 \
   --max-queue-length=3000 \
@@ -256,10 +256,9 @@ required arguments:
 
 * `--output=<val>`                 Output type. Supported values: `text`, `json`. Default is `text`.
 * `--extra-columns=<values>`       Comma delimited list of extra columns added to output table. It is possible to
-  specify
-  HTTP header names (e.g. `X-Cache`) or predefined `Title`, `Keywords`, `Description` or `DOM` for the number of DOM
-  elements found in the HTML. You can set the expected length of the column in parentheses for better look - e.g.
-  `DOM(6),X-Cache(10),Title(50),`
+  specify HTTP header names (e.g. `X-Cache`) or predefined `Title`, `Keywords`, `Description` or `DOM` for the number of DOM
+  elements found in the HTML. You can set the expected length of the column in parentheses and `!` for truncate for better look - e.g.
+  `DOM(6),X-Cache(10),Title(40!),Description(50!)`.
 * `--url-column-size=<num>`        Basic URL column width. Default is `80`.
 * `--do-not-truncate-url`          In the text output, long URLs are truncated by default to `--url-column-size` so the
   table does not wrap due to long URLs. With this option, you can turn off the truncation.
