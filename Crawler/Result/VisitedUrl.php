@@ -2,6 +2,7 @@
 
 namespace Crawler\Result;
 
+use Crawler\Crawler;
 use Crawler\Utils;
 
 class VisitedUrl
@@ -106,6 +107,23 @@ class VisitedUrl
         $this->extras = $extras;
         $this->isExternal = $isExternal;
         $this->isAllowedForCrawling = $isAllowedForCrawling;
+    }
+
+    public function isStaticFile(): bool
+    {
+        static $staticTypes = [
+            Crawler::CONTENT_TYPE_ID_IMAGE,
+            Crawler::CONTENT_TYPE_ID_SCRIPT,
+            Crawler::CONTENT_TYPE_ID_STYLESHEET,
+            Crawler::CONTENT_TYPE_ID_VIDEO,
+            Crawler::CONTENT_TYPE_ID_AUDIO,
+            Crawler::CONTENT_TYPE_ID_DOCUMENT,
+            Crawler::CONTENT_TYPE_ID_FONT,
+            Crawler::CONTENT_TYPE_ID_JSON,
+            Crawler::CONTENT_TYPE_ID_XML,
+        ];
+
+        return in_array($this->contentType, $staticTypes);
     }
 
 }
