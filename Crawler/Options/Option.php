@@ -203,7 +203,7 @@ class Option
             throw new Exception("Option {$this->name} ({$value}) must be string");
         } else if ($this->type === Type::SIZE_M_G && (!is_string($value) || !preg_match('/^\d+(\.\d+)?[MG]$/', $value))) {
             throw new Exception("Option {$this->name} ({$value}) must be string with M/G suffix (for example 512M or 1.5G)");
-        } else if ($this->type === Type::REGEX && @preg_match($value, null) === false) {
+        } else if ($this->type === Type::REGEX && @preg_match($value, '') === false) {
             throw new Exception("Option {$this->name} ({$value}) must be valid PCRE regular expression");
         } else if ($this->type === Type::URL && !filter_var($value, FILTER_VALIDATE_URL)) {
             throw new Exception("Option {$this->name} ({$value}) must be valid URL");
@@ -230,7 +230,7 @@ class Option
         } else if ($this->type === Type::FLOAT) {
             return (float)$value;
         } else if ($this->type === Type::BOOL) {
-            return in_array($value, ['1', 'yes', 'true']);
+            return in_array($value, ['1', 'yes', 'true', true], true);
         } else if ($this->type === Type::STRING || $this->type === Type::SIZE_M_G) {
             return (string)$value;
         } else if ($this->type === Type::REGEX) {

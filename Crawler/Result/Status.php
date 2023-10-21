@@ -178,4 +178,14 @@ class Status
         return $this->visitedUrls[$uqId]->url ?? null;
     }
 
+    public function getOriginHeaderValueBySourceUqId(string $sourceUiqId): ?string
+    {
+        $visitedUrl = $this->visitedUrls[$sourceUiqId] ?? null;
+        if ($visitedUrl === null) {
+            return null;
+        }
+
+        return preg_replace('/^(https?:\/\/[^\/]+)/i', '$1', $visitedUrl->url);
+    }
+
 }

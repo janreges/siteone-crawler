@@ -309,10 +309,12 @@ class Utils
             Crawler::CONTENT_TYPE_ID_SCRIPT => 'JS',
             Crawler::CONTENT_TYPE_ID_STYLESHEET => 'CSS',
             Crawler::CONTENT_TYPE_ID_IMAGE => 'Image',
+            Crawler::CONTENT_TYPE_ID_AUDIO => 'Audio',
             Crawler::CONTENT_TYPE_ID_VIDEO => 'Video',
             Crawler::CONTENT_TYPE_ID_FONT => 'Font',
             Crawler::CONTENT_TYPE_ID_DOCUMENT => 'Document',
             Crawler::CONTENT_TYPE_ID_JSON => 'JSON',
+            Crawler::CONTENT_TYPE_ID_XML => 'XML',
             Crawler::CONTENT_TYPE_ID_REDIRECT => 'Redirect',
             Crawler::CONTENT_TYPE_ID_OTHER => 'Other',
         ];
@@ -334,10 +336,15 @@ class Utils
      */
     public static function applySpecificHtmlChanges(string $html, string $baseUrl, bool $removeExternalJs, bool $removeCrossOrigins, bool $removeAnalytics, bool $removeSocnets, bool $removeCookiesRelated): string
     {
+        $orig = $html;
+        if (trim($html) === '') {
+            return $html;
+        }
+
         $baseHost = parse_url($baseUrl, PHP_URL_HOST);
 
         if ($removeExternalJs) {
-            $html = preg_replace_callback('#<script[^>]*src=["\']?(.*?)["\']?[^>]*>.*?</script>#is', function ($matches) use ($baseHost) {
+            $html = preg_replace_callback('/<script[^>]*src=["\']?(.*?)["\']?[^>]*>.*?<\/script>/isU', function ($matches) use ($baseHost) {
                 if (preg_match("/^(https?:)?\/\//i", $matches[1]) === 1 && parse_url($matches[1], PHP_URL_HOST) !== $baseHost) {
                     return '';
                 }
@@ -393,7 +400,7 @@ class Utils
 
             $patterns = array_unique($patterns);
 
-            $html = preg_replace_callback('/<script[^>]*>(.*?)<\/script>/is', function ($matches) use ($patterns) {
+            $html = preg_replace_callback('/<script[^>]*>(.*?)<\/script>/isU', function ($matches) use ($patterns) {
                 if ($matches[0]) {
                     foreach ($patterns as $keyword) {
                         if (stripos($matches[0], $keyword) !== false) {
@@ -404,12 +411,12 @@ class Utils
                 return $matches[0];
             }, $html);
 
-            if ($removeSocnets) {
-                $html = preg_replace('/<iframe[^>]*(facebook\.com|twitter\.com|linkedin\.com)[^>]*>.*?<\/iframe>/is', '', $html);
+            if ($removeSocnets && $html) {
+                $html = preg_replace('/<iframe[^>]*(facebook\.com|twitter\.com|linkedin\.com)[^>]*>.*?<\/iframe>/isU', '', $html);
             }
         }
 
-        return $html;
+        return $html ?: '';
     }
 
     /**
@@ -533,7 +540,7 @@ class Utils
 
         // if rel starts with slash, that's it
         if (strlen($relPath) > 0 && $relPath[0] == "/") {
-            return $abs . $relPath;
+            return $abs . $relPath . (array_key_exists("query", $rel) ? "?" . $rel["query"] : "") . (array_key_exists("fragment", $rel) ? "#" . $rel["fragment"] : "");
         }
 
         // split the base path parts
@@ -591,6 +598,151 @@ class Utils
         }
 
         return $abs;
+    }
+
+    /**
+     * Strip all JavaScript and related code from HTML
+     *
+     * @param string $html
+     * @return string
+     */
+    public static function stripJavaScript(string $html): string
+    {
+        $orig = $html;
+        // script tags
+        $scriptPattern = '/<script[^>]*>(.*)<\/script>/isU';
+        $html = preg_replace($scriptPattern, '', $html);
+
+        // link tags by "href"
+        $linkPatternHref = '/<link[^>]*href=["\'][^"\']+\.js[^"\']*["\'][^>]*>/isU';
+        if ($html === null) {
+            var_dump(preg_last_error());die;
+            var_dump($orig);die;
+        }
+        $html = preg_replace($linkPatternHref, '', $html);
+
+        // link tags by "as"
+        $linkPatternAs = '/<link[^>]*as=["\']script["\'][^>]*>/isU';
+        $html = preg_replace($linkPatternAs, '', $html);
+
+        // on* attributes
+        $onEventPattern = '/\s+on[a-z]+=("[^"]*"|\'[^\']*\'|[^\s>]*)/isU';
+        $html = preg_replace($onEventPattern, '', $html);
+
+        return $html;
+    }
+
+    /**
+     * Strip all styles and related code from HTML
+     *
+     * @param string $html
+     * @return string
+     */
+    public static function stripStyles(string $html): string
+    {
+        $styleTagPattern = '/<style\b[^>]*>(.*?)<\/style>/isU';
+        $html = preg_replace($styleTagPattern, '', $html);
+
+        $linkTagPattern = '/<link\b[^>]*rel=["\']stylesheet["\'][^>]*>/isU';
+        $html = preg_replace($linkTagPattern, '', $html);
+
+        $styleAttrPattern = '/\s+style=("[^"]*"|\'[^\']*\'|[^\s>]*)/isU';
+        $html = preg_replace($styleAttrPattern, ' ', $html);
+
+        return $html;
+    }
+
+    /**
+     * Strip all fonts and related code from HTML
+     *
+     * @param string $htmlOrCss
+     * @return string
+     */
+    public static function stripFonts(string $htmlOrCss): string
+    {
+        $fontLinkPattern = '/<link\b[^>]*href=["\'][^"\']+\.(eot|ttf|woff2|woff|otf)[^"\']*["\'][^>]*>/isU';
+        $htmlOrCss = preg_replace($fontLinkPattern, '', $htmlOrCss);
+
+        $fontFacePattern = '/@font-face\s*{[^}]*}\s*/is';
+        $htmlOrCss = preg_replace($fontFacePattern, '', $htmlOrCss);
+
+        $fontStylePattern = '/\b(font|font-family)\s*:[^;]+;/i';
+        $htmlOrCss = preg_replace($fontStylePattern, '', $htmlOrCss);
+
+        $emptyStyleAttrPattern = '/\s*style=["\']\s*["\']/i';
+        $htmlOrCss = preg_replace($emptyStyleAttrPattern, '', $htmlOrCss);
+
+        return $htmlOrCss;
+    }
+
+    /**
+     * @param string $htmlOrCss
+     * @return string
+     */
+    public static function stripImages(string $htmlOrCss): string
+    {
+        $placeholderImage = '/placeholder.png';
+        $patterns = [
+            '/(<img[^>]+)src=[\'"][^\'"]*[\'"]([^>]*>)/im',
+            '/(<img[^>]+)srcset=[\'"][^\'"]*[\'"]([^>]*>)/im',
+            '/(<source[^>]+)srcset=[\'"][^\'"]*[\'"]([^>]*>)/im',
+            '/(<source[^>]+)src=[\'"][^\'"]*[\'"]([^>]*>)/im',
+            '/url\(\s*[\'"]?(?![data:])([^\'")]*\.(?:png|jpe?g|gif|webp|svg|bmp))[\'"]?\s*\)/i',
+        ];
+        $replacements = [
+            '$1src="' . $placeholderImage . '"$2',
+            '$1srcset="' . $placeholderImage . '"$2',
+            '$1srcset="' . $placeholderImage . '"$2',
+            '$1src="' . $placeholderImage . '"$2',
+            'url("' . $placeholderImage . '")'
+        ];
+
+        foreach ($patterns as $index => $pattern) {
+            $htmlOrCss = preg_replace($pattern, $replacements[$index], $htmlOrCss);
+        }
+
+        $htmlOrCss = preg_replace_callback('/<picture[^>]*>.*?<\/picture>/isU', function ($matches) use ($patterns, $replacements) {
+            $pictureContent = preg_replace($patterns, $replacements, $matches[0]);
+            return $pictureContent;
+        }, $htmlOrCss);
+
+        return $htmlOrCss;
+    }
+
+    /**
+     * Recursively add redirect folderName.html files for all subfolders which contains index.html
+     *
+     * @param string $dir
+     * @param array $changes
+     * @return void
+     */
+    public static function addRedirectHtmlToSubfolders(string $dir, array &$changes): void
+    {
+        if (!is_dir($dir)) {
+            echo "Directory '$dir' does not exist\n";
+            return;
+        }
+
+        if ($handle = opendir($dir)) {
+            while (false !== ($entry = readdir($handle))) {
+                if ($entry == "." || $entry == "..") {
+                    continue;
+                }
+
+                $path = "{$dir}/{$entry}";
+                if (is_dir($path) && !is_file($path . ".html") && is_file("{$path}/index.html")) {
+                    $htmlContent = '<!DOCTYPE html><meta http-equiv="refresh" content="0;url=' . $entry . '/index.html">';
+                    $filePath = "{$dir}/{$entry}.html";
+                    file_put_contents($filePath, $htmlContent);
+                    $changes[] = "Added redirect file '$filePath'";
+                }
+
+                if (is_dir($path)) {
+                    Utils::addRedirectHtmlToSubfolders($path, $changes);
+                }
+            }
+            closedir($handle);
+        }
     }
 
 }

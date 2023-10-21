@@ -29,7 +29,7 @@ class HtmlUrlParser
      */
     public function __construct(string $html, string $sourceUrl, bool $files, bool $images, bool $scripts, bool $styles, bool $fonts)
     {
-        $this->html = $html;
+        $this->html = self::treatFrameworkSpecificCode($html);
         $this->sourceUrl = $sourceUrl;
         $this->files = $files;
         $this->images = $images;
@@ -113,27 +113,35 @@ class HtmlUrlParser
     private function findImages(FoundUrls $foundUrls): void
     {
         // <img src="..."
-        preg_match_all('/<img\s+[^>]*?src=["\']?([^"\'\s>]+)["\'\s][^>]*>/im', $this->html, $matches);
+        preg_match_all('/<img\s+[^>]*?src=["\']([^"\'>]+)["\'][^>]*>/im', $this->html, $matches);
         $foundUrls->addUrlsFromTextArray($matches[1], $this->sourceUrl, FoundUrl::SOURCE_IMG_SRC);
 
         // <input src="..."
-        preg_match_all('/<input\s+[^>]*?src=["\']?([^"\'\s>]+\.[a-z0-9]{1,10})["\'\s][^>]*>/im', $this->html, $matches);
+        preg_match_all('/<input\s+[^>]*?src=["\']([^"\'>]+\.[a-z0-9]{1,10})["\'][^>]*>/im', $this->html, $matches);
         $foundUrls->addUrlsFromTextArray($matches[1], $this->sourceUrl, FoundUrl::SOURCE_IMG_SRC);
 
         // <link href="...(png|gif|jpg|jpeg|webp|avif|tif|bmp|svg)"
-        preg_match_all('/<link\s+[^>]*?href=["\']?([^"\'\s>]+\.(png|gif|jpg|jpeg|webp|avif|tif|bmp|svg|ico)(|\?[^"\'\s]*))["\'\s][^>]*>/im', $this->html, $matches);
+        preg_match_all('/<link\s+[^>]*?href=["\']([^"\'>]+\.(png|gif|jpg|jpeg|webp|avif|tif|bmp|svg|ico)(|\?[^"\']))["\'][^>]*>/im', $this->html, $matches);
         $foundUrls->addUrlsFromTextArray($matches[1], $this->sourceUrl, FoundUrl::SOURCE_LINK_HREF);
 
         // <source src="..."
-        preg_match_all('/<source\s+[^>]*?src=["\']?([^"\'\s>]+)["\'\s][^>]*>/im', $this->html, $matches);
+        preg_match_all('/<source\s+[^>]*?src=["\']([^"\'>]+)["\'][^>]*>/im', $this->html, $matches);
         $foundUrls->addUrlsFromTextArray($matches[1], $this->sourceUrl, FoundUrl::SOURCE_IMG_SRC);
+
+        // find
+        preg_match_all("/url\s*\(\s*['\"]?([^'\")]+\.(jpg|jpeg|png|gif|bmp|tif|webp|avif))/im", $this->html, $matches);
+        $foundUrls->addUrlsFromTextArray($matches[1], $this->sourceUrl, FoundUrl::SOURCE_CSS_URL);
 
         // <picture><source srcset="..."><img src="..."></picture>
         // <img srcset="..."
+        // <* imageSrcSet="..."
+
         $urls = [];
         preg_match_all('/<source\s+[^>]*?srcset=["\']([^"\'>]+)["\'][^>]*>/im', $this->html, $matches);
         $tmpMatches = $matches[1] ?? [];
         preg_match_all('/<img[^>]+srcset=["\']([^"\']+)["\']/im', $this->html, $matches);
+        $tmpMatches = array_merge($tmpMatches, $matches[1] ?? []);
+        preg_match_all('/<[a-z]+[^>]+imagesrcset=["\']([^"\']+)["\']/im', $this->html, $matches);
         $tmpMatches = array_merge($tmpMatches, $matches[1] ?? []);
 
         if ($tmpMatches) {
@@ -156,7 +164,7 @@ class HtmlUrlParser
      */
     private function findScripts(FoundUrls $foundUrls): void
     {
-        preg_match_all('/<script\s+[^>]*?src=["\']?([^"\'\s>]+)["\'\s][^>]*>/im', $this->html, $matches);
+        preg_match_all('/<script\s+[^>]*?src=["\']([^"\']+)["\'][^>]*>/im', $this->html, $matches);
         $foundUrls->addUrlsFromTextArray($matches[1], $this->sourceUrl, FoundUrl::SOURCE_SCRIPT_SRC);
 
         // often used for lazy loading in JS code
@@ -170,15 +178,29 @@ class HtmlUrlParser
      */
     private function findStylesheets(FoundUrls $foundUrls): void
     {
-        preg_match_all('/<link\s+[^>]*?href=["\']?([^"\'\s>]+)["\'\s][^>]*>/im', $this->html, $matches);
+        preg_match_all('/<link\s+[^>]*?href=["\']([^"\']+)["\'][^>]*>/im', $this->html, $matches);
         foreach ($matches[0] as $key => $match) {
             if (stripos($match, 'rel=') !== false && stripos($match, 'stylesheet') === false) {
                 unset($matches[0][$key]);
                 unset($matches[1][$key]);
             }
         }
-        
+
         $foundUrls->addUrlsFromTextArray($matches[1], $this->sourceUrl, FoundUrl::SOURCE_LINK_HREF);
+    }
+
+    /**
+     * Treat some framework-specific code which could cause problems during parsing
+     *
+     * @param string $html
+     * @return string
+     */
+    public static function treatFrameworkSpecificCode(string $html): string
+    {
+        if (str_contains($html, '<svelte:')) {
+            $html = preg_replace('/<svelte:[^>]+>\s*/i', '', $html);
+        }
+        return $html;
     }
 
 }

@@ -20,7 +20,7 @@ enum TargetDomainRelation
     public static function getByUrls(ParsedUrl $initialUrl, ParsedUrl $baseUrl, ParsedUrl $targetUrl): self
     {
         if (!$targetUrl->host || $targetUrl->host === $baseUrl->host) {
-            // base host is same as target host
+            // base host is the same as target host
             return $baseUrl->host === $initialUrl->host ? self::INITIAL_SAME__BASE_SAME : self::INITIAL_DIFFERENT__BASE_SAME;
         } else {
             // base host is different from target host

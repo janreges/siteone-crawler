@@ -28,11 +28,15 @@ class Crawler
     private ParsedUrl $initialParsedUrl;
     private string $finalUserAgent;
     private ?array $doneCallback = null;
+    private bool $terminated = false;
 
-    private static array $htmlPagesExtensions = ['htm', 'html', 'shtml', 'php', 'phtml', 'ashx', 'xhtml', 'asp', 'aspx', 'jsp', 'jspx', 'do', 'cfm', 'cgi', 'pl'];
     // rate limiting
     private ?float $optimalDelayBetweenRequests;
     private float $lastRequestTime = 0;
+
+    private string $acceptHeader = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7';
+
+    private static array $htmlPagesExtensions = ['htm', 'html', 'shtml', 'php', 'phtml', 'ashx', 'xhtml', 'asp', 'aspx', 'jsp', 'jspx', 'do', 'cfm', 'cgi', 'pl', 'rb', 'erb', 'gsp'];
 
     const CONTENT_TYPE_ID_HTML = 1;
     const CONTENT_TYPE_ID_SCRIPT = 2;
@@ -64,7 +68,6 @@ class Crawler
         $this->finalUserAgent = $this->getFinalUserAgent();
         $this->status->setFinalUserAgent($this->finalUserAgent);
         $this->initialParsedUrl = ParsedUrl::parse($this->options->url);
-        $this->status->setFinalUserAgent($this->finalUserAgent);
     }
 
     /**
@@ -112,6 +115,9 @@ class Crawler
         // print table header
         $this->output->addTableHeader();
 
+        // set corouting settings
+        $this->setupCoroutines();
+
         // start recursive coroutine to process URLs
         Coroutine\run(function () {
 
@@ -122,9 +128,9 @@ class Crawler
                 throw new ExitException(Utils::getColorText('I caught the manual stop of the script. Therefore, the statistics only contain processed URLs until the script stops.', 'red', true));
             });
 
-            while ($this->getActiveWorkersNumber() < $this->options->maxWorkers && $this->queue->count() > 0) {
-                Coroutine::create([$this, 'processNextUrl']);
-            }
+            // run first recursive coroutine
+            Coroutine::create([$this, 'processNextUrl']);
+
         });
     }
 
@@ -150,11 +156,11 @@ class Crawler
         $urlParser = new HtmlUrlParser(
             $body,
             $url,
-            $this->options->hasCrawlAsset(AssetType::FILES),
-            $this->options->hasCrawlAsset(AssetType::IMAGES),
-            $this->options->hasCrawlAsset(AssetType::SCRIPTS),
-            $this->options->hasCrawlAsset(AssetType::STYLES),
-            $this->options->hasCrawlAsset(AssetType::FONTS),
+            !$this->options->disableFiles,
+            !$this->options->disableImages,
+            !$this->options->disableJavascript,
+            !$this->options->disableStyles,
+            !$this->options->disableFonts,
         );
 
         $foundUrls = $urlParser->getUrlsFromHtml();
@@ -187,11 +193,6 @@ class Crawler
         return $result;
     }
 
-    private function canCrawlAssetType(AssetType $assetType): bool
-    {
-        return in_array($assetType, $this->options->crawlAssets);
-    }
-
     /**
      * Parse CSS body for url('xyz') and fill queue with new founded URLs (images, fonts) if are allowed
      *
@@ -206,8 +207,8 @@ class Crawler
         $urlParser = new CssUrlParser(
             $body,
             $url,
-            $this->canCrawlAssetType(AssetType::IMAGES),
-            $this->canCrawlAssetType(AssetType::FONTS)
+            !$this->options->disableImages,
+            !$this->options->disableFonts,
         );
 
         $this->addSuitableUrlsToQueue($urlParser->getUrlsFromCss(), $url, $urlUqId);
@@ -285,15 +286,17 @@ class Crawler
      */
     private function processNextUrl(): void
     {
-        if ($this->queue->count() === 0) {
+        if ($this->queue->count() === 0 || $this->terminated) {
             return;
         }
 
         // take first URL from queue, remove it from queue and add it to visited
         $url = null;
+        $sourceUqId = null;
         foreach ($this->queue as $urlKey => $queuedUrl) {
             $url = $queuedUrl['url'];
-            $this->addUrlToVisited($url, $queuedUrl['uqId'], $queuedUrl['sourceUqId']);
+            $sourceUqId = $queuedUrl['sourceUqId'];
+            $this->addUrlToVisited($url, $queuedUrl['uqId'], $sourceUqId);
             $this->queue->del($urlKey);
             break;
         }
@@ -323,6 +326,7 @@ class Crawler
 
         $absoluteUrl = $scheme . '://' . $hostAndPort . $parsedUrl->path . ($parsedUrl->query ? '?' . $parsedUrl->query : '');
         $finalUrlForHttpClient = $this->options->addRandomQueryParams ? Utils::addRandomQueryParams($parsedUrl->path) : ($parsedUrl->path . ($parsedUrl->query ? '?' . $parsedUrl->query : ''));
+        $origin = $sourceUqId ? $this->status->getOriginHeaderValueBySourceUqId($sourceUqId) : null;
 
         // setup HTTP client, send request and get response
         $httpResponse = $this->httpClient->request(
@@ -333,8 +337,16 @@ class Crawler
             'GET',
             $this->options->timeout,
             $this->finalUserAgent,
-            $this->options->acceptEncoding
+            $this->acceptHeader,
+            $this->options->acceptEncoding,
+            $origin
         );
+
+        // when the crawler has been terminated in the meantime, do not process response, otherwise output
+        // will be corrupted because request table-row will be somewhere in the middle of output of the analyzers
+        if ($this->terminated) {
+            return;
+        }
 
         $body = $httpResponse->body;
         $status = $httpResponse->statusCode;
@@ -360,8 +372,13 @@ class Crawler
             $this->parseCssBodyAndFillQueue($body, $url, $this->getUrlUqId($url));
         }
 
-        if ($status >= 301 && $status <= 308) {
-            $extraParsedContent['Location'] = $httpResponse->headers['location'] ?? '';
+        // handle redirect
+        if ($status >= 301 && $status <= 308 && isset($httpResponse->headers['location'])) {
+            $redirectLocation = $httpResponse->headers['location'];
+            if ($redirectLocation) {
+                $extraParsedContent['Location'] = $redirectLocation;
+                $this->addRedirectLocationToQueueIfSuitable($redirectLocation, $this->getUrlUqId($url), $scheme, $hostAndPort, $parsedUrl);
+            }
         }
 
         // get type self::URL_TYPE_* based on content-type header
@@ -422,9 +439,38 @@ class Crawler
         $isAlreadyVisited = $this->visited->exist($urlKey);
         $isParsable = @parse_url($url) !== false;
         $isUrlWithHtml = preg_match('/\.[a-z0-9]{1,10}(|\?.*)$/i', $url) === 0 || preg_match($regexForHtmlExtensions, $url) === 1;
-        $parseableAreOnlyHtmlFiles = empty($this->options->crawlAssets);
+        $allowedAreOnlyHtmlFiles = $this->options->crawlOnlyHtmlFiles();
 
-        return !$isInQueue && !$isAlreadyVisited && $isParsable && ($isUrlWithHtml || !$parseableAreOnlyHtmlFiles);
+        return !$isInQueue && !$isAlreadyVisited && $isParsable && ($isUrlWithHtml || !$allowedAreOnlyHtmlFiles);
+    }
+
+
+    /**
+     * Add URL returned as redirect location to queue if is suitable
+     *
+     * @param string $redirectLocation
+     * @param string|null $sourceUqId
+     * @param string $scheme
+     * @param string $hostAndPort
+     * @param ParsedUrl $parsedUrl
+     * @return void
+     * @throws Exception
+     */
+    private function addRedirectLocationToQueueIfSuitable(string $redirectLocation, ?string $sourceUqId, string $scheme, string $hostAndPort, ParsedUrl $parsedUrl): void
+    {
+        $redirectToQueue = null;
+        if (str_starts_with($redirectLocation, '//')) {
+            $redirectToQueue = $scheme . ':' . $redirectLocation;
+        } elseif (str_starts_with($redirectLocation, '/')) {
+            $redirectToQueue = $scheme . '://' . $hostAndPort . $redirectLocation;
+        } elseif (str_starts_with($redirectLocation, 'http://') || str_starts_with($redirectLocation, 'https://')) {
+            $redirectToQueue = $redirectLocation;
+        } else {
+            $redirectToQueue = $scheme . '://' . $hostAndPort . $parsedUrl->path . '/' . $redirectLocation;
+        }
+        if ($redirectToQueue && $this->isUrlSuitableForQueue($redirectToQueue)) {
+            $this->addUrlToQueue($redirectToQueue, $sourceUqId);
+        }
     }
 
     private function isUrlAllowedByRegexes(string $url): bool
@@ -580,6 +626,8 @@ class Crawler
     }
 
     /**
+     * Get final user agent string with respect to options
+     *
      * @return string
      * @throws Exception
      */
@@ -658,7 +706,7 @@ class Crawler
             $isUrlForDebug = $this->options->isUrlSelectedForDebug($origUrlForQueue);
             $parsedUrlForQueue = ParsedUrl::parse(trim($urlForQueue));
 
-            // skip URLs that are not on the same host, allowed domain or are not real HTML URLs
+            // skip URLs that are not on the same host, allowed domain or are not real resource URL (data:, mailto:, etc.
             $isRequestableResource = Utils::isHrefForRequestableResource($urlForQueue);
             $isUrlOnSameHost = !$parsedUrlForQueue->host || $parsedUrlForQueue->host === $this->initialParsedUrl->host;
             $isUrlOnAllowedHost = false;
@@ -705,6 +753,25 @@ class Crawler
     }
 
     /**
+     * Remove AVIF and WebP support from Accept header
+     *
+     * @return void
+     */
+    public function removeAvifAndWebpSupportFromAcceptHeader(): void
+    {
+        $this->acceptHeader = str_replace(['image/avif', 'image/webp'], ['', ''], $this->acceptHeader);
+    }
+
+    /**
+     * Terminate crawler and ignore all URLs in queue or request processing
+     * @return void
+     */
+    public function terminate(): void
+    {
+        $this->terminated = true;
+    }
+
+    /**
      * Checks if URL is allowed by robots.txt of given domain. It respects all Disallow rules and User-Agent or Allow rules are ignored
      * Has internal static cache for disallowed paths to minimize requests to robots.txt
      *
@@ -737,8 +804,9 @@ class Crawler
                     '/robots.txt',
                     'GET',
                     1,
-                    self::getCrawlerUserAgent(),
-                    'gzip, deflate'
+                    self::getCrawlerUserAgentSignature(),
+                    'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+                    'gzip, deflate, br'
                 );
 
                 if ($robotsTxtResponse->statusCode === 200 && $robotsTxtResponse->body) {
@@ -797,9 +865,45 @@ class Crawler
      * Get User-Agent used for specific cases (e.g. downloading of robots.txt)
      * @return string
      */
-    public static function getCrawlerUserAgent(): string
+    public static function getCrawlerUserAgentSignature(): string
     {
-        return 'siteone-website-crawler/v' . VERSION;
+        // WARNING: Please do not change or remove this signature, it's used to detect crawler
+        // in logs and also for possibility to block our crawler by website owner
+
+        return 'siteone-website-crawler/' . VERSION;
+    }
+
+    /**
+     * Basic coroutines setup
+     * @return void
+     */
+    private function setupCoroutines(): void
+    {
+        $options = [
+            'max_concurrency' => $this->options->maxWorkers,
+            'max_coroutine' => 4096,
+            'stack_size' => 2 * 1024 * 1024,
+            'socket_connect_timeout' => $this->options->timeout + 1,
+            'socket_timeout' => $this->options->timeout + 2,
+            'socket_read_timeout' => -1,
+            'socket_write_timeout' => -1,
+            'log_level' => SWOOLE_LOG_INFO,
+            'hook_flags' => SWOOLE_HOOK_ALL,
+            'trace_flags' => SWOOLE_TRACE_ALL,
+            'dns_cache_expire' => 60,
+            'dns_cache_capacity' => 1000,
+            'dns_server' => '8.8.8.8',
+            'display_errors' => false,
+            'aio_core_worker_num' => $this->options->maxWorkers + 1,
+            'aio_worker_num' => $this->options->maxWorkers + 1,
+            'aio_max_wait_time' => 1,
+            'aio_max_idle_time' => 1,
+            'exit_condition' => function () {
+                return Coroutine::stats()['coroutine_num'] === 0;
+            },
+        ];
+
+        Coroutine::set($options);
     }
 
 }
