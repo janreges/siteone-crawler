@@ -6,6 +6,7 @@ use Crawler\Analysis\Analyzer;
 use Crawler\Export\Exporter;
 use Crawler\Export\FileExporter;
 use Crawler\Export\MailerExporter;
+use Crawler\Export\OfflineWebsiteExporter;
 use Crawler\Export\SitemapExporter;
 use Crawler\HttpClient\HttpClient;
 use Crawler\Output\TextOutput;
@@ -82,7 +83,7 @@ class Manager
 
         $this->output = $this->getOutputByOptions($this->status);
 
-        $httpClient = new HttpClient($baseDir. '/tmp/http-client-cache');
+        $httpClient = new HttpClient($baseDir . '/tmp/http-client-cache');
         $this->crawler = new Crawler($this->options, $httpClient, $this->output, $this->status);
     }
 
@@ -94,6 +95,11 @@ class Manager
     {
         $this->output->addBanner();
 
+        // remove avif and webp support from accept header if offline website export is enabled (because of potential missing support in offline browsers)
+        if ($this->hasExporter(OfflineWebsiteExporter::class)) {
+            $this->crawler->removeAvifAndWebpSupportFromAcceptHeader();
+        }
+
         $this->crawler->init();
         $this->crawler->run([$this, 'crawlerDoneCallback']);
 
@@ -103,6 +109,8 @@ class Manager
 
     public function crawlerDoneCallback(): void
     {
+        $this->crawler->terminate();
+
         static $alreadyDone = false;
         if ($alreadyDone) {
             return;
