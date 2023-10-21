@@ -42,6 +42,7 @@ class TargetDomainRelationTest extends TestCase
             // INITIAL_DIFFERENT__BASE_DIFFERENT
             ['https://www.siteone.io/', 'https://nextjs.org/', 'https://svelte.dev/', TargetDomainRelation::INITIAL_DIFFERENT__BASE_DIFFERENT],
             ['https://www.siteone.io/', 'https://nextjs.org/', '//svelte.dev', TargetDomainRelation::INITIAL_DIFFERENT__BASE_DIFFERENT],
+            ['https://www.siteone.io/', 'https://www.siteone.io/', '//svelte.dev', TargetDomainRelation::INITIAL_DIFFERENT__BASE_DIFFERENT],
         ];
     }
 }
