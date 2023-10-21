@@ -160,14 +160,21 @@ class SuperTable
             return $output;
         }
 
+        $columnToWidth = [];
+        foreach ($this->columns as $column) {
+            $columnToWidth[$column->aplCode] = $column->width === SuperTableColumn::AUTO_WIDTH
+                ? $column->getAutoWidthByData($this->data)
+                : $column->width;
+        }
+
         $headers = [];
-        foreach ($this->columns as $key => $column) {
-            $headers[] = str_pad($column->name, $column->width);
+        foreach ($this->columns as $column) {
+            $headers[] = str_pad($column->name, $columnToWidth[$column->aplCode]);
         }
         $output .= Utils::getColorText(implode(' | ', $headers), 'gray') . PHP_EOL;
 
-        $repeat = array_sum(array_map(function ($column) {
-                return $column->width;
+        $repeat = array_sum(array_map(function ($column) use ($columnToWidth) {
+                return $columnToWidth[$column->aplCode];
             }, $this->columns)) + (count($this->columns) * 3) - 1;
         $output .= str_repeat('-', $repeat) . PHP_EOL;
 
@@ -175,17 +182,18 @@ class SuperTable
             $rowData = [];
             foreach ($this->columns as $key => $column) {
                 $value = is_object($row) ? ($row->{$key} ?? '') : ($row[$key] ?? '');
+                $columnWidth = $columnToWidth[$column->aplCode];
                 if (isset($column->formatter)) {
                     $value = call_user_func($column->formatter, $value);
                 } else if (isset($column->renderer)) {
                     $value = call_user_func($column->renderer, $row);
                 }
 
-                if ($value && mb_strlen($value) > $column->width && $column->truncateIfLonger) {
-                    $value = Utils::truncateInTwoThirds($value, $column->width);
+                if ($value && mb_strlen($value) > $columnWidth && $column->truncateIfLonger) {
+                    $value = Utils::truncateInTwoThirds($value, $columnWidth);
                 }
 
-                $rowData[] = str_pad($value, $column->width);
+                $rowData[] = str_pad($value, $columnWidth);
             }
             $output .= implode(' | ', $rowData) . PHP_EOL;
         }
@@ -212,6 +220,7 @@ class SuperTable
 
     private function sortData(string $columnKey, string $direction): void
     {
+        $direction = strtoupper($direction);
         usort($this->data, function ($a, $b) use ($columnKey, $direction) {
             $aValue = $a->{$columnKey} ?? '';
             $bValue = $b->{$columnKey} ?? '';
