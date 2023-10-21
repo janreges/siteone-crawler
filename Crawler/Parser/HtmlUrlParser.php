@@ -97,8 +97,13 @@ class HtmlUrlParser
      */
     private function findFonts(FoundUrls $foundUrls): void
     {
+        // CSS @font-face
         preg_match_all("/url\s*\(\s*['\"]?([^'\"\s>]+\.(eot|ttf|woff2|woff|otf))/im", $this->html, $matches);
         $foundUrls->addUrlsFromTextArray($matches[1], $this->sourceUrl, FoundUrl::SOURCE_CSS_URL);
+
+        // <link href="...(eot|ttf|woff2|woff|otf)
+        preg_match_all('/<link\s+[^>]*href=["\']([^"\']+\.(eot|ttf|woff2|woff|otf)[^"\']*)["\'][^>]*>/im', $this->html, $matches);
+        $foundUrls->addUrlsFromTextArray($matches[1], $this->sourceUrl, FoundUrl::SOURCE_LINK_HREF);
     }
 
     /**
