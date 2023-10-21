@@ -107,7 +107,7 @@ class ContentTypeAnalyzer extends BaseAnalyzer implements Analyzer
 
     public function getOrder(): int
     {
-        return 30;
+        return 210;
     }
 
     public static function getOptions(): Options

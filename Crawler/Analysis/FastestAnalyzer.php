@@ -59,7 +59,7 @@ class FastestAnalyzer extends BaseAnalyzer implements Analyzer
 
     public function getOrder(): int
     {
-        return 300;
+        return 100;
     }
 
     public static function getOptions(): Options

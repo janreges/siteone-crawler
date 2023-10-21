@@ -51,7 +51,7 @@ class Page404Analyzer extends BaseAnalyzer implements Analyzer
 
     public function getOrder(): int
     {
-        return 100;
+        return 20;
     }
 
     public static function getOptions(): Options

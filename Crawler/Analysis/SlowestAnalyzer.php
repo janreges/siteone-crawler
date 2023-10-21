@@ -74,7 +74,7 @@ class SlowestAnalyzer extends BaseAnalyzer implements Analyzer
 
     public function getOrder(): int
     {
-        return 400;
+        return 110;
     }
 
     public static function getOptions(): Options

@@ -57,7 +57,7 @@ class RedirectsAnalyzer extends BaseAnalyzer implements Analyzer
 
     public function getOrder(): int
     {
-        return 200;
+        return 10;
     }
 
     public static function getOptions(): Options

@@ -677,13 +677,13 @@ class Crawler
     {
         return [
             self::CONTENT_TYPE_ID_HTML,
+            self::CONTENT_TYPE_ID_IMAGE,
             self::CONTENT_TYPE_ID_SCRIPT,
             self::CONTENT_TYPE_ID_STYLESHEET,
-            self::CONTENT_TYPE_ID_IMAGE,
-            self::CONTENT_TYPE_ID_AUDIO,
-            self::CONTENT_TYPE_ID_VIDEO,
             self::CONTENT_TYPE_ID_FONT,
             self::CONTENT_TYPE_ID_DOCUMENT,
+            self::CONTENT_TYPE_ID_AUDIO,
+            self::CONTENT_TYPE_ID_VIDEO,
             self::CONTENT_TYPE_ID_JSON,
             self::CONTENT_TYPE_ID_XML,
             self::CONTENT_TYPE_ID_REDIRECT,
