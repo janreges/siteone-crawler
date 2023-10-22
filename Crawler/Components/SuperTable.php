@@ -225,8 +225,8 @@ class SuperTable
     {
         $direction = strtoupper($direction);
         usort($this->data, function ($a, $b) use ($columnKey, $direction) {
-            $aValue = $a->{$columnKey} ?? '';
-            $bValue = $b->{$columnKey} ?? '';
+            $aValue = is_object($a) ? ($a->{$columnKey} ?? '') : ($a[$columnKey] ?? '');
+            $bValue = is_object($b) ? ($b->{$columnKey} ?? '') : ($b[$columnKey] ?? '');
 
             if ($direction === 'ASC') {
                 return $aValue > $bValue ? 1 : ($aValue < $bValue ? -1 : 0);
