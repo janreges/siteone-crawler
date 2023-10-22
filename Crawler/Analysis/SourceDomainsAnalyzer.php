@@ -70,14 +70,14 @@ class SourceDomainsAnalyzer extends BaseAnalyzer implements Analyzer
                 $total['execTime'] += $execTime;
 
                 if ($count) {
-                    $data[$domain][$contentType] = str_replace(' ', '', "$count / " . Utils::getFormattedSize($size, 0) . " / " . number_format($execTime, 1, '.', ' ') . " s");
+                    $data[$domain][$contentType] = str_replace(' ', '', "$count / " . Utils::getFormattedSize($size, 0) . " / " . Utils::getFormattedDuration($execTime));
                 } else {
                     $data[$domain][$contentType] = '';
                 }
 
                 $contentTypeLongestValue[$contentType] = max($contentTypeLongestValue[$contentType] ?? 0, strlen($data[$domain][$contentType]));
             }
-            $data[$domain]['totals'] = str_replace(' ', '', "{$total['count']} / " . Utils::getFormattedSize($total['size'], 0) . " / " . number_format($total['execTime'], 1, '.', ' ') . " s");
+            $data[$domain]['totals'] = str_replace(' ', '', "{$total['count']} / " . Utils::getFormattedSize($total['size'], 0) . " / " . Utils::getFormattedDuration($total['execTime']));
             $data[$domain]['totalCount'] = $total['count'];
         }
 
@@ -91,9 +91,13 @@ class SourceDomainsAnalyzer extends BaseAnalyzer implements Analyzer
         }
 
         // setup supertable
+        $delimiter = Utils::getColorText('/', 'dark-gray');
+        $statsFormatter = function ($value) use ($delimiter) {
+            return str_replace('/', $delimiter, $value);
+        };
         $superTableColumns = [
             new SuperTableColumn('domain', 'Domain'),
-            new SuperTableColumn('totals', 'Totals'),
+            new SuperTableColumn('totals', 'Totals', SuperTableColumn::AUTO_WIDTH, $statsFormatter, null, false, false),
         ];
 
         // add content-type columns
@@ -102,7 +106,15 @@ class SourceDomainsAnalyzer extends BaseAnalyzer implements Analyzer
                 if ($contentType === 'domain' || $contentType === 'totals' || $contentType === 'totalCount') {
                     continue;
                 }
-                $superTableColumns[] = new SuperTableColumn($contentType, $contentType);
+                $superTableColumns[] = new SuperTableColumn(
+                    $contentType,
+                    $contentType,
+                    SuperTableColumn::AUTO_WIDTH,
+                    $statsFormatter,
+                    null,
+                    false,
+                    false   // formatterWillChangeValueLength = false (because we only add colors)
+                );
             }
             break;
         }
