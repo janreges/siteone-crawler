@@ -37,7 +37,7 @@ class Debugger
                 str_pad($category, 14)
             );
             if ($time !== null) {
-                $finalMessage .= str_pad(round($time, 3) . 's', 7) . ' | ';
+                $finalMessage .= str_pad(Utils::getFormattedDuration($time), 7) . ' | ';
             }
             if ($size !== null) {
                 $finalMessage .= str_pad(Utils::getFormattedSize($size), 7) . ' | ';

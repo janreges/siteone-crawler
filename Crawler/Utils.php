@@ -11,7 +11,7 @@ class Utils
         self::$colorsEnabled = false;
     }
 
-    public static function getFormattedSize(int $bytes, int $precision = 1): string
+    public static function getFormattedSize(int $bytes, int $precision = 0): string
     {
         $units = array('B', 'kB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB');
 
@@ -22,6 +22,17 @@ class Utils
         $bytes /= pow(1024, $pow);
 
         return round($bytes, $precision) . ' ' . $units[$pow];
+    }
+
+    public static function getFormattedDuration(float $duration): string
+    {
+        if ($duration < 1) {
+            return number_format($duration * 1000, 0, '.', ' ') . ' ms';
+        } elseif ($duration < 10) {
+            return str_replace('.0', '', number_format($duration, 1, '.', ' ')) . ' s';
+        } else {
+            return number_format($duration, 0, '.', ' ') . ' s';
+        }
     }
 
     public static function getColorText(string $text, string $color, ?bool $setBackground = false): string
@@ -253,7 +264,7 @@ class Utils
 
     public static function getColoredRequestTime(float $requestTime, int $strPadTo = 6): string
     {
-        $result = str_pad(sprintf("%.3f", $requestTime), $strPadTo);
+        $result = str_pad(self::getFormattedDuration($requestTime), $strPadTo);
         if ($requestTime >= 2) {
             $result = Utils::getColorText($result, 'red', true);
         } else if ($requestTime >= 1) {
@@ -594,10 +605,6 @@ class Utils
 
         // link tags by "href"
         $linkPatternHref = '/<link[^>]*href=["\'][^"\']+\.js[^"\']*["\'][^>]*>/isU';
-        if ($html === null) {
-            var_dump(preg_last_error());die;
-            var_dump($orig);die;
-        }
         $html = preg_replace($linkPatternHref, '', $html);
 
         // link tags by "as"

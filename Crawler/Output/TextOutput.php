@@ -138,7 +138,7 @@ class TextOutput implements Output
         $this->addToOutput("\n");
         $resultHeader = sprintf(
             "Total execution time %s using %s workers and %s memory limit (max used %s)\n",
-            Utils::getColorText(number_format($stats->totalExecutionTime, 3, '.', ' ') . " sec", 'cyan'),
+            Utils::getColorText(Utils::getFormattedDuration($stats->totalExecutionTime), 'cyan'),
             Utils::getColorText($this->options->workers, 'cyan'),
             Utils::getColorText($this->options->memoryLimit, 'cyan'),
             Utils::getColorText(Utils::getFormattedSize(memory_get_peak_usage(true)), 'cyan')
@@ -150,16 +150,16 @@ class TextOutput implements Output
                 Utils::getColorText($stats->totalUrls, 'cyan'),
                 Utils::getColorText($stats->totalSizeFormatted, 'cyan'),
                 Utils::getColorText(intval($stats->totalUrls / $stats->totalExecutionTime) . " reqs/s", 'magenta'),
-                Utils::getColorText(Utils::getFormattedSize(intval($stats->totalSize / $stats->totalExecutionTime), 2) . "/s", 'magenta'),
+                Utils::getColorText(Utils::getFormattedSize(intval($stats->totalSize / $stats->totalExecutionTime), 0) . "/s", 'magenta'),
             )
         );
         $this->addToOutput(
             sprintf(
                 "Response times: AVG %s MIN %s MAX %s TOTAL %s\n",
-                Utils::getColorText(number_format($stats->totalRequestsTimesAvg, 3, '.', ' ') . ' sec', 'magenta'),
-                Utils::getColorText(number_format($stats->totalRequestsTimesMin, 3, '.', ' ') . ' sec', 'green'),
-                Utils::getColorText(number_format($stats->totalRequestsTimesMax, 3, '.', ' ') . ' sec', 'red'),
-                Utils::getColorText(number_format($stats->totalRequestsTimes, 3, '.', ' ') . ' sec', 'cyan')
+                Utils::getColorText(Utils::getFormattedDuration($stats->totalRequestsTimesAvg), 'magenta'),
+                Utils::getColorText(Utils::getFormattedDuration($stats->totalRequestsTimesMin), 'green'),
+                Utils::getColorText(Utils::getFormattedDuration($stats->totalRequestsTimesMax), 'red'),
+                Utils::getColorText(Utils::getFormattedDuration($stats->totalRequestsTimes), 'cyan')
             )
         );
 

@@ -100,7 +100,7 @@ class VisitedUrl
         $this->url = $url;
         $this->statusCode = $statusCode;
         $this->requestTime = $requestTime;
-        $this->requestTimeFormatted = number_format($this->requestTime, 3);
+        $this->requestTimeFormatted = Utils::getFormattedDuration($this->requestTime);
         $this->size = $size;
         $this->sizeFormatted = $size !== null ? Utils::getFormattedSize($size) : null;
         $this->contentType = $contentType;

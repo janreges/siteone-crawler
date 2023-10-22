@@ -2,6 +2,8 @@
 
 namespace Crawler\HttpClient;
 
+use Crawler\Utils;
+
 class HttpResponse
 {
     public readonly string $url;
@@ -30,12 +32,12 @@ class HttpResponse
 
     public function getFormattedExecTime(): string
     {
-        return number_format($this->execTime, 3) . 's';
+        return Utils::getFormattedDuration($this->execTime);
     }
 
     public function getFormattedBodyLength(): string
     {
-        return number_format(strlen($this->body), 0, '.', ' ') . ' B';
+        return Utils::getFormattedSize(strlen($this->body));
     }
 
     /**

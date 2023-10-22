@@ -98,7 +98,7 @@ class JsonOutput implements Output
                 "\rProgress: %s | %s %s | %s",
                 str_pad($progressStatus, 7),
                 Utils::getProgressBar($done, $total, 25),
-                number_format($elapsedTime, 3) . " sec",
+                Utils::getFormattedDuration($elapsedTime),
                 Utils::truncateInTwoThirds($url, Utils::getConsoleWidth() - $textWidthWithoutUrl)
             );
             $maxStdErrLength = max($maxStdErrLength, strlen($progressToStdErr));
