@@ -55,6 +55,7 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
      */
     public function export(): void
     {
+        $startTime = microtime(true);
         $visitedUrls = $this->status->getVisitedUrls();
         $this->initialUrlHost = parse_url($this->status->getOptions()->url, PHP_URL_HOST);
 
@@ -92,6 +93,15 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
             }
         }
 
+        // add info to summary
+        $this->status->addInfoToSummary(
+            'offline-website-generated',
+            sprintf(
+                "Offline website generated to '%s'. It takes %s",
+                $this->offlineExportDirectory,
+                Utils::getFormattedDuration(microtime(true) - $startTime)
+            )
+        );
     }
 
     /**
