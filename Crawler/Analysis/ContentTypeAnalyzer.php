@@ -57,7 +57,7 @@ class ContentTypeAnalyzer extends BaseAnalyzer implements Analyzer
             "No URLs found.",
             [
                 new SuperTableColumn('contentType', 'Content type', 12),
-                new SuperTableColumn('count', 'URLs', 6),
+                new SuperTableColumn('count', 'URLs', 5),
                 new SuperTableColumn('totalSize', 'Total size', 10, function ($value) {
                     if ($value) {
                         return Utils::getFormattedSize($value);
