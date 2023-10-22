@@ -32,6 +32,7 @@ try {
 } catch (Exception $e) {
     echo Utils::getColorText("ERROR: {$e->getMessage()}", 'red');
     $initiator->printHelp();
+    echo Utils::getColorText("\nERROR: {$e->getMessage()}\n\n", 'red');
     exit(101);
 }
 
