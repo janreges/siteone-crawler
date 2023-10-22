@@ -611,10 +611,9 @@ class Crawler
         } elseif (str_contains($contentTypeHeader, 'font/')) {
             $typeId = self::CONTENT_TYPE_ID_FONT;
         } elseif (str_contains($contentTypeHeader, 'application/json')) {
-            $typeId = self::CONTENT_TYPE_ID_XML;
-        } elseif (str_contains($contentTypeHeader, 'application/xml') || str_contains($contentTypeHeader, 'text/xml')
-            || str_contains($contentTypeHeader, '+xml')) {
             $typeId = self::CONTENT_TYPE_ID_JSON;
+        } elseif (str_contains($contentTypeHeader, 'application/xml') || str_contains($contentTypeHeader, 'text/xml') || str_contains($contentTypeHeader, '+xml')) {
+            $typeId = self::CONTENT_TYPE_ID_XML;
         } elseif (str_contains($contentTypeHeader, 'application/pdf') || str_contains($typeId, 'application/msword')
             || str_contains($typeId, 'application/vnd.ms-excel') || str_contains($typeId, 'application/vnd.ms-powerpoint')
             || str_contains($contentTypeHeader, 'text/plain') || str_contains($contentTypeHeader, 'document')) {
