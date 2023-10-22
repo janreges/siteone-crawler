@@ -94,7 +94,7 @@ class SuperTable
                     $formattedValue = call_user_func($column->formatter, $value);
                 }
 
-                if (is_string($formattedValue) && (str_contains($formattedValue, '[0;') || str_contains($formattedValue, '[1;'))) {
+                if (is_string($formattedValue) && (str_contains($formattedValue, '[0;') || str_contains($formattedValue, '[1;') || str_contains($formattedValue, '[0m'))) {
                     $formattedValue = Utils::convertBashColorsInTextToHtml($formattedValue);
                 }
 
@@ -182,6 +182,7 @@ class SuperTable
             $rowData = [];
             foreach ($this->columns as $key => $column) {
                 $value = is_object($row) ? ($row->{$key} ?? '') : ($row[$key] ?? '');
+                $valueLength = mb_strlen($value);
                 $columnWidth = $columnToWidth[$column->aplCode];
                 if (isset($column->formatter)) {
                     $value = call_user_func($column->formatter, $value);
@@ -189,11 +190,13 @@ class SuperTable
                     $value = call_user_func($column->renderer, $row);
                 }
 
-                if ($value && mb_strlen($value) > $columnWidth && $column->truncateIfLonger) {
+                if ($column->truncateIfLonger && $value && mb_strlen($value) > $columnWidth) {
                     $value = Utils::truncateInTwoThirds($value, $columnWidth);
                 }
 
-                $rowData[] = str_pad($value, $columnWidth);
+                $rowData[] = $column->formatterWillChangeValueLength
+                    ? str_pad($value, $columnWidth)
+                    : ($value . (str_repeat(' ', max(0, $columnWidth - $valueLength))));
             }
             $output .= implode(' | ', $rowData) . PHP_EOL;
         }
