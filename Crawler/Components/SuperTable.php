@@ -20,7 +20,7 @@ class SuperTable
     private bool $positionBeforeUrlTable;
     private array $data;
     private string $emptyTableMessage;
-    private string $currentOrderColumn;
+    private ?string $currentOrderColumn;
     private string $currentOrderDirection = 'ASC';
     private string $uniqueId;
 
@@ -30,10 +30,10 @@ class SuperTable
      * @param string $emptyTableMessage
      * @param SuperTableColumn[] $columns
      * @param bool $positionBeforeUrlTable
-     * @param string $currentOrderColumn
+     * @param string|null $currentOrderColumn
      * @param string $currentOrderDirection
      */
-    public function __construct(string $aplCode, string $title, string $emptyTableMessage, array $columns, bool $positionBeforeUrlTable, string $currentOrderColumn, string $currentOrderDirection = 'ASC')
+    public function __construct(string $aplCode, string $title, string $emptyTableMessage, array $columns, bool $positionBeforeUrlTable, ?string $currentOrderColumn = null, string $currentOrderDirection = 'ASC')
     {
         foreach ($columns as $column) {
             if (!($column instanceof SuperTableColumn)) {
@@ -61,7 +61,9 @@ class SuperTable
     public function setData(array $data)
     {
         $this->data = $data;
-        $this->sortData($this->currentOrderColumn, $this->currentOrderDirection);
+        if ($this->currentOrderColumn) {
+            $this->sortData($this->currentOrderColumn, $this->currentOrderDirection);
+        }
     }
 
     /**
