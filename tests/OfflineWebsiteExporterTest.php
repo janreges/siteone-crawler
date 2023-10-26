@@ -25,6 +25,7 @@ class OfflineWebsiteExporterTest extends TestCase
             '--allowed-domain-for-external-files=cdn.webflow.com',
             '--allowed-domain-for-external-files=nextjs.org',
             '--allowed-domain-for-crawling=svelte.dev',
+            '--allowed-domain-for-crawling=nextjs.org',
         ], dirname(__DIR__) . '/src/Crawler');
         $initiator->validateAndInit();
 
