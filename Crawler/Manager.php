@@ -101,7 +101,7 @@ class Manager
         }
 
         $this->crawler->init();
-        $this->crawler->run([$this, 'crawlerDoneCallback']);
+        $this->crawler->run([$this, 'crawlerDoneCallback'], [$this, 'visitedUrlCallback']);
 
         // for cases when callback is not called
         $this->crawlerDoneCallback();
@@ -124,6 +124,39 @@ class Manager
         $this->output->addTotalStats($this->crawler->getVisited());
         $this->output->addSummary($this->status->getSummary());
         $this->output->end();
+    }
+
+    /**
+     * This callback is called after each URL is crawled (even if it fails) from Crawler class by callback
+     * Returns array of analysis results in format [analysisClass => UrlAnalysisResult, ...]
+     *
+     * @param VisitedUrl $url
+     * @param string|null $body
+     * @param array|null $headers
+     * @return array
+     */
+    public function visitedUrlCallback(VisitedUrl $url, ?string $body, ?array $headers): array
+    {
+        // cache for analyzer class to table column
+        static $analyzerClassToTableColumn = null;
+        if ($analyzerClassToTableColumn === null) {
+            $analyzerClassToTableColumn = [];
+            foreach ($this->analysisManager->getAnalyzers() as $analyzer) {
+                $tableColumn = $analyzer->showAnalyzedVisitedUrlResultAsColumn();
+                if ($tableColumn) {
+                    $analyzerClassToTableColumn[get_class($analyzer)] = $tableColumn->name;
+                }
+            }
+        }
+
+        $result = [];
+        $analysisResult = $this->analysisManager->analyzeVisitedUrl($url, $body, $headers);
+        foreach ($analysisResult as $analyzerClass => $analyzerResult) {
+            if (isset($analyzerClassToTableColumn[$analyzerClass])) {
+                $result[$analyzerClassToTableColumn[$analyzerClass]] = $analyzerResult;
+            }
+        }
+        return $result;
     }
 
     /**

@@ -2,10 +2,13 @@
 
 namespace Crawler\Analysis;
 
+use Crawler\Analysis\Result\UrlAnalysisResult;
 use Crawler\Crawler;
+use Crawler\ExtraColumn;
 use Crawler\Options\Options;
 use Crawler\Output\Output;
 use Crawler\Result\Status;
+use Crawler\Result\VisitedUrl;
 use Exception;
 
 abstract class BaseAnalyzer implements Analyzer
@@ -64,6 +67,25 @@ abstract class BaseAnalyzer implements Analyzer
     {
         throw new Exception("Not implemented method analyze() in " . get_class($this));
     }
+
+    /**
+     * @inheritDoc
+     */
+    public function analyzeVisitedUrl(VisitedUrl $visitedUrl, ?string $body, ?array $headers): ?UrlAnalysisResult
+    {
+        // you can override this method in your analyzer
+        return null;
+    }
+
+    /**
+     * @return ExtraColumn|null
+     */
+    public function showAnalyzedVisitedUrlResultAsColumn(): ?ExtraColumn
+    {
+        // you can override this method in your analyzer if you want to show results from analyzeVisitedUrl() in table
+        return null;
+    }
+
 
     public function shouldBeActivated(): bool
     {

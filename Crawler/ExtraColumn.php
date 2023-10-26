@@ -32,7 +32,7 @@ class ExtraColumn
             return trim(mb_substr($value, 0, $this->length - 2)) . '..';
         }
 
-        return str_pad($value, $this->length);
+        return str_pad($value, $length);
     }
 
     /**

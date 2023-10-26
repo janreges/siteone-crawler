@@ -2,10 +2,13 @@
 
 namespace Crawler\Analysis;
 
+use Crawler\Analysis\Result\UrlAnalysisResult;
 use Crawler\Crawler;
+use Crawler\ExtraColumn;
 use Crawler\Options\Options;
 use Crawler\Output\Output;
 use Crawler\Result\Status;
+use Crawler\Result\VisitedUrl;
 
 interface Analyzer
 {
@@ -43,6 +46,25 @@ interface Analyzer
      * @return void
      */
     public function analyze(): void;
+
+    /**
+     * Do your analysis right now visited URL. Body and headers are already downloaded and decompressed.
+     * Return null if you don't want to analyze this URL, otherwise return UrlAnalysisResult with your results.
+     *
+     * @param VisitedUrl $visitedUrl
+     * @param string|null $body
+     * @param array|null $headers
+     * @return UrlAnalysisResult|null
+     */
+    public function analyzeVisitedUrl(VisitedUrl $visitedUrl, ?string $body, ?array $headers): ?UrlAnalysisResult;
+
+    /**
+     * If you want to show URL analysis results in table column (as numbers with severity icons), return name of column
+     * under which your results will be shown. This column will be added to the table automatically.
+     *
+     * @return ExtraColumn|null
+     */
+    public function showAnalyzedVisitedUrlResultAsColumn(): ?ExtraColumn;
 
     /**
      * Should this analyzer be activated based on options?

@@ -3,6 +3,7 @@
 namespace Crawler\Output;
 
 use Crawler\Components\SuperTable;
+use Crawler\ExtraColumn;
 use Crawler\HttpClient\HttpResponse;
 use Crawler\Result\Summary\Summary;
 use Swoole\Table;
@@ -49,6 +50,17 @@ class MultiOutput implements Output
     {
         foreach ($this->outputs as $output) {
             $output->addUsedOptions();
+        }
+    }
+
+    /**
+     * @param ExtraColumn[] $extraColumnsFromAnalysis
+     * @return void
+     */
+    public function setExtraColumnsFromAnalysis(array $extraColumnsFromAnalysis): void
+    {
+        foreach ($this->outputs as $output) {
+            $output->setExtraColumnsFromAnalysis($extraColumnsFromAnalysis);
         }
     }
 

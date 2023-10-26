@@ -2,8 +2,10 @@
 
 namespace Crawler\Output;
 
+use Crawler\Analysis\Result\UrlAnalysisResult;
 use Crawler\Components\SuperTable;
 use Crawler\CoreOptions;
+use Crawler\ExtraColumn;
 use Crawler\HttpClient\HttpResponse;
 use Crawler\Result\Status;
 use Crawler\Result\Summary\Summary;
@@ -19,6 +21,12 @@ class TextOutput implements Output
     private CoreOptions $options;
     private string $command;
     private bool $printToOutput = true;
+
+    /**
+     * Extra columns from analysis that will be added to the table via showAnalyzedVisitedUrlResultAsColumn() in Analyzer
+     * @var ExtraColumn[]
+     */
+    private array $extraColumnsFromAnalysis = [];
 
     private string $outputText = '';
 
@@ -54,11 +62,24 @@ class TextOutput implements Output
         // $this->addToOutput("Used options: " . Utils::getColorText(print_r($this->options, true), 'gray') . "\n");
     }
 
+    /**
+     * @param ExtraColumn[] $extraColumnsFromAnalysis
+     * @return void
+     */
+    public function setExtraColumnsFromAnalysis(array $extraColumnsFromAnalysis): void
+    {
+        $this->extraColumnsFromAnalysis = $extraColumnsFromAnalysis;
+    }
+
     public function addTableHeader(): void
     {
         $header = str_pad("URL", $this->options->urlColumnSize) . " |" . " Status " . "|" . " Type     " . "|" . " Time   " . "|" . " Size     ";
         if (!$this->options->hideProgressBar) {
             $header = str_pad("Progress report", 26) . "| " . $header;
+        }
+
+        foreach ($this->extraColumnsFromAnalysis as $extraColumn) {
+            $header .= " | " . str_pad($extraColumn->name, max($extraColumn->getLength(), 4));
         }
 
         foreach ($this->options->extraColumns as $extraColumn) {
@@ -81,6 +102,32 @@ class TextOutput implements Output
                 : str_pad(Utils::getFormattedSize($size), 8);
 
         $extraHeadersContent = '';
+        $extraNewLine = '';
+        $extraNewLinePrefix = str_repeat(' ', 2);
+        foreach ($this->extraColumnsFromAnalysis as $extraColumn) {
+            $value = '';
+            $headerName = $extraColumn->name;
+            if (array_key_exists($headerName, $extraParsedContent)) {
+                $value = $extraParsedContent[$headerName];
+            }
+
+            /* @var $value UrlAnalysisResult */
+            if ($value instanceof UrlAnalysisResult) {
+                $notColorizedLength = $value ? strlen($value->toNotColorizedString()) : 0;
+                $strPadContent = str_repeat(' ', max(0, $extraColumn->getLength() - $notColorizedLength));
+
+                $extraHeadersContent .= (' | ' . trim($value) . $strPadContent);
+
+                if ($this->options->showInlineCriticals && ($criticals = $value->getCritical())) {
+                    $extraNewLine .= "{$extraNewLinePrefix}⛔ " . implode("\n{$extraNewLinePrefix}⛔ ", $criticals) . "\n";
+                }
+                if ($this->options->showInlineWarnings && ($warnings = $value->getWarning())) {
+                    $extraNewLine .= "{$extraNewLinePrefix}⚠️ " . implode("\n{$extraNewLinePrefix}⚠️ ", $warnings) . "\n";
+                }
+            } else {
+                $extraHeadersContent .= (' | ' . str_pad($extraColumn->getTruncatedValue($value), max($extraColumn->getLength(), 4)));
+            }
+        }
         foreach ($this->options->extraColumns as $extraColumn) {
             $value = '';
             $headerName = $extraColumn->name;
@@ -113,7 +160,7 @@ class TextOutput implements Output
             $progressContent = str_pad($progressToStdErr, 17);
         }
 
-        $this->addToOutput(trim(sprintf(
+        $output = sprintf(
                 '%s %s | %s | %s | %s | %s %s',
                 $progressContent,
                 str_pad($urlForTable, $this->options->urlColumnSize),
@@ -122,7 +169,13 @@ class TextOutput implements Output
                 $coloredElapsedTime,
                 $coloredSize,
                 $extraHeadersContent
-            ), '|') . "\n");
+            ) . "\n";
+
+        if ($extraNewLine) {
+            $output .= rtrim($extraNewLine) . "\n";
+        }
+
+        $this->addToOutput($output);
     }
 
     public function addSuperTable(SuperTable $table): void

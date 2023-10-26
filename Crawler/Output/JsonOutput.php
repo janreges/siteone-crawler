@@ -4,6 +4,7 @@ namespace Crawler\Output;
 
 use Crawler\Components\SuperTable;
 use Crawler\CoreOptions;
+use Crawler\ExtraColumn;
 use Crawler\HttpClient\HttpResponse;
 use Crawler\Result\Status;
 use Crawler\Result\Summary\Summary;
@@ -19,6 +20,12 @@ class JsonOutput implements Output
     private CoreOptions $options;
     private string $command;
     private bool $printToOutput = true;
+
+    /**
+     * Extra columns from analysis that will be added to the table via showAnalyzedVisitedUrlResultAsColumn() in Analyzer
+     * @var ExtraColumn[]
+     */
+    private array $extraColumnsFromAnalysis = [];
 
     private array $json = [];
 
@@ -48,6 +55,16 @@ class JsonOutput implements Output
     public function addUsedOptions(): void
     {
         $this->json['options'] = $this->options;
+    }
+
+    /**
+     * @param ExtraColumn[] $extraColumnsFromAnalysis
+     * @return void
+     */
+    public function setExtraColumnsFromAnalysis(array $extraColumnsFromAnalysis): void
+    {
+        $this->extraColumnsFromAnalysis = $extraColumnsFromAnalysis;
+        $this->json['extraColumnsFromAnalysis'] = $extraColumnsFromAnalysis;
     }
 
     public function addTotalStats(Table $visited): void

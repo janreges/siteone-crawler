@@ -3,6 +3,7 @@
 namespace Crawler\Output;
 
 use Crawler\Components\SuperTable;
+use Crawler\ExtraColumn;
 use Crawler\HttpClient\HttpResponse;
 use Crawler\Result\Summary\Summary;
 use Swoole\Table;
@@ -12,6 +13,12 @@ interface Output
     public function addBanner(): void;
 
     public function addUsedOptions(): void;
+
+    /**
+     * @param ExtraColumn[] $extraColumnsFromAnalysis
+     * @return void
+     */
+    public function setExtraColumnsFromAnalysis(array $extraColumnsFromAnalysis): void;
 
     public function addTableHeader(): void;
 
