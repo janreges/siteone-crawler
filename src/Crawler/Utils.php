@@ -361,7 +361,7 @@ class Utils
         $baseHost = parse_url($baseUrl, PHP_URL_HOST);
 
         if ($removeExternalJs) {
-            $html = preg_replace_callback('/<script[^>]*src=["\']?(.*?)["\']?[^>]*>.*?<\/script>/isU', function ($matches) use ($baseHost) {
+            $html = preg_replace_callback('/<script[^>]*src=["\']?(.*?)["\']?[^>]*>.*?<\/script>/is', function ($matches) use ($baseHost) {
                 if (preg_match("/^(https?:)?\/\//i", $matches[1]) === 1 && parse_url($matches[1], PHP_URL_HOST) !== $baseHost) {
                     return '';
                 }
@@ -417,7 +417,10 @@ class Utils
 
             $patterns = array_unique($patterns);
 
-            $html = preg_replace_callback('/<script[^>]*>(.*?)<\/script>/isU', function ($matches) use ($patterns) {
+            $html = preg_replace_callback('/<script[^>]*>(.*?)<\/script>/is', function ($matches) use ($patterns) {
+                if (substr_count($matches[0], '<script') > 1) {
+                    var_dump($matches[0]);die;
+                }
                 if ($matches[0]) {
                     foreach ($patterns as $keyword) {
                         if (stripos($matches[0], $keyword) !== false) {
@@ -429,7 +432,7 @@ class Utils
             }, $html);
 
             if ($removeSocnets && $html) {
-                $html = preg_replace('/<iframe[^>]*(facebook\.com|twitter\.com|linkedin\.com)[^>]*>.*?<\/iframe>/isU', '', $html);
+                $html = preg_replace('/<iframe[^>]*(facebook\.com|twitter\.com|linkedin\.com)[^>]*>.*?<\/iframe>/is', '', $html);
             }
         }
 
@@ -628,19 +631,19 @@ class Utils
     {
         $orig = $html;
         // script tags
-        $scriptPattern = '/<script[^>]*>(.*)<\/script>/isU';
+        $scriptPattern = '/<script[^>]*>(.*)<\/script>/is';
         $html = preg_replace($scriptPattern, '', $html);
 
         // link tags by "href"
-        $linkPatternHref = '/<link[^>]*href=["\'][^"\']+\.js[^"\']*["\'][^>]*>/isU';
+        $linkPatternHref = '/<link[^>]*href=["\'][^"\']+\.js[^"\']*["\'][^>]*>/is';
         $html = preg_replace($linkPatternHref, '', $html);
 
         // link tags by "as"
-        $linkPatternAs = '/<link[^>]*as=["\']script["\'][^>]*>/isU';
+        $linkPatternAs = '/<link[^>]*as=["\']script["\'][^>]*>/is';
         $html = preg_replace($linkPatternAs, '', $html);
 
         // on* attributes
-        $onEventPattern = '/\s+on[a-z]+=("[^"]*"|\'[^\']*\'|[^\s>]*)/isU';
+        $onEventPattern = '/\s+on[a-z]+=("[^"]*"|\'[^\']*\'|[^\s>]*)/is';
         $html = preg_replace($onEventPattern, '', $html);
 
         return $html;
@@ -654,13 +657,13 @@ class Utils
      */
     public static function stripStyles(string $html): string
     {
-        $styleTagPattern = '/<style\b[^>]*>(.*?)<\/style>/isU';
+        $styleTagPattern = '/<style\b[^>]*>(.*?)<\/style>/is';
         $html = preg_replace($styleTagPattern, '', $html);
 
-        $linkTagPattern = '/<link\b[^>]*rel=["\']stylesheet["\'][^>]*>/isU';
+        $linkTagPattern = '/<link\b[^>]*rel=["\']stylesheet["\'][^>]*>/is';
         $html = preg_replace($linkTagPattern, '', $html);
 
-        $styleAttrPattern = '/\s+style=("[^"]*"|\'[^\']*\'|[^\s>]*)/isU';
+        $styleAttrPattern = '/\s+style=("[^"]*"|\'[^\']*\'|[^\s>]*)/is';
         $html = preg_replace($styleAttrPattern, ' ', $html);
 
         return $html;
@@ -674,7 +677,7 @@ class Utils
      */
     public static function stripFonts(string $htmlOrCss): string
     {
-        $fontLinkPattern = '/<link\b[^>]*href=["\'][^"\']+\.(eot|ttf|woff2|woff|otf)[^"\']*["\'][^>]*>/isU';
+        $fontLinkPattern = '/<link\b[^>]*href=["\'][^"\']+\.(eot|ttf|woff2|woff|otf)[^"\']*["\'][^>]*>/is';
         $htmlOrCss = preg_replace($fontLinkPattern, '', $htmlOrCss);
 
         $fontFacePattern = '/@font-face\s*{[^}]*}\s*/is';
@@ -715,7 +718,7 @@ class Utils
             $htmlOrCss = preg_replace($pattern, $replacements[$index], $htmlOrCss);
         }
 
-        $htmlOrCss = preg_replace_callback('/<picture[^>]*>.*?<\/picture>/isU', function ($matches) use ($patterns, $replacements) {
+        $htmlOrCss = preg_replace_callback('/<picture[^>]*>.*?<\/picture>/is', function ($matches) use ($patterns, $replacements) {
             $pictureContent = preg_replace($patterns, $replacements, $matches[0]);
             return $pictureContent;
         }, $htmlOrCss);
