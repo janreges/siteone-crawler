@@ -73,7 +73,7 @@ class TextOutput implements Output
 
     public function addTableHeader(): void
     {
-        $header = str_pad("URL", $this->options->urlColumnSize) . " |" . " Status " . "|" . " Type     " . "|" . " Time   " . "|" . " Size     ";
+        $header = str_pad("URL", $this->options->urlColumnSize) . " |" . " Status " . "|" . " Type     " . "|" . " Time   " . "|" . " Size   ";
         if (!$this->options->hideProgressBar) {
             $header = str_pad("Progress report", 26) . "| " . $header;
         }
@@ -98,8 +98,8 @@ class TextOutput implements Output
         $coloredElapsedTime = Utils::getColoredRequestTime($elapsedTime);
         $coloredSize =
             $size > 1024 * 1024
-                ? Utils::getColorText(str_pad(Utils::getFormattedSize($size), 8), 'red')
-                : str_pad(Utils::getFormattedSize($size), 8);
+                ? Utils::getColorText(str_pad(Utils::getFormattedSize($size), 6), 'red')
+                : str_pad(Utils::getFormattedSize($size), 6);
 
         $extraHeadersContent = '';
         $extraNewLine = '';
