@@ -139,7 +139,7 @@ class UrlAnalysisResult
 
     public function getAllCount(): int
     {
-        return count($this->ok) && count($this->notice) && count($this->warning) && count($this->critical);
+        return count($this->ok) + count($this->notice) + count($this->warning) + count($this->critical);
     }
 
     public function toIconString(string $okIcon = '✅', string $noticeIcon = 'ℹ️', string $warningIcon = '⚠', string $criticalIcon = '⛔'): string

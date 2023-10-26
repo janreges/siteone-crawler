@@ -59,7 +59,7 @@ class AnalyzerStats
     }
 
     /**
-     * @return array <string, array<string, int>>
+     * @return array <int<0, max>, array<string, int<0, max>|string>>
      */
     public function toTableArray(): array
     {

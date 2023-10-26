@@ -237,16 +237,4 @@ class CoreOptions
     {
         return $this->disableJavascript && $this->disableStyles && $this->disableFonts && $this->disableImages && $this->disableFiles;
     }
-
-    public function toArray(bool $maskSensitive = true): array
-    {
-        $result = [];
-        foreach ($this as $key => $value) {
-            if ($maskSensitive && $key == 'mailSmtpPass') {
-                $value = '***';
-            }
-            $result[$key] = $value;
-        }
-        return $result;
-    }
 }
