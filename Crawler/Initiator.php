@@ -2,6 +2,7 @@
 
 namespace Crawler;
 
+use Crawler\Analysis\AnalysisManager;
 use Crawler\Analysis\Analyzer;
 use Crawler\Export\Exporter;
 use Crawler\Options\Options;
@@ -25,6 +26,9 @@ class Initiator
      */
     private readonly string $crawlerClassDir;
 
+    /**
+     * @var Options
+     */
     private Options $options;
 
     /**
@@ -33,14 +37,14 @@ class Initiator
     private CoreOptions $coreOptions;
 
     /**
+     * @var AnalysisManager
+     */
+    private AnalysisManager $analysisManager;
+
+    /**
      * @var Exporter[]
      */
     private array $exporters;
-
-    /**
-     * @var Analyzer[]
-     */
-    private array $analyzers;
 
     /**
      * Array of all known options for unknown option detection
@@ -59,6 +63,7 @@ class Initiator
 
         $this->argv = $argv;
         $this->crawlerClassDir = $crawlerClassDir;
+        $this->analysisManager = new AnalysisManager($crawlerClassDir);
 
         // import options config from crawler and all exporters/analyzers
         $this->setupOptions();
@@ -79,18 +84,18 @@ class Initiator
         // import core crawler options and fill with given parameters
         $this->importCoreOptions();
 
+        // set options to analysis manager and its analyzers
+        $this->analysisManager->setOptions($this->options);
+
         // import all auto-activated exporters thanks to filled CLI parameter(s)
         $this->importExporters();
-
-        // import all auto-activated analyzers thanks to filled CLI parameters(s)
-        $this->importAnalyzers();
 
         // apply system settings
         $this->importSystemSettings();
     }
 
     /**
-     * Setu[ $this->options with options from Crawler and all founded exporters and analyzers
+     * Setup $this->options with options from Crawler and all founded exporters and analyzers
      * @return void
      */
     private function setupOptions(): void
@@ -103,13 +108,15 @@ class Initiator
 
         $exporterClasses = $this->getClassesOfExporters();
         foreach ($exporterClasses as $exporterClass) {
+            /** @var Exporter $exporterClass */
             foreach ($exporterClass::getOptions()->getGroups() as $group) {
                 $this->options->addGroup($group);
             }
         }
 
-        $analyzerClasses = $this->getClassesOfAnalyzers();
+        $analyzerClasses = $this->analysisManager->getClassesOfAnalyzers();
         foreach ($analyzerClasses as $analyzerClass) {
+            /** @var Analyzer $analyzerClass */
             foreach ($analyzerClass::getOptions()->getGroups() as $group) {
                 $this->options->addGroup($group);
             }
@@ -193,21 +200,6 @@ class Initiator
         }
     }
 
-    private function importAnalyzers(): void
-    {
-        $this->analyzers = [];
-
-        $analyzerClasses = $this->getClassesOfAnalyzers();
-        foreach ($analyzerClasses as $analyzerClass) {
-            $analyzer = new $analyzerClass();
-            /** @var Analyzer $analyzer */
-            $analyzer->setConfig($this->options);
-            if ($analyzer->shouldBeActivated()) {
-                $this->analyzers[] = $analyzer;
-            }
-        }
-    }
-
     private function importSystemSettings(): void
     {
         ini_set('memory_limit', $this->coreOptions->memoryLimit);
@@ -228,24 +220,14 @@ class Initiator
         return $classes;
     }
 
-    /**
-     * @return string[]
-     */
-    private function getClassesOfAnalyzers(): array
-    {
-        $classes = [];
-        foreach (glob($this->crawlerClassDir . '/Analysis/*Analyzer.php') as $file) {
-            $classBaseName = basename($file, '.php');
-            if ($classBaseName != 'Analyzer' & $classBaseName != 'BaseAnalyzer') {
-                $classes[] = 'Crawler\\Analysis\\' . $classBaseName;
-            }
-        }
-        return $classes;
-    }
-
     public function getCoreOptions(): CoreOptions
     {
         return $this->coreOptions;
+    }
+
+    public function getAnalysisManager(): AnalysisManager
+    {
+        return $this->analysisManager;
     }
 
     /**
@@ -254,14 +236,6 @@ class Initiator
     public function getExporters(): array
     {
         return $this->exporters;
-    }
-
-    /**
-     * @return Analyzer[]
-     */
-    public function getAnalyzers(): array
-    {
-        return $this->analyzers;
     }
 
     public function printHelp(): void

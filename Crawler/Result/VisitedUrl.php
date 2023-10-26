@@ -29,8 +29,9 @@ class VisitedUrl
     public readonly string $url;
 
     /**
-     * @var int HTTP status code of the request
+     * HTTP status code of the request
      * Negative values are errors - see self:ERROR_* constants
+     * @var int
      */
     public readonly int $statusCode;
 
@@ -41,7 +42,7 @@ class VisitedUrl
     public readonly float $requestTime;
 
     /**
-     * Request time formatted as "1.234s"
+     * Request time formatted as "32 ms" or "7.4 s"
      * @var string
      */
     public readonly string $requestTimeFormatted;
@@ -59,6 +60,12 @@ class VisitedUrl
     public readonly ?string $sizeFormatted;
 
     /**
+     * Content-Encoding header value (br, gzip, ...)
+     * @var string|null
+     */
+    public readonly ?string $contentEncoding;
+
+    /**
      * Content type ID
      * @see Crawler::CONTENT_TYPE_ID_*
      * @var int
@@ -66,17 +73,19 @@ class VisitedUrl
     public readonly int $contentType;
 
     /**
-     * Extra data from the response
+     * Extra data from the response required by --extra-columns (headers, Title, DOM, etc.
      * @var array|null
      */
     public readonly ?array $extras;
 
     /**
+     * Is this URL external (not from the same domain as the initial URL)
      * @var bool
      */
     public readonly bool $isExternal;
 
     /**
+     * Is this URL allowed for crawling (based on --allowed-domain-for-crawling)
      * @var bool
      */
     public readonly bool $isAllowedForCrawling;
@@ -89,11 +98,12 @@ class VisitedUrl
      * @param float $requestTime
      * @param int|null $size
      * @param int $contentType
+     * @param string|null $contentEncoding
      * @param array|null $extras
      * @param bool $isExternal
      * @param bool $isAllowedForCrawling
      */
-    public function __construct(string $uqId, string $sourceUqId, string $url, int $statusCode, float $requestTime, ?int $size, int $contentType, ?array $extras, bool $isExternal, bool $isAllowedForCrawling)
+    public function __construct(string $uqId, string $sourceUqId, string $url, int $statusCode, float $requestTime, ?int $size, int $contentType, ?string $contentEncoding, ?array $extras, bool $isExternal, bool $isAllowedForCrawling)
     {
         $this->uqId = $uqId;
         $this->sourceUqId = $sourceUqId;
@@ -104,6 +114,7 @@ class VisitedUrl
         $this->size = $size;
         $this->sizeFormatted = $size !== null ? Utils::getFormattedSize($size) : null;
         $this->contentType = $contentType;
+        $this->contentEncoding = $contentEncoding;
         $this->extras = $extras;
         $this->isExternal = $isExternal;
         $this->isAllowedForCrawling = $isAllowedForCrawling;

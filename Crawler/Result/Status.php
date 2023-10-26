@@ -15,12 +15,32 @@ use Crawler\Utils;
 class Status
 {
 
+    /**
+     * Content storage (memory or file) - used only if storeContent is true
+     * Use FileStorage for large crawls with many pages when memory is not enough for all pages content
+     *
+     * @var Storage $storage
+     */
     private Storage $storage;
     private CoreOptions $options;
-    private bool $saveContent;
+
+    /**
+     * Store content of visited URLs (HTML, CSS, JS, images, ...) to storage. For example analyzer needs it.
+     * @var bool $storeContent
+     */
+    private bool $storeContent;
     private float $startTime;
 
+    /**
+     * Basic stats/metrics about visited URLs
+     * @var BasicStats|null
+     */
     private ?BasicStats $basicStats = null;
+
+    /**
+     * Overall summary of the crawl - each analyzer/exporter can add its own highlighted items
+     * @var Summary
+     */
     private Summary $summary;
 
     /**
@@ -48,26 +68,27 @@ class Status
 
     /**
      * @param Storage $storage
-     * @param bool $saveContent
+     * @param bool $storeContent
      * @param Info $crawlerInfo
      * @param CoreOptions $options
      * @param float $startTime
      */
-    public function __construct(Storage $storage, bool $saveContent, Info $crawlerInfo, CoreOptions $options, float $startTime)
+    public function __construct(Storage $storage, bool $storeContent, Info $crawlerInfo, CoreOptions $options, float $startTime)
     {
         $this->storage = $storage;
-        $this->saveContent = $saveContent;
+        $this->storeContent = $storeContent;
         $this->crawlerInfo = $crawlerInfo;
         $this->options = $options;
         $this->startTime = $startTime;
         $this->summary = new Summary();
     }
 
-    public function addVisitedUrl(VisitedUrl $url, ?string $body): void
+    public function addVisitedUrl(VisitedUrl $url, ?string $body, ?array $headers): void
     {
         $this->visitedUrls[$url->uqId] = $url;
-        if ($this->saveContent && $body !== null) {
+        if ($this->storeContent && $body !== null) {
             $this->storage->save($url->uqId, $url->contentType === Crawler::CONTENT_TYPE_ID_HTML ? trim($body) : $body);
+            $this->storage->save($url->uqId . '.headers', serialize($headers));
         }
     }
 
@@ -85,14 +106,29 @@ class Status
         $this->summary->addItem(new Item($aplCode, $text, $status));
     }
 
+    public function addOkToSummary(string $aplCode, string $text): void
+    {
+        $this->summary->addItem(new Item($aplCode, $text, ItemStatus::OK));
+    }
+
+    public function addNoticeToSummary(string $aplCode, string $text): void
+    {
+        $this->summary->addItem(new Item($aplCode, $text, ItemStatus::NOTICE));
+    }
+
     public function addInfoToSummary(string $aplCode, string $text): void
     {
         $this->summary->addItem(new Item($aplCode, $text, ItemStatus::INFO));
     }
 
-    public function addErrorToSummary(string $aplCode, string $text): void
+    public function addWarningToSummary(string $aplCode, string $text): void
     {
-        $this->summary->addItem(new Item($aplCode, $text, ItemStatus::ERROR));
+        $this->summary->addItem(new Item($aplCode, $text, ItemStatus::WARNING));
+    }
+
+    public function addCriticalToSummary(string $aplCode, string $text): void
+    {
+        $this->summary->addItem(new Item($aplCode, $text, ItemStatus::CRITICAL));
     }
 
     public function getSummary(): Summary
@@ -102,7 +138,16 @@ class Status
 
     public function getUrlBody(string $uqId): ?string
     {
-        return $this->saveContent ? $this->storage->load($uqId) : null;
+        return $this->storeContent ? $this->storage->load($uqId) : null;
+    }
+
+    public function getUrlHeaders(string $uqId): ?array
+    {
+        $serialized = $this->storage->load($uqId . '.headers');
+        if ($serialized) {
+            return unserialize($serialized);
+        }
+        return null;
     }
 
     /**

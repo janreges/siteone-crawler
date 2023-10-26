@@ -28,6 +28,7 @@ class Crawler
     private ParsedUrl $initialParsedUrl;
     private string $finalUserAgent;
     private ?array $doneCallback = null;
+    private ?array $visitedUrlCallback = null;
     private bool $terminated = false;
 
     // rate limiting
@@ -101,12 +102,14 @@ class Crawler
 
     /**
      * @param callable $doneCallback
+     * @param callable $visitedUrlCallback
      * @return void
      * @throws Exception
      */
-    public function run(callable $doneCallback): void
+    public function run(callable $doneCallback, callable $visitedUrlCallback): void
     {
         $this->doneCallback = $doneCallback;
+        $this->visitedUrlCallback = $visitedUrlCallback;
         $this->optimalDelayBetweenRequests = max(1 / ($this->options->maxReqsPerSec), 0.001);
 
         // add initial URL to queue
@@ -169,15 +172,12 @@ class Crawler
         $this->addSuitableUrlsToQueue($foundUrls, $url, $urlUqId);
 
         // add extra parsed content to result (Title, Keywords, Description) if needed
-        if ($this->options->hasHeaderToTable('Title')) {
-            preg_match_all('/<title>([^<]*)<\/title>/i', $body, $matches);
-            $result['Title'] = trim($matches[1][0] ?? '');
-        }
+        // title & descriptions are needed by BestPracticeAnalyzer so they are parsed even if not needed for output
+        preg_match_all('/<title>([^<]*)<\/title>/i', $body, $matches);
+        $result['Title'] = trim($matches[1][0] ?? '');
 
-        if ($this->options->hasHeaderToTable('Description')) {
-            preg_match_all('/<meta\s+.*?name=["\']description["\']\s+content=["\']([^"\']+)["\'][^>]*>/i', $body, $matches);
-            $result['Description'] = trim($matches[1][0] ?? '');
-        }
+        preg_match_all('/<meta\s+.*?name=["\']description["\']\s+content=["\']([^"\']+)["\'][^>]*>/i', $body, $matches);
+        $result['Description'] = trim($matches[1][0] ?? '');
 
         if ($this->options->hasHeaderToTable('Keywords')) {
             preg_match_all('/<meta\s+.*?name=["\']keywords["\']\s+content=["\']([^"\']+)["\'][^>]*>/i', $body, $matches);
@@ -391,13 +391,19 @@ class Crawler
 
         // update info about visited URL
         $isExternal = $parsedUrl->host && $parsedUrl->host !== $this->initialParsedUrl->host;
-        $this->updateVisitedUrl($url, $elapsedTime, $status, $bodySize, $type, $body, $extraParsedContent, $isExternal, $isAllowedForCrawling);
+        $visitedUrl = $this->updateVisitedUrl($url, $elapsedTime, $status, $bodySize, $type, $body, $httpResponse->headers, $extraParsedContent, $isExternal, $isAllowedForCrawling);
+
+        // call visited URL callback (it runs analyzers)
+        $extraColumnsFromAnalysis = call_user_func($this->visitedUrlCallback, $visitedUrl, $body, $httpResponse->headers);
+        if ($extraColumnsFromAnalysis) {
+            $extraParsedContent = array_merge($extraParsedContent, $extraColumnsFromAnalysis);
+        }
 
         // print table row to output
         $progressStatus = $this->statusTable->get('1', 'doneUrls') . '/' . ($this->queue->count() + $this->visited->count());
         $this->output->addTableRow($httpResponse, $absoluteUrl, $status, $elapsedTime, $bodySize, $type, $extraParsedContent, $progressStatus);
 
-        // check if crawler is done and exit or start new coroutine to process next URL
+        // check if crawler is done and exit or start new coroutine to process the next URL
         if ($this->queue->count() === 0 && $this->getActiveWorkersNumber() === 0) {
             call_user_func($this->doneCallback);
             Coroutine::cancel(Coroutine::getCid());
@@ -533,13 +539,14 @@ class Crawler
      * @param int $size
      * @param int $type @see self::URL_TYPE_*
      * @param string|null $body
+     * @param array|null $headers
      * @param array|null $extras
      * @param bool $isExternal
      * @param bool $isAllowedForCrawling
-     * @return void
+     * @return VisitedUrl
      * @throws Exception
      */
-    private function updateVisitedUrl(string $url, float $elapsedTime, int $status, int $size, int $type, ?string $body, ?array $extras, bool $isExternal, bool $isAllowedForCrawling): void
+    private function updateVisitedUrl(string $url, float $elapsedTime, int $status, int $size, int $type, ?string $body, ?array $headers, ?array $extras, bool $isExternal, bool $isAllowedForCrawling): VisitedUrl
     {
         $urlKey = $this->getUrlKeyForSwooleTable($url);
         $visitedUrl = $this->visited->get($urlKey);
@@ -554,20 +561,22 @@ class Crawler
 
         $this->statusTable->incr('1', 'doneUrls');
 
-        $this->status->addVisitedUrl(
-            new VisitedUrl(
-                $visitedUrl['uqId'],
-                $visitedUrl['sourceUqId'],
-                $visitedUrl['url'],
-                $visitedUrl['status'],
-                $visitedUrl['time'],
-                $visitedUrl['size'],
-                $visitedUrl['type'],
-                $extras,
-                $isExternal,
-                $isAllowedForCrawling,
-            ), $body
+        $visitedUrl = new VisitedUrl(
+            $visitedUrl['uqId'],
+            $visitedUrl['sourceUqId'],
+            $visitedUrl['url'],
+            $visitedUrl['status'],
+            $visitedUrl['time'],
+            $visitedUrl['size'],
+            $visitedUrl['type'],
+            $headers['content-encoding'] ?? null,
+            $extras,
+            $isExternal,
+            $isAllowedForCrawling,
         );
+
+        $this->status->addVisitedUrl($visitedUrl, $body, $headers);
+        return $visitedUrl;
     }
 
     private function getUrlKeyForSwooleTable(string $url): string

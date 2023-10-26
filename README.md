@@ -216,6 +216,7 @@ required arguments:
   --include-regex="/^.*\/technologies.*/" \
   --include-regex="/^.*\/fashion.*/" \
   --ignore-regex="/^.*\/downloads\/.*\.pdf$/i" \
+  --analyzer-filter-regex="/^.*$/i" \
   --remove-query-params \
   --add-random-query-params \
   --hide-scheme-and-host \
@@ -303,6 +304,9 @@ through the file:// protocol.
   Argument can be specified multiple times. Example: `--include-regex='/^\/public\//'`
 * `--ignore-regex=<regex>`         Regular expression compatible with PHP preg_match() for URLs that should be ignored.
   Argument can be specified multiple times. Example: `--ignore-regex='/^.*\/downloads\/.*\.pdf$/i'`
+* `--analyzer-filter-regex`        Regular expression compatible with PHP preg_match() applied to Analyzer class names 
+ for analyzers filtering. Example: `/(content|accessibility)/i` or `/^(?:(?!best|access).)*$/i` for all analyzers except
+ `BestPracticesAnalyzer` and `AccessibilityAnalyzer`.
 * `--accept-encoding=<val>`        Custom `Accept-Encoding` request header. Default is `gzip, deflate, br`.
 * `--remove-query-params`          Remove query parameters from found URLs. Useful on websites where a lot of links are
   made to the same pages, only with different irrelevant query parameters.

@@ -50,7 +50,7 @@ try {
         $options,
         implode(' ', $argv),
         $initiator->getExporters(),
-        $initiator->getAnalyzers(),
+        $initiator->getAnalysisManager(),
         dirname(platformCompatiblePath($_SERVER['PHP_SELF']))
     );
 

@@ -2,7 +2,7 @@
 
 namespace Crawler;
 
-use Crawler\Analysis\Analyzer;
+use Crawler\Analysis\AnalysisManager;
 use Crawler\Export\Exporter;
 use Crawler\Export\FileExporter;
 use Crawler\Export\MailerExporter;
@@ -18,6 +18,7 @@ use Crawler\Result\Status;
 use Crawler\Result\Storage\FileStorage;
 use Crawler\Result\Storage\MemoryStorage;
 use Crawler\Result\Storage\StorageType;
+use Crawler\Result\VisitedUrl;
 use Exception;
 
 class Manager
@@ -36,10 +37,7 @@ class Manager
      */
     private array $exporters;
 
-    /**
-     * @var Analyzer[]
-     */
-    private array $analyzers;
+    private AnalysisManager $analysisManager;
 
     /**
      * @param string $version
@@ -47,18 +45,17 @@ class Manager
      * @param CoreOptions $options
      * @param string $command
      * @param Exporter[] $exporters
-     * @param Analyzer[] $analyzers
+     * @param AnalysisManager $analysisManager
      * @param string $baseDir
      * @throws Exception
      */
-    public function __construct(string $version, float $startTime, CoreOptions $options, string $command, array $exporters, array $analyzers, string $baseDir)
+    public function __construct(string $version, float $startTime, CoreOptions $options, string $command, array $exporters, AnalysisManager $analysisManager, string $baseDir)
     {
         $this->version = $version;
         $this->startTime = $startTime;
         $this->options = $options;
         $this->command = $command;
         $this->exporters = $exporters;
-        $this->analyzers = $analyzers;
 
         $crawlerInfo = new Info(
             'SiteOne Website Crawler',
@@ -66,7 +63,7 @@ class Manager
             date('Y-m-d H:i:s'),
             Utils::getSafeCommand($this->command),
             gethostname(),
-            $this->options->userAgent ?? 'default'
+            $options->userAgent ?? 'default'
         );
 
         $resultStorageDir = $options->resultStorageDir && !str_starts_with($options->resultStorageDir, '/')
@@ -79,7 +76,7 @@ class Manager
                 : new FileStorage($resultStorageDir, $options->resultStorageCompression),
             true,
             $crawlerInfo,
-            $this->options,
+            $options,
             $this->startTime
         );
 
@@ -91,6 +88,9 @@ class Manager
 
         $httpClient = new HttpClient($httpClientCacheDir, $options->httpCacheCompression);
         $this->crawler = new Crawler($options, $httpClient, $this->output, $this->status);
+
+        $this->analysisManager = $analysisManager;
+        $this->analysisManager->init($this->crawler, $this->status, $this->output);
     }
 
     /**
@@ -123,7 +123,7 @@ class Manager
         }
         $alreadyDone = true;
 
-        $this->runAnalyzers();
+        $this->analysisManager->runAnalyzers();
         $this->runExporters();
 
         $this->output->addUsedOptions();
@@ -226,27 +226,7 @@ class Manager
                 $exporter->export();
             } catch (Exception $e) {
                 $exporterBasename = basename(str_replace('\\', '/', get_class($exporter)));
-                $this->status->addErrorToSummary($exporterBasename, "{$exporterBasename} error: " . $e->getMessage());
-            }
-        }
-    }
-
-    private function runAnalyzers(): void
-    {
-        // sort analyzers by order
-        usort($this->analyzers, function (Analyzer $a, Analyzer $b) {
-            return $a->getOrder() <=> $b->getOrder();
-        });
-
-        foreach ($this->analyzers as $analyzer) {
-            $analyzer->setCrawler($this->crawler);
-            $analyzer->setStatus($this->status);
-            $analyzer->setOutput($this->output);
-            try {
-                $analyzer->analyze();
-            } catch (Exception $e) {
-                $analyzerBasename = basename(str_replace('\\', '/', get_class($analyzer)));
-                $this->status->addErrorToSummary($analyzerBasename, "{$analyzerBasename} error: " . $e->getMessage());
+                $this->status->addCriticalToSummary($exporterBasename, "{$exporterBasename} error: " . $e->getMessage());
             }
         }
     }
@@ -255,16 +235,6 @@ class Manager
     {
         foreach ($this->exporters as $exporter) {
             if (get_class($exporter) === $exporterClass) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private function hasAnalyzer(string $analyzerClass): bool
-    {
-        foreach ($this->analyzers as $analyzer) {
-            if (get_class($analyzer) === $analyzerClass) {
                 return true;
             }
         }

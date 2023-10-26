@@ -292,6 +292,33 @@ class Utils
         }
     }
 
+    public static function getColoredCriticals(int $criticals, int $strPadTo = 6): string
+    {
+        if ($criticals === 0) {
+            return $criticals;
+        }
+
+        return Utils::getColorText(str_pad($criticals, $strPadTo), 'red', true);
+    }
+
+    public static function getColoredWarnings(int $warnings, int $strPadTo = 6): string
+    {
+        if ($warnings === 0) {
+            return $warnings;
+        }
+
+        return Utils::getColorText(str_pad($warnings, $strPadTo), 'magenta');
+    }
+
+    public static function getColoredNotices(int $notices, int $strPadTo = 6): string
+    {
+        if ($notices === 0) {
+            return $notices;
+        }
+
+        return Utils::getColorText(str_pad($notices, $strPadTo), 'yellow');
+    }
+
     public static function getContentTypeNameById(int $contentTypeId): string
     {
         static $typeToName = [
