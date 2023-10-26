@@ -18,6 +18,9 @@
         }
     ],
     "require": {
-      "ext-mbstring": "*"
+      "ext-mbstring": "*",
+      "ext-dom": "*",
+      "ext-libxml": "*",
+      "ext-zlib": "*"
     }
 }
