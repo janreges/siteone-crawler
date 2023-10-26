@@ -3,7 +3,8 @@
     "description": "The best and easy-to-use command-line website crawler, sitemap and offline-website generator for Linux/Windows/macOS you've ever seen.",
     "type": "project",
     "require-dev": {
-        "phpunit/phpunit": "^10.4"
+        "phpunit/phpunit": "^10.4",
+        "phpstan/phpstan": "^1.10"
     },
     "license": "CC BY 4.0",
     "autoload": {
@@ -22,5 +23,9 @@
       "ext-dom": "*",
       "ext-libxml": "*",
       "ext-zlib": "*"
+    },
+    "scripts": {
+      "test": "phpunit --color=always --testdox",
+      "phpstan": "phpstan analyse"
     }
 }
