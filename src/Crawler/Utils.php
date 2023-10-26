@@ -188,8 +188,8 @@ class Utils
         $firstPartLength = ceil($maxLength * (2 / 3));
         $secondPartLength = $maxLength - $firstPartLength - mb_strlen($placeholder);
 
-        $firstPart = mb_substr($text, 0, $firstPartLength);
-        $secondPart = mb_substr($text, -1 * $secondPartLength);
+        $firstPart = mb_substr($text, 0, intval($firstPartLength));
+        $secondPart = mb_substr($text, -1 * intval($secondPartLength));
 
         return $firstPart . $placeholder . $secondPart;
     }
@@ -198,7 +198,7 @@ class Utils
     {
         $percentage = ($done / $total) * 100;
         $filledSegments = round(($done / $total) * $segments);
-        $progressBar = str_repeat('>', $filledSegments) . str_repeat(' ', $segments - $filledSegments);
+        $progressBar = str_repeat('>', intval($filledSegments)) . str_repeat(' ', intval($segments - $filledSegments));
         return sprintf("%s|%s|", str_pad(intval($percentage) . '%', 5), $progressBar);
     }
 
@@ -280,13 +280,13 @@ class Utils
     public static function getColoredStatusCode(int $statusCode, int $strPadTo = 6): string
     {
         if ($statusCode >= 200 && $statusCode < 300) {
-            return Utils::getColorText(str_pad($statusCode, $strPadTo), 'green');
+            return Utils::getColorText(str_pad(strval($statusCode), $strPadTo), 'green');
         } else if ($statusCode >= 300 && $statusCode < 400) {
-            return Utils::getColorText(str_pad($statusCode, $strPadTo), 'yellow', true);
+            return Utils::getColorText(str_pad(strval($statusCode), $strPadTo), 'yellow', true);
         } else if ($statusCode >= 400 && $statusCode < 500) {
-            return Utils::getColorText(str_pad($statusCode, $strPadTo), 'magenta', true);
+            return Utils::getColorText(str_pad(strval($statusCode), $strPadTo), 'magenta', true);
         } else if ($statusCode >= 500 && $statusCode < 600) {
-            return Utils::getColorText(str_pad($statusCode, $strPadTo), 'red', true);
+            return Utils::getColorText(str_pad(strval($statusCode), $strPadTo), 'red', true);
         } else {
             return Utils::getColorText(str_pad(Utils::getHttpClientCodeWithErrorDescription($statusCode, true), $strPadTo), 'red', true);
         }
@@ -298,7 +298,7 @@ class Utils
             return strval($criticals);
         }
 
-        return Utils::getColorText(str_pad($criticals, $strPadTo), 'red', true);
+        return Utils::getColorText(str_pad(strval($criticals), $strPadTo), 'red', true);
     }
 
     public static function getColoredWarnings(int $warnings, int $strPadTo = 6): string
@@ -307,7 +307,7 @@ class Utils
             return strval($warnings);
         }
 
-        return Utils::getColorText(str_pad($warnings, $strPadTo), 'magenta');
+        return Utils::getColorText(str_pad(strval($warnings), $strPadTo), 'magenta');
     }
 
     public static function getColoredNotices(int $notices, int $strPadTo = 6): string
@@ -316,7 +316,7 @@ class Utils
             return strval($notices);
         }
 
-        return Utils::getColorText(str_pad($notices, $strPadTo), 'yellow');
+        return Utils::getColorText(str_pad(strval($notices), $strPadTo), 'yellow');
     }
 
     public static function getContentTypeNameById(int $contentTypeId): string

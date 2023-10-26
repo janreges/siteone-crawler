@@ -51,7 +51,7 @@ class SuperTable
         $this->positionBeforeUrlTable = $positionBeforeUrlTable;
         $this->currentOrderColumn = $currentOrderColumn;
         $this->currentOrderDirection = $currentOrderDirection;
-        $this->uniqueId = substr(md5(rand(1000000, 9999999)), 0, 6);
+        $this->uniqueId = substr(md5(strval(rand(1000000, 9999999))), 0, 6);
     }
 
     /**

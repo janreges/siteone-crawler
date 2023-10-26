@@ -180,7 +180,7 @@ class MailerExporter extends BaseExporter implements Exporter
 
         // Send headers and body
         if ($attachedFile && file_exists($attachedFile)) {
-            $boundary = md5(uniqid(time()));
+            $boundary = md5(uniqid(strval(time())));
             $headers = "From: {$senderName}<{$sender}>\r\n";
             $headers .= "MIME-Version: 1.0\r\n";
             $headers .= "Content-Type: multipart/mixed; boundary=\"{$boundary}\"\r\n";

@@ -149,7 +149,7 @@ class TextOutput implements Output
             $progressToStdErr = sprintf(
                 "%s | %s",
                 str_pad($progressStatus, 7),
-                Utils::getProgressBar($done, $total, 10)
+                Utils::getProgressBar(intval($done), intval($total), 10)
             );
             $progressContent = str_pad($progressToStdErr, 17);
         }
@@ -186,7 +186,7 @@ class TextOutput implements Output
         $resultHeader = sprintf(
             "Total execution time %s using %s workers and %s memory limit (max used %s)\n",
             Utils::getColorText(Utils::getFormattedDuration($stats->totalExecutionTime), 'cyan'),
-            Utils::getColorText($this->options->workers, 'cyan'),
+            Utils::getColorText(strval($this->options->workers), 'cyan'),
             Utils::getColorText($this->options->memoryLimit, 'cyan'),
             Utils::getColorText(Utils::getFormattedSize(memory_get_peak_usage(true)), 'cyan')
         );
@@ -194,7 +194,7 @@ class TextOutput implements Output
         $this->addToOutput($resultHeader);
         $this->addToOutput(
             sprintf("Total of %s visited URLs with a total size of %s and power of %s with download speed %s\n",
-                Utils::getColorText($stats->totalUrls, 'cyan'),
+                Utils::getColorText(strval($stats->totalUrls), 'cyan'),
                 Utils::getColorText($stats->totalSizeFormatted, 'cyan'),
                 Utils::getColorText(intval($stats->totalUrls / $stats->totalExecutionTime) . " reqs/s", 'magenta'),
                 Utils::getColorText(Utils::getFormattedSize(intval($stats->totalSize / $stats->totalExecutionTime), 0) . "/s", 'magenta'),

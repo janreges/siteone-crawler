@@ -47,7 +47,7 @@ class ContentTypeAnalyzer extends BaseAnalyzer implements Analyzer
             $stats[$visitedUrl->contentType]['totalSize'] += $visitedUrl->size;
             $stats[$visitedUrl->contentType]['totalTime'] += $visitedUrl->requestTime;
 
-            $statusSuffix = $visitedUrl->statusCode >= 200 ? substr($visitedUrl->statusCode, 0, 2) . 'x' : 'Other';
+            $statusSuffix = $visitedUrl->statusCode >= 200 ? substr(strval($visitedUrl->statusCode), 0, 2) . 'x' : 'Other';
             $stats[$visitedUrl->contentType]['status' . $statusSuffix]++;
         }
 

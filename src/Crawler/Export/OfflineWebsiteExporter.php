@@ -34,7 +34,7 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
 
     /**
      * For debug only - storage of debug messages if debug mode is activated (storeOnlyUrls)
-     * @var string[]|null
+     * @var array|null
      */
     protected ?array $debugMessages = null;
 
@@ -233,7 +233,7 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
      * @param string $content
      * @param int $contentType
      * @param string $baseUrl
-     * @param string[]|null $debug
+     * @param array|null $debug
      * @return string
      */
     private function applyRequiredContentChanges(string $content, int $contentType, string $baseUrl, ?array &$debug = null): string
@@ -254,7 +254,7 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
      *
      * @param string $html
      * @param string $baseUrl
-     * @param string[]|null $debug
+     * @param array|null $debug
      * @return string
      */
     private function applyHtmlContentChanges(string $html, string $baseUrl, ?array &$debug): string
@@ -314,7 +314,7 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
      *
      * @param string $css
      * @param string $baseUrl
-     * @param string[]|null $debug
+     * @param array|null $debug
      * @return string
      */
     private function applyCssContentChanges(string $css, string $baseUrl, ?array &$debug): string
@@ -328,7 +328,7 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
      *
      * @param string $js
      * @param string $baseUrl
-     * @param string[]|null $debug
+     * @param array|null $debug
      * @return string
      */
     private function applyJsContentChanges(string $js, string $baseUrl, ?array &$debug): string
@@ -341,7 +341,7 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
      *
      * @param string $html
      * @param string $baseUrl
-     * @param string[]|null $debug
+     * @param array|null $debug
      * @return string
      */
     private function updateHtmlPathsToRelative(string $html, string $baseUrl, ?array &$debug = null): string
@@ -408,7 +408,7 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
      *
      * @param string $css
      * @param string $baseUrl
-     * @param string[]|null $debug
+     * @param array|null $debug
      * @return string
      */
     private function updateCssPathsToRelative(string $css, string $baseUrl, ?array &$debug = null): string
@@ -438,7 +438,7 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
      *
      * @param string $js
      * @param string $baseUrl
-     * @param string[]|null $debug
+     * @param array|null $debug
      * @return string
      */
     private function updateJsPathsToRelative(string $js, string $baseUrl, ?array &$debug = null): string

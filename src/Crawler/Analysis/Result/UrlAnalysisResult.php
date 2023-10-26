@@ -177,16 +177,16 @@ class UrlAnalysisResult
         $countOk = count($this->ok);
 
         if ($countCritical) {
-            $result .= Utils::getColorText($countCritical, 'red', true) . ' / ';
+            $result .= Utils::getColorText(strval($countCritical), 'red', true) . ' / ';
         }
         if ($countWarning) {
-            $result .= Utils::getColorText($countWarning, 'yellow') . ' / ';
+            $result .= Utils::getColorText(strval($countWarning), 'yellow') . ' / ';
         }
         if ($countNotice) {
-            $result .= Utils::getColorText($countNotice, 'blue') . ' / ';
+            $result .= Utils::getColorText(strval($countNotice), 'blue') . ' / ';
         }
         if ($countOk) {
-            $result .= Utils::getColorText($countOk, 'green') . ' / ';
+            $result .= Utils::getColorText(strval($countOk), 'green') . ' / ';
         }
 
         return $stripWhitespaces ? str_replace(' ', '', trim($result, ' /')) : trim($result, ' /');

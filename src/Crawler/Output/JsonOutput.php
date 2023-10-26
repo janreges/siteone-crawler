@@ -98,7 +98,7 @@ class JsonOutput implements Output
             $progressToStdErr = sprintf(
                 "\rProgress: %s | %s %s | %s",
                 str_pad($progressStatus, 7),
-                Utils::getProgressBar($done, $total, 25),
+                Utils::getProgressBar(intval($done), intval($total), 25),
                 Utils::getFormattedDuration($elapsedTime),
                 Utils::truncateInTwoThirds($url, Utils::getConsoleWidth() - $textWidthWithoutUrl)
             );

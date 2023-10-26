@@ -121,7 +121,7 @@ class HtmlReport
         foreach ($status->getVisitedUrls() as $visitedUrl) {
             $html .= '<tr>
                                     <td><a href="' . htmlspecialchars($visitedUrl->url, ENT_QUOTES, 'UTF-8') . '" target="_blank">' . htmlspecialchars($visitedUrl->url) . '</a></td>
-                                    <td>' . htmlspecialchars($visitedUrl->statusCode) . '</td>
+                                    <td>' . htmlspecialchars(strval($visitedUrl->statusCode)) . '</td>
                                     <td>' . htmlspecialchars(Utils::getContentTypeNameById($visitedUrl->contentType)) . '</td>
                                     <td>' . htmlspecialchars($visitedUrl->requestTimeFormatted) . ' sec</td>
                                     <td>' . htmlspecialchars($visitedUrl->sizeFormatted) . '</td>';
