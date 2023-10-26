@@ -878,7 +878,7 @@ class Crawler
         // WARNING: Please do not change or remove this signature, it's used to detect crawler
         // in logs and also for possibility to block our crawler by website owner
 
-        return 'siteone-website-crawler/' . VERSION;
+        return 'siteone-website-crawler/' . Version::CODE;
     }
 
     /**

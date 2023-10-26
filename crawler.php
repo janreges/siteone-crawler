@@ -4,13 +4,13 @@ use Crawler\Initiator;
 use Crawler\Manager;
 use Crawler\Output\OutputType;
 use Crawler\Utils;
+use Crawler\Version;
 
-const VERSION = '2023.10.5';
 $startTime = microtime(true);
 
 // class loader
 spl_autoload_register(function ($class) {
-    $classFile = dirname(platformCompatiblePath($_SERVER['PHP_SELF'])) . '/' . str_replace('\\', '/', $class) . '.php';
+    $classFile = dirname(platformCompatiblePath($_SERVER['PHP_SELF'])) . '/src/' . str_replace('\\', '/', $class) . '.php';
     require_once($classFile);
 });
 
@@ -20,7 +20,7 @@ ini_set('pcre.recursion_limit', '10000000');
 
 // initiator
 try {
-    $initiator = new Initiator($argv, dirname(platformCompatiblePath($_SERVER['PHP_SELF'])) . '/Crawler');
+    $initiator = new Initiator($argv, dirname(platformCompatiblePath($_SERVER['PHP_SELF'])) . '/src/Crawler');
 } catch (Exception $e) {
     echo Utils::getColorText("ERROR: Unable to initialize crawler: {$e->getMessage()}", 'red');
     exit(100);
@@ -45,7 +45,7 @@ if ($options->noColor) {
 // run crawler
 try {
     $manager = new Manager(
-        VERSION,
+        Version::CODE,
         $startTime,
         $options,
         implode(' ', $argv),

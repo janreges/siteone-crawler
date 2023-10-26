@@ -39,7 +39,7 @@ class ParsedUrl
 
     public function getFullUrl(bool $includeSchemeAndHost = true, bool $includeFragment = true): string
     {
-        $result = $this->path . ($this->query !== null ? ' ? ' . $this->query : '') . (($includeFragment && $this->fragment !== null) ? '#' . $this->fragment : '');
+        $result = $this->path . ($this->query !== null ? '?' . $this->query : '') . (($includeFragment && $this->fragment !== null) ? '#' . $this->fragment : '');
         if ($includeSchemeAndHost && $this->scheme && $this->host) {
             $port = $this->port;
             if ($port === 80 && $this->scheme === 'http') {

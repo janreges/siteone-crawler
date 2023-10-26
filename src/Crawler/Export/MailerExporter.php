@@ -30,15 +30,19 @@ class MailerExporter extends BaseExporter implements Exporter
 
     public function export(): void
     {
-        $htmlReport = HtmlReport::generate($this->status);
-        $this->sendEmail($htmlReport);
+        $emailBody = HtmlReport::generateEmailBody($this->status);
+        $emailAttachment = null; //HtmlReport::generateHtmlFile($this->status);
+        $this->sendEmail($emailBody, $emailAttachment);
         $this->status->addInfoToSummary('mail-report-sent', "HTML report sent to " . implode(', ', $this->mailTo) . ' using ' . $this->mailSmtpHost . ':' . $this->mailSmtpPort);
     }
 
     /**
+     * @param string $htmlBody
+     * @param string|null $attachedFile
+     * @return void
      * @throws Exception
      */
-    private function sendEmail(string $htmlBody): void
+    private function sendEmail(string $htmlBody, ?string $attachedFile): void
     {
         $htmlBodyForEmail = $this->styleHtmlBodyForEmail($htmlBody);
         $parsedUrl = ParsedUrl::parse($this->crawler->getCoreOptions()->url);
@@ -57,6 +61,7 @@ class MailerExporter extends BaseExporter implements Exporter
             $this->mailFromName,
             $subject,
             $htmlBodyForEmail,
+            $attachedFile,
             $this->mailSmtpHost,
             $this->mailSmtpPort,
             $this->mailSmtpUser,
@@ -92,6 +97,7 @@ class MailerExporter extends BaseExporter implements Exporter
      * @param string $senderName
      * @param string $subject
      * @param string $htmlBody
+     * @param string|null $attachedFile
      * @param string $smtpHost
      * @param int $smtpPort
      * @param string|null $smtpUser
@@ -99,7 +105,7 @@ class MailerExporter extends BaseExporter implements Exporter
      * @return void
      * @throws Exception
      */
-    private function sendEmailBySmtp(array $recipients, string $sender, string $senderName, string $subject, string $htmlBody, string $smtpHost, int $smtpPort, ?string $smtpUser = null, ?string $smtpPass = null): void
+    private function sendEmailBySmtp(array $recipients, string $sender, string $senderName, string $subject, string $htmlBody, ?string $attachedFile, string $smtpHost, int $smtpPort, ?string $smtpUser = null, ?string $smtpPass = null): void
     {
         // Connect to SMTP server
         $socket = @fsockopen($smtpHost, $smtpPort, $errno, $errstr, 5);
@@ -173,13 +179,43 @@ class MailerExporter extends BaseExporter implements Exporter
         }
 
         // Send headers and body
-        $headers = "From: {$senderName}<{$sender}>\r\n";
-        $headers .= "MIME-Version: 1.0\r\n";
-        $headers .= "Content-type: text/html; charset=utf-8\r\n";
-        $headers .= "To: " . implode(", ", $recipients) . "\r\n";
-        $headers .= "Subject: $subject\r\n";
-        $headers .= "\r\n";
-        $headers .= $htmlBody;
+        if ($attachedFile && file_exists($attachedFile)) {
+            $boundary = md5(uniqid(time()));
+            $headers = "From: {$senderName}<{$sender}>\r\n";
+            $headers .= "MIME-Version: 1.0\r\n";
+            $headers .= "Content-Type: multipart/mixed; boundary=\"{$boundary}\"\r\n";
+            $headers .= "To: " . implode(", ", $recipients) . "\r\n";
+            $headers .= "Subject: $subject\r\n";
+            $headers .= "\r\n";
+
+            // Message part
+            $headers .= "--{$boundary}\r\n";
+            $headers .= "Content-Type: text/html; charset=utf-8\r\n";
+            $headers .= "\r\n";
+            $headers .= $htmlBody . "\r\n";
+
+            // Attachment part
+            $filename = basename($attachedFile);
+            $attachmentData = file_get_contents($attachedFile);
+            $base64Attachment = chunk_split(base64_encode($attachmentData));
+            $headers .= "--{$boundary}\r\n";
+            $headers .= "Content-Type: application/octet-stream; name=\"{$filename}\"\r\n";
+            $headers .= "Content-Transfer-Encoding: base64\r\n";
+            $headers .= "Content-Disposition: attachment; filename=\"{$filename}\"\r\n";
+            $headers .= "\r\n";
+            $headers .= $base64Attachment . "\r\n";
+
+            // Boundary end
+            $headers .= "--{$boundary}--\r\n";
+        } else {
+            $headers = "From: {$senderName}<{$sender}>\r\n";
+            $headers .= "MIME-Version: 1.0\r\n";
+            $headers .= "Content-type: text/html; charset=utf-8\r\n";
+            $headers .= "To: " . implode(", ", $recipients) . "\r\n";
+            $headers .= "Subject: $subject\r\n";
+            $headers .= "\r\n";
+            $headers .= $htmlBody;
+        }
         fwrite($socket, $headers . "\r\n.\r\n");
 
         $response = fgets($socket, 515);

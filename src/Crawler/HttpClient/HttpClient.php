@@ -2,6 +2,7 @@
 
 namespace Crawler\HttpClient;
 
+use Crawler\Version;
 use Swoole\Coroutine\Http\Client;
 
 class HttpClient
@@ -52,7 +53,7 @@ class HttpClient
         }
 
         $requestHeaders = [
-            'X-Crawler-Info' => 'siteone-website-crawler/' . VERSION,
+            'X-Crawler-Info' => 'siteone-website-crawler/' . Version::CODE,
             'User-Agent' => $userAgent,
             'Accept' => $accept,
             'Accept-Encoding' => $acceptEncoding,

@@ -242,7 +242,7 @@ class Initiator
     {
         echo "\n";
         echo "Usage: ./swoole-cli crawler.php --url=https://mydomain.tld/ [options]\n";
-        echo "Version: " . VERSION . "\n";
+        echo "Version: " . Version::CODE . "\n";
         echo "\n";
 
         foreach ($this->options->getGroups() as $group) {

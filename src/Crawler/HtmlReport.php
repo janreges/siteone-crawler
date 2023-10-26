@@ -9,7 +9,7 @@ use Crawler\Result\Summary\Summary;
 class HtmlReport
 {
 
-    public static function generate(Status $status): string
+    public static function generateEmailBody(Status $status): string
     {
         $crawlerInfo = $status->getCrawlerInfo();
 
@@ -140,7 +140,7 @@ class HtmlReport
         $html .= '<section>
                         <br />
                         <hr />
-                        The report was generated <strong>' . date('Y-m-d - H:i:s') . '</strong> using the ♥ <a href="https://github.com/janreges/siteone-website-crawler"><strong>SiteOne Website Crawler</strong></a> by Ján Regeš from <a href="https://www.siteone.io/?utm_source=siteone_crawler&utm_medium=email&utm_campaign=crawler_report&utm_content=v' . VERSION . '"><strong>SiteOne</strong></a> (Czech Republic).<br />
+                        The report was generated <strong>' . date('Y-m-d - H:i:s') . '</strong> using the ♥ <a href="https://github.com/janreges/siteone-website-crawler"><strong>SiteOne Website Crawler</strong></a> by Ján Regeš from <a href="https://www.siteone.io/?utm_source=siteone_crawler&utm_medium=email&utm_campaign=crawler_report&utm_content=v' . Version::CODE . '"><strong>SiteOne</strong></a> (Czech Republic).<br />
                         <br />
                     </section>
                 </div>
