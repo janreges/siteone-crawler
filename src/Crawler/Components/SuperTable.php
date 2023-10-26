@@ -104,7 +104,7 @@ class SuperTable
             }
             $output .= "</tr>";
         }
-        if (count($this->data) === 0) {
+        if (empty($this->data)) {
             $output .= "<tr><td colspan='" . count($this->columns) . "'>" . htmlspecialchars($this->emptyTableMessage) . "</td></tr>";
         }
         $output .= "</tbody>";

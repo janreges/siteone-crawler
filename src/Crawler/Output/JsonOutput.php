@@ -14,36 +14,21 @@ use Swoole\Table;
 class JsonOutput implements Output
 {
 
-    private string $version;
-    private float $startTime;
     private Status $status;
     private CoreOptions $options;
-    private string $command;
     private bool $printToOutput = true;
-
-    /**
-     * Extra columns from analysis that will be added to the table via showAnalyzedVisitedUrlResultAsColumn() in Analyzer
-     * @var ExtraColumn[]
-     */
-    private array $extraColumnsFromAnalysis = [];
 
     private array $json = [];
 
     /**
-     * @param string $version
-     * @param float $startTime
      * @param Status $status
      * @param CoreOptions $options
-     * @param string $command
      * @param bool $printToOutput
      */
-    public function __construct(string $version, float $startTime, Status $status, CoreOptions $options, string $command, bool $printToOutput = true)
+    public function __construct(Status $status, CoreOptions $options, bool $printToOutput = true)
     {
-        $this->version = $version;
-        $this->startTime = $startTime;
         $this->status = $status;
         $this->options = $options;
-        $this->command = $command;
         $this->printToOutput = $printToOutput;
     }
 
@@ -63,7 +48,6 @@ class JsonOutput implements Output
      */
     public function setExtraColumnsFromAnalysis(array $extraColumnsFromAnalysis): void
     {
-        $this->extraColumnsFromAnalysis = $extraColumnsFromAnalysis;
         $this->json['extraColumnsFromAnalysis'] = $extraColumnsFromAnalysis;
     }
 

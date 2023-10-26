@@ -247,7 +247,7 @@ class Option
             return (string)$value;
         } else if ($this->type === Type::DIR) {
             return (string)$value;
-        } else {
+        } /* @phpstan-ignore-line */ else {
             throw new Exception("Unknown type {$this->type}");
         }
     }

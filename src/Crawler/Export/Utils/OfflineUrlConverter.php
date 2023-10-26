@@ -40,6 +40,7 @@ class OfflineUrlConverter
         $this->targetUrlSourceAttribute = $attribute;
         $this->targetDomainRelation = TargetDomainRelation::getByUrls($initialUrl, $baseUrl, $targetUrl);
 
+        /** @phpstan-ignore-next-line */
         if (self::DEBUG_URL !== null && preg_match(self::DEBUG_URL, $this->targetUrl->getFullUrl()) === 1) {
             $this->relativeTargetUrl->setDebug(true);
         }

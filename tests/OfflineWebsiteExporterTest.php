@@ -34,10 +34,8 @@ class OfflineWebsiteExporterTest extends TestCase
         $status = new Status($storage, false, new Info('-', '-', '-', '-', '-', '-'), $coreOptions, microtime(true));
         $output = new TextOutput(
             '1.0.0',
-            microtime(true),
             $status,
             $coreOptions,
-            '-',
             true
         );
 

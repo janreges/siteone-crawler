@@ -63,9 +63,19 @@ class ParsedUrl
      */
     public function isStaticFile(): bool
     {
-        if (preg_match('/\.([a-z0-9]{1,10})$/i', $this->path) === 1 && preg_match('/\.(asp|aspx|cfm|cgi|erb|gsp|html|htm|jsp|php|pl|py|rb|rhtml|shtml|tcl)$/i', $this->path) === 0) {
+        static $htmlExtensionsRegex = null;
+        if ($htmlExtensionsRegex === null) {
+            $htmlExtensionsRegex = implode('|', [
+                'htm', 'html', 'shtml', 'php', 'phtml', 'ashx', 'xhtml', 'asp', 'aspx', 'jsp',
+                'jspx', 'do', 'cfm', 'cgi', 'pl', 'rb', 'erb', 'gsp'
+            ]);
+        }
+
+        // has an extension but is not evident HTML
+        if (preg_match('/\.([a-z0-9]{1,10})$/i', $this->path) === 1 && preg_match('/\.(' . $htmlExtensionsRegex . ')$/i', $this->path) === 0) {
             return true;
         }
+
         return false;
     }
 

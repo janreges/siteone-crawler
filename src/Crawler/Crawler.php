@@ -37,8 +37,6 @@ class Crawler
 
     private string $acceptHeader = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7';
 
-    private static array $htmlPagesExtensions = ['htm', 'html', 'shtml', 'php', 'phtml', 'ashx', 'xhtml', 'asp', 'aspx', 'jsp', 'jspx', 'do', 'cfm', 'cgi', 'pl', 'rb', 'erb', 'gsp'];
-
     const CONTENT_TYPE_ID_HTML = 1;
     const CONTENT_TYPE_ID_SCRIPT = 2;
     const CONTENT_TYPE_ID_STYLESHEET = 3;
@@ -464,7 +462,6 @@ class Crawler
      */
     private function addRedirectLocationToQueueIfSuitable(string $redirectLocation, ?string $sourceUqId, string $scheme, string $hostAndPort, ParsedUrl $parsedUrl): void
     {
-        $redirectToQueue = null;
         if (str_starts_with($redirectLocation, '//')) {
             $redirectToQueue = $scheme . ':' . $redirectLocation;
         } elseif (str_starts_with($redirectLocation, '/')) {
@@ -474,7 +471,8 @@ class Crawler
         } else {
             $redirectToQueue = $scheme . '://' . $hostAndPort . $parsedUrl->path . '/' . $redirectLocation;
         }
-        if ($redirectToQueue && $this->isUrlSuitableForQueue($redirectToQueue)) {
+
+        if ($this->isUrlSuitableForQueue($redirectToQueue)) {
             $this->addUrlToQueue($redirectToQueue, $sourceUqId);
         }
     }
@@ -648,7 +646,6 @@ class Crawler
                 DeviceType::DESKTOP => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/' . date('y') . '.0.0.0 Safari/537.36',
                 DeviceType::MOBILE => 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15A5370a Safari/604.1',
                 DeviceType::TABLET => 'Mozilla/5.0 (Linux; Android 11; SAMSUNG SM-T875) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/14.0 Chrome/87.0.4280.141 Safari/537.36',
-                default => throw new Exception("Unsupported device '{$this->options->device}'"),
             };
         }
 

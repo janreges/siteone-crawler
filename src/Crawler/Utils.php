@@ -575,6 +575,7 @@ class Utils
         // split the rel base parts
         $relParts = explode("/", $relPath);
 
+        // @phpstan-ignore-next-line
         if (count($relParts) > 0 && strlen($relParts[0]) > 0) {
             array_pop($parts);
         }

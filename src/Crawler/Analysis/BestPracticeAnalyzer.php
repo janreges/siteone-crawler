@@ -49,14 +49,6 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
     private int $pagesWithSkippedHeadingLevels = 0;
     private int $pagesWithDeepDom = 0;
 
-    /**
-     * Continuous result of all analyzed URLs in analyzeVisitedUrl()
-     * Key is URL and value is UrlAnalysisResult if URL was analyzed
-     *
-     * @var UrlAnalysisResult[]
-     */
-    private array $continuousResults = [];
-
     public function __construct()
     {
         $this->stats = new AnalyzerStats();
@@ -182,10 +174,6 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
             $this->checkMissingQuotesOnAttributes($body, $result);
             $this->checkMaxDOMDepth($dom, $body, $result);
             $this->checkHeadingStructure($dom, $body, $result);
-        }
-
-        if ($result) {
-            $this->continuousResults[$visitedUrl->url] = $result;
         }
 
         return $result;
@@ -417,7 +405,7 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
      */
     private function findMaxDepth(DOMNode $node, int $depth = 0): int
     {
-        if ($node->childNodes) {
+        if ($node->childNodes->count() > 0) {
             $childDepth = 0;
             foreach ($node->childNodes as $child) {
                 $childDepth = max($childDepth, $this->findMaxDepth($child, $depth + 1));

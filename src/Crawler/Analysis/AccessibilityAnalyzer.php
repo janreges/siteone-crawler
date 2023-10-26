@@ -75,17 +75,6 @@ class AccessibilityAnalyzer extends BaseAnalyzer implements Analyzer
         $this->setFindingsToSummary();
     }
 
-    private function getAnalysisResult(string $analysisName, int $ok, int $notice, int $warning, int $critical): array
-    {
-        return [
-            'analysisName' => $analysisName,
-            'ok' => $ok,
-            'notice' => $notice,
-            'warning' => $warning,
-            'critical' => $critical,
-        ];
-    }
-
     /**
      * Analyze HTML URLs for accessibility - return URL analysis result with all findings
      *

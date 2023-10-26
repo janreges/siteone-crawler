@@ -16,10 +16,8 @@ class TextOutput implements Output
 {
 
     private string $version;
-    private float $startTime;
     private Status $status;
     private CoreOptions $options;
-    private string $command;
     private bool $printToOutput = true;
 
     /**
@@ -32,19 +30,15 @@ class TextOutput implements Output
 
     /**
      * @param string $version
-     * @param float $startTime
      * @param Status $status
      * @param CoreOptions $options
-     * @param string $command
      * @param bool $printToOutput
      */
-    public function __construct(string $version, float $startTime, Status $status, CoreOptions $options, string $command, bool $printToOutput)
+    public function __construct(string $version, Status $status, CoreOptions $options, bool $printToOutput)
     {
         $this->version = $version;
-        $this->startTime = $startTime;
         $this->status = $status;;
         $this->options = $options;
-        $this->command = $command;
         $this->printToOutput = $printToOutput;
     }
 
@@ -113,7 +107,7 @@ class TextOutput implements Output
 
             /* @var $value UrlAnalysisResult */
             if ($value instanceof UrlAnalysisResult) {
-                $notColorizedLength = $value ? strlen($value->toNotColorizedString()) : 0;
+                $notColorizedLength = strlen($value->toNotColorizedString());
                 $strPadContent = str_repeat(' ', max(0, $extraColumn->getLength() - $notColorizedLength));
 
                 $extraHeadersContent .= (' | ' . trim($value) . $strPadContent);

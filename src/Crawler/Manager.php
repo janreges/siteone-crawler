@@ -176,10 +176,8 @@ class Manager
         if ($this->options->outputType == OutputType::TEXT || $this->hasExporter(FileExporter::class)) {
             $requiredOutputs[] = new TextOutput(
                 $this->version,
-                $this->startTime,
                 $this->status,
                 $this->options,
-                Utils::getSafeCommand($this->command),
                 $this->options->outputType == OutputType::TEXT
             );
         }
@@ -192,11 +190,8 @@ class Manager
 
         if ($jsonOutputNeeded) {
             $requiredOutputs[] = new JsonOutput(
-                $this->version,
-                $this->startTime,
                 $status,
                 $this->options,
-                Utils::getSafeCommand($this->command),
                 $this->options->outputType == OutputType::JSON
             );
         }
