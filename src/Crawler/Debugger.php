@@ -2,8 +2,6 @@
 
 namespace Crawler;
 
-use PHPUnit\Event\Runtime\PHP;
-
 class Debugger
 {
     const DEBUG = 'debug';

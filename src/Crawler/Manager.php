@@ -212,7 +212,7 @@ class Manager
         } else if ($requiredOutputs) {
             return $requiredOutputs[0];
         } else {
-            throw new Exception("Unknown output type {$this->options->outputType}");
+            throw new Exception(__METHOD__ . ": Unknown output type");
         }
     }
 

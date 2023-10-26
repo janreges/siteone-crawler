@@ -204,8 +204,6 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
      *
      * @param string $html
      * @param UrlAnalysisResult $result
-     * @param int $maxSvgSize
-     * @param int $maxDuplicates
      * @return void
      */
     private function checkInlineSvg(string $html, UrlAnalysisResult $result): void

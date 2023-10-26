@@ -37,11 +37,19 @@ class FileExporter extends BaseExporter implements Exporter
     public function export(): void
     {
         $multiOutput = $this->crawler->getOutput();
+        if (!($multiOutput instanceof MultiOutput)) {
+            throw new Exception(__METHOD__ . ': MultiOutput expected');
+        }
+
         /* @var $multiOutput MultiOutput */
 
         // text file
         if ($this->outputTextFile) {
             $textOutput = $multiOutput->getOutputByType(OutputType::TEXT);
+            if (!($textOutput instanceof TextOutput)) {
+                throw new Exception(__METHOD__ . ': TextOutput expected');
+            }
+
             /* @var $textOutput TextOutput */
             $reportFile = $this->getExportFilePath($this->outputTextFile, 'txt');
             file_put_contents(
@@ -58,6 +66,10 @@ class FileExporter extends BaseExporter implements Exporter
         // json file
         if ($this->outputJsonFile) {
             $jsonOutput = $multiOutput->getOutputByType(OutputType::JSON);
+            if (!($jsonOutput instanceof JsonOutput)) {
+                throw new Exception(__METHOD__ . ': JsonOutput expected');
+            }
+
             /* @var $jsonOutput JsonOutput */
             $reportFile = $this->getExportFilePath($this->outputJsonFile, 'json');
             file_put_contents(

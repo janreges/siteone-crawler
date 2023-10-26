@@ -108,7 +108,7 @@ class Initiator
 
         $exporterClasses = $this->getClassesOfExporters();
         foreach ($exporterClasses as $exporterClass) {
-            /** @var Exporter $exporterClass */
+            /* @var $exporterClass Exporter */
             foreach ($exporterClass::getOptions()->getGroups() as $group) {
                 $this->options->addGroup($group);
             }
@@ -116,7 +116,7 @@ class Initiator
 
         $analyzerClasses = $this->analysisManager->getClassesOfAnalyzers();
         foreach ($analyzerClasses as $analyzerClass) {
-            /** @var Analyzer $analyzerClass */
+            /* @var $analyzerClass Analyzer */
             foreach ($analyzerClass::getOptions()->getGroups() as $group) {
                 $this->options->addGroup($group);
             }
