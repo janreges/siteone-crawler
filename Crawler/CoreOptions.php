@@ -78,6 +78,8 @@ class CoreOptions
 
     // experts settings
 
+    public ?string $httpCacheDir;
+    public bool $httpCacheCompression = false;
     public bool $debug = false;
     public ?string $debugLogFile = null;
 
@@ -177,6 +179,8 @@ class CoreOptions
             new Option('--allowed-domain-for-external-files', null, 'allowedDomainsForExternalFiles', Type::STRING, true, "Primarily, the crawler crawls only the URL within the domain for initial URL. This allows you to enable loading of file content from another domain as well (e.g. if you want to load assets from a CDN). Can be specified multiple times. Use can use domains with wildcard '*'.", [], true, true),
             new Option('--allowed-domain-for-crawling', null, 'allowedDomainsForCrawling', Type::STRING, true, "This option will allow you to crawl all content from other listed domains - typically in the case of language mutations on other domains. Can be specified multiple times. Use can use domains with wildcard '*'.", [], true, true),
             new Option('--result-storage', null, 'resultStorage', Type::STRING, false, 'Result storage type. Values: `memory` or `file-system`. Use `file-system` for large websites.', 'memory', false),
+            new Option('--http-cache-dir', null, 'httpCacheDir', Type::DIR, false, "Cache dir for HTTP responses. You can disable cache by --http-cache-dir=''", 'tmp/http-client-cache', true),
+            new Option('--http-cache-compression', null, 'httpCacheCompression', Type::BOOL, false, "Enable compression for HTTP cache storage. Saves disk space, but uses more CPU.", false, true),
             new Option('--include-regex', '--include-regexp', 'includeRegex', Type::REGEX, true, 'Include only URLs matching at least one PCRE regex. Can be specified multiple times.', [], false, true),
             new Option('--ignore-regex', '--ignore-regexp', 'ignoreRegex', Type::REGEX, true, 'Ignore URLs matching any PCRE regex. Can be specified multiple times.', [], false, true),
             new Option('--accept-encoding', null, 'acceptEncoding', Type::STRING, false, 'Set `Accept-Encoding` request header.', 'gzip, deflate, br', false),

@@ -14,11 +14,19 @@ class HttpClient
     private readonly ?string $cacheDir;
 
     /**
-     * @param string|null $cacheDir
+     * If true, cache is compressed
+     * @var bool $compression
      */
-    public function __construct(?string $cacheDir)
+    private readonly bool $compression;
+
+    /**
+     * @param string|null $cacheDir
+     * @param bool $compression
+     */
+    public function __construct(?string $cacheDir, bool $compression = false)
     {
         $this->cacheDir = $cacheDir;
+        $this->compression = $compression;
     }
 
     /**
@@ -78,7 +86,9 @@ class HttpClient
             return null;
         }
 
-        $result = unserialize(file_get_contents($cacheFile));
+        $result = $this->compression
+            ? unserialize(gzdecode(file_get_contents($cacheFile)))
+            : unserialize(file_get_contents($cacheFile));
 
         // If cached response is 429/500/503 or -1 to -4 (errors), we don't want to use it again, and we want to try to get new response
         if (in_array($result->statusCode, [429, 500, 502, 503, -1, -2, -3, -4])) {
@@ -102,12 +112,12 @@ class HttpClient
         }
 
         $cacheFile = $this->getCacheFilePath($cacheKey);
-        file_put_contents($cacheFile, serialize($result));
+        file_put_contents($cacheFile, $this->compression ? gzencode(serialize($result)) : serialize($result));
     }
 
     private function getCacheFilePath(string $cacheKey): string
     {
-        return $this->cacheDir . '/' . $cacheKey . '.cache';
+        return $this->cacheDir . '/' . $cacheKey . '.cache' . ($this->compression ? '.gz' : '');
     }
 
 }

@@ -83,8 +83,12 @@ class Manager
 
         $this->output = $this->getOutputByOptions($this->status);
 
-        $httpClient = new HttpClient($baseDir . '/tmp/http-client-cache');
-        $this->crawler = new Crawler($this->options, $httpClient, $this->output, $this->status);
+        $httpClientCacheDir = $options->httpCacheDir && !str_starts_with($options->httpCacheDir, '/')
+            ? ($baseDir . '/' . $options->httpCacheDir)
+            : ($options->httpCacheDir ?: null);
+
+        $httpClient = new HttpClient($httpClientCacheDir, $options->httpCacheCompression);
+        $this->crawler = new Crawler($options, $httpClient, $this->output, $this->status);
     }
 
     /**
