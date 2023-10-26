@@ -38,7 +38,7 @@ class SitemapExporter extends BaseExporter implements Exporter
                 $sitemapFile = $this->generateXmlSitemap($this->outputSitemapXml, $urls);
                 $this->status->addInfoToSummary('sitemap-xml', "XML sitemap generated to '{$sitemapFile}'");
             } catch (Exception $e) {
-                $this->status->addErrorToSummary('sitemap-xml', "Sitemap XML ERROR: {$e->getMessage()}");
+                $this->status->addCriticalToSummary('sitemap-xml', "Sitemap XML ERROR: {$e->getMessage()}");
             }
         }
 
@@ -47,7 +47,7 @@ class SitemapExporter extends BaseExporter implements Exporter
                 $sitemapFile = $this->generateTxtSitemap($this->outputSitemapTxt, $urls);
                 $this->status->addInfoToSummary('sitemap-txt', "TXT sitemap generated to '{$sitemapFile}'");
             } catch (Exception $e) {
-                $this->status->addErrorToSummary('sitemap-txt', "Sitemap TXT ERROR: {$e->getMessage()}");
+                $this->status->addCriticalToSummary('sitemap-txt', "Sitemap TXT ERROR: {$e->getMessage()}");
             }
         }
     }
