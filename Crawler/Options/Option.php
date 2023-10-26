@@ -189,7 +189,7 @@ class Option
      */
     private function validateValue(mixed $value): void
     {
-        if ($value === null && $this->isNullable) {
+        if ($this->isNullable && ($value === null || $value === '')) {
             return;
         }
 
@@ -220,11 +220,15 @@ class Option
 
     /**
      * @param mixed $value
-     * @return string|int|bool|float
+     * @return string|int|bool|float|null
      * @throws Exception
      */
-    private function correctValueType(mixed $value): string|int|bool|float
+    private function correctValueType(mixed $value): string|int|bool|float|null
     {
+        if ($this->isNullable && ($value === null || $value === '')) {
+            return null;
+        }
+
         if ($this->type === Type::INT) {
             return (int)$value;
         } else if ($this->type === Type::FLOAT) {

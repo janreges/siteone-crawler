@@ -60,8 +60,6 @@ class Manager
         $this->exporters = $exporters;
         $this->analyzers = $analyzers;
 
-        $compression = true; // TODO from options
-
         $crawlerInfo = new Info(
             'SiteOne Website Crawler',
             $this->version,
@@ -71,11 +69,15 @@ class Manager
             $this->options->userAgent ?? 'default'
         );
 
+        $resultStorageDir = $options->resultStorageDir && !str_starts_with($options->resultStorageDir, '/')
+            ? ($baseDir . '/' . $options->resultStorageDir)
+            : $options->resultStorageDir;
+
         $this->status = new Status(
             $options->resultStorage === StorageType::MEMORY
-                ? new MemoryStorage($compression)
-                : new FileStorage($baseDir . '/tmp/result-storage', $compression),
-            true, // TODO by options
+                ? new MemoryStorage($options->resultStorageCompression)
+                : new FileStorage($resultStorageDir, $options->resultStorageCompression),
+            true,
             $crawlerInfo,
             $this->options,
             $this->startTime

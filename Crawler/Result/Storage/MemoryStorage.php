@@ -2,19 +2,17 @@
 
 namespace Crawler\Result\Storage;
 
-use Crawler\Result\Storage\Storage;
-
 class MemoryStorage implements Storage
 {
     private array $storage = [];
     private bool $compress;
 
     /**
-     * @param bool $compress
+     * @param bool $compression
      */
-    public function __construct(bool $compress = false)
+    public function __construct(bool $compression = false)
     {
-        $this->compress = $compress;
+        $this->compress = $compression;
     }
 
 

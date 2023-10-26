@@ -352,6 +352,17 @@ through the file:// protocol.
 * `--sitemap-priority-increase=<num>`  Priority increase value based on slashes count in the URL. Default values
   is `0.1`.
 
+#### Expert options
+
+`--debug`                          Activate debug mode.
+`--debug-log-file=<file>`          Log file where to save debug messages. When `--debug` is not set and `--debug-log-file` is set, logging will be active without visible output.
+`--debug-url-regex=<regex>`        Regex for URL(s) to debug. When crawled URL is matched, parsing, URL replacing, and other actions are printed to output. Can be specified multiple times.
+`--result-storage=<val>`           Result storage type for content and headers. Values: `memory` or `file-system`. Use `file-system` for large websites. Default values is `memory`.
+`--result-storage-dir=<dir>`       Directory for `--result-storage=file-system`. Default values is `tmp/result-storage`.
+`--result-storage-compression`     Enable compression for results storage. Saves disk space, but uses more CPU.
+`--http-cache-dir=<dir>`           Cache dir for HTTP responses. You can disable cache by `--http-cache-dir=''`. Default values is `tmp/http-client-cache`.
+`--http-cache-compression`         Enable compression for HTTP cache storage. Saves disk space, but uses more CPU.
+
 **NOTICE**: For now, only SMTP without encryption is supported, typically running on port 25. If you are interested in
 this tool, we can also implement secure SMTP support, or simply send me a pull request with lightweight implementation.
 

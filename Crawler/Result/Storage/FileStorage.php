@@ -2,8 +2,6 @@
 
 namespace Crawler\Result\Storage;
 
-use Crawler\Result\Storage\Storage;
-
 class FileStorage implements Storage
 {
 
