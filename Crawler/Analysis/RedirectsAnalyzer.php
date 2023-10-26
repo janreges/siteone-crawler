@@ -50,8 +50,13 @@ class RedirectsAnalyzer extends BaseAnalyzer implements Analyzer
         $this->status->addSummaryItemByRanges(
             'redirects',
             count($urlRedirects),
-            [[0, 0], [1, 5], [6, PHP_INT_MAX]],
-            ["Redirects OK - no redirects found", "Redirects WARNING - %s redirect(s) found", "Redirects CRITICAL - %s redirects found"]
+            [[0, 0], [1, 2], [3, 9], [10, PHP_INT_MAX]],
+            [
+                "Redirects OK - no redirects found",
+                "Redirects NOTICE - %s redirect(s) found",
+                "Redirects WARNING - %s redirects found",
+                "Redirects CRITICAL - %s redirects found"
+            ]
         );
     }
 

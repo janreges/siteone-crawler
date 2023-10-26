@@ -44,8 +44,13 @@ class Page404Analyzer extends BaseAnalyzer implements Analyzer
         $this->status->addSummaryItemByRanges(
             '404',
             count($urls404),
-            [[0, 0], [1, 5], [6, PHP_INT_MAX]],
-            ["404 OK - all pages exists, no non-existent pages found", "404 WARNING - %s non-existent page(s) found", "404 CRITICAL - %s non-existent pages found"]
+            [[0, 0], [1, 2], [3, 5], [6, PHP_INT_MAX]],
+            [
+                "404 OK - all pages exists, no non-existent pages found",
+                "404 NOTICE - %s non-existent page(s) found",
+                "404 WARNING - %s non-existent pages found",
+                "404 CRITICAL - %s non-existent pages found"
+            ]
         );
     }
 

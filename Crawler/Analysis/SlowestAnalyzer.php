@@ -63,11 +63,12 @@ class SlowestAnalyzer extends BaseAnalyzer implements Analyzer
         $this->status->addSummaryItemByRanges(
             'slowUrls',
             count($verySlowUrls),
-            [[0, 0], [1, 5], [6, PHP_INT_MAX]],
+            [[0, 0], [1, 2], [3, 5], [6, PHP_INT_MAX]],
             [
-                "Performance OK - all URLs are faster than {$this->slowestMaxTime} seconds",
-                "Performance WARNING - %s slow URLs found (slowest than {$this->slowestMaxTime} seconds)",
-                "Performance CRITICAL - %s slow URLs found (slowest than {$this->slowestMaxTime} seconds)"
+                "Performance OK - all non-media URLs are faster than {$this->slowestMaxTime} seconds",
+                "Performance NOTICE - %s slow non-media URL(s) found (slowest than {$this->slowestMaxTime} seconds)",
+                "Performance WARNING - %s slow non-media URLs found (slowest than {$this->slowestMaxTime} seconds)",
+                "Performance CRITICAL - %s slow non-media URLs found (slowest than {$this->slowestMaxTime} seconds)"
             ]
         );
     }

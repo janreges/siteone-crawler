@@ -5,17 +5,19 @@ namespace Crawler\Result\Summary;
 enum ItemStatus
 {
     case OK;
+    case NOTICE;
     case WARNING;
-    case ERROR;
+    case CRITICAL;
     case INFO;
 
     public static function fromRangeId(int $rangeId): ItemStatus
     {
         return match ($rangeId) {
             0 => ItemStatus::OK,
-            1 => ItemStatus::WARNING,
-            2 => ItemStatus::ERROR,
-            3 => ItemStatus::INFO,
+            1 => ItemStatus::NOTICE,
+            2 => ItemStatus::WARNING,
+            3 => ItemStatus::CRITICAL,
+            4 => ItemStatus::INFO,
         };
     }
 
@@ -23,8 +25,9 @@ enum ItemStatus
     {
         return match (strtoupper($text)) {
             'OK' => ItemStatus::OK,
-            'WARN' => ItemStatus::WARNING,
-            'ERROR' => ItemStatus::ERROR,
+            'NOTICE' => ItemStatus::NOTICE,
+            'WARNING' => ItemStatus::WARNING,
+            'CRITICAL' => ItemStatus::CRITICAL,
             'INFO' => ItemStatus::INFO,
         };
     }
@@ -32,10 +35,11 @@ enum ItemStatus
     public static function getSortOrder(ItemStatus $status): int
     {
         return match ($status) {
-            self::OK => 3,
+            self::CRITICAL => 1,
             self::WARNING => 2,
-            self::ERROR => 1,
-            self::INFO => 4
+            self::NOTICE => 3,
+            self::OK => 4,
+            self::INFO => 5,
         };
     }
 }

@@ -20,23 +20,25 @@ class Item
         $this->status = $status;
     }
 
-    public function getAsHtml(string $okIcon = '✅', string $warningIcon = '⚠️', string $errorIcon = '⛔', string $infoIcon = 'ℹ️'): string
+    public function getAsHtml(string $okIcon = '✅', string $noticeIcon = '🌟', string $warningIcon = '⚠️', string $errorIcon = '⛔', string $infoIcon = 'ℹ️'): string
     {
         $icon = match ($this->status) {
             ItemStatus::OK => $okIcon,
+            ItemStatus::NOTICE => $noticeIcon,
             ItemStatus::WARNING => $warningIcon,
-            ItemStatus::ERROR => $errorIcon,
+            ItemStatus::CRITICAL => $errorIcon,
             ItemStatus::INFO => $infoIcon,
         };
         return $icon . ' ' . htmlspecialchars($this->text);
     }
 
-    public function getAsConsoleText(string $okIcon = '✅', string $warningIcon = '⚠️', string $errorIcon = '⛔', string $infoIcon = 'ℹ️'): string
+    public function getAsConsoleText(string $okIcon = '✅', string $noticeIcon = '🌟', string $warningIcon = '⚠️', string $errorIcon = '⛔', string $infoIcon = 'ℹ️'): string
     {
         $icon = match ($this->status) {
             ItemStatus::OK => $okIcon,
+            ItemStatus::NOTICE => $noticeIcon,
             ItemStatus::WARNING => $warningIcon,
-            ItemStatus::ERROR => $errorIcon,
+            ItemStatus::CRITICAL => $errorIcon,
             ItemStatus::INFO => $infoIcon,
         };
         return $icon . ' ' . $this->text;
