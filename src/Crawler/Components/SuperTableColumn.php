@@ -43,7 +43,7 @@ class SuperTableColumn
 
     public function getAutoWidthByData(array $data): int
     {
-        $maxWidth = 0;
+        $maxWidth = mb_strlen($this->name);
         foreach ($data as $row) {
             $value = is_object($row) ? $row->{$this->aplCode} : $row[$this->aplCode];
             $value = $this->formatter && $this->formatterWillChangeValueLength ? ($this->formatter)($value) : $value;
