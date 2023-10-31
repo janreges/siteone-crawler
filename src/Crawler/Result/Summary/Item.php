@@ -29,7 +29,7 @@ class Item
             ItemStatus::CRITICAL => $errorIcon,
             ItemStatus::INFO => $infoIcon,
         };
-        return $icon . ' ' . htmlspecialchars($this->text);
+        return $icon . ' ' . rtrim(htmlspecialchars($this->text), '. ') . '.';
     }
 
     public function getAsConsoleText(string $okIcon = '✅', string $noticeIcon = '🌟', string $warningIcon = '⚠️', string $errorIcon = '⛔', string $infoIcon = 'ℹ️'): string
@@ -41,7 +41,7 @@ class Item
             ItemStatus::CRITICAL => $errorIcon,
             ItemStatus::INFO => $infoIcon,
         };
-        return $icon . ' ' . $this->text;
+        return $icon . ' ' . rtrim($this->text, '. ') . '.';
     }
 
 }
