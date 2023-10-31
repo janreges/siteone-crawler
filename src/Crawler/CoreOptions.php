@@ -23,7 +23,7 @@ class CoreOptions
     public string $url;
     public DeviceType $device = DeviceType::DESKTOP;
     public ?string $userAgent = null;
-    public int $timeout = 3;
+    public int $timeout = 5;
 
     // output setting
     public OutputType $outputType = OutputType::TEXT;
@@ -149,7 +149,7 @@ class CoreOptions
             new Option('--url', '-u', 'url', Type::URL, false, 'Required URL. Enclose in quotes if URL contains query parameters.', null, false),
             new Option('--device', null, 'device', Type::STRING, false, 'Device type for User-Agent selection. Values `desktop`, `tablet`, `mobile`. Ignored with `--user-agent`.', 'desktop', false),
             new Option('--user-agent', null, 'userAgent', Type::STRING, false, 'Override User-Agent selected by --device.', null, true),
-            new Option('--timeout', null, 'timeout', Type::INT, false, 'Request timeout (in sec).', 3, false),
+            new Option('--timeout', null, 'timeout', Type::INT, false, 'Request timeout (in sec).', 5, false),
         ]));
 
         $options->addGroup(new Group(
