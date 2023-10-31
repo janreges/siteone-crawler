@@ -92,6 +92,11 @@ class SuperTable
             foreach ($this->columns as $key => $column) {
                 $value = is_object($row) ? ($row->{$key} ?? '') : ($row[$key] ?? '');
                 $formattedValue = $value;
+
+                if ($column->nonBreakingSpaces && is_string($formattedValue)) {
+                    $formattedValue = str_replace([' ', "\t"], ['&nbsp;', str_repeat('&nbsp;', 4)], $formattedValue);
+                }
+
                 if ($column->formatter) {
                     $formattedValue = call_user_func($column->formatter, $value);
                 }

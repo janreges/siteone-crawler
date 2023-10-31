@@ -15,6 +15,7 @@ class SuperTableColumn
     public readonly ?Closure $renderer;   // renderer will take the whole row as argument and return formatted value
     public readonly bool $truncateIfLonger;
     public readonly bool $formatterWillChangeValueLength;
+    public readonly bool $nonBreakingSpaces;
 
     /**
      * @param string $aplCode
@@ -24,8 +25,9 @@ class SuperTableColumn
      * @param callable|null $renderer
      * @param bool $truncateIfLonger
      * @param bool $formatterWillChangeValueLength
+     * @param bool $nonBreakingSpaces
      */
-    public function __construct(string $aplCode, string $name, int $width = self::AUTO_WIDTH, ?callable $formatter = null, ?callable $renderer = null, bool $truncateIfLonger = false, bool $formatterWillChangeValueLength = true)
+    public function __construct(string $aplCode, string $name, int $width = self::AUTO_WIDTH, ?callable $formatter = null, ?callable $renderer = null, bool $truncateIfLonger = false, bool $formatterWillChangeValueLength = true, bool $nonBreakingSpaces = false)
     {
         $this->aplCode = $aplCode;
         $this->name = $name;
@@ -34,6 +36,7 @@ class SuperTableColumn
         $this->renderer = $renderer;
         $this->truncateIfLonger = $truncateIfLonger;
         $this->formatterWillChangeValueLength = $formatterWillChangeValueLength;
+        $this->nonBreakingSpaces = $nonBreakingSpaces;
     }
 
     public function getWidthPx(): int
