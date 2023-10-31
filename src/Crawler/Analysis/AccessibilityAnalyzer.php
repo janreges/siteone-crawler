@@ -80,30 +80,37 @@ class AccessibilityAnalyzer extends BaseAnalyzer implements Analyzer
      *
      * @param VisitedUrl $visitedUrl
      * @param string|null $body
+     * @param DOMDocument|null $dom
      * @param array|null $headers
      * @return UrlAnalysisResult|null
      */
-    public function analyzeVisitedUrl(VisitedUrl $visitedUrl, ?string $body, ?array $headers): ?UrlAnalysisResult
+    public function analyzeVisitedUrl(VisitedUrl $visitedUrl, ?string $body, ?DOMDocument $dom, ?array $headers): ?UrlAnalysisResult
     {
         $result = null;
-        $isHtml = $visitedUrl->contentType === Crawler::CONTENT_TYPE_ID_HTML && $body;
+        $isHtml = $visitedUrl->contentType === Crawler::CONTENT_TYPE_ID_HTML;
 
-        if ($isHtml) {
+        if ($isHtml && $body && $dom) {
             $result = new UrlAnalysisResult();
 
-            $dom = new DOMDocument();
-            $domParsing = @$dom->loadHTML(mb_convert_encoding($body, 'HTML-ENTITIES', 'UTF-8'));
-            if (!$domParsing) {
-                $result->addCritical("Invalid HTML", self::ANALYSIS_VALID_HTML);
-                $this->pagesWithInvalidHtml++;
-                return $result;
-            }
-
+            $s = microtime(true);
             $this->checkImageAltAttributes($body, $result);
+            $this->measureExecTime(__CLASS__, 'checkImageAltAttributes', $s);
+
+            $s = microtime(true);
             $this->checkMissingLabels($dom, $result);
+            $this->measureExecTime(__CLASS__, 'checkMissingLabels', $s);
+
+            $s = microtime(true);
             $this->checkMissingAriaLabels($dom, $result);
+            $this->measureExecTime(__CLASS__, 'checkMissingAriaLabels', $s);
+
+            $s = microtime(true);
             $this->checkMissingRoles($dom, $result);
+            $this->measureExecTime(__CLASS__, 'checkMissingRoles', $s);
+
+            $s = microtime(true);
             $this->checkMissingLang($dom, $result);
+            $this->measureExecTime(__CLASS__, 'checkMissingLang', $s);
         }
 
         return $result;
@@ -353,7 +360,7 @@ class AccessibilityAnalyzer extends BaseAnalyzer implements Analyzer
         if ($this->pagesWithoutLang > 0) {
             $this->status->addCriticalToSummary('pages-without-lang', "{$this->pagesWithoutLang} page(s) without lang");
         } else {
-            $this->status->addOkToSummary('pages-without-lang', "All pages have lang");
+            $this->status->addOkToSummary('pages-without-lang', "All pages have lang attribute");
         }
     }
 
