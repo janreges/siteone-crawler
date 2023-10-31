@@ -418,9 +418,6 @@ class Utils
             $patterns = array_unique($patterns);
 
             $html = preg_replace_callback('/<script[^>]*>(.*?)<\/script>/is', function ($matches) use ($patterns) {
-                if (substr_count($matches[0], '<script') > 1) {
-                    var_dump($matches[0]);die;
-                }
                 if ($matches[0]) {
                     foreach ($patterns as $keyword) {
                         if (stripos($matches[0], $keyword) !== false) {
@@ -760,6 +757,68 @@ class Utils
             }
             closedir($handle);
         }
+    }
+
+    /**
+     * Parse and get all phone numbers from HTML
+     *
+     * If $onlyNonClickable = TRUE, filter only phone numbers that are not wrapped within <a href="tel: ...">
+     *
+     * @param string $html
+     * @param bool $onlyNonClickable
+     * @return string[]
+     */
+    public static function parsePhoneNumbersFromHtml(string $html, bool $onlyNonClickable = false): array
+    {
+        $phoneNumbers = [];
+
+        // strip all JavaScript and styles - typically phone numbers are not visible in these parts of HTML
+        $html = Utils::stripJavaScript($html);
+        $html = Utils::stripStyles($html);
+
+        // replace &nbsp; with space - phone numbers are typically separated by non-breaking spaces
+        $html = str_replace('&nbsp;', ' ', $html);
+
+        // formats with country codes and spaces, e.g.: +420 123 456 789 or +1234 1234567890
+        $formatWithSpaces = '/\+\d{1,4}(\s?[0-9\- ]{1,5}){1,5}/s';
+        preg_match_all($formatWithSpaces, $html, $matchesWithSpaces);
+        $phoneNumbers = array_merge($phoneNumbers, $matchesWithSpaces[0]);
+
+        // formats with country codes without spaces, e.g.: +420123456789
+        $formatWithoutSpaces = '/\+[0-9\- ]{7,20}/s';
+        preg_match_all($formatWithoutSpaces, $html, $matchesWithoutSpaces);
+        $phoneNumbers = array_merge($phoneNumbers, $matchesWithoutSpaces[0]);
+
+        // US format with parentheses, e.g.: (123) 456-7890
+        $formatWithBrackets = '/\(\d{1,5}\)\s?\d{1,4}-\d{4}/';
+        preg_match_all($formatWithBrackets, $html, $matchesWithBrackets);
+        $phoneNumbers = array_merge($phoneNumbers, $matchesWithBrackets[0]);
+
+        // regular format with dashes, e.g.: 123-456-7890
+        $formatWithDashes = '/\d{1,5}-\d{1,4}-\d{4}/';
+        preg_match_all($formatWithDashes, $html, $matchesWithDashes);
+        $phoneNumbers = array_merge($phoneNumbers, $matchesWithDashes[0]);
+
+        // trim spaces from all found numbers
+        $phoneNumbers = array_map(function ($number) {
+            return trim($number);
+        }, $phoneNumbers);
+
+        // filters out matches that are wrapped within <a href="tel: ...">
+        if ($onlyNonClickable) {
+            $phoneNumbers = array_filter($phoneNumbers, function ($number) use ($html) {
+                $telPattern1 = '/<a[^>]*href=["\']tel:' . preg_quote($number, '/') . '["\'][^>]*>.*?<\/a>/';
+                $telPattern2 = '/<a[^>]*href=["\']tel:[^"\'>]+["\'][^>]*>.*' . preg_quote($number, '/') . '.*<\/a>/s';
+                return !preg_match($telPattern1, $html) && !preg_match($telPattern2, $html);
+            });
+        }
+
+        // phone number must contain at least 8 digits
+        $phoneNumbers = array_filter($phoneNumbers, function ($number) {
+            return strlen($number) >= 8;
+        });
+
+        return array_values(array_unique($phoneNumbers));
     }
 
 }
