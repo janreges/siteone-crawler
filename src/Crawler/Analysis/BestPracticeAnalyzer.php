@@ -25,6 +25,7 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
     const ANALYSIS_INVALID_SVGS = 'Invalid inline SVGs';
     const ANALYSIS_MISSING_QUOTES = 'Missing quotes on attributes';
     const ANALYSIS_HEADING_STRUCTURE = 'Heading structure';
+    const ANALYSIS_NON_CLICKABLE_PHONE_NUMBERS = 'Non-clickable phone numbers';
     const ANALYSIS_DOM_DEPTH = 'DOM depth';
     const ANALYSIS_TITLE_UNIQUENESS = 'Title uniqueness';
     const ANALYSIS_DESCRIPTION_UNIQUENESS = 'Description uniqueness';
@@ -48,6 +49,7 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
     private int $pagesWithoutH1 = 0;
     private int $pagesWithSkippedHeadingLevels = 0;
     private int $pagesWithDeepDom = 0;
+    private int $pagesWithNonClickablePhoneNumbers = 0;
 
     public function __construct()
     {
@@ -116,21 +118,27 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
         $data = $this->stats->toTableArray();
 
         // check for title uniqueness
+        $s = microtime(true);
         $data[] = $this->checkTitleUniqueness(array_map(function (VisitedUrl $url) {
             return $url->extras['Title'] ?? null;
         }, $urls));
+        $this->measureExecTime(__CLASS__, 'checkTitleUniqueness', $s);
 
         // check for meta description uniqueness
+        $s = microtime(true);
         $data[] = $this->checkMetaDescriptionUniqueness(array_map(function (VisitedUrl $url) {
             return $url->extras['Description'] ?? null;
         }, $urls));
+        $this->measureExecTime(__CLASS__, 'checkMetaDescriptionUniqueness', $s);
 
         // check for brotli support on HTML pages (just for non-external URLs)
         $brotliSupportedInRequests = str_contains($this->crawler->getCoreOptions()->acceptEncoding, 'br');
         if ($brotliSupportedInRequests) {
+            $s = microtime(true);
             $this->checkBrotliSupport(array_filter($urls, function (VisitedUrl $url) {
                 return !$url->isExternal && $url->contentType === Crawler::CONTENT_TYPE_ID_HTML;
             }));
+            $this->measureExecTime(__CLASS__, 'checkBrotliSupport', $s);
         }
 
         return $data;
@@ -152,28 +160,37 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
      *
      * @param VisitedUrl $visitedUrl
      * @param string|null $body
+     * @param DOMDocument|null $dom
      * @param array|null $headers
      * @return UrlAnalysisResult|null
      */
-    public function analyzeVisitedUrl(VisitedUrl $visitedUrl, ?string $body, ?array $headers): ?UrlAnalysisResult
+    public function analyzeVisitedUrl(VisitedUrl $visitedUrl, ?string $body, ?DOMDocument $dom, ?array $headers): ?UrlAnalysisResult
     {
         $result = null;
         $isHtml = $visitedUrl->contentType === Crawler::CONTENT_TYPE_ID_HTML && $body;
 
-        if ($isHtml) {
+        if ($isHtml && $dom) {
             $result = new UrlAnalysisResult();
 
-            $dom = new DOMDocument();
-            libxml_use_internal_errors(true);
-            if (!@$dom->loadHTML($body)) {
-                $result->addCritical('Failed to parse HTML - it may be badly malformed.', self::ANALYSIS_VALID_HTML);
-                return $result;
-            }
-
+            $s = microtime(true);
             $this->checkInlineSvg($body, $result);
+            $this->measureExecTime(__CLASS__, 'checkInlineSvg', $s);
+
+            $s = microtime(true);
             $this->checkMissingQuotesOnAttributes($body, $result);
+            $this->measureExecTime(__CLASS__, 'checkMissingQuotesOnAttributes', $s);
+
+            $s = microtime(true);
             $this->checkMaxDOMDepth($dom, $body, $result);
+            $this->measureExecTime(__CLASS__, 'checkMaxDOMDepth', $s);
+
+            $s = microtime(true);
             $this->checkHeadingStructure($dom, $body, $result);
+            $this->measureExecTime(__CLASS__, 'checkHeadingStructure', $s);
+
+            $s = microtime(true);
+            $this->checkNonClickablePhoneNumbers($body, $result);
+            $this->measureExecTime(__CLASS__, 'checkNonClickablePhoneNumbers', $s);
         }
 
         return $result;
@@ -424,7 +441,7 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
      * @param UrlAnalysisResult $result
      * @return void
      */
-    public function checkHeadingStructure(DOMDocument $dom, string $html, UrlAnalysisResult $result)
+    public function checkHeadingStructure(DOMDocument $dom, string $html, UrlAnalysisResult $result): void
     {
         $warningIssues = [];
         $criticalIssues = [];
@@ -449,7 +466,7 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
 
             if ($currentHeadingLevel === 1) {
                 if ($foundH1) {
-                    $criticalIssues[] = 'Multiple <h1> tags found.';
+                    $criticalIssues[] = 'Multiple <h1> headings found.';
                     $this->stats->addCritical(self::ANALYSIS_HEADING_STRUCTURE, $html . ' - multiple h1 tags found');
                 } else {
                     $foundH1 = true;
@@ -493,6 +510,37 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
         if (!$criticalIssues && !$warningIssues) {
             $result->addOk('Heading structure is valid . ', self::ANALYSIS_HEADING_STRUCTURE);
             $this->stats->addOk(self::ANALYSIS_HEADING_STRUCTURE, $html . ' - heading structure is valid');
+        }
+    }
+
+    /**
+     * Check HTML for all phone numbers and check if they are clickable (by tel: protocol)
+     *
+     * @param string $html
+     * @param UrlAnalysisResult $result
+     * @return void
+     */
+    private function checkNonClickablePhoneNumbers(string $html, UrlAnalysisResult $result): void
+    {
+        $allPhoneNumbers = Utils::parsePhoneNumbersFromHtml($html);
+        $nonClickablePhoneNumbers = Utils::parsePhoneNumbersFromHtml($html, true);
+        if ($nonClickablePhoneNumbers) {
+            $result->addWarning(count($nonClickablePhoneNumbers) . ' non-clickable phone number(s) found.', self::ANALYSIS_NON_CLICKABLE_PHONE_NUMBERS, $nonClickablePhoneNumbers);
+
+            // add non-clickable phone numbers to stats
+            foreach ($nonClickablePhoneNumbers as $nonClickablePhoneNumber) {
+                $this->stats->addWarning(self::ANALYSIS_NON_CLICKABLE_PHONE_NUMBERS, $nonClickablePhoneNumber);
+            }
+
+            $this->pagesWithNonClickablePhoneNumbers++;
+        } else {
+            $result->addOk('No non-clickable phone numbers found.', self::ANALYSIS_NON_CLICKABLE_PHONE_NUMBERS);
+            foreach ($allPhoneNumbers as $phoneNumber) {
+                if (!in_array($phoneNumber, $nonClickablePhoneNumbers)) {
+                    // add clickable phone numbers to stats
+                    $this->stats->addOk(self::ANALYSIS_NON_CLICKABLE_PHONE_NUMBERS, $phoneNumber);
+                }
+            }
         }
     }
 
@@ -632,13 +680,13 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
 
         // inline SVGs
         if ($this->pagesWithLargeSvgs > 0) {
-            $this->status->addWarningToSummary('pages-with-large-svgs', "{$this->pagesWithLargeSvgs} page(s) with large inline SVGs (> {$this->maxInlineSvgSize} bytes))");
+            $this->status->addWarningToSummary('pages-with-large-svgs', "{$this->pagesWithLargeSvgs} page(s) with large inline SVGs (> {$this->maxInlineSvgSize} bytes)");
         } else {
             $this->status->addOkToSummary('pages-with-large-svgs', "All pages have inline SVGs smaller than {$this->maxInlineSvgSize} bytes");
         }
 
         if ($this->pagesWithDuplicatedSvgs > 0) {
-            $this->status->addWarningToSummary('pages-with-duplicated-svgs', "{$this->pagesWithDuplicatedSvgs} page(s) with duplicated inline SVGs (> {$this->maxInlineSvgDuplicates} duplicates))");
+            $this->status->addWarningToSummary('pages-with-duplicated-svgs', "{$this->pagesWithDuplicatedSvgs} page(s) with duplicated inline SVGs (> {$this->maxInlineSvgDuplicates} duplicates)");
         } else {
             $this->status->addOkToSummary('pages-with-duplicated-svgs', "All pages have inline SVGs with less than {$this->maxInlineSvgDuplicates} duplicates");
         }
@@ -651,15 +699,15 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
 
         // heading structure
         if ($this->pagesWithMultipleH1 > 0) {
-            $this->status->addCriticalToSummary('pages-with-multiple-h1', "{$this->pagesWithMultipleH1} page(s) with multiple <h1> tags");
+            $this->status->addCriticalToSummary('pages-with-multiple-h1', "{$this->pagesWithMultipleH1} page(s) with multiple <h1> headings");
         } else {
-            $this->status->addOkToSummary('pages-with-multiple-h1', "All pages without multiple <h1> tags");
+            $this->status->addOkToSummary('pages-with-multiple-h1', "All pages without multiple <h1> headings");
         }
 
         if ($this->pagesWithoutH1 > 0) {
-            $this->status->addCriticalToSummary('pages-without-h1', "{$this->pagesWithoutH1} page(s) without <h1> tag");
+            $this->status->addCriticalToSummary('pages-without-h1', "{$this->pagesWithoutH1} page(s) without <h1> heading");
         } else {
-            $this->status->addOkToSummary('pages-without-h1', "All pages have at least one <h1> tag");
+            $this->status->addOkToSummary('pages-without-h1', "All pages have <h1> heading");
         }
 
         if ($this->pagesWithSkippedHeadingLevels > 0) {
@@ -673,6 +721,13 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
             $this->status->addWarningToSummary('pages-with-deep-dom', "{$this->pagesWithDeepDom} page(s) with deep DOM (> {$this->maxDomDepthWarning} levels)");
         } else {
             $this->status->addOkToSummary('pages-with-deep-dom', "All pages have DOM depth less than {$this->maxDomDepthWarning}");
+        }
+
+        // non-clickable phone numbers
+        if ($this->pagesWithNonClickablePhoneNumbers > 0) {
+            $this->status->addWarningToSummary('pages-with-non-clickable-phone-numbers', "{$this->pagesWithNonClickablePhoneNumbers} page(s) with non-clickable (non-interactive) phone numbers");
+        } else {
+            $this->status->addOkToSummary('pages-with-non-clickable-phone-numbers', "All pages have clickable (interactive) phone numbers");
         }
     }
 
