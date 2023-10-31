@@ -3,12 +3,15 @@
 namespace Crawler\Analysis;
 
 use Crawler\Analysis\Result\UrlAnalysisResult;
+use Crawler\Components\SuperTable;
+use Crawler\Components\SuperTableColumn;
 use Crawler\Crawler;
-use Crawler\ExtraColumn;
 use Crawler\Options\Options;
 use Crawler\Output\Output;
 use Crawler\Result\Status;
 use Crawler\Result\VisitedUrl;
+use Crawler\Utils;
+use DOMDocument;
 use Exception;
 
 class AnalysisManager
@@ -29,6 +32,18 @@ class AnalysisManager
      * @var Analyzer[]
      */
     private array $analyzers;
+
+    /**
+     * Total exec times of analyzer methods
+     * @var array [string => int]
+     */
+    protected array $execTimes = [];
+
+    /**
+     * Total exec counts of analyzer methods
+     * @var array [string => int]
+     */
+    protected array $execCounts = [];
 
     /**
      * @param string $crawlerClassDir
@@ -94,6 +109,43 @@ class AnalysisManager
                 $this->status->addCriticalToSummary($analyzerBasename, "{$analyzerBasename} error: " . $e->getMessage());
             }
         }
+
+        // add analysis stats table
+        if ($analyzers) {
+            $data = [];
+
+            // stats from this class (AnalysisManager)
+            foreach ($this->execTimes as $analyzerAndMethod => $execTime) {
+                $data[] = [
+                    'analyzerAndMethod' => basename(str_replace('\\', '/', $analyzerAndMethod)),
+                    'execTime' => $execTime,
+                    'execTimeFormatted' => Utils::getFormattedDuration($execTime),
+                    'execCount' => $this->execCounts[$analyzerAndMethod] ?? 0,
+                ];
+            }
+
+            // stats aggregated all analyzers
+            $execTimes = $this->getExecTimesFromAnalyzers();
+            $execCounts = $this->getExecCountsFromAnalyzers();
+            foreach ($execTimes as $analyzerAndMethod => $execTime) {
+                $data[] = [
+                    'analyzerAndMethod' => basename(str_replace('\\', '/', $analyzerAndMethod)),
+                    'execTime' => $execTime,
+                    'execTimeFormatted' => Utils::getFormattedDuration($execTime),
+                    'execCount' => $execCounts[$analyzerAndMethod] ?? 0,
+                ];
+            }
+
+            // configure super table and add it to output
+            $superTable = new SuperTable('analysis-stats', 'Analysis stats', 'No analysis stats', [
+                new SuperTableColumn('analyzerAndMethod', 'Analyzer::method'),
+                new SuperTableColumn('execTimeFormatted', 'Exec time'),
+                new SuperTableColumn('execCount', 'Exec count'),
+            ], false, 'execTime', 'DESC');
+            $superTable->setData($data);
+
+            $this->output->addSuperTable($superTable);
+        }
     }
 
     /**
@@ -107,8 +159,22 @@ class AnalysisManager
     public function analyzeVisitedUrl(VisitedUrl $visitedUrl, ?string $body, ?array $headers): array
     {
         $result = [];
+
+        $dom = null;
+        if ($visitedUrl->contentType === Crawler::CONTENT_TYPE_ID_HTML) {
+            $s = microtime(true);
+            $dom = new DOMDocument();
+            $domParsing = @$dom->loadHTML(mb_convert_encoding($body, 'HTML-ENTITIES', 'UTF-8'));
+            if (!$domParsing) {
+                $this->output->addNotice("HTML parsing error for URL {$visitedUrl->url}");
+                $dom = null;
+            }
+
+            $this->measureExecTime('parseDOMDocument', $s);
+        }
+
         foreach ($this->analyzers as $analyzer) {
-            $analyzerResult = $analyzer->analyzeVisitedUrl($visitedUrl, $body, $headers);
+            $analyzerResult = $analyzer->analyzeVisitedUrl($visitedUrl, $body, $dom, $headers);
             if ($analyzerResult) {
                 $result[get_class($analyzer)] = $analyzerResult;
             }
@@ -156,6 +222,38 @@ class AnalysisManager
     }
 
     /**
+     * @return array [analyzer class::method => exec time in seconds]
+     */
+    public function getExecTimesFromAnalyzers(): array
+    {
+        $result = [];
+
+        foreach ($this->analyzers as $analyzer) {
+            if ($analyzer instanceof BaseAnalyzer) {
+                $result = array_merge($result, $analyzer->getExecTimes());
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * @return array [analyzer class::method => calls count]
+     */
+    public function getExecCountsFromAnalyzers(): array
+    {
+        $result = [];
+
+        foreach ($this->analyzers as $analyzer) {
+            if ($analyzer instanceof BaseAnalyzer) {
+                $result = array_merge($result, $analyzer->getExecCounts());
+            }
+        }
+
+        return $result;
+    }
+
+    /**
      * Import all founded analyzers in Crawler/Analysis folder and set all extra table columns from analyzers
      *
      * @return void
@@ -191,5 +289,28 @@ class AnalysisManager
         if ($extraTableColumns) {
             $this->output->setExtraColumnsFromAnalysis($extraTableColumns);
         }
+    }
+
+    /**
+     * Measure and increment exec time and count of analyzer method
+     *
+     * @param string $method
+     * @param float $startTime
+     * @return void
+     */
+    private function measureExecTime(string $method, float $startTime): void
+    {
+        $endTime = microtime(true);
+        $key = __CLASS__ . '::' . $method;
+
+        if (!isset($this->execTimes[$key])) {
+            $this->execTimes[$key] = 0;
+        }
+        if (!isset($this->execCounts[$key])) {
+            $this->execCounts[$key] = 0;
+        }
+
+        $this->execTimes[$key] += ($endTime - $startTime);
+        $this->execCounts[$key]++;
     }
 }

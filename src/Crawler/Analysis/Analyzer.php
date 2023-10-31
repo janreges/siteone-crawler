@@ -9,6 +9,7 @@ use Crawler\Options\Options;
 use Crawler\Output\Output;
 use Crawler\Result\Status;
 use Crawler\Result\VisitedUrl;
+use DOMDocument;
 
 interface Analyzer
 {
@@ -53,10 +54,11 @@ interface Analyzer
      *
      * @param VisitedUrl $visitedUrl
      * @param string|null $body
+     * @param DOMDocument|null $dom
      * @param array|null $headers
      * @return UrlAnalysisResult|null
      */
-    public function analyzeVisitedUrl(VisitedUrl $visitedUrl, ?string $body, ?array $headers): ?UrlAnalysisResult;
+    public function analyzeVisitedUrl(VisitedUrl $visitedUrl, ?string $body, ?DOMDocument $dom, ?array $headers): ?UrlAnalysisResult;
 
     /**
      * If you want to show URL analysis results in table column (as numbers with severity icons), return name of column

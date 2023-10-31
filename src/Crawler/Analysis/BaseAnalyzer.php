@@ -9,6 +9,7 @@ use Crawler\Options\Options;
 use Crawler\Output\Output;
 use Crawler\Result\Status;
 use Crawler\Result\VisitedUrl;
+use DOMDocument;
 use Exception;
 
 abstract class BaseAnalyzer implements Analyzer
@@ -18,6 +19,18 @@ abstract class BaseAnalyzer implements Analyzer
     protected Output $output;
     protected Crawler $crawler;
     protected Status $status;
+
+    /**
+     * Total exec times of analyzer methods
+     * @var array [string => int]
+     */
+    protected array $execTimes = [];
+
+    /**
+     * Total exec counts of analyzer methods
+     * @var array [string => int]
+     */
+    protected array $execCounts = [];
 
     /**
      * @inheritDoc
@@ -71,7 +84,7 @@ abstract class BaseAnalyzer implements Analyzer
     /**
      * @inheritDoc
      */
-    public function analyzeVisitedUrl(VisitedUrl $visitedUrl, ?string $body, ?array $headers): ?UrlAnalysisResult
+    public function analyzeVisitedUrl(VisitedUrl $visitedUrl, ?string $body, ?DOMDocument $dom, ?array $headers): ?UrlAnalysisResult
     {
         // you can override this method in your analyzer
         return null;
@@ -89,7 +102,7 @@ abstract class BaseAnalyzer implements Analyzer
 
     public function shouldBeActivated(): bool
     {
-        throw new Exception("Not implemented method shouldBeActivated() in " .  get_class($this));
+        throw new Exception("Not implemented method shouldBeActivated() in " . get_class($this));
     }
 
     /**
@@ -99,7 +112,47 @@ abstract class BaseAnalyzer implements Analyzer
      */
     public function getOrder(): int
     {
-        throw new Exception("Not implemented method getOrder() in " .  get_class($this));
+        throw new Exception("Not implemented method getOrder() in " . get_class($this));
+    }
+
+    /**
+     * Measure and increment exec time and count of analyzer method
+     *
+     * @param string $class
+     * @param string $method
+     * @param float $startTime
+     * @return void
+     */
+    protected function measureExecTime(string $class, string $method, float $startTime): void
+    {
+        $endTime = microtime(true);
+        $key = $class . '::' . $method;
+
+        if (!isset($this->execTimes[$key])) {
+            $this->execTimes[$key] = 0;
+        }
+        if (!isset($this->execCounts[$key])) {
+            $this->execCounts[$key] = 0;
+        }
+
+        $this->execTimes[$key] += ($endTime - $startTime);
+        $this->execCounts[$key]++;
+    }
+
+    /**
+     * @return array [string => int]
+     */
+    public function getExecTimes(): array
+    {
+        return $this->execTimes;
+    }
+
+    /**
+     * @return array [string => int]
+     */
+    public function getExecCounts(): array
+    {
+        return $this->execCounts;
     }
 
     /**
@@ -107,6 +160,6 @@ abstract class BaseAnalyzer implements Analyzer
      */
     public static function getOptions(): Options
     {
-        throw new Exception("Not implemented method getOptions() in " .  get_called_class());
+        throw new Exception("Not implemented method getOptions() in " . get_called_class());
     }
 }
