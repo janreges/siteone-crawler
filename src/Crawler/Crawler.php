@@ -1,5 +1,13 @@
 <?php
 
+/*
+ * This file is part of the SiteOne Website Crawler.
+ *
+ * (c) Ján Regeš <jan.reges@siteone.cz>
+ */
+
+declare(strict_types=1);
+
 namespace Crawler;
 
 use Crawler\HttpClient\HttpClient;
@@ -87,7 +95,7 @@ class Crawler
         $this->queue->column('sourceUqId', Table::TYPE_STRING, 8);
         $this->queue->create();
 
-        $this->visited = new Table($this->options->maxVisitedUrls * 1.33);
+        $this->visited = new Table(intval($this->options->maxVisitedUrls * 1.33));
         $this->visited->column('url', Table::TYPE_STRING, $this->options->maxUrlLength);
         $this->visited->column('uqId', Table::TYPE_STRING, 8);
         $this->visited->column('sourceUqId', Table::TYPE_STRING, 8);

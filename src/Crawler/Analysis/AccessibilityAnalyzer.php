@@ -1,5 +1,13 @@
 <?php
 
+/*
+ * This file is part of the SiteOne Website Crawler.
+ *
+ * (c) Ján Regeš <jan.reges@siteone.cz>
+ */
+
+declare(strict_types=1);
+
 namespace Crawler\Analysis;
 
 use Crawler\Analysis\Result\AnalyzerStats;
@@ -54,7 +62,7 @@ class AccessibilityAnalyzer extends BaseAnalyzer implements Analyzer
             [
                 new SuperTableColumn('analysisName', 'Analysis name', SuperTableColumn::AUTO_WIDTH),
                 new SuperTableColumn('ok', 'OK', 5, function ($value) {
-                    return $value > 0 ? Utils::getColorText($value, 'green') : '0';
+                    return $value > 0 ? Utils::getColorText(strval($value), 'green') : '0';
                 }, null, false, false),
                 new SuperTableColumn('notice', 'Notice', 6, function ($value) {
                     return Utils::getColoredNotices($value, 6);

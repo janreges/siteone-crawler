@@ -1,5 +1,13 @@
 <?php
 
+/*
+ * This file is part of the SiteOne Website Crawler.
+ *
+ * (c) Ján Regeš <jan.reges@siteone.cz>
+ */
+
+declare(strict_types=1);
+
 use Crawler\Utils;
 use PHPUnit\Framework\TestCase;
 

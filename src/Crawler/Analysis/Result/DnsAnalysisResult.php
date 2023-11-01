@@ -1,5 +1,13 @@
 <?php
 
+/*
+ * This file is part of the SiteOne Website Crawler.
+ *
+ * (c) Ján Regeš <jan.reges@siteone.cz>
+ */
+
+declare(strict_types=1);
+
 namespace Crawler\Analysis\Result;
 
 class DnsAnalysisResult
@@ -79,9 +87,9 @@ class DnsAnalysisResult
         }
 
         if ($this->dnsServerName !== $this->dnsServerIpAddress) {
-            $result .= "\n\nDNS server: {$this->dnsServerName} ({$this->dnsServerIpAddress})\n";
+            $result .= "\nDNS server: {$this->dnsServerName} ({$this->dnsServerIpAddress})\n";
         } else {
-            $result .= "\n\nDNS server: {$this->dnsServerName}\n";
+            $result .= "\nDNS server: {$this->dnsServerName}\n";
         }
 
         return trim($result);

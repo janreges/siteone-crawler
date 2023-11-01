@@ -1,5 +1,13 @@
 <?php
 
+/*
+ * This file is part of the SiteOne Website Crawler.
+ *
+ * (c) Ján Regeš <jan.reges@siteone.cz>
+ */
+
+declare(strict_types=1);
+
 namespace Crawler\Output;
 
 use Crawler\Analysis\Result\UrlAnalysisResult;
@@ -110,7 +118,7 @@ class TextOutput implements Output
                 $notColorizedLength = strlen($value->toNotColorizedString());
                 $strPadContent = str_repeat(' ', max(0, $extraColumn->getLength() - $notColorizedLength));
 
-                $extraHeadersContent .= (' | ' . trim($value) . $strPadContent);
+                $extraHeadersContent .= (' | ' . trim(strval($value)) . $strPadContent);
 
                 if ($this->options->showInlineCriticals && ($criticals = $value->getCritical())) {
                     $extraNewLine .= "{$extraNewLinePrefix}⛔ " . implode("\n{$extraNewLinePrefix}⛔ ", $criticals) . "\n";

@@ -1,5 +1,13 @@
 <?php
 
+/*
+ * This file is part of the SiteOne Website Crawler.
+ *
+ * (c) Ján Regeš <jan.reges@siteone.cz>
+ */
+
+declare(strict_types=1);
+
 namespace Crawler\Components;
 
 use Crawler\Utils;
@@ -189,7 +197,7 @@ class SuperTable
             $rowData = [];
             foreach ($this->columns as $key => $column) {
                 $value = is_object($row) ? ($row->{$key} ?? '') : ($row[$key] ?? '');
-                $valueLength = mb_strlen($value);
+                $valueLength = mb_strlen(strval($value));
                 $columnWidth = $columnToWidth[$column->aplCode];
                 if (isset($column->formatter)) {
                     $value = call_user_func($column->formatter, $value);
@@ -202,7 +210,7 @@ class SuperTable
                 }
 
                 $rowData[] = $column->formatterWillChangeValueLength
-                    ? str_pad($value, $columnWidth)
+                    ? str_pad(strval($value), $columnWidth)
                     : ($value . (str_repeat(' ', max(0, $columnWidth - $valueLength))));
             }
             $output .= implode(' | ', $rowData) . PHP_EOL;

@@ -1,5 +1,13 @@
 <?php
 
+/*
+ * This file is part of the SiteOne Website Crawler.
+ *
+ * (c) Ján Regeš <jan.reges@siteone.cz>
+ */
+
+declare(strict_types=1);
+
 namespace Crawler\Analysis;
 
 use Crawler\Components\SuperTable;
@@ -72,22 +80,22 @@ class ContentTypeAnalyzer extends BaseAnalyzer implements Analyzer
                     return Utils::getColoredRequestTime($value, 8);
                 }),
                 new SuperTableColumn('status20x', 'Status 20x', 10, function ($value) {
-                    return $value > 0 ? Utils::getColorText(str_pad($value, 10), 'green') : $value;
+                    return $value > 0 ? Utils::getColorText(str_pad(strval($value), 10), 'green') : $value;
                 }),
                 new SuperTableColumn('status30x', 'Status 30x', 10, function ($value) {
-                    return $value > 0 ? Utils::getColorText(str_pad($value, 10), 'yellow', true) : $value;
+                    return $value > 0 ? Utils::getColorText(str_pad(strval($value), 10), 'yellow', true) : $value;
                 }),
                 new SuperTableColumn('status40x', 'Status 40x', 10, function ($value) {
-                    return $value > 0 ? Utils::getColorText(str_pad($value, 10), 'magenta', true) : $value;
+                    return $value > 0 ? Utils::getColorText(str_pad(strval($value), 10), 'magenta', true) : $value;
                 }),
                 new SuperTableColumn('status42x', 'Status 42x', 10, function ($value) {
-                    return $value > 0 ? Utils::getColorText(str_pad($value, 10), 'magenta', true) : $value;
+                    return $value > 0 ? Utils::getColorText(str_pad(strval($value), 10), 'magenta', true) : $value;
                 }),
                 new SuperTableColumn('status50x', 'Status 50x', 10, function ($value) {
-                    return $value > 0 ? Utils::getColorText(str_pad($value, 10), 'red', true) : $value;
+                    return $value > 0 ? Utils::getColorText(str_pad(strval($value), 10), 'red', true) : $value;
                 }),
                 new SuperTableColumn('statusOther', 'Status ERR', 10, function ($value) {
-                    return $value > 0 ? Utils::getColorText(str_pad($value, 10), 'red', true) : $value;
+                    return $value > 0 ? Utils::getColorText(str_pad(strval($value), 10), 'red', true) : $value;
                 }),
             ], true, 'contentTypeId', 'ASC'
         );

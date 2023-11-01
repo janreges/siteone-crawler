@@ -1,5 +1,13 @@
 <?php
 
+/*
+ * This file is part of the SiteOne Website Crawler.
+ *
+ * (c) Ján Regeš <jan.reges@siteone.cz>
+ */
+
+declare(strict_types=1);
+
 namespace Crawler\Components;
 
 use Closure;
@@ -50,7 +58,7 @@ class SuperTableColumn
         foreach ($data as $row) {
             $value = is_object($row) ? $row->{$this->aplCode} : $row[$this->aplCode];
             $value = $this->formatter && $this->formatterWillChangeValueLength ? ($this->formatter)($value) : $value;
-            $maxWidth = max($maxWidth, mb_strlen($value));
+            $maxWidth = max($maxWidth, mb_strlen(strval($value)));
         }
         return $maxWidth;
     }
