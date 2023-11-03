@@ -49,7 +49,7 @@ class OfflineWebsiteExporterTest extends TestCase
 
         $crawler = new Crawler(
             $coreOptions,
-            new HttpClient('tmp/'),
+            new HttpClient(null, 'tmp/'),
             $output,
             $status
         );

@@ -737,7 +737,7 @@ class Crawler
             } elseif (!$isUrlOnSameHost && !$isUrlOnAllowedHost) {
                 $isUrlForDebug && Debugger::debug('ignored-url_not-allowed-host', "URL '{$urlForQueue}' ignored because it's not requestable resource.");
                 continue;
-            } elseif (!self::isUrlAllowedByRobotsTxt($parsedUrlForQueue->host ?: $this->initialParsedUrl->host, $urlForQueue, $parsedUrlForQueue->port ?: $this->initialParsedUrl->port)) {
+            } elseif (!self::isUrlAllowedByRobotsTxt($parsedUrlForQueue->host ?: $this->initialParsedUrl->host, $urlForQueue, $this->options->proxy, $parsedUrlForQueue->port ?: $this->initialParsedUrl->port)) {
                 $isUrlForDebug && Debugger::debug('ignored-url_blocked-by-robots-txt', "URL '{$urlForQueue}' ignored because is blocked by website's robots.txt.");
                 continue;
             }
@@ -790,10 +790,11 @@ class Crawler
      *
      * @param string $domain
      * @param string $url
+     * @param string|null $proxy
      * @param int|null $extraPort
      * @return bool
      */
-    public static function isUrlAllowedByRobotsTxt(string $domain, string $url, ?int $extraPort = null): bool
+    public static function isUrlAllowedByRobotsTxt(string $domain, string $url, ?string $proxy, ?int $extraPort = null): bool
     {
         // when URL is for frontend asset (internal or external), we can assume that it's allowed
         if (preg_match('/\.(js|css|json|eot|ttf|woff2|woff|otf|png|gif|jpg|jpeg|ico|webp|avif|tif|bmp|svg)/i', $url) === 1) {
@@ -809,7 +810,7 @@ class Crawler
         } else {
             $ports = $extraPort ? [$extraPort] : [443, 80];
             foreach ($ports as $port) {
-                $httpClient = new HttpClient(null);
+                $httpClient = new HttpClient($proxy, null);
                 $robotsTxtResponse = $httpClient->request(
                     $domain,
                     $port,

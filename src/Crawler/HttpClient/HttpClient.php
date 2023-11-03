@@ -17,6 +17,12 @@ class HttpClient
 {
 
     /**
+     * Proxy server in format "host:port"
+     * @var string|null
+     */
+    private readonly ?string $proxy;
+
+    /**
      * Cache dir for http client. If null, cache is disabled
      * @var string|null
      */
@@ -29,11 +35,13 @@ class HttpClient
     private readonly bool $compression;
 
     /**
+     * @param string|null $proxy
      * @param string|null $cacheDir
      * @param bool $compression
      */
-    public function __construct(?string $cacheDir, bool $compression = false)
+    public function __construct(?string $proxy, ?string $cacheDir, bool $compression = false)
     {
+        $this->proxy = $proxy;
         $this->cacheDir = $cacheDir;
         $this->compression = $compression;
     }
@@ -73,6 +81,15 @@ class HttpClient
 
         $startTime = microtime(true);
         $client = new Client($host, $port, $scheme === 'https');
+
+        if ($this->proxy) {
+            list($proxyHost, $proxyPort) = explode(':', $this->proxy);
+            $client->set([
+                'http_proxy_host' => $proxyHost,
+                'http_proxy_port' => $proxyPort
+            ]);
+        }
+
         $client->setHeaders($requestHeaders);
         $client->set(['timeout' => $timeout]);
         $client->setMethod($httpMethod);

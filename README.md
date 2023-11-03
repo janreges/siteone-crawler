@@ -206,6 +206,7 @@ required arguments:
   --workers=2 \
   --memory-limit=512M \
   --timeout=5 \
+  --proxy=proxy.mydomain.tld:8080 \
   --user-agent="My User-Agent String" \
   --extra-columns="DOM,X-Cache(10),Title(40!),Keywords(50!),Description(50!)" \
   --accept-encoding="gzip, deflate" \
@@ -252,6 +253,7 @@ required arguments:
 * `--user-agent=<val>`             Custom User-Agent header. Use quotation marks. If specified, it takes precedence over
   the device parameter.
 * `--timeout=<int>`                Request timeout in seconds. Default is `3`.
+* `--proxy=<host:port>`            HTTP proxy to use in format `host:port`. Host can be hostname, IPv4 or IPv6.
 
 #### Output settings
 

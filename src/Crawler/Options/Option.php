@@ -223,6 +223,8 @@ class Option
             if (mkdir($value, 0777, true) === false) {
                 throw new Exception("Option {$this->name} ({$value}) must be valid and writable directory. Check permissions.");
             }
+        } else if ($this->type === Type::PROXY && (!is_string($value) || !preg_match('/^[a-z0-9\-.:]{1,100}:[0-9]{1,5}$/i', $value))) {
+            throw new Exception("Option {$this->name} ({$value}) must be in format host:port");
         }
     }
 
@@ -254,6 +256,8 @@ class Option
         } else if ($this->type === Type::FILE) {
             return (string)$value;
         } else if ($this->type === Type::DIR) {
+            return (string)$value;
+        } else if ($this->type === Type::PROXY) {
             return (string)$value;
         } /* @phpstan-ignore-line */ else {
             throw new Exception("Unknown type {$this->type}");

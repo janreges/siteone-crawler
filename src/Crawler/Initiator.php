@@ -276,6 +276,8 @@ class Initiator
                     $nameAndValue .= '=<file>';
                 } elseif ($option->type === Type::DIR) {
                     $nameAndValue .= '=<dir>';
+                } elseif ($option->type === Type::PROXY) {
+                    $nameAndValue .= '=<host:port>';
                 }
 
                 echo str_pad($nameAndValue, 32) . " " . rtrim($option->description, '. ') . '.';

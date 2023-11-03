@@ -32,6 +32,7 @@ class CoreOptions
     public DeviceType $device = DeviceType::DESKTOP;
     public ?string $userAgent = null;
     public int $timeout = 5;
+    public ?string $proxy = null;
 
     // output setting
     public OutputType $outputType = OutputType::TEXT;
@@ -158,6 +159,7 @@ class CoreOptions
             new Option('--device', null, 'device', Type::STRING, false, 'Device type for User-Agent selection. Values `desktop`, `tablet`, `mobile`. Ignored with `--user-agent`.', 'desktop', false),
             new Option('--user-agent', null, 'userAgent', Type::STRING, false, 'Override User-Agent selected by --device.', null, true),
             new Option('--timeout', null, 'timeout', Type::INT, false, 'Request timeout (in sec).', 5, false),
+            new Option('--proxy', null, 'proxy', Type::PROXY, false, 'HTTP proxy in host:port format.', null),
         ]));
 
         $options->addGroup(new Group(

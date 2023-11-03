@@ -22,4 +22,5 @@ enum Type
     case REGEX;
     case FILE;
     case DIR;
+    case PROXY;
 }

@@ -94,7 +94,7 @@ class Manager
             ? ($baseDir . '/' . $options->httpCacheDir)
             : ($options->httpCacheDir ?: null);
 
-        $httpClient = new HttpClient($httpClientCacheDir, $options->httpCacheCompression);
+        $httpClient = new HttpClient($this->options->proxy, $httpClientCacheDir, $options->httpCacheCompression);
         $this->crawler = new Crawler($options, $httpClient, $this->output, $this->status);
 
         $this->analysisManager = $analysisManager;
