@@ -53,7 +53,8 @@ class HttpClient
      */
     public function request(string $host, int $port, string $scheme, string $url, string $httpMethod, int $timeout, string $userAgent, string $accept, string $acceptEncoding, ?string $origin = null): HttpResponse
     {
-        $extension = @pathinfo(@parse_url($url, PHP_URL_PATH), PATHINFO_EXTENSION);
+        $path = @parse_url($url, PHP_URL_PATH);
+        $extension = is_string($path) ? @pathinfo($path, PATHINFO_EXTENSION) : null;
         $cacheKey = $host . '.' . md5(serialize(func_get_args())) . ($extension ? ".{$extension}" : '');
         $cachedResult = $this->getFromCache($cacheKey);
         if ($cachedResult !== null && str_contains($url, ' ') === false) {
