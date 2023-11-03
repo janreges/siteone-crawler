@@ -149,10 +149,9 @@ class AnalysisManager
             // configure super table and add it to output
             $superTable = new SuperTable(self::SUPER_TABLE_ANALYSIS_STATS, 'Analysis stats', 'No analysis stats', [
                 new SuperTableColumn('analyzerAndMethod', 'Analyzer::method'),
-                new SuperTableColumn('execTime', 'Exec time', SuperTableColumn::AUTO_WIDTH, null, function ($row) {
-                    return Utils::getColoredRequestTime($row['execTime']);
-
-                }),
+                new SuperTableColumn('execTime', 'Exec time', 9, function ($value) {
+                    return Utils::getColoredRequestTime($value, 9);
+                }, null, false, false),
                 new SuperTableColumn('execCount', 'Exec count'),
             ], false, 'execTime', 'DESC');
             $superTable->setData($data);

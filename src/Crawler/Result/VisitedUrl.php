@@ -128,6 +128,11 @@ class VisitedUrl
         $this->isAllowedForCrawling = $isAllowedForCrawling;
     }
 
+    public function isHttps(): bool
+    {
+        return str_starts_with($this->url, 'https://');
+    }
+
     public function isStaticFile(): bool
     {
         static $staticTypes = [

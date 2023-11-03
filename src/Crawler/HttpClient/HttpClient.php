@@ -110,7 +110,12 @@ class HttpClient
         $url = str_replace(["\\ ", ' '], ['%20', '%20'], $url); // fix for HTTP 400 Bad Request for URLs with spaces
         $client->execute($url);
 
-        $result = new HttpResponse($url, $client->statusCode, $client->body, $client->headers ?? [], microtime(true) - $startTime);
+        $headers = $client->headers ?? [];
+        if ($client->set_cookie_headers) {
+            $headers['set-cookie'] = $client->set_cookie_headers;
+        }
+
+        $result = new HttpResponse($url, $client->statusCode, $client->body, $headers, microtime(true) - $startTime);
         $this->saveToCache($cacheKey, $result);
         return $result;
     }

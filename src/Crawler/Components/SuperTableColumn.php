@@ -58,9 +58,13 @@ class SuperTableColumn
         foreach ($data as $row) {
             $value = is_object($row) ? $row->{$this->aplCode} : $row[$this->aplCode];
             $value = $this->formatter && $this->formatterWillChangeValueLength ? ($this->formatter)($value) : $value;
-            $maxWidth = max($maxWidth, mb_strlen(strval($value)));
+            if (is_scalar($value)) {
+                $maxWidth = max($maxWidth, mb_strlen(strval($value)));
+            } else {
+                $maxWidth = 100;
+            }
         }
-        return $maxWidth;
+        return min(1000, $maxWidth);
     }
 
 }

@@ -207,7 +207,11 @@ class SuperTable
             $rowData = [];
             foreach ($this->columns as $key => $column) {
                 $value = is_object($row) ? ($row->{$key} ?? '') : ($row[$key] ?? '');
-                $valueLength = mb_strlen(strval($value));
+                if (is_scalar($value)) {
+                    $valueLength = mb_strlen(strval($value));
+                } else {
+                    $valueLength = 100;
+                }
                 $columnWidth = $columnToWidth[$column->aplCode];
                 if (isset($column->formatter)) {
                     $value = call_user_func($column->formatter, $value);
