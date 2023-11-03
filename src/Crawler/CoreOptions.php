@@ -61,7 +61,7 @@ class CoreOptions
     // advanced crawler settings
     public int $workers = 3;
     public float $maxReqsPerSec = 10;
-    public string $memoryLimit = '512M';
+    public string $memoryLimit = '2048M';
 
     /**
      * Domains that are allowed for static files (e.g. CDN) but not for crawling.
@@ -190,7 +190,7 @@ class CoreOptions
             'Advanced crawler settings', [
             new Option('--workers', '-w', 'workers', Type::INT, false, 'Max concurrent workers (threads). Crawler will not make more simultaneous requests to the server than this number.', 3, false),
             new Option('--max-reqs-per-sec', '-rps', 'maxReqsPerSec', Type::FLOAT, false, 'Max requests/s for whole crawler. Be careful not to cause a DoS attack.', 10, false),
-            new Option('--memory-limit', null, 'memoryLimit', Type::SIZE_M_G, false, 'Memory limit in units M (Megabytes) or G (Gigabytes).', '512M', false),
+            new Option('--memory-limit', null, 'memoryLimit', Type::SIZE_M_G, false, 'Memory limit in units M (Megabytes) or G (Gigabytes).', '2048M', false),
             new Option('--allowed-domain-for-external-files', null, 'allowedDomainsForExternalFiles', Type::STRING, true, "Primarily, the crawler crawls only the URL within the domain for initial URL. This allows you to enable loading of file content from another domain as well (e.g. if you want to load assets from a CDN). Can be specified multiple times. Use can use domains with wildcard '*'.", [], true, true),
             new Option('--allowed-domain-for-crawling', null, 'allowedDomainsForCrawling', Type::STRING, true, "This option will allow you to crawl all content from other listed domains - typically in the case of language mutations on other domains. Can be specified multiple times. Use can use domains with wildcard '*'.", [], true, true),
             new Option('--include-regex', '--include-regexp', 'includeRegex', Type::REGEX, true, 'Include only URLs matching at least one PCRE regex. Can be specified multiple times.', [], false, true),
@@ -210,8 +210,8 @@ class CoreOptions
             new Option('--debug', null, 'debug', Type::BOOL, false, 'Activate debug mode.', false, true),
             new Option('--debug-log-file', null, 'debugLogFile', Type::FILE, false, 'Log file where to save debug messages. When --debug is not set and --debug-log-file is set, logging will be active without visible output.', null, true),
             new Option('--debug-url-regex', null, 'debugUrlRegex', Type::REGEX, true, 'Regex for URL(s) to debug. When crawled URL is matched, parsing, URL replacing and other actions are printed to output. Can be specified multiple times.', [], true, true),
-            new Option('--result-storage', null, 'resultStorage', Type::STRING, false, 'Result storage type for content and headers. Values: `memory` or `file-system`. Use `file-system` for large websites.', 'memory', false),
-            new Option('--result-storage-dir', null, 'resultStorageDir', Type::DIR, false, 'Directory for --result-storage=file-system.', 'tmp/result-storage', false),
+            new Option('--result-storage', null, 'resultStorage', Type::STRING, false, 'Result storage type for content and headers. Values: `memory` or `file`. Use `file` for large websites.', 'memory', false),
+            new Option('--result-storage-dir', null, 'resultStorageDir', Type::DIR, false, 'Directory for --result-storage=file.', 'tmp/result-storage', false),
             new Option('--result-storage-compression', null, 'resultStorageCompression', Type::BOOL, false, 'Enable compression for results storage. Saves disk space, but uses more CPU.', false, false),
             new Option('--http-cache-dir', null, 'httpCacheDir', Type::DIR, false, "Cache dir for HTTP responses. You can disable cache by --http-cache-dir=''", 'tmp/http-client-cache', true),
             new Option('--http-cache-compression', null, 'httpCacheCompression', Type::BOOL, false, "Enable compression for HTTP cache storage. Saves disk space, but uses more CPU.", false, true),
