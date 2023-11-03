@@ -17,6 +17,8 @@ use Crawler\Utils;
 
 class Page404Analyzer extends BaseAnalyzer implements Analyzer
 {
+    const SUPER_TABLE_404 = '404';
+
     public function shouldBeActivated(): bool
     {
         return true;
@@ -32,7 +34,7 @@ class Page404Analyzer extends BaseAnalyzer implements Analyzer
 
         $status = $this->status;
         $superTable = new SuperTable(
-            '404',
+            self::SUPER_TABLE_404,
             '404 URLs',
             'No 404 URLs found.',
             [

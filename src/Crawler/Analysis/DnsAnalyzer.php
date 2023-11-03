@@ -18,6 +18,8 @@ use Exception;
 
 class DnsAnalyzer extends BaseAnalyzer implements Analyzer
 {
+    const SUPER_TABLE_DNS = 'dns';
+
     public function shouldBeActivated(): bool
     {
         return true;
@@ -26,10 +28,10 @@ class DnsAnalyzer extends BaseAnalyzer implements Analyzer
     public function analyze(): void
     {
         $superTable = new SuperTable(
-            'dns',
+            self::SUPER_TABLE_DNS,
             'DNS info',
             'No DNS info found.', [
-            new SuperTableColumn('info', 'Info'),
+            new SuperTableColumn('info', 'Info', SuperTableColumn::AUTO_WIDTH, null, null, true, false, true),
         ], false);
 
         $data = [];

@@ -19,7 +19,9 @@ class SuperTable
     const POSITION_AFTER_URL_TABLE = 'after-url-table';
 
     public readonly string $aplCode;
-    private string $title;
+    public readonly string $title;
+    public readonly ?string $description;
+    public readonly ?int $maxRows;
 
     /**
      * @var SuperTableColumn[]
@@ -31,6 +33,8 @@ class SuperTable
     private ?string $currentOrderColumn;
     private string $currentOrderDirection = 'ASC';
     private string $uniqueId;
+    private ?string $hostToStripFromUrls = null;
+    private ?string $initialUrl = null;
 
     /**
      * @param string $aplCode
@@ -40,8 +44,10 @@ class SuperTable
      * @param bool $positionBeforeUrlTable
      * @param string|null $currentOrderColumn
      * @param string $currentOrderDirection
+     * @param string|null $description
+     * @param int|null $maxRows
      */
-    public function __construct(string $aplCode, string $title, string $emptyTableMessage, array $columns, bool $positionBeforeUrlTable, ?string $currentOrderColumn = null, string $currentOrderDirection = 'ASC')
+    public function __construct(string $aplCode, string $title, string $emptyTableMessage, array $columns, bool $positionBeforeUrlTable, ?string $currentOrderColumn = null, string $currentOrderDirection = 'ASC', ?string $description = null, ?int $maxRows = null)
     {
         foreach ($columns as $column) {
             if (!($column instanceof SuperTableColumn)) {
@@ -59,7 +65,9 @@ class SuperTable
         $this->positionBeforeUrlTable = $positionBeforeUrlTable;
         $this->currentOrderColumn = $currentOrderColumn;
         $this->currentOrderDirection = $currentOrderDirection;
-        $this->uniqueId = substr(md5(strval(rand(1000000, 9999999))), 0, 6);
+        $this->description = $description;
+        $this->maxRows = $maxRows;
+        $this->uniqueId = 't' . substr(md5(strval(rand(1000000, 9999999))), 0, 6);
     }
 
     /**
@@ -79,85 +87,87 @@ class SuperTable
      */
     public function getHtmlOutput(): string
     {
-        $output = '<section class="mb-5">';
-        $output .= "<h2>" . htmlspecialchars($this->title) . "</h2>";
+        $output = "<h2>" . htmlspecialchars($this->title) . "</h2>";
         if (!$this->data) {
             $output .= "<p>" . htmlspecialchars($this->emptyTableMessage) . "</p>";
             return $output;
+        } elseif ($this->description) {
+            $output .= strip_tags($this->description, 'p,b,strong,i,em,ul,li,ol,br,a') . "<br>";
         }
 
-        $output .= "<table id='" . htmlspecialchars($this->uniqueId) . "' border='1' class='table table-bordered table-hover' style='border-collapse: collapse;'>";
+        $output .= "<table id='" . htmlspecialchars($this->uniqueId) . "' border='1' class='table table-bordered table-hover table-sortable' style='border-collapse: collapse;'>";
         $output .= "<thead>";
         foreach ($this->columns as $key => $column) {
+            $width = $column->width === SuperTableColumn::AUTO_WIDTH
+                ? $column->getAutoWidthByData($this->data)
+                : $column->width;
+            $widthPx = min($width * 12, 800);
             $direction = ($this->currentOrderColumn === $key && $this->currentOrderDirection === 'ASC') ? 'DESC' : 'ASC';
-            $arrow = ($this->currentOrderColumn === $key) ? ($this->currentOrderDirection === 'ASC' ? '🔼' : '🔽') : '';
-            $output .= "<th style='width:{$column->getWidthPx()}px' onclick='sortTable_" . htmlspecialchars($this->uniqueId) . "(\"" . htmlspecialchars($key) . "\", \"" . htmlspecialchars($direction) . "\")'>" . htmlspecialchars($column->name) . " {$arrow}</th>";
+            $arrow = ($this->currentOrderColumn === $key) ? ($this->currentOrderDirection === 'ASC' ? '&nbsp;🔼' : '&nbsp;🔽') : '';
+
+            if (isset($this->data[0]) && is_array($this->data[0])) {
+                $dataType = isset($this->data[0][$key]) && is_numeric($this->data[0][$key]) ? 'number' : 'string';
+            } else {
+                $dataType = isset($this->data[0]) && isset($this->data[0]->$key) && is_numeric($this->data[0]->$key) ? 'number' : 'string';
+            }
+            $output .= "<th data-key='{$key}' data-type='{$dataType}' data-direction='" . $direction . "' data-label='" . htmlspecialchars($column->name) . "' style='width:{$widthPx}px' onclick='sortTable(\"" . htmlspecialchars($this->uniqueId) . "\", \"" . htmlspecialchars($key) . "\")'>" . htmlspecialchars($column->name) . "{$arrow}</th>";
         }
+
+        $initialRootUrl = $this->initialUrl ? preg_replace('/^(https?:\/\/[^\/]+).*$/', '$1', $this->initialUrl) : null;
+
         $output .= "</thead>";
         $output .= "<tbody>";
+        $counter = 1;
+        $maxRowsReached = false;
         foreach ($this->data as $row) {
+            if ($this->maxRows && $counter > $this->maxRows) {
+                $maxRowsReached = true;
+                break;
+            }
             $output .= "<tr>";
             foreach ($this->columns as $key => $column) {
                 $value = is_object($row) ? ($row->{$key} ?? '') : ($row[$key] ?? '');
                 $formattedValue = $value;
 
-                if ($column->nonBreakingSpaces && is_string($formattedValue)) {
-                    $formattedValue = str_replace([' ', "\t"], ['&nbsp;', str_repeat('&nbsp;', 4)], $formattedValue);
-                }
-
                 if ($column->formatter) {
                     $formattedValue = call_user_func($column->formatter, $value);
+                } elseif ($column->renderer) {
+                    $formattedValue = call_user_func($column->renderer, $row);
+                } else {
+                    if ($column->nonBreakingSpaces && is_string($formattedValue)) {
+                        $formattedValue = str_replace([' ', "\t"], ['&nbsp;', str_repeat('&nbsp;', 4)], $formattedValue);
+                    }
                 }
 
+                // colored text
                 if (is_string($formattedValue) && (str_contains($formattedValue, '[0;') || str_contains($formattedValue, '[1;') || str_contains($formattedValue, '[0m'))) {
                     $formattedValue = Utils::convertBashColorsInTextToHtml($formattedValue);
                 }
 
-                $output .= "<td data-value='" . htmlspecialchars($value) . "'>{$formattedValue}</td>";
+                // full URL in value
+                if (is_string($formattedValue) && is_string($value) && str_starts_with($value, 'http')) {
+                    $formattedValue = "<a href='" . htmlspecialchars($value) . "' target='_blank'>" . Utils::truncateUrl($value, 100, '...', $this->hostToStripFromUrls) . "</a>";
+                } // full URL in formatted value
+                else if (is_string($formattedValue) && is_string($value) && str_starts_with($formattedValue, 'http')) {
+                    $formattedValue = "<a href='" . htmlspecialchars($formattedValue) . "' target='_blank'>" . Utils::truncateUrl($formattedValue, 100, '...', $this->hostToStripFromUrls) . "</a>";
+                } // relative URL
+                elseif ($initialRootUrl && is_string($formattedValue) && str_starts_with($formattedValue, '/') && preg_match('/^\/[a-z0-9\-_.\/?&#+=%@()|]+$/i', $formattedValue)) {
+                    $finalUrl = $initialRootUrl . $formattedValue;
+                    $formattedValue = "<a href='" . htmlspecialchars($finalUrl) . "' target='_blank'>" . Utils::truncateUrl($formattedValue, 100, '...', $this->hostToStripFromUrls) . "</a>";
+                }
+
+                $output .= "<td data-value='" . htmlspecialchars(is_scalar($value) && strlen(strval($value)) < 200 ? strval($value) : 'complex-data') . "'>{$formattedValue}</td>";
             }
             $output .= "</tr>";
+            $counter++;
         }
         if (empty($this->data)) {
-            $output .= "<tr><td colspan='" . count($this->columns) . "'>" . htmlspecialchars($this->emptyTableMessage) . "</td></tr>";
+            $output .= "<tr><td colspan='" . count($this->columns) . "' class='warning'>" . htmlspecialchars($this->emptyTableMessage) . "</td></tr>";
+        } else if ($maxRowsReached) {
+            $output .= "<tr><td colspan='" . count($this->columns) . "' class='warning'>You have reached the limit of {$this->maxRows} rows as a protection against very large output or exhausted memory.</td></tr>";
         }
         $output .= "</tbody>";
         $output .= "</table>";
-
-        $output .= "
-            <script>
-            function sortTable_" . htmlspecialchars($this->uniqueId) . "(columnKey, direction) {
-            const table = document.querySelector('#" . htmlspecialchars($this->uniqueId) . "');
-            const tbody = table.querySelector('tbody');
-            const rows = Array.from(tbody.querySelectorAll('tr'));
-            const headerCells = Array.from(table.querySelectorAll('thead th'));
-            const columnIndex = Array.from(table.querySelectorAll('thead th')).findIndex(th => th.textContent.trim().startsWith(columnKey));
-        
-            rows.sort((a, b) => {
-                const aValue = a.children[columnIndex].getAttribute('data-value');
-                const bValue = b.children[columnIndex].getAttribute('data-value');
-        
-                if (direction === 'ASC') {
-                    return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
-                } else {  // DESC
-                    return aValue < bValue ? 1 : aValue > bValue ? -1 : 0;
-                }
-            });
-        
-            rows.forEach(row => tbody.appendChild(row));
-            
-            headerCells.forEach(th => {
-                const text = th.textContent.trim();
-                if (text.startsWith(columnKey)) {
-                    th.textContent = direction === 'ASC' ? columnKey + ' 🔼' : columnKey + ' 🔽';
-                } else {
-                    // Odeberte šipky z ostatních sloupců
-                    th.textContent = th.textContent.replace(' 🔼', '').replace(' 🔽', '');
-                }
-            });
-        }
-            </script>\n";
-
-        $output .= '</section>';
 
         return $output;
     }
@@ -234,6 +244,29 @@ class SuperTable
     public function isPositionBeforeUrlTable(): bool
     {
         return $this->positionBeforeUrlTable;
+    }
+
+    /**
+     * @return mixed[]
+     */
+    public function getData(): array
+    {
+        return $this->data;
+    }
+
+    public function getTotalRows(): int
+    {
+        return count($this->data);
+    }
+
+    public function setHostToStripFromUrls(?string $hostToStripFromUrls): void
+    {
+        $this->hostToStripFromUrls = $hostToStripFromUrls;
+    }
+
+    public function setInitialUrl(?string $initialUrl): void
+    {
+        $this->initialUrl = $initialUrl;
     }
 
     private function sortData(string $columnKey, string $direction): void

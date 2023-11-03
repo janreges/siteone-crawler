@@ -150,6 +150,22 @@ class UrlAnalysisResult
         return count($this->ok) + count($this->notice) + count($this->warning) + count($this->critical);
     }
 
+    public function getDetailsOfSeverityAndAnalysisName(string $severity, string $analysisName): array
+    {
+        switch ($severity) {
+            case 'ok':
+                return $this->okDetails[$analysisName] ?? [];
+            case 'notice':
+                return $this->noticeDetails[$analysisName] ?? [];
+            case 'warning':
+                return $this->warningDetails[$analysisName] ?? [];
+            case 'critical':
+                return $this->criticalDetails[$analysisName] ?? [];
+            default:
+                throw new \InvalidArgumentException('Unknown severity: ' . $severity);
+        }
+    }
+
     public function toIconString(string $okIcon = '✅', string $noticeIcon = 'ℹ️', string $warningIcon = '⚠', string $criticalIcon = '⛔'): string
     {
         $result = '';
@@ -228,6 +244,35 @@ class UrlAnalysisResult
     public function __toString(): string
     {
         return $this->toColorizedString();
+    }
+
+    /**
+     * @param string $analysisName
+     * @return array|array[]
+     */
+    public function getAllDetailsForAnalysis(string $analysisName): array
+    {
+        $result = [
+            'ok' => [],
+            'notice' => [],
+            'warning' => [],
+            'critical' => [],
+        ];
+
+        foreach($this->criticalDetails[$analysisName]??[] as $detail) {
+            $result['critical'][] = $detail;
+        }
+        foreach($this->warningDetails[$analysisName]??[] as $detail) {
+            $result['warning'][] = $detail;
+        }
+        foreach($this->noticeDetails[$analysisName]??[] as $detail) {
+            $result['notice'][] = $detail;
+        }
+        foreach($this->okDetails[$analysisName]??[] as $detail) {
+            $result['ok'][] = $detail;
+        }
+
+        return $result;
     }
 
 }

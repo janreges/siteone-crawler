@@ -22,6 +22,8 @@ use Crawler\Utils;
 class SourceDomainsAnalyzer extends BaseAnalyzer implements Analyzer
 {
 
+    const SUPER_TABLE_SOURCE_DOMAINS = 'source-domains';
+
     public function shouldBeActivated(): bool
     {
         return true;
@@ -128,8 +130,8 @@ class SourceDomainsAnalyzer extends BaseAnalyzer implements Analyzer
         }
 
         $superTable = new SuperTable(
-            'source-domains-summary',
-            "Source domains summary",
+            self::SUPER_TABLE_SOURCE_DOMAINS,
+            "Source domains",
             "No source domains found.",
             $superTableColumns, false, 'totalCount', 'DESC'
         );

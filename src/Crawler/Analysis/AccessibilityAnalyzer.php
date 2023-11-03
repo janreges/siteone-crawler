@@ -20,6 +20,7 @@ use Crawler\Options\Options;
 use Crawler\Result\VisitedUrl;
 use Crawler\Utils;
 use DOMDocument;
+use DOMElement;
 use DOMNode;
 use DOMXPath;
 
@@ -31,6 +32,8 @@ class AccessibilityAnalyzer extends BaseAnalyzer implements Analyzer
     const ANALYSIS_MISSING_ARIA_LABELS = 'Missing aria labels';
     const ANALYSIS_MISSING_ROLES = 'Missing roles';
     const ANALYSIS_MISSING_LANG_ATTRIBUTE = 'Missing html lang attribute';
+
+    const SUPER_TABLE_ACCESSIBILITY = 'accessibility';
 
     // stats
     private readonly AnalyzerStats $stats;
@@ -56,7 +59,7 @@ class AccessibilityAnalyzer extends BaseAnalyzer implements Analyzer
     public function analyze(): void
     {
         $superTable = new SuperTable(
-            'accessibility',
+            self::SUPER_TABLE_ACCESSIBILITY,
             "Accessibility",
             "Nothing to report.",
             [
@@ -95,7 +98,7 @@ class AccessibilityAnalyzer extends BaseAnalyzer implements Analyzer
     public function analyzeVisitedUrl(VisitedUrl $visitedUrl, ?string $body, ?DOMDocument $dom, ?array $headers): ?UrlAnalysisResult
     {
         $result = null;
-        $isHtml = $visitedUrl->contentType === Crawler::CONTENT_TYPE_ID_HTML;
+        $isHtml = $visitedUrl->contentType === Crawler::CONTENT_TYPE_ID_HTML && $visitedUrl->statusCode === 200;
 
         if ($isHtml && $body && $dom) {
             $result = new UrlAnalysisResult();
@@ -184,6 +187,9 @@ class AccessibilityAnalyzer extends BaseAnalyzer implements Analyzer
             $id = $input->attributes->getNamedItem('id');
             $inputHtml = $dom->saveHTML($input);
 
+            // remove all content after the first opening tag (it is not needed for the analysis)
+            $inputHtml = preg_replace('/^(<[^>]+>).+$/s', '$1', $inputHtml);
+
             // If the input has an id, check for a label with a 'for' attribute that matches the id
             if ($id) {
                 $label = $xpath->query("//label[@for='{$id->nodeValue}']");
@@ -217,17 +223,19 @@ class AccessibilityAnalyzer extends BaseAnalyzer implements Analyzer
     {
         $xpath = new DOMXPath($dom);
 
-        $elementsWithoutAriaLabels = [];
-
+        $criticalElementsWithoutAriaLabels = [];
         $criticalElements = ['input', 'select', 'textarea'];
         foreach ($criticalElements as $elementName) {
             $elements = $xpath->query("//{$elementName}");
 
             foreach ($elements as $element) {
-                /* @var $element \DOMElement */
+                /* @var $element DOMElement */
                 $elementHtml = $dom->saveHTML($element);
+
+                // remove all content after the first opening tag (it is not needed for the analysis)
+                $elementHtml = preg_replace('/^(<[^>]+>).+$/s', '$1', $elementHtml);
                 if (!$element->getAttribute('aria-label') && !$element->getAttribute('aria-labelledby')) {
-                    $elementsWithoutAriaLabels[] = $elementHtml;
+                    $criticalElementsWithoutAriaLabels[] = $elementHtml;
                     $this->stats->addCritical(self::ANALYSIS_MISSING_ARIA_LABELS, $elementHtml);
                 } else {
                     $this->stats->addOk(self::ANALYSIS_MISSING_ARIA_LABELS, $elementHtml);
@@ -235,15 +243,19 @@ class AccessibilityAnalyzer extends BaseAnalyzer implements Analyzer
             }
         }
 
+        $warningElementsWithoutAriaLabels = [];
         $warningElements = ['a', 'button'];
         foreach ($warningElements as $elementName) {
             $elements = $xpath->query("//{$elementName}");
 
             foreach ($elements as $element) {
-                /* @var $element \DOMElement */
+                /* @var $element DOMElement */
                 $elementHtml = $dom->saveHTML($element);
+
+                // remove all content after the first opening tag (it is not needed for the analysis)
+                $elementHtml = preg_replace('/^(<[^>]+>).+$/s', '$1', $elementHtml);
                 if (!$element->getAttribute('aria-label') && !$element->getAttribute('aria-labelledby')) {
-                    $elementsWithoutAriaLabels[] = $elementHtml;
+                    $warningElementsWithoutAriaLabels[] = $elementHtml;
                     $this->stats->addWarning(self::ANALYSIS_MISSING_ARIA_LABELS, $elementHtml);
                 } else {
                     $this->stats->addOk(self::ANALYSIS_MISSING_ARIA_LABELS, $elementHtml);
@@ -251,8 +263,15 @@ class AccessibilityAnalyzer extends BaseAnalyzer implements Analyzer
             }
         }
 
-        if ($elementsWithoutAriaLabels) {
-            $result->addWarning(count($elementsWithoutAriaLabels) . " element(s) without defined 'aria-label' or 'aria-labelledby'", self::ANALYSIS_MISSING_ARIA_LABELS, $elementsWithoutAriaLabels);
+        // set info to result
+        if ($criticalElementsWithoutAriaLabels) {
+            $result->addCritical(count($criticalElementsWithoutAriaLabels) . " form element(s) without defined 'aria-label' or 'aria-labelledby'", self::ANALYSIS_MISSING_ARIA_LABELS, $criticalElementsWithoutAriaLabels);
+        }
+        if ($warningElementsWithoutAriaLabels) {
+            $result->addWarning(count($warningElementsWithoutAriaLabels) . " element(s) without defined 'aria-label' or 'aria-labelledby'", self::ANALYSIS_MISSING_ARIA_LABELS, $warningElementsWithoutAriaLabels);
+        }
+
+        if ($criticalElementsWithoutAriaLabels || $warningElementsWithoutAriaLabels) {
             $this->pagesWithoutAriaLabels++;
         } else {
             $result->addOk("All key interactive element(s) have defined 'aria-label' or 'aria-labelledby'", self::ANALYSIS_MISSING_ARIA_LABELS);
@@ -280,6 +299,10 @@ class AccessibilityAnalyzer extends BaseAnalyzer implements Analyzer
 
             foreach ($elements as $element) {
                 $elementHtml = $dom->saveHTML($element);
+
+                // remove all content after the first opening tag (it is not needed for the analysis)
+                $elementHtml = preg_replace('/^(<[^>]+>).+$/s', '$1', $elementHtml);
+
                 $elementsWithoutRoles[] = $elementHtml;
                 $this->stats->addWarning(self::ANALYSIS_MISSING_ROLES, $elementHtml);
             }
@@ -308,7 +331,7 @@ class AccessibilityAnalyzer extends BaseAnalyzer implements Analyzer
             $langValue = $htmlElement->getAttribute('lang');
             $elementHtml = '<html lang="' . $langValue . '">';
             if (empty($langValue)) {
-                $result->addCritical("The 'lang' attribute is present in <html> but empty.", self::ANALYSIS_MISSING_LANG_ATTRIBUTE);
+                $result->addCritical("The 'lang' attribute is present in <html> but empty.", self::ANALYSIS_MISSING_LANG_ATTRIBUTE, ["HTML lang attribute value is empty ''."]);
                 $this->stats->addCritical(self::ANALYSIS_MISSING_LANG_ATTRIBUTE, $elementHtml);
                 $this->pagesWithoutLang++;
             } else {
@@ -316,7 +339,7 @@ class AccessibilityAnalyzer extends BaseAnalyzer implements Analyzer
                 $this->stats->addOk(self::ANALYSIS_MISSING_LANG_ATTRIBUTE, $elementHtml);
             }
         } else {
-            $result->addCritical("Document does not have a defined 'lang' attribute in <html>.", self::ANALYSIS_MISSING_LANG_ATTRIBUTE);
+            $result->addCritical("Document does not have a defined 'lang' attribute in <html>.", self::ANALYSIS_MISSING_LANG_ATTRIBUTE, ["HTML lang attribute is not present."]);
             $this->stats->addCritical(self::ANALYSIS_MISSING_LANG_ATTRIBUTE, '<html>');
             $this->pagesWithoutLang++;
         }
@@ -380,6 +403,18 @@ class AccessibilityAnalyzer extends BaseAnalyzer implements Analyzer
     public static function getOptions(): Options
     {
         return new Options();
+    }
+
+    public static function getAnalysisNames(): array
+    {
+        return [
+            self::ANALYSIS_VALID_HTML,
+            self::ANALYSIS_MISSING_IMAGE_ALT_ATTRIBUTES,
+            self::ANALYSIS_MISSING_FORM_LABELS,
+            self::ANALYSIS_MISSING_ARIA_LABELS,
+            self::ANALYSIS_MISSING_ROLES,
+            self::ANALYSIS_MISSING_LANG_ATTRIBUTE,
+        ];
     }
 
 

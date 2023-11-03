@@ -22,8 +22,9 @@ use Crawler\Utils;
 class FastestAnalyzer extends BaseAnalyzer implements Analyzer
 {
     const GROUP_FASTEST_ANALYZER = 'fastest-analyzer';
+    const SUPER_TABLE_FASTEST_URLS = 'fastest-urls';
 
-    protected int $fastestTopLimit = 10;
+    protected int $fastestTopLimit = 20;
     protected float $fastestMaxTime = 1;
 
     public function shouldBeActivated(): bool
@@ -43,11 +44,11 @@ class FastestAnalyzer extends BaseAnalyzer implements Analyzer
         $fastUrls = array_slice($fastUrls, 0, $this->fastestTopLimit);
 
         $consoleWidth = Utils::getConsoleWidth();
-        $urlColumnWidth = intval($consoleWidth - 25);
+        $urlColumnWidth = max($consoleWidth - 25, 20);
 
         $superTable = new SuperTable(
-            'fastest-urls',
-            "TOP {$this->fastestTopLimit} fastest URLs",
+            self::SUPER_TABLE_FASTEST_URLS,
+            "TOP fastest URLs",
             "No fast URLs fastest than {$this->fastestMaxTime} second(s) found.",
             [
                 new SuperTableColumn('requestTime', 'Time', 6, function ($value) {
@@ -76,7 +77,7 @@ class FastestAnalyzer extends BaseAnalyzer implements Analyzer
         $options->addGroup(new Group(
             self::GROUP_FASTEST_ANALYZER,
             'Fastest URL analyzer', [
-            new Option('--fastest-urls-top-limit', null, 'fastestTopLimit', Type::INT, false, 'Number of URL addresses in TOP fastest URL addresses.', 10, false, false),
+            new Option('--fastest-urls-top-limit', null, 'fastestTopLimit', Type::INT, false, 'Number of URL addresses in TOP fastest URL addresses.', 20, false, false),
             new Option('--fastest-urls-max-time', null, 'fastestMaxTime', Type::FLOAT, false, 'The maximum response time for an URL address to be evaluated as fast.', 1, false),
         ]));
         return $options;

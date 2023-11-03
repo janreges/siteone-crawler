@@ -10,7 +10,6 @@ declare(strict_types=1);
 
 namespace Crawler\Export;
 
-use Crawler\HtmlReport;
 use Crawler\Options\Group;
 use Crawler\Options\Options;
 use Crawler\Options\Option;
@@ -91,11 +90,13 @@ class FileExporter extends BaseExporter implements Exporter
         // html file
         if ($this->outputHtmlFile) {
             $jsonOutput = $jsonOutput ?: $multiOutput->getOutputByType(OutputType::JSON);
-            $htmlReport = HtmlReport::generateEmailBody($this->status);
+
+            $htmlReport = new HtmlReport($this->status);
+            $htmlReportBody = $htmlReport->getHtml();
             $reportFile = $this->getExportFilePath($this->outputHtmlFile, 'html');
             file_put_contents(
                 $reportFile,
-                $htmlReport
+                $htmlReportBody
             );
 
             $this->status->addInfoToSummary('export-to-html', "HTML report saved to '{$reportFile}'");

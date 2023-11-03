@@ -202,6 +202,19 @@ class Utils
         return $firstPart . $placeholder . $secondPart;
     }
 
+    public static function truncateUrl(string $url, int $maxLength, string $placeholder = '...', ?string $stripHostname = null): string
+    {
+        if ($stripHostname) {
+            $url = str_ireplace(['http://' . $stripHostname, 'https://' . $stripHostname], ['', ''], $url);
+        }
+
+        if (mb_strlen($url) > $maxLength) {
+            $url = self::truncateInTwoThirds($url, $maxLength, $placeholder);
+        }
+
+        return $url;
+    }
+
     public static function getProgressBar(int $done, int $total, int $segments = 20): string
     {
         $percentage = ($done / $total) * 100;
@@ -255,8 +268,19 @@ class Utils
         return $width;
     }
 
-    public static function getUrlWithoutSchemeAndHost(string $url): string
+    /**
+     * Get URL without a scheme and host. If $onlyWhenHost is defined and URL does not contain this host, return original URL.
+     *
+     * @param string $url
+     * @param string|null $onlyWhenHost
+     * @return string
+     */
+    public static function getUrlWithoutSchemeAndHost(string $url, ?string $onlyWhenHost = null): string
     {
+        if ($onlyWhenHost && stripos($url, $onlyWhenHost) === false) {
+            return $url;
+        }
+
         $parsedUrl = parse_url($url);
         return $parsedUrl['path'] ?? '/';
     }
@@ -297,6 +321,19 @@ class Utils
             return Utils::getColorText(str_pad(strval($statusCode), $strPadTo), 'red', true);
         } else {
             return Utils::getColorText(str_pad(Utils::getHttpClientCodeWithErrorDescription($statusCode, true), $strPadTo), 'red', true);
+        }
+    }
+
+    public static function getColoredSeverity(string $severity): string
+    {
+        if ($severity === 'critical') {
+            return Utils::getColorText($severity, 'red', true);
+        } else if ($severity === 'warning') {
+            return Utils::getColorText($severity, 'magenta', true);
+        } else if ($severity === 'notice') {
+            return Utils::getColorText($severity, 'yellow');
+        } else {
+            return Utils::getColorText($severity, 'green');
         }
     }
 
@@ -828,5 +865,60 @@ class Utils
 
         return array_values(array_unique($phoneNumbers));
     }
+
+    /**
+     * Parse HTML and remove all unwanted attributes from all HTML tags (except for $allowedAttrs)
+     *
+     * @param string $html
+     * @param string[] $allowedAttrs
+     * @param string $replaceTo
+     * @return string
+     */
+    public static function removeUnwantedHtmlAttributes(string $html, array $allowedAttrs, string $replaceTo = ' *** '): string
+    {
+        if (!str_contains($html, '<')) {
+            return $html;
+        }
+
+        $regex = '/<([a-z][a-z0-9]*)\s+([^>]*)>/i';
+        $callback = function ($matches) use ($allowedAttrs, $replaceTo) {
+            $tagName = $matches[1];
+            $attrsString = $matches[2];
+
+            preg_match_all('/([a-z][-a-z0-9_]*)\s*=\s*("|\')(.*?)\2/si', $attrsString, $attrMatches, PREG_SET_ORDER);
+            $allowedAttributes = '';
+            $attributesRemoved = false;
+
+            foreach ($attrMatches as $attr) {
+                if (in_array($attr[1], $allowedAttrs)) {
+                    $allowedAttributes .= $attr[0] . ' ';
+                } else {
+                    $attributesRemoved = true;
+                }
+            }
+
+            $result = "<{$tagName} " . rtrim($allowedAttributes) . ($attributesRemoved ? $replaceTo : '') . '>';
+            return str_replace(' >', '>', $result);
+        };
+
+        return preg_replace_callback($regex, $callback, $html);
+    }
+
+    public static function removeWhitespacesFromHtml(string $html): string
+    {
+        $regexSkip = '/<(script|style)\b[^>]*>.*?<\/\1>/isx';
+
+        $callback = function ($matches) {
+            return preg_replace('/>\s+</', '> <', $matches[0]);
+        };
+
+        $html = preg_replace_callback($regexSkip, $callback, $html);
+
+        $html = preg_replace('/\s+/', ' ', $html);
+        $html = preg_replace('/>\s+</', '> <', $html);
+
+        return $html;
+    }
+
 
 }

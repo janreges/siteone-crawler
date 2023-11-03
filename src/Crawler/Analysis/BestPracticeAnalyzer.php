@@ -38,10 +38,13 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
     const ANALYSIS_TITLE_UNIQUENESS = 'Title uniqueness';
     const ANALYSIS_DESCRIPTION_UNIQUENESS = 'Description uniqueness';
 
+    const SUPER_TABLE_BEST_PRACTICES = 'best-practices';
+
     private readonly AnalyzerStats $stats;
 
     // options
     private int $maxInlineSvgSize = 5 * 1024;
+    private int $maxInlineSvgDuplicateSize = 1024;
     private int $maxInlineSvgDuplicates = 5;
     private int $titleUniquenessPercentage = 10;
     private int $metaDescriptionUniquenessPercentage = 10;
@@ -77,15 +80,15 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
         });
 
         $superTable = new SuperTable(
-            'best-practices',
-            "Best practices summary",
+            self::SUPER_TABLE_BEST_PRACTICES,
+            "Best practices",
             "Nothing to report.",
             [
                 new SuperTableColumn('analysisName', 'Analysis name', SuperTableColumn::AUTO_WIDTH, function ($value) {
                     if ($value === self::ANALYSIS_LARGE_SVGS) {
                         $value .= " (> {$this->maxInlineSvgSize} B)";
                     } elseif ($value === self::ANALYSIS_DUPLICATED_SVGS) {
-                        $value .= " (> {$this->maxInlineSvgDuplicates})";
+                        $value .= " (> {$this->maxInlineSvgDuplicates} and > {$this->maxInlineSvgDuplicateSize} B)";
                     } elseif ($value === self::ANALYSIS_DOM_DEPTH) {
                         $value .= " (> {$this->maxDomDepthWarning})";
                     } elseif ($value === self::ANALYSIS_TITLE_UNIQUENESS) {
@@ -253,7 +256,7 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
 
             // check duplicates
             if (!isset($duplicates[$svgHash])) {
-                $duplicates[$svgHash] = ['count' => 0, 'svg' => $svg];
+                $duplicates[$svgHash] = ['count' => 0, 'svg' => $svg, 'size' => strlen($svg)];
             }
             $duplicates[$svgHash]['count']++;
 
@@ -270,9 +273,9 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
 
         // evaluate inline SVG duplicates
         foreach ($duplicates as $hash => $info) {
-            if ($info['count'] > $this->maxInlineSvgDuplicates) {
+            if ($info['count'] > $this->maxInlineSvgDuplicates && $info['size'] > $this->maxInlineSvgDuplicateSize) {
                 unset($okSvg[$info['svg']]);
-                $duplicatedSvgs[$hash] = "{$info['count']}x SVG: {$info['svg']}";
+                $duplicatedSvgs[$hash] = "{$info['count']}x SVG (" . Utils::getFormattedSize(strlen($info['svg'])) . "): {$info['svg']}";
                 $this->stats->addWarning(self::ANALYSIS_DUPLICATED_SVGS, $info['svg']);
             } else {
                 $this->stats->addOk(self::ANALYSIS_DUPLICATED_SVGS, $info['svg']);
@@ -408,11 +411,11 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
 
         // Report based on the depth
         if ($maxDepth >= $this->maxDomDepthCritical) {
-            $result->addCritical("The DOM depth exceeds the critical limit: {$this->maxDomDepthCritical}. Found depth: {$maxDepth}", self::ANALYSIS_DOM_DEPTH);
+            $result->addCritical("The DOM depth exceeds the critical limit: {$this->maxDomDepthCritical}. Found depth: {$maxDepth}", self::ANALYSIS_DOM_DEPTH, ["The DOM depth exceeds the critical limit: {$this->maxDomDepthCritical}."]);
             $this->stats->addCritical(self::ANALYSIS_DOM_DEPTH, $html);
             $this->pagesWithDeepDom++;
         } elseif ($maxDepth >= $this->maxDomDepthWarning) {
-            $result->addWarning("The DOM depth exceeds the warning limit: {$this->maxDomDepthWarning}. Found depth: {$maxDepth}", self::ANALYSIS_DOM_DEPTH);
+            $result->addWarning("The DOM depth exceeds the warning limit: {$this->maxDomDepthWarning}. Found depth: {$maxDepth}", self::ANALYSIS_DOM_DEPTH, ["The DOM depth exceeds the warning limit: {$this->maxDomDepthWarning}."]);
             $this->stats->addWarning(self::ANALYSIS_DOM_DEPTH, $html);
             $this->pagesWithDeepDom++;
         } else {
@@ -461,7 +464,7 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
         $headings = $xpath->query('//h1 | //h2 | //h3 | //h4 | //h5 | //h6');
 
         if ($headings->length === 0) {
-            $result->addNotice('No headings found in the HTML content.', self::ANALYSIS_HEADING_STRUCTURE);
+            $result->addNotice('No headings found in the HTML content.', self::ANALYSIS_HEADING_STRUCTURE, ['No headings found in the HTML content.']);
             $this->stats->addNotice(self::ANALYSIS_HEADING_STRUCTURE, $html);
             return;
         }
@@ -491,7 +494,7 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
 
         // check if at least one h1 tag was found
         if (!$foundH1) {
-            $criticalIssues[] = 'No <h1> tag found in the HTML content . ';
+            $criticalIssues[] = 'No <h1> tag found in the HTML content.';
             $this->pagesWithoutH1++;
         } else {
             $result->addOk('At least one h1 tag was found . ', self::ANALYSIS_HEADING_STRUCTURE);
@@ -737,6 +740,21 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
         } else {
             $this->status->addOkToSummary('pages-with-non-clickable-phone-numbers', "All pages have clickable (interactive) phone numbers");
         }
+    }
+
+    public static function getAnalysisNames(): array
+    {
+        return [
+            self::ANALYSIS_LARGE_SVGS,
+            self::ANALYSIS_DUPLICATED_SVGS,
+            self::ANALYSIS_INVALID_SVGS,
+            self::ANALYSIS_MISSING_QUOTES,
+            self::ANALYSIS_DOM_DEPTH,
+            self::ANALYSIS_HEADING_STRUCTURE,
+            self::ANALYSIS_NON_CLICKABLE_PHONE_NUMBERS,
+            self::ANALYSIS_TITLE_UNIQUENESS,
+            self::ANALYSIS_DESCRIPTION_UNIQUENESS,
+        ];
     }
 
     public function getOrder(): int

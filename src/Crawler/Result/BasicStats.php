@@ -50,6 +50,27 @@ class BasicStats
         $this->countByStatus = $countByStatus;
     }
 
+    public function getAsHtml(): string
+    {
+        $html = '<table class="table table-bordered table-striped table-hover">';
+        $html .= '<tr><th colspan="2">Basic stats</th></tr>';
+        $html .= '<tr><td>Total execution time</td><td>' . Utils::getFormattedDuration($this->totalExecutionTime) . '</td></tr>';
+        $html .= '<tr><td>Total URLs</td><td>' . $this->totalUrls . '</td></tr>';
+        $html .= '<tr><td>Total size</td><td>' . $this->totalSizeFormatted . '</td></tr>';
+        $html .= '<tr><td>Requests - total time</td><td>' . Utils::getFormattedDuration($this->totalRequestsTimes) . '</td></tr>';
+        $html .= '<tr><td>Requests - avg time</td><td>' . Utils::getFormattedDuration($this->totalRequestsTimesAvg) . '</td></tr>';
+        $html .= '<tr><td>Requests - min time</td><td>' . Utils::getFormattedDuration($this->totalRequestsTimesMin) . '</td></tr>';
+        $html .= '<tr><td>Requests - max time</td><td>' . Utils::getFormattedDuration($this->totalRequestsTimesMax) . '</td></tr>';
+        $html .= '<tr><td>Requests by status</td><td>';
+        foreach ($this->countByStatus as $statusCode => $count) {
+            $html .= Utils::convertBashColorsInTextToHtml(Utils::getColoredStatusCode($statusCode)) . ': ' . htmlspecialchars(strval($count)) . '<br>';
+        }
+        $html .= '</td></tr>';
+        $html .= '</table>';
+
+        return $html;
+    }
+
     /**
      * @param VisitedUrl[] $visitedUrls
      * @param float $startTime

@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SiteOne Website Crawler Report - {$initialHost} | {$executedAt}</title>
+
+    <style>
+        :root {
+            /* colors */
+            --color-white: #fff;
+            --color-black: #000000;
+            --color-gray-50: #f9fafb;
+            --color-gray-100: #eeecec;
+            --color-gray-200: #E5E7EB;
+            --color-gray-300: #D1D5DB;
+            --color-gray-400: #9CA3AF;
+            --color-gray-500: #6B7280;
+            --color-gray-600: #4B5563;
+            --color-gray-700: #374151;
+            --color-gray-800: #1F2937;
+            --color-gray-900: #111827;
+            --color-gray-950: rgb(9, 15, 32);
+            --color-blue-100: #DBEAFE;
+            --color-blue-500: #3B82F6;
+            --color-blue-600: #2563EB;
+            --color-blue-950: rgb(23, 37, 84);
+            /* text-colors */
+            --text-color-default: var(--color-gray-900);
+            --text-color-neutral: var(--color-gray-300);
+            --text-color-blue: var(--color-blue-500);
+            --text-color-blue-dark: var(--color-blue-600);
+            /* background-colors */
+            --background-color-default: var(--color-white);
+            --background-color-neutral: var(--color-gray-100);
+
+            --border-radius: 1.5rem;
+            --padding-inline: 2rem;
+        }
+
+        html * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--background-color-neutral);
+            color: var(--text-color-default);
+            transition: background-color 0.2s ease-out, color 0.2s ease-out;
+        }
+
+        main {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+
+        section {
+            background-color: var(--background-color-default);
+            padding: 2rem var(--padding-inline);
+            border-radius: var(--border-radius);
+            transition: background-color 0.2s ease-out;
+        }
+
+        body h2 {
+            margin-top: 0;
+        }
+
+        body a {
+            color: var(--text-color-default);
+            transition: color 0.2s ease-out;
+        }
+
+        table {
+            border-collapse: collapse;
+        }
+
+        table.table-compact {
+            font-size: 0.7em;
+        }
+
+        table,
+        table th,
+        table td {
+            border: 1px solid var(--color-gray-100);
+            padding: 2px 4px !important;
+            vertical-align: top;
+            text-align: left;
+            transition: border-color 0.2s ease-out, background-color 0.2s ease-out;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            hyphens: auto;
+        }
+
+        table td.warning {
+            text-align: center;
+            color: var(--text-color-neutral);
+        }
+
+        table td svg {
+            max-width: 100px;
+            max-height: 18px;
+        }
+
+        .table-sortable th {
+            cursor: pointer;
+        }
+
+        html:has(.theme-switch__input:checked) table,
+        html:has(.theme-switch__input:checked) table td,
+        html:has(.theme-switch__input:checked) table th {
+            border-color: var(--background-color-neutral);
+        }
+
+        table th {
+            background-color: var(--background-color-neutral);
+        }
+
+        html:has(.theme-switch__input:checked) table th {
+            background-color: var(--background-color-neutral);
+        }
+
+        table th table.table-two-col th {
+            width: 20%;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+            max-width: 117.5rem;
+            margin: 0 auto;
+            padding: 1.5rem 4rem;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background-color: var(--background-color-default);
+            padding-inline: var(--padding-inline);
+            padding-block: 2rem;
+            border-radius: 1000px;
+            border: 1px solid var(--color-gray-100);
+            transition: background-color 0.2s ease-out, border-color 0.2s ease-out;
+        }
+
+        .header a.logo {
+            display: flex;
+        }
+
+        .header h1 {
+            margin: 0;
+        }
+
+        html:has(.theme-switch__input:checked) .body {
+            --text-color-default: var(--color-gray-200);
+            --text-color-neutral: var(--color-gray-600);
+            --background-color-default: var(--color-gray-900);
+            --background-color-neutral: var(--color-gray-800);
+        }
+
+        html:has(.theme-switch__input:checked) .header {
+            border-color: transparent;
+        }
+
+        .theme-switch__dot--light {
+            transform: translateX(0rem);
+        }
+
+        html:has(.theme-switch__input:checked) .theme-switch__dot{
+            transform: translateX(2rem);
+            background-color: var(--color-gray-300);
+        }
+
+        .theme-switch label {
+            display: flex;
+            align-items: center;
+            gap: .375rem;
+            cursor: pointer;
+        }
+
+        .theme-switch__wrapper {
+            display: flex;
+            align-items: center;
+            position: relative;
+            border-radius: var(--border-radius);
+            background-color: var(--color-gray-300);
+            width: 4rem;
+            height: 2rem;
+            transition: all 0.2s ease-out;
+        }
+
+        html:has(.theme-switch__input:checked) .theme-switch__wrapper {
+            background-color: var(--color-gray-600);
+        }
+
+        .theme-switch__input {
+            display: none;
+        }
+
+        .theme-switch__dot {
+            position: absolute;
+            height: 1.5rem;
+            width: 1.5rem;
+            left: .25rem;
+            background-color: var(--color-gray-600);
+            border-radius: 50%;
+            transition: all .2s ease-out;
+        }
+
+        .theme-switch__dot--light {
+            transform: translateX(0rem);
+        }
+
+        .theme-switch__dot--dark {
+            transform: translateX(2rem);
+            background-color: var(--color-gray-300);
+        }
+
+        .info__wrapper {
+            overflow-x: auto;
+        }
+
+        .summary ul {
+            padding-left: 20px;
+        }
+
+        .tabs {
+            display: grid;
+            grid-template-columns: minmax(0, 17.625rem) 1fr;
+            gap: 2rem;
+        }
+
+        .tabs__navigation {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            border-right: 1px solid var(--color-gray-700);
+            padding-right: 2rem;
+        }
+
+        .tabs__radio {
+            display: none;
+        }
+
+        .tabs__tab {
+            display: none;
+        }
+
+        .tabs__content {
+            overflow: auto;
+            font-size: 0.8em;
+        }
+
+        .tabs__content ul {
+            padding-left: 0px;
+        }
+        .tabs__content ul li {
+            list-style: none;
+        }
+
+        .tabs__title {
+            margin: 0;
+            font-size: 1rem;
+            padding: .5rem .75rem;
+            background-color: var(--background-color-neutral);
+            border-radius: var(--border-radius);
+            transition: background-color .2s ease-out;
+            cursor: pointer;
+        }
+
+
+        .tabs__title:hover {
+            background-color: var(--color-blue-500);
+            color: var(--color-white);
+        }
+
+        html:has(.theme-switch__input:checked) .tabs__title {
+            background-color: var(--background-color-neutral);
+        }
+
+        html:has(.theme-switch__input:checked) .tabs__title:hover {
+            background-color: var(--color-blue-600);
+            color: var(--color-white);
+        }
+
+        .tabs__table {
+            border-radius: var(--border-radius);
+            font-size: 0.875rem;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 4px;
+            color: var(--color-gray-800);
+            border-radius: 8px;
+            font-size: 0.75rem;
+            /*font-weight: bold;*/
+            line-height: 1;
+            min-width: 18px;
+            text-align: center;
+        }
+        html:has(.theme-switch__input:checked) .badge {
+            color: var(--color-white);
+        }
+        .badge.red {
+            background-color: #e3342f;
+        }
+        .badge.green {
+            background-color: #38c172;
+        }
+        .badge.blue {
+            background-color: #3490dc;
+        }
+        .badge.orange {
+            background-color: #ff9234;
+        }
+        .badge.yellow {
+            background-color: #ffed4a;
+            color: var(--color-gray-800) !important;
+        }
+        .badge.neutral {
+            background-color: #718096;
+        }
+
+        .badge.in-table {
+            background-color: var(--background-color-neutral);
+        }
+
+        @media screen and (max-width: 64rem) {
+            main {
+                gap: 2.5rem;
+            }
+
+            h1 {
+                font-size: 1.25rem;
+            }
+
+            .container {
+                padding: 2.5rem;
+            }
+
+            .tabs {
+                grid-template-columns: 1fr;
+            }
+
+            .tabs__navigation {
+                justify-content: center;
+                flex-direction: row;
+                flex-wrap: wrap;
+                padding: 0;
+                border: none;
+                text-align: center;
+            }
+
+            .tabs__tab {
+                justify-content: center;
+            }
+        }
+
+        @media screen and (max-width: 40rem) {
+            :root {
+                --padding-inline: 1rem;
+            }
+
+            main {
+                gap: 2rem;
+            }
+
+            h1 {
+                font-size: 1.25rem;
+                text-align: center;
+            }
+
+            h2 {
+                font-size: 1.125rem;
+            }
+
+            .container {
+                padding: 1.25rem;
+                gap: 2rem;
+            }
+
+            .header {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                grid-template-rows: auto auto;
+                gap: 1rem;
+                padding-block: 1.5rem;
+                border-radius: var(--border-radius);
+            }
+
+            .header .theme-switch {
+                justify-self: end;
+            }
+
+            .header h1 {
+                grid-row: 2;
+                grid-column: 1 / 3;
+            }
+
+            .tabs__title {
+                font-size: .875rem;
+                padding: .25rem .5rem;
+            }
+        }
+
+        {$tabsCss}
+
+    </style>
+</head>
+
+<body class="body">
+<div class="container">
+    <header class="header">
+        <a href="https://www.siteone.io/?utm_source=siteone_crawler&utm_medium=logo&utm_campaign=crawler_report&utm_content=v{$version}"
+           target="_blank" class="logo">
+            <svg viewBox="0 0 119 59" width="70px" height="34px" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M92.0551 14.9476V48.07H75.2954V58.0351H118.638V48.07H102.303V0H92.9895L66.8594 26.13L73.8804 33.1223C73.9083 33.1223 92.0551 14.9476 92.0551 14.9476Z"
+                      fill="var(--text-color-neutral)"></path>
+                <path fill-rule="evenodd" clip-rule="evenodd"
+                      d="M0 0.0527344H57.9785V58.0312H0V0.0527344ZM10.25 48.0639H47.7323V10.0156H10.25V48.0639Z"
+                      fill="var(--text-color-default)"></path>
+            </svg>
+        </a>
+        <h1>Crawler Report for <a href="{$initialUrl}">{$initialHost}</a></h1>
+        <div class="theme-switch">
+            <label>
+                <input type="checkbox" class="theme-switch__input" checked>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round" class="feather feather-sun">
+                    <circle cx="12" cy="12" r="5"></circle>
+                    <line x1="12" y1="1" x2="12" y2="3"></line>
+                    <line x1="12" y1="21" x2="12" y2="23"></line>
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                    <line x1="1" y1="12" x2="3" y2="12"></line>
+                    <line x1="21" y1="12" x2="23" y2="12"></line>
+                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                </svg>
+                <div class="theme-switch__wrapper">
+                    <div class="theme-switch__dot"></div>
+                </div>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round" class="feather feather-moon">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                </svg>
+            </label>
+        </div>
+    </header>
+    <main>
+        <section class="tabs">
+            {$tabsRadios}
+            <div class="tabs__navigation">
+                {$tabs}
+            </div>
+            <div class="tabs__content">
+                {$tabsContent}
+            </div>
+        </section>
+    </main>
+    <footer>
+        <br/>
+        <hr/>
+        The report was generated <strong>{$executedAt}</strong> using the <span style="color: red;">♥</span>
+        <a href="https://github.com/janreges/siteone-website-crawler"><strong>SiteOne Website Crawler</strong></a>
+        by Ján Regeš from <a
+            href="https://www.siteone.io/?utm_source=siteone_crawler&utm_medium=email&utm_campaign=crawler_report&utm_content=v{$version}"><strong>SiteOne</strong></a>
+        (Czech Republic).<br/>
+        <br/>
+    </footer>
+    <script>
+        function sortTable(tableId, columnKey) {
+
+            const table = document.querySelector('#' + tableId);
+            const tbody = table.querySelector('tbody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            const headerCells = Array.from(table.querySelectorAll('thead th'));
+            const columnIndex = Array.from(table.querySelectorAll('thead th')).findIndex(th => th.getAttribute('data-key') === columnKey);
+            const direction = headerCells[columnIndex].getAttribute('data-direction');
+            const dataType = headerCells[columnIndex].getAttribute('data-type');
+
+            rows.sort((a, b) => {
+                if (a.children.length !== b.children.length) {
+                    return 0;
+                }
+                let aValue = a.children[columnIndex].getAttribute('data-value');
+                let bValue = b.children[columnIndex].getAttribute('data-value');
+
+                if (dataType === 'number') {
+                    aValue = parseFloat(aValue);
+                    bValue = parseFloat(bValue);
+                }
+
+                if (direction === 'ASC') {
+                    return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
+                } else {
+                    return aValue < bValue ? 1 : aValue > bValue ? -1 : 0;
+                }
+            });
+
+            rows.forEach(row => tbody.appendChild(row));
+
+            headerCells.forEach(th => {
+                let label = th.getAttribute('data-label');
+                if (th.getAttribute('data-key') === columnKey) {
+                    th.innerHTML = label + (direction === 'ASC' ? '&nbsp;🔼' : '&nbsp;🔽');
+                    th.setAttribute('data-direction', direction === 'ASC' ? 'DESC' : 'ASC');
+                } else {
+                    th.textContent = label;
+                }
+            });
+        }
+    </script>
+</div>
+</body>
+
+</html>

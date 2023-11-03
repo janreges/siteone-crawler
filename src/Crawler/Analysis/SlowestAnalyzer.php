@@ -22,8 +22,9 @@ use Crawler\Utils;
 class SlowestAnalyzer extends BaseAnalyzer implements Analyzer
 {
     const GROUP_SLOWEST_ANALYZER = 'slowest-analyzer';
+    const SUPER_TABLE_SLOWEST_URLS = 'slowest-urls';
 
-    protected int $slowestTopLimit = 10;
+    protected int $slowestTopLimit = 20;
     protected float $slowestMinTime = 0.01;
     protected float $slowestMaxTime = 3;
 
@@ -47,8 +48,8 @@ class SlowestAnalyzer extends BaseAnalyzer implements Analyzer
         $urlColumnWidth = intval($consoleWidth - 25);
 
         $superTable = new SuperTable(
-            'slowest-urls',
-            "TOP {$this->slowestTopLimit} slowest URLs",
+            self::SUPER_TABLE_SLOWEST_URLS,
+            "TOP slowest URLs",
             "No slow URLs slowest than {$this->slowestMinTime} second(s) found.",
             [
                 new SuperTableColumn('requestTime', 'Time', 6, function ($value) {
@@ -92,7 +93,7 @@ class SlowestAnalyzer extends BaseAnalyzer implements Analyzer
         $options->addGroup(new Group(
             self::GROUP_SLOWEST_ANALYZER,
             'Slowest URL analyzer', [
-            new Option('--slowest-urls-top-limit', null, 'slowestTopLimit', Type::INT, false, 'Number of URL addresses in TOP slowest URL addresses.', 10, false, false),
+            new Option('--slowest-urls-top-limit', null, 'slowestTopLimit', Type::INT, false, 'Number of URL addresses in TOP slowest URL addresses.', 20, false, false),
             new Option('--slowest-urls-min-time', null, 'slowestMinTime', Type::FLOAT, false, 'The minimum response time for an URL address to be added to TOP slow selection.', 0.01, false),
             new Option('--slowest-urls-max-time', null, 'slowestMaxTime', Type::FLOAT, false, 'The maximum response time for an URL address to be evaluated as very slow.', 3, false),
         ]));

@@ -22,6 +22,7 @@ use Crawler\Utils;
 class ContentTypeAnalyzer extends BaseAnalyzer implements Analyzer
 {
     const GROUP_CONTENT_TYPE_ANALYZER = 'content-type-analyzer';
+    const SUPER_TABLE_CONTENT_TYPES = 'content-types';
 
     protected int $fastestTopLimit = 10;
     protected float $fastestMaxTime = 1;
@@ -60,7 +61,7 @@ class ContentTypeAnalyzer extends BaseAnalyzer implements Analyzer
         }
 
         $superTable = new SuperTable(
-            'content-types',
+            self::SUPER_TABLE_CONTENT_TYPES,
             "Content types",
             "No URLs found.",
             [
@@ -74,7 +75,7 @@ class ContentTypeAnalyzer extends BaseAnalyzer implements Analyzer
                     }
                 }),
                 new SuperTableColumn('totalTime', 'Total time', 10, function ($value) {
-                    return sprintf("%.3f", $value) . ' s';
+                    return Utils::getFormattedDuration($value);
                 }),
                 new SuperTableColumn('avgTime', 'Avg time', 8, function ($value) {
                     return Utils::getColoredRequestTime($value, 8);

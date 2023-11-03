@@ -10,6 +10,7 @@ declare(strict_types=1);
 
 namespace Crawler\Result;
 
+use Crawler\Analysis\Result\UrlAnalysisResult;
 use Crawler\Components\SuperTable;
 use Crawler\CoreOptions;
 use Crawler\Crawler;
@@ -73,6 +74,11 @@ class Status
      * @var VisitedUrl[]
      */
     private array $visitedUrls = [];
+
+    /**
+     * @var array [string => UrlAnalysisResult[]]
+     */
+    private array $visitedUrlToAnalysisResult = [];
 
     /**
      * @param Storage $storage
@@ -226,6 +232,21 @@ class Status
         return $this->superTablesAtEnd;
     }
 
+    public function getSuperTableByAplCode(string $aplCode): ?SuperTable
+    {
+        foreach ($this->superTablesAtBeginning as $superTable) {
+            if ($superTable->aplCode === $aplCode) {
+                return $superTable;
+            }
+        }
+        foreach ($this->superTablesAtEnd as $superTable) {
+            if ($superTable->aplCode === $aplCode) {
+                return $superTable;
+            }
+        }
+        return null;
+    }
+
     public function getUrlByUqId(string $uqId): ?string
     {
         return $this->visitedUrls[$uqId]->url ?? null;
@@ -239,6 +260,33 @@ class Status
         }
 
         return preg_replace('/^(https?:\/\/[^\/]+)/i', '$1', $visitedUrl->url);
+    }
+
+    public function addUrlAnalysisResultForVisitedUrl(string $visitedUrlUqId, UrlAnalysisResult $urlAnalysisResult): void
+    {
+        $this->visitedUrlToAnalysisResult[$visitedUrlUqId][] = $urlAnalysisResult;
+    }
+
+    public function getUrlAnalysisResultsForVisitedUrl(string $visitedUrlUqId): array
+    {
+        return $this->visitedUrlToAnalysisResult[$visitedUrlUqId] ?? [];
+    }
+
+    public function getDetailsByAnalysisNameAndSeverity(string $analysisName, string $severity): array
+    {
+        $result = [];
+        foreach ($this->visitedUrlToAnalysisResult as $visitedUrlUqId => $analysisResults) {
+            foreach ($analysisResults as $analysisResult) {
+                /** @var UrlAnalysisResult $analysisResult */
+                $result = array_merge($result, $analysisResult->getDetailsOfSeverityAndAnalysisName($analysisName, $severity));
+            }
+        }
+        return $result;
+    }
+
+    public function getVisitedUrlToAnalysisResult(): array
+    {
+        return $this->visitedUrlToAnalysisResult;
     }
 
 }

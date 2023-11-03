@@ -10,12 +10,13 @@ declare(strict_types=1);
 
 namespace Crawler\Export;
 
-use Crawler\HtmlReport;
+use Crawler\Crawler;
 use Crawler\Options\Group;
 use Crawler\Options\Options;
 use Crawler\Options\Option;
 use Crawler\Options\Type;
 use Crawler\ParsedUrl;
+use Crawler\Version;
 use Exception;
 
 class MailerExporter extends BaseExporter implements Exporter
@@ -38,19 +39,23 @@ class MailerExporter extends BaseExporter implements Exporter
 
     public function export(): void
     {
-        $emailBody = HtmlReport::generateEmailBody($this->status);
-        $emailAttachment = null; //HtmlReport::generateHtmlFile($this->status);
-        $this->sendEmail($emailBody, $emailAttachment);
+        $host = parse_url($this->status->getOptions()->url, PHP_URL_HOST);
+        $datetime = date('YmdHis', strtotime($this->status->getCrawlerInfo()->executedAt));
+        $htmlReport = new HtmlReport($this->status);
+        $emailBody = $this->getEmailBody($host);
+
+        $this->sendEmail($emailBody, "report-{$host}-{$datetime}.html", $htmlReport->getHtml());
         $this->status->addInfoToSummary('mail-report-sent', "HTML report sent to " . implode(', ', $this->mailTo) . ' using ' . $this->mailSmtpHost . ':' . $this->mailSmtpPort);
     }
 
     /**
      * @param string $htmlBody
-     * @param string|null $attachedFile
+     * @param string|null $attachedFileName
+     * @param string|null $attachedFileContent
      * @return void
      * @throws Exception
      */
-    private function sendEmail(string $htmlBody, ?string $attachedFile): void
+    private function sendEmail(string $htmlBody, ?string $attachedFileName = null, ?string $attachedFileContent = null): void
     {
         $htmlBodyForEmail = $this->styleHtmlBodyForEmail($htmlBody);
         $parsedUrl = ParsedUrl::parse($this->crawler->getCoreOptions()->url);
@@ -69,12 +74,51 @@ class MailerExporter extends BaseExporter implements Exporter
             $this->mailFromName,
             $subject,
             $htmlBodyForEmail,
-            $attachedFile,
+            $attachedFileName,
+            $attachedFileContent,
             $this->mailSmtpHost,
             $this->mailSmtpPort,
             $this->mailSmtpUser,
             $this->mailSmtpPass,
         );
+    }
+
+    private function getEmailBody(string $host): string
+    {
+        $body = 'Hello,<br>
+<br>
+We are pleased to deliver the attached report detailing a thorough crawling and analysis of your website, {$host}. Our advanced website crawler has identified key areas that require your attention, including found redirects, 404 error pages, and potential issues in accessibility, best practices, performance, and security.<br>
+<br>
+<b>How to Utilize the Report</b>:<br>
+<br>
+The report is in HTML format and for full functionality, it should be opened in a JavaScript-enabled browser. This will allow you to access enhanced features such as sorting data within tables.<br>
+For optimal viewing and functionality, we recommend opening the report on a desktop browser. Some mobile email clients may not support all interactive elements.<br>
+<br>
+<b>Benefits of the Report for You</b>:<br>
+<br>
+<b>Clarity</b>: Easily identify pages that need updates or fixes.<br>
+<b>Prioritization</b>: The report is structured to help you quickly determine which issues to address first.<br>
+<b>SEO Optimization</b>: Findings from the report can aid in improving your website’s visibility in search engines.<br>
+<b>User Experience Improvement</b>: Alerts on accessibility and performance issues enable you to create a better experience for your users.<br>
+<b>Security Checks</b>: Identifying potential security threats protects your data and users’ trust.<br>
+<br>
+In case you have any suggestions for improvements and other useful features, feel free to send them as Feature requests to <a href="https://github.com/janreges/siteone-website-crawler/issues/">our project\'s GitHub</a>.<br>
+<br>
+Best regards,<br>
+<br>
+<a href="https://crawler.siteone.io/?utm_source=siteone_crawler&utm_medium=email-report&utm_campaign=crawler_report&utm_content=v"' . Version::CODE . '>SiteOne Website Crawler</a> Team';
+
+        $body = str_replace(
+            [
+                '{$host}',
+            ],
+            [
+                $host
+            ],
+            $body);
+
+        return $body;
+
     }
 
     private function styleHtmlBodyForEmail(string $html): string
@@ -105,7 +149,8 @@ class MailerExporter extends BaseExporter implements Exporter
      * @param string $senderName
      * @param string $subject
      * @param string $htmlBody
-     * @param string|null $attachedFile
+     * @param string|null $attachedFileName
+     * @param string|null $attachedFileContent
      * @param string $smtpHost
      * @param int $smtpPort
      * @param string|null $smtpUser
@@ -113,7 +158,7 @@ class MailerExporter extends BaseExporter implements Exporter
      * @return void
      * @throws Exception
      */
-    private function sendEmailBySmtp(array $recipients, string $sender, string $senderName, string $subject, string $htmlBody, ?string $attachedFile, string $smtpHost, int $smtpPort, ?string $smtpUser = null, ?string $smtpPass = null): void
+    private function sendEmailBySmtp(array $recipients, string $sender, string $senderName, string $subject, string $htmlBody, ?string $attachedFileName, ?string $attachedFileContent, string $smtpHost, int $smtpPort, ?string $smtpUser = null, ?string $smtpPass = null): void
     {
         // Connect to SMTP server
         $socket = @fsockopen($smtpHost, $smtpPort, $errno, $errstr, 5);
@@ -187,7 +232,7 @@ class MailerExporter extends BaseExporter implements Exporter
         }
 
         // Send headers and body
-        if ($attachedFile && file_exists($attachedFile)) {
+        if ($attachedFileName && $attachedFileContent) {
             $boundary = md5(uniqid(strval(time())));
             $headers = "From: {$senderName}<{$sender}>\r\n";
             $headers .= "MIME-Version: 1.0\r\n";
@@ -203,8 +248,8 @@ class MailerExporter extends BaseExporter implements Exporter
             $headers .= $htmlBody . "\r\n";
 
             // Attachment part
-            $filename = basename($attachedFile);
-            $attachmentData = file_get_contents($attachedFile);
+            $filename = basename($attachedFileName);
+            $attachmentData = $attachedFileContent;
             $base64Attachment = chunk_split(base64_encode($attachmentData));
             $headers .= "--{$boundary}\r\n";
             $headers .= "Content-Type: application/octet-stream; name=\"{$filename}\"\r\n";
@@ -249,7 +294,7 @@ class MailerExporter extends BaseExporter implements Exporter
             new Option('--mail-to', null, 'mailTo', Type::EMAIL, true, 'E-mail report recipient address(es). Can be specified multiple times.', [], true, true),
             new Option('--mail-from', null, 'mailFrom', Type::EMAIL, false, 'E-mail sender address.', 'siteone-website-crawler@your-hostname.com', false),
             new Option('--mail-from-name', null, 'mailFromName', Type::STRING, false, 'E-mail sender name', 'SiteOne Crawler', false),
-            new Option('--mail-subject-template', null, 'mailSubjectTemplate', Type::STRING, false, 'E-mail subject template. You can use dynamic variables %domain% and %datetime%', 'Crawler report for %domain% (%datetime%)', true),
+            new Option('--mail-subject-template', null, 'mailSubjectTemplate', Type::STRING, false, 'E-mail subject template. You can use dynamic variables %domain% and %datetime%', 'Crawler Report for %domain% (%date%)', true),
             new Option('--mail-smtp-host', null, 'mailSmtpHost', Type::STRING, false, 'SMTP host.', 'localhost', true),
             new Option('--mail-smtp-port', null, 'mailSmtpPort', Type::INT, false, 'SMTP port.', 25, true),
             new Option('--mail-smtp-user', null, 'mailSmtpUser', Type::STRING, false, 'SMTP user for authentication.', null, true),

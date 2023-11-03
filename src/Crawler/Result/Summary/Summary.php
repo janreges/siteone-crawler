@@ -69,4 +69,15 @@ class Summary
         return $result;
     }
 
+    public function getCountByItemStatus(ItemStatus $status): int
+    {
+        $count = 0;
+        foreach ($this->items as $item) {
+            if ($item->status === $status) {
+                $count++;
+            }
+        }
+        return $count;
+    }
+
 }

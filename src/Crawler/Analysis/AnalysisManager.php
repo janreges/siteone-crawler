@@ -25,6 +25,8 @@ use Exception;
 class AnalysisManager
 {
 
+    const SUPER_TABLE_ANALYSIS_STATS = 'analysis-stats';
+
     /**
      * Absolute path to Crawler class directory where are subfolders Export and Analysis
      * @var string
@@ -145,14 +147,18 @@ class AnalysisManager
             }
 
             // configure super table and add it to output
-            $superTable = new SuperTable('analysis-stats', 'Analysis stats', 'No analysis stats', [
+            $superTable = new SuperTable(self::SUPER_TABLE_ANALYSIS_STATS, 'Analysis stats', 'No analysis stats', [
                 new SuperTableColumn('analyzerAndMethod', 'Analyzer::method'),
-                new SuperTableColumn('execTimeFormatted', 'Exec time'),
+                new SuperTableColumn('execTime', 'Exec time', SuperTableColumn::AUTO_WIDTH, null, function ($row) {
+                    return Utils::getColoredRequestTime($row['execTime']);
+
+                }),
                 new SuperTableColumn('execCount', 'Exec count'),
             ], false, 'execTime', 'DESC');
             $superTable->setData($data);
 
             $this->output->addSuperTable($superTable);
+            $this->status->addSuperTableAtEnd($superTable);
         }
     }
 
@@ -185,6 +191,7 @@ class AnalysisManager
             $analyzerResult = $analyzer->analyzeVisitedUrl($visitedUrl, $body, $dom, $headers);
             if ($analyzerResult) {
                 $result[get_class($analyzer)] = $analyzerResult;
+                $this->status->addUrlAnalysisResultForVisitedUrl($visitedUrl->uqId, $analyzerResult);
             }
         }
         return $result;

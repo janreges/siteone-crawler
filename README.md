@@ -234,7 +234,7 @@ required arguments:
   --mail-to=your.friend.name@my-mail.tld \
   --mail-from=crawler@ymy-mail.tld \
   --mail-from-name="SiteOne Crawler" \
-  --mail-subject-template="Crawler report for %domain% (%datetime%)" \
+  --mail-subject-template="Crawler Report for %domain% (%date%)" \
   --mail-smtp-host=smtp.my-mail.tld \
   --mail-smtp-port=25 \
   --mail-smtp-user=smtp.user \
@@ -340,7 +340,7 @@ through the file:// protocol.
 * `--mail-from=<email>`            E-mail sender address. Default values is `siteone-website-crawler@your-hostname.com`.
 * `--mail-from-name=<val>`         E-mail sender name. Default values is `SiteOne Crawler`.
 * `--mail-subject-template=<val>`  E-mail subject template. You can use dynamic variables %domain%, %date% and
-  %datetime%. Default values is `Crawler report for %domain% (%datetime%)`.
+  %datetime%. Default values is `Crawler Report for %domain% (%date%)`.
 * `--mail-smtp-host=<host>`        SMTP host for sending emails. Default is `localhost`.
 * `--mail-smtp-port=<port>`        SMTP port for sending emails. Default is `25`.
 * `--mail-smtp-user=<user>`        SMTP user, if your SMTP server requires authentication.

@@ -245,4 +245,24 @@ class CoreOptions
     {
         return $this->disableJavascript && $this->disableStyles && $this->disableFonts && $this->disableImages && $this->disableFiles;
     }
+
+    /**
+     * Get initial host from URL (with port if is explicitly set
+     *
+     * @return string
+     */
+    public function getInitialHost(): string
+    {
+        static $initialHost = null;
+
+        if ($initialHost === null) {
+            $initialHost = parse_url($this->url, PHP_URL_HOST);
+            $initialPort = parse_url($this->url, PHP_URL_PORT);
+            if ($initialPort) {
+                $initialHost .= ":{$initialPort}";
+            }
+        }
+
+        return $initialHost;
+    }
 }

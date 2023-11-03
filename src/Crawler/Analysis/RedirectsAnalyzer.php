@@ -17,6 +17,8 @@ use Crawler\Utils;
 
 class RedirectsAnalyzer extends BaseAnalyzer implements Analyzer
 {
+    const SUPER_TABLE_REDIRECTS = 'redirects';
+
     public function shouldBeActivated(): bool
     {
         return true;
@@ -30,24 +32,25 @@ class RedirectsAnalyzer extends BaseAnalyzer implements Analyzer
 
         $consoleWidth = Utils::getConsoleWidth();
         $urlColumnWidth = intval(($consoleWidth - 20) / 3);
+        $initialHost = $this->status->getOptions()->getInitialHost();
 
         $status = $this->status;
         $superTable = new SuperTable(
-            'redirects',
+            self::SUPER_TABLE_REDIRECTS,
             'Redirected URLs',
             'No redirects found.',
             [
                 new SuperTableColumn('statusCode', 'Status', 6, function ($value) {
                     return Utils::getColoredStatusCode($value);
                 }),
-                new SuperTableColumn('url', 'Redirected URL', $urlColumnWidth, function ($value) {
-                    return Utils::getUrlWithoutSchemeAndHost($value);
+                new SuperTableColumn('url', 'Redirected URL', $urlColumnWidth, function ($value) use ($initialHost) {
+                    return Utils::getUrlWithoutSchemeAndHost($value, $initialHost);
                 }, null, true),
-                new SuperTableColumn('targetUrl', 'Target URL', $urlColumnWidth, null, function ($row) {
-                    return Utils::getUrlWithoutSchemeAndHost($row->extras['Location'] ?? '?');
+                new SuperTableColumn('targetUrl', 'Target URL', $urlColumnWidth, null, function ($row) use ($initialHost) {
+                    return Utils::getUrlWithoutSchemeAndHost($row->extras['Location'] ?? '?', $initialHost);
                 }, true),
-                new SuperTableColumn('sourceUqId', 'Found at URL', $urlColumnWidth, function ($value) use ($status) {
-                    return $value ? Utils::getUrlWithoutSchemeAndHost($status->getUrlByUqId($value)) : '';
+                new SuperTableColumn('sourceUqId', 'Found at URL', $urlColumnWidth, function ($value) use ($status, $initialHost) {
+                    return $value ? Utils::getUrlWithoutSchemeAndHost($status->getUrlByUqId($value), $initialHost) : '';
                 }, null, true),
             ], true, 'url', 'ASC');
 
