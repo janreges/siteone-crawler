@@ -798,12 +798,12 @@ class Utils
         $phoneNumbers = array_merge($phoneNumbers, $matchesWithoutSpaces[0]);
 
         // US format with parentheses, e.g.: (123) 456-7890
-        $formatWithBrackets = '/\(\d{1,5}\)\s?\d{1,4}-\d{4}/';
+        $formatWithBrackets = '/\(\d{1,5}\)\s?\d{3,4}-\d{4}/';
         preg_match_all($formatWithBrackets, $html, $matchesWithBrackets);
         $phoneNumbers = array_merge($phoneNumbers, $matchesWithBrackets[0]);
 
         // regular format with dashes, e.g.: 123-456-7890
-        $formatWithDashes = '/\d{1,5}-\d{1,4}-\d{4}/';
+        $formatWithDashes = '/\d{1,5}-\d{3,4}-\d{4}/';
         preg_match_all($formatWithDashes, $html, $matchesWithDashes);
         $phoneNumbers = array_merge($phoneNumbers, $matchesWithDashes[0]);
 

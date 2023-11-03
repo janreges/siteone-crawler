@@ -30,6 +30,7 @@ class UtilsTest extends TestCase
                 <a href="tel:00420987654321">00420987654321</a>
                 <a href="tel:whatever">00 420 987 654 321</a>
                 <a href="tel:(987) 987-654-321">foo</a>
+                02-11-2023
                 +1 123-456-7890
                 234567
                 +61 2 1234 5678
