@@ -460,7 +460,7 @@ class HtmlReport
                     }
                 }
                 $color = $fastestTime < 0.5 ? Badge::COLOR_GREEN : ($fastestTime < 2 ? Badge::COLOR_ORANGE : Badge::COLOR_RED);
-                $badges[] = new Badge(Utils::getFormattedDuration($fastestTime), $color);
+                $badges[] = new Badge(Utils::getFormattedDuration($fastestTime ?: 0), $color);
                 break;
             case SlowestAnalyzer::SUPER_TABLE_SLOWEST_URLS:
                 $slowestTime = null;
@@ -472,7 +472,7 @@ class HtmlReport
                     }
                 }
                 $color = $slowestTime < 0.5 ? Badge::COLOR_GREEN : ($slowestTime < 2 ? Badge::COLOR_ORANGE : Badge::COLOR_RED);
-                $badges[] = new Badge(Utils::getFormattedDuration($slowestTime), $color);
+                $badges[] = new Badge(Utils::getFormattedDuration($slowestTime ?: 0), $color);
                 break;
             case DnsAnalyzer::SUPER_TABLE_DNS:
                 $ipv4 = 0;

@@ -41,7 +41,7 @@ class DnsAnalyzer extends BaseAnalyzer implements Analyzer
                 $data[] = ['info' => $line];
             }
 
-            $domain = $dnsInfo->resolvedDomains[0];
+            $domain = $dnsInfo->resolvedDomains[0] ?? 'unknown';
 
             // IPv4
             if ($dnsInfo->ipv4Addresses) {
@@ -157,6 +157,10 @@ class DnsAnalyzer extends BaseAnalyzer implements Analyzer
                 $match = trim($match, "\r\n\t .");
                 $resolvedDomains[$match] = $match;
             }
+        }
+
+        if (!$resolvedDomains && !$ipv4Addresses && !$ipv6Addresses) {
+            throw new Exception('No resolved domains or IP addresses found. Probably invalid domain.');
         }
 
         return new DnsAnalysisResult(
