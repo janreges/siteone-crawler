@@ -89,7 +89,7 @@ class JsonOutput implements Output
             $value = '';
             $headerName = $extraColumn->name;
             if (array_key_exists($headerName, $extraParsedContent)) {
-                $value = trim($extraParsedContent[$headerName]);
+                $value = trim(strval($extraParsedContent[$headerName]));
             } elseif (array_key_exists(strtolower($headerName), $httpResponse->headers ?: [])) {
                 $value = trim($httpResponse->headers[strtolower($headerName)]);
             }

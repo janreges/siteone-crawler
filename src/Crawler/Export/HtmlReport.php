@@ -666,7 +666,12 @@ class HtmlReport
                         if (preg_match('/^[\s\w\d.,:;!?()\/\-]*$/i', $detail) || $isSvg) {
                             if ($isSvg) {
                                 $detail = str_replace(' display="block', '', $detail);
-                                return Utils::getFormattedSize(strlen($detail)) . ' ' . $detail;
+                                // add SVG size to the detail if detail contains only SVG
+                                if (str_starts_with($detail, '<')) {
+                                    return Utils::getFormattedSize(strlen($detail)) . ' ' . $detail;
+                                } else {
+                                    return $detail;
+                                }
                             } else {
                                 return $detail;
                             }

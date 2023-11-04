@@ -176,8 +176,13 @@ class AnalysisManager
         $dom = null;
         if ($visitedUrl->contentType === Crawler::CONTENT_TYPE_ID_HTML) {
             $s = microtime(true);
+            $encodedBody = mb_convert_encoding($body, 'HTML-ENTITIES', 'UTF-8');
+            if (!$encodedBody) {
+                $this->output->addNotice("HTML encoding error for URL {$visitedUrl->url}");
+                return $result;
+            }
             $dom = new DOMDocument();
-            $domParsing = @$dom->loadHTML(mb_convert_encoding($body, 'HTML-ENTITIES', 'UTF-8'));
+            $domParsing = @$dom->loadHTML($encodedBody);
             if (!$domParsing) {
                 $this->output->addNotice("HTML parsing error for URL {$visitedUrl->url}");
                 $dom = null;
