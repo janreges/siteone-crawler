@@ -335,6 +335,41 @@
             background-color: var(--background-color-neutral);
         }
 
+        input.fulltext {
+            width: 100%;
+            padding: 0.4rem;
+            border-radius: 2px;
+            border: 1px solid var(--background-color-neutral);
+            background-color: var(--background-color-default);
+            color: var(--text-color-default);
+            transition: border-color 0.2s ease-out;
+            margin-bottom: 8px;
+            display: none;
+        }
+
+        .js-enabled input.fulltext {
+            display: inline-block;
+        }
+
+        input.fulltext:focus, input.fulltext:focus-visible {
+            outline: none;
+            box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.2);
+            border-color: var(--background-color-neutral) !important;
+        }
+
+        table tr.empty-fulltext {
+            display: none;
+        }
+
+        ::placeholder {
+            color: var(--text-color-neutral);
+            opacity: 1;
+        }
+
+        ::-ms-input-placeholder {
+            color: var(--text-color-neutral);
+        }
+
         @media screen and (max-width: 64rem) {
             main {
                 gap: 2.5rem;
@@ -419,6 +454,9 @@
 </head>
 
 <body class="body">
+<script>
+    document.getElementsByTagName('body')[0].setAttribute('class', 'body js-enabled');
+</script>
 <div class="container">
     <header class="header">
         <a href="https://www.siteone.io/?utm_source=siteone_crawler&utm_medium=logo&utm_campaign=crawler_report&utm_content=v{$version}"
@@ -520,6 +558,66 @@
                 }
             });
         }
+
+        function debounce(callback, timeout) {
+            let timerId;
+            return function (...args) {
+                clearTimeout(timerId);
+                timerId = setTimeout(() => {
+                    callback.apply(this, args);
+                }, timeout);
+            };
+        }
+
+        function tableFulltext(tableId, searchTerm) {
+            var table = document.getElementById(tableId);
+            if (!table) {
+                console.warn('Table with id "' + tableId + '" was not found.');
+                return;
+            }
+            searchTerm = searchTerm.trim().toLowerCase();
+
+            /* index table rows for effective fulltext search */
+            if (table.getAttribute('data-fulltext-ready') !== '1') {
+                var rows = table.getElementsByTagName('tr');
+                for (var i = 0; i < rows.length; i++) {
+                    var cells = rows[i].getElementsByTagName('td');
+                    var fulltextValue = '';
+                    for (var j = 0; j < cells.length; j++) {
+                        fulltextValue += cells[j].textContent + ' ';
+                    }
+                    fulltextValue = fulltextValue.trim();
+                    rows[i].setAttribute('data-fulltext', fulltextValue.toLowerCase());
+                }
+                table.setAttribute('data-fulltext-ready', '1');
+            }
+
+            var terms = searchTerm.split(' ');
+
+            var tbody = table.getElementsByTagName('tbody')[0];
+            var rows = tbody.getElementsByTagName('tr');
+            var foundRows = 0;
+            for (var i = 0; i < rows.length; i++) {
+                var rowFulltext = rows[i].getAttribute('data-fulltext') || '';
+                var display = terms.every(function(term) {
+                    return rowFulltext.includes(term);
+                }) ? '' : 'none';
+
+                if (display === '') {
+                    foundRows++;
+                }
+
+                rows[i].style.display = display;
+            }
+
+            var emptyFulltextRow = table.getElementsByClassName('empty-fulltext')[0];
+            emptyFulltextRow.style.display = foundRows > 0 ? 'none' : 'table-row';
+        }
+
+        function debouncedTableFulltext(tableId, searchTerm) {
+            debounce(tableFulltext, 250)(tableId, searchTerm);
+        }
+
     </script>
 </div>
 </body>

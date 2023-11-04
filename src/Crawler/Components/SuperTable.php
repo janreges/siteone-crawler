@@ -95,6 +95,8 @@ class SuperTable
             $output .= strip_tags($this->description, 'p,b,strong,i,em,ul,li,ol,br,a') . "<br>";
         }
 
+        $output .= '<input type="text" class="fulltext" onkeyup="debouncedTableFulltext(\'' . htmlspecialchars($this->uniqueId) . '\', this.value)" style="width: 300px;" placeholder="Fulltext search"><br>';
+
         $output .= "<table id='" . htmlspecialchars($this->uniqueId) . "' border='1' class='table table-bordered table-hover table-sortable' style='border-collapse: collapse;'>";
         $output .= "<thead>";
         foreach ($this->columns as $key => $column) {
@@ -167,6 +169,7 @@ class SuperTable
             $output .= "<tr><td colspan='" . count($this->columns) . "' class='warning'>You have reached the limit of {$this->maxRows} rows as a protection against very large output or exhausted memory.</td></tr>";
         }
         $output .= "</tbody>";
+        $output .= "<tr class='empty-fulltext'><td colspan='" . count($this->columns) . "' class='warning'>No rows found, please edit your search term.</td></tr>";
         $output .= "</table>";
 
         return $output;
