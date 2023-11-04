@@ -64,8 +64,8 @@ class Utils
             'magenta' => '0;35',
             'cyan' => '0;36',
             'white' => '0;37',
-            'gray' => '1;30',
-            'dark-gray' => '38;5;237',
+            'gray' => '38;5;244',
+            'dark-gray' => '38;5;240',
         ];
 
         $bgColors = [
