@@ -25,8 +25,8 @@ use Exception;
 
 class SecurityAnalyzer extends BaseAnalyzer implements Analyzer
 {
-    const SUPER_TABLE_SECURITY = 'Security headers';
-    const ANALYSIS_HEADERS = 'Headers';
+    const SUPER_TABLE_SECURITY = 'security';
+    const ANALYSIS_HEADERS = 'Security headers';
 
     const HEADER_ACCESS_CONTROL_ALLOW_ORIGIN = 'access-control-allow-origin';
     const HEADER_STRICT_TRANSPORT_SECURITY = 'strict-transport-security';
@@ -61,7 +61,7 @@ class SecurityAnalyzer extends BaseAnalyzer implements Analyzer
     {
         $superTable = new SuperTable(
             self::SUPER_TABLE_SECURITY,
-            "Security headers",
+            "Security",
             "Nothing to report.",
             [
                 new SuperTableColumn('header', 'Header', SuperTableColumn::AUTO_WIDTH),
@@ -235,6 +235,7 @@ class SecurityAnalyzer extends BaseAnalyzer implements Analyzer
         } elseif ($value !== 'same-origin' && $value !== 'none') {
             $severity = SecurityCheckedHeader::NOTICE;
             $recommendation = "Access-Control-Allow-Origin is set to '{$value}' which allows this origin to access the resource.";
+            $urlAnalysisResult->addNotice($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
         } else {
             $severity = SecurityCheckedHeader::OK;
         }
@@ -280,15 +281,17 @@ class SecurityAnalyzer extends BaseAnalyzer implements Analyzer
         if ($value === null) {
             $severity = SecurityCheckedHeader::WARNING;
             $recommendation = "X-Frame-Options header is not set. This can be a security risk.";
-            $urlAnalysisResult->addCritical($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
+            $urlAnalysisResult->addWarning($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
         } elseif ($value === 'DENY') {
             $severity = SecurityCheckedHeader::OK;
         } elseif ($value === 'SAMEORIGIN') {
             $severity = SecurityCheckedHeader::NOTICE;
             $recommendation = "X-Frame-Options header is set to SAMEORIGIN which allows this origin to embed the resource in a frame.";
+            $urlAnalysisResult->addNotice($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
         } elseif ($value === 'ALLOW-FROM') {
             $severity = SecurityCheckedHeader::NOTICE;
             $recommendation = "X-Frame-Options header is set to ALLOW-FROM which allows this origin to embed the resource in a frame.";
+            $urlAnalysisResult->addNotice($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
         } else {
             $severity = SecurityCheckedHeader::WARNING;
             $recommendation = "X-Frame-Options header is set to '{$value}' which allows this origin to embed the resource in a frame. This can be a security risk.";
@@ -320,7 +323,7 @@ class SecurityAnalyzer extends BaseAnalyzer implements Analyzer
         } else {
             $severity = SecurityCheckedHeader::NOTICE;
             $recommendation = "X-XSS-Protection header is set to '{$value}'. This can be a security risk.";
-            $urlAnalysisResult->addWarning($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
+            $urlAnalysisResult->addNotice($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
         }
 
         $this->result->getCheckedHeader($header)->setFinding($value, $severity, $recommendation);
@@ -335,7 +338,7 @@ class SecurityAnalyzer extends BaseAnalyzer implements Analyzer
         if ($value === null) {
             $severity = SecurityCheckedHeader::WARNING;
             $recommendation = "X-Content-Type-Options header is not set. This can be a security risk.";
-            $urlAnalysisResult->addCritical($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
+            $urlAnalysisResult->addWarning($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
         } elseif ($value === 'nosniff') {
             $severity = SecurityCheckedHeader::OK;
         } else {
@@ -367,13 +370,13 @@ class SecurityAnalyzer extends BaseAnalyzer implements Analyzer
         if ($value === null) {
             $severity = SecurityCheckedHeader::WARNING;
             $recommendation = "Referrer-Policy header is not set. This can be a security risk.";
-            $urlAnalysisResult->addCritical($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
+            $urlAnalysisResult->addWarning($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
         } elseif (in_array($value, $okValues)) {
             $severity = SecurityCheckedHeader::OK;
         } else {
             $severity = SecurityCheckedHeader::NOTICE;
             $recommendation = "Referrer-Policy header is set to '{$value}'. This can be a security risk.";
-            $urlAnalysisResult->addWarning($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
+            $urlAnalysisResult->addNotice($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
         }
 
         $this->result->getCheckedHeader($header)->setFinding($value, $severity, $recommendation);
@@ -387,7 +390,7 @@ class SecurityAnalyzer extends BaseAnalyzer implements Analyzer
 
         if ($value === null) {
             $severity = SecurityCheckedHeader::CRITICAL;
-            $recommendation = "Content-Security-Policy header is not set. This can be a security risk. By CSP you can limit what resources can be loaded from where. It can minimize the consequences of XSS and other attacks";
+            $recommendation = "Content-Security-Policy header is not set. This can be a security risk.";
             $urlAnalysisResult->addCritical($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
         } else {
             $severity = SecurityCheckedHeader::OK;
@@ -405,7 +408,7 @@ class SecurityAnalyzer extends BaseAnalyzer implements Analyzer
         if ($value === null) {
             $severity = SecurityCheckedHeader::WARNING;
             $recommendation = "Feature-Policy header is not set. This can be a security risk.";
-            $urlAnalysisResult->addCritical($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
+            $urlAnalysisResult->addWarning($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
         } else {
             $severity = SecurityCheckedHeader::OK;
         }
@@ -422,7 +425,7 @@ class SecurityAnalyzer extends BaseAnalyzer implements Analyzer
         if ($value === null) {
             $severity = SecurityCheckedHeader::WARNING;
             $recommendation = "Permissions-Policy header is not set. This can be a security risk.";
-            $urlAnalysisResult->addCritical($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
+            $urlAnalysisResult->addWarning($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
         } else {
             $severity = SecurityCheckedHeader::OK;
         }
@@ -445,17 +448,19 @@ class SecurityAnalyzer extends BaseAnalyzer implements Analyzer
         } elseif (str_contains($value, 'Apache')) {
             $severity = SecurityCheckedHeader::NOTICE;
             $recommendation = "Server header is set to '{$value}'. This can be a security risk.";
-            $urlAnalysisResult->addWarning($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
+            $urlAnalysisResult->addNotice($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
         } elseif (str_contains($value, 'nginx')) {
             $severity = SecurityCheckedHeader::NOTICE;
             $recommendation = "Server header is set to '{$value}'. This can be a security risk.";
-            $urlAnalysisResult->addWarning($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
+            $urlAnalysisResult->addNotice($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
         } elseif (str_contains($value, 'Microsoft-IIS')) {
             $severity = SecurityCheckedHeader::NOTICE;
             $recommendation = "Server header is set to '{$value}'. This can be a security risk.";
-            $urlAnalysisResult->addWarning($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
+            $urlAnalysisResult->addNotice($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
         } else {
-            $severity = SecurityCheckedHeader::OK;
+            $severity = SecurityCheckedHeader::NOTICE;
+            $recommendation = "Server header is set to '{$value}'. This can be low security risk.";
+            $urlAnalysisResult->addNotice($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
         }
 
         $this->result->getCheckedHeader($header)->setFinding($value, $severity, $recommendation);
@@ -476,7 +481,7 @@ class SecurityAnalyzer extends BaseAnalyzer implements Analyzer
         } else {
             $severity = SecurityCheckedHeader::WARNING;
             $recommendation = "X-Powered-By header is set to '{$value}'. This can be a security risk.";
-            $urlAnalysisResult->addCritical($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
+            $urlAnalysisResult->addWarning($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
         }
 
         $this->result->getCheckedHeader($header)->setFinding($value, $severity, $recommendation);
@@ -523,6 +528,13 @@ class SecurityAnalyzer extends BaseAnalyzer implements Analyzer
     public function getOrder(): int
     {
         return 215;
+    }
+
+    public static function getAnalysisNames(): array
+    {
+        return [
+            self::ANALYSIS_HEADERS,
+        ];
     }
 
     public static function getOptions(): Options

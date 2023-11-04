@@ -64,7 +64,7 @@ class UrlAnalysisResult
     {
         $this->ok[] = $message;
         if ($detail) {
-            $this->okDetails[$analysisName] = $detail;
+            $this->okDetails[$analysisName] = array_merge($this->okDetails[$analysisName] ?? [], $detail);;
         }
 
         $this->statsPerAnalysis[$analysisName]['ok'] = ($this->statsPerAnalysis[$analysisName]['ok'] ?? 0) + 1;
@@ -74,7 +74,7 @@ class UrlAnalysisResult
     {
         $this->notice[] = $message;
         if ($detail) {
-            $this->noticeDetails[$analysisName] = $detail;
+            $this->noticeDetails[$analysisName] = array_merge($this->noticeDetails[$analysisName] ?? [], $detail);
         }
 
         $this->statsPerAnalysis[$analysisName]['notice'] = ($this->statsPerAnalysis[$analysisName]['notice'] ?? 0) + 1;
@@ -84,7 +84,7 @@ class UrlAnalysisResult
     {
         $this->warning[] = $message;
         if ($detail) {
-            $this->warningDetails[$analysisName] = $detail;
+            $this->warningDetails[$analysisName] = array_merge($this->warningDetails[$analysisName] ?? [], $detail);
         }
 
         $this->statsPerAnalysis[$analysisName]['warning'] = ($this->statsPerAnalysis[$analysisName]['warning'] ?? 0) + 1;
@@ -94,7 +94,7 @@ class UrlAnalysisResult
     {
         $this->critical[] = $message;
         if ($detail) {
-            $this->criticalDetails[$analysisName] = $detail;
+            $this->criticalDetails[$analysisName] = array_merge($this->criticalDetails[$analysisName] ?? [], $detail);;
         }
 
         $this->statsPerAnalysis[$analysisName]['critical'] = ($this->statsPerAnalysis[$analysisName]['critical'] ?? 0) + 1;
@@ -259,16 +259,16 @@ class UrlAnalysisResult
             'critical' => [],
         ];
 
-        foreach($this->criticalDetails[$analysisName]??[] as $detail) {
+        foreach ($this->criticalDetails[$analysisName] ?? [] as $detail) {
             $result['critical'][] = $detail;
         }
-        foreach($this->warningDetails[$analysisName]??[] as $detail) {
+        foreach ($this->warningDetails[$analysisName] ?? [] as $detail) {
             $result['warning'][] = $detail;
         }
-        foreach($this->noticeDetails[$analysisName]??[] as $detail) {
+        foreach ($this->noticeDetails[$analysisName] ?? [] as $detail) {
             $result['notice'][] = $detail;
         }
-        foreach($this->okDetails[$analysisName]??[] as $detail) {
+        foreach ($this->okDetails[$analysisName] ?? [] as $detail) {
             $result['ok'][] = $detail;
         }
 

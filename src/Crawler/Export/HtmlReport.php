@@ -19,6 +19,7 @@ use Crawler\Analysis\FastestAnalyzer;
 use Crawler\Analysis\Page404Analyzer;
 use Crawler\Analysis\RedirectsAnalyzer;
 use Crawler\Analysis\Result\UrlAnalysisResult;
+use Crawler\Analysis\SecurityAnalyzer;
 use Crawler\Analysis\SlowestAnalyzer;
 use Crawler\Analysis\SourceDomainsAnalyzer;
 use Crawler\Components\SuperTable;
@@ -602,6 +603,14 @@ class HtmlReport
                     }
                 }
                 break;
+            case SecurityAnalyzer::SUPER_TABLE_SECURITY:
+                foreach (SecurityAnalyzer::getAnalysisNames() as $analysisName) {
+                    $superTable = $this->getSuperTableForUrlAnalysis($analysisName);
+                    if ($superTable) {
+                        $superTables[] = $superTable;
+                    }
+                }
+                break;
         }
 
         foreach ($superTables as $superTable) {
@@ -616,6 +625,7 @@ class HtmlReport
         static $orders = [
             BestPracticeAnalyzer::SUPER_TABLE_BEST_PRACTICES,
             AccessibilityAnalyzer::SUPER_TABLE_ACCESSIBILITY,
+            SecurityAnalyzer::SUPER_TABLE_SECURITY,
             Page404Analyzer::SUPER_TABLE_404,
             RedirectsAnalyzer::SUPER_TABLE_REDIRECTS,
             FastestAnalyzer::SUPER_TABLE_FASTEST_URLS,
