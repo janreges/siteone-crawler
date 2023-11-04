@@ -204,7 +204,7 @@ class UrlAnalysisResult
             $result .= Utils::getColorText(strval($countCritical), 'red', true) . ' / ';
         }
         if ($countWarning) {
-            $result .= Utils::getColorText(strval($countWarning), 'yellow') . ' / ';
+            $result .= Utils::getColorText(strval($countWarning), 'magenta') . ' / ';
         }
         if ($countNotice) {
             $result .= Utils::getColorText(strval($countNotice), 'blue') . ' / ';

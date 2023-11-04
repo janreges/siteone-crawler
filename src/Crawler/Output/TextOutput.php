@@ -232,7 +232,7 @@ class TextOutput implements Output
 
     public function addNotice(string $text): void
     {
-        $this->addToOutput(Utils::getColorText($text, 'yellow') . "\n");
+        $this->addToOutput(Utils::getColorText($text, 'blue') . "\n");
     }
 
     public function addError(string $text): void

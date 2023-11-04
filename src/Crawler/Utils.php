@@ -331,7 +331,7 @@ class Utils
         } else if ($severity === 'warning') {
             return Utils::getColorText($severity, 'magenta', true);
         } else if ($severity === 'notice') {
-            return Utils::getColorText($severity, 'yellow');
+            return Utils::getColorText($severity, 'blue');
         } else {
             return Utils::getColorText($severity, 'green');
         }
@@ -361,7 +361,7 @@ class Utils
             return strval($notices);
         }
 
-        return Utils::getColorText(str_pad(strval($notices), $strPadTo), 'yellow');
+        return Utils::getColorText(str_pad(strval($notices), $strPadTo), 'blue');
     }
 
     public static function getContentTypeNameById(int $contentTypeId): string

@@ -69,7 +69,7 @@ class SecurityAnalyzer extends BaseAnalyzer implements Analyzer
                     return $value > 0 ? Utils::getColorText(strval($value), 'green') : '0';
                 }, null, false, false),
                 new SuperTableColumn('notice', 'Notice', 6, function ($value) {
-                    return $value > 0 ? Utils::getColorText(strval($value), 'yellow') : '0';
+                    return $value > 0 ? Utils::getColorText(strval($value), 'blue') : '0';
                 }, null, false, false),
                 new SuperTableColumn('warning', 'Warning', 7, function ($value) {
                     return $value > 0 ? Utils::getColorText(strval($value), 'magenta', true) : '0';

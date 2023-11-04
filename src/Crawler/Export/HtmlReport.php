@@ -101,6 +101,7 @@ class HtmlReport
                 '<span class="badge in-table" style="background-color: #ffff00; color: #1F2937">',
                 '<span class="badge" style="background-color: #ffff00; color: #1F2937">',
                 '<span class="badge in-table" style="color: #ffff00">',
+                '<span class="badge in-table" style="color: #0000ff">',
             ],
             [
                 '<span class="badge green">',
@@ -109,6 +110,7 @@ class HtmlReport
                 '<span class="badge yellow">',
                 '<span class="badge yellow">',
                 '<span class="badge yellow">',
+                '<span class="badge blue">',
             ],
             $html
         );
@@ -280,8 +282,8 @@ class HtmlReport
         $colorToCount = [
             Badge::COLOR_RED => $summary->getCountByItemStatus(ItemStatus::CRITICAL),
             Badge::COLOR_ORANGE => $summary->getCountByItemStatus(ItemStatus::WARNING),
-            Badge::COLOR_GREEN => $summary->getCountByItemStatus(ItemStatus::OK),
             Badge::COLOR_BLUE => $summary->getCountByItemStatus(ItemStatus::NOTICE),
+            Badge::COLOR_GREEN => $summary->getCountByItemStatus(ItemStatus::OK),
             Badge::COLOR_NEUTRAL => $summary->getCountByItemStatus(ItemStatus::INFO),
         ];
 
@@ -534,8 +536,8 @@ class HtmlReport
 
         $red = 0;
         $orange = 0;
-        $green = 0;
         $blue = 0;
+        $green = 0;
         $neutral = 0;
 
         foreach ($superTable->getData() as $row) {
@@ -568,11 +570,11 @@ class HtmlReport
         if ($orange > 0) {
             $badges[] = new Badge((string)$orange, Badge::COLOR_ORANGE, 'Warning');
         }
-        if ($green > 0) {
-            $badges[] = new Badge((string)$green, Badge::COLOR_GREEN, 'OK');
-        }
         if ($blue > 0) {
             $badges[] = new Badge((string)$blue, Badge::COLOR_BLUE, 'Notice');
+        }
+        if ($green > 0) {
+            $badges[] = new Badge((string)$green, Badge::COLOR_GREEN, 'OK');
         }
         if ($neutral > 0) {
             $badges[] = new Badge((string)$neutral, Badge::COLOR_NEUTRAL, 'Info');
