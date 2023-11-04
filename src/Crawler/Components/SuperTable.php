@@ -100,10 +100,6 @@ class SuperTable
         $output .= "<table id='" . htmlspecialchars($this->uniqueId) . "' border='1' class='table table-bordered table-hover table-sortable' style='border-collapse: collapse;'>";
         $output .= "<thead>";
         foreach ($this->columns as $key => $column) {
-            $width = $column->width === SuperTableColumn::AUTO_WIDTH
-                ? $column->getAutoWidthByData($this->data)
-                : $column->width;
-            $widthPx = min($width * 12, 800);
             $direction = ($this->currentOrderColumn === $key && $this->currentOrderDirection === 'ASC') ? 'DESC' : 'ASC';
             $arrow = ($this->currentOrderColumn === $key) ? ($this->currentOrderDirection === 'ASC' ? '&nbsp;🔼' : '&nbsp;🔽') : '';
 
@@ -112,7 +108,7 @@ class SuperTable
             } else {
                 $dataType = isset($this->data[0]) && isset($this->data[0]->$key) && is_numeric($this->data[0]->$key) ? 'number' : 'string';
             }
-            $output .= "<th data-key='{$key}' data-type='{$dataType}' data-direction='" . $direction . "' data-label='" . htmlspecialchars($column->name) . "' style='width:{$widthPx}px' onclick='sortTable(\"" . htmlspecialchars($this->uniqueId) . "\", \"" . htmlspecialchars($key) . "\")'>" . htmlspecialchars($column->name) . "{$arrow}</th>";
+            $output .= "<th data-key='{$key}' data-type='{$dataType}' data-direction='" . $direction . "' data-label='" . htmlspecialchars($column->name) . "' onclick='sortTable(\"" . htmlspecialchars($this->uniqueId) . "\", \"" . htmlspecialchars($key) . "\")'>" . htmlspecialchars($column->name) . "{$arrow}</th>";
         }
 
         $initialRootUrl = $this->initialUrl ? preg_replace('/^(https?:\/\/[^\/]+).*$/', '$1', $this->initialUrl) : null;
@@ -168,6 +164,7 @@ class SuperTable
         } else if ($maxRowsReached) {
             $output .= "<tr><td colspan='" . count($this->columns) . "' class='warning'>You have reached the limit of {$this->maxRows} rows as a protection against very large output or exhausted memory.</td></tr>";
         }
+
         $output .= "</tbody>";
         $output .= "<tr class='empty-fulltext'><td colspan='" . count($this->columns) . "' class='warning'>No rows found, please edit your search term.</td></tr>";
         $output .= "</table>";
