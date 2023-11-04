@@ -333,13 +333,13 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
         $issues = [];
         $attributesToCheck = ['href', 'src', 'content', 'alt', 'title'];
 
-        $attributesPattern = '\b\s(' . implode('|', $attributesToCheck) . ')\s*=\s*([^"\'][^\s>]*)';
+        $attributesPattern = '\s(' . implode('|', $attributesToCheck) . ')\s*=\s*([^"\'][^\s>]*)';
         $tagPattern = '/<[^>]*' . $attributesPattern . '[^>]*>/i';
 
         if (preg_match_all($tagPattern, $html, $matches, PREG_SET_ORDER)) {
             foreach ($matches as $match) {
                 // skip attributes without value
-                if (!isset($match[3])) {
+                if (!isset($match[2])) {
                     continue;
                 }
                 // skip <astro-* tags from Astro framework (it uses custom syntax for attributes)
@@ -347,10 +347,10 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
                     continue;
                 }
 
-                $attribute = $match[2];
-                $value = $match[3];
+                $attribute = $match[1];
+                $value = $match[2];
                 if (trim($value) != '' && !is_numeric($value)) {
-                    $issues[] = "The attribute '{$attribute}' has a value not enclosed in quotes in tag '{$match[0]}'";
+                    $issues[] = "The attribute '{$attribute}' has a value '{$value}' not enclosed in quotes in tag {$match[0]}";
                     $this->stats->addWarning(self::ANALYSIS_MISSING_QUOTES, $match[0]);
                 }
             }

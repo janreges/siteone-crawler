@@ -87,7 +87,7 @@ class HtmlUrlParser
      */
     private function findHrefUrls(FoundUrls $foundUrls, string $regexForHtmlExtensions): void
     {
-        preg_match_all('/<a[^>]*\shref=["\']?([^#][^"\'\s]+)["\'\s]?[^>]*>/im', $this->html, $matches);
+        preg_match_all('/<a[^>]*\shref=["\']?([^#][^"\'\s>]+)["\'\s]?[^>]*>/im', $this->html, $matches);
         $foundUrlsTxt = $matches[1];
 
         if (!$this->files) {
