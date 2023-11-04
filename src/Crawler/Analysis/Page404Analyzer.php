@@ -41,7 +41,7 @@ class Page404Analyzer extends BaseAnalyzer implements Analyzer
                 new SuperTableColumn('statusCode', 'Status', 6, function ($value) {
                     return Utils::getColoredStatusCode($value);
                 }),
-                new SuperTableColumn('url', 'URL 404', $urlColumnSize, null),
+                new SuperTableColumn('url', 'URL 404', $urlColumnSize, null, null, true),
                 new SuperTableColumn('sourceUqId', 'Found at URL', $urlColumnSize, function ($value) use ($status) {
                     return $value ? $status->getUrlByUqId($value) : '';
                 }),
