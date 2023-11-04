@@ -95,7 +95,10 @@ class SuperTable
             $output .= strip_tags($this->description, 'p,b,strong,i,em,ul,li,ol,br,a') . "<br>";
         }
 
-        $output .= '<input type="text" class="fulltext" onkeyup="debouncedTableFulltext(\'' . htmlspecialchars($this->uniqueId) . '\', this.value)" style="width: 300px;" placeholder="Fulltext search"><br>';
+        $output .= '<div class="fulltext-container">';
+        $output .= '    <input type="text" class="fulltext" onkeyup="debouncedTableFulltext(\'' . htmlspecialchars($this->uniqueId) . '\', this.value)" style="width: 300px;" placeholder="Fulltext search">';
+        $output .= '    <span id="foundRows_' . htmlspecialchars($this->uniqueId) . '" class="found-rows">Found ' . count($this->data) . ' row(s).</span>';
+        $output .= '</div>';
 
         $output .= "<table id='" . htmlspecialchars($this->uniqueId) . "' border='1' class='table table-bordered table-hover table-sortable' style='border-collapse: collapse;'>";
         $output .= "<thead>";

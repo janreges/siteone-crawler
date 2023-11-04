@@ -76,6 +76,7 @@
 
         table {
             border-collapse: collapse;
+            min-width: 300px;
         }
 
         table.table-compact {
@@ -331,6 +332,19 @@
             background-color: var(--background-color-neutral);
         }
 
+        .fulltext-container {
+            display: none;
+            margin-bottom: 8px;
+        }
+
+        .fulltext-container .found-rows {
+            margin-bottom: 8px;
+        }
+
+        .js-enabled .fulltext-container {
+            display: block;
+        }
+
         input.fulltext {
             width: 100%;
             padding: 0.4rem;
@@ -339,17 +353,12 @@
             background-color: var(--background-color-default);
             color: var(--text-color-default);
             transition: border-color 0.2s ease-out;
-            margin-bottom: 8px;
-            display: none;
-        }
-
-        .js-enabled input.fulltext {
-            display: inline-block;
+            margin-right: 8px;
         }
 
         input.fulltext:focus, input.fulltext:focus-visible {
             outline: none;
-            box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.2);
+            box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1);
             border-color: var(--background-color-neutral) !important;
         }
 
@@ -608,6 +617,8 @@
 
             var emptyFulltextRow = table.getElementsByClassName('empty-fulltext')[0];
             emptyFulltextRow.style.display = foundRows > 0 ? 'none' : 'table-row';
+
+            document.getElementById('foundRows_' + tableId).textContent = 'Found ' + foundRows + ' row(s).';
         }
 
         function debouncedTableFulltext(tableId, searchTerm) {
