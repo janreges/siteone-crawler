@@ -127,7 +127,11 @@ class JsonOutput implements Output
         if (!isset($this->json['tables'])) {
             $this->json['tables'] = [];
         }
-        $this->json['tables'][$table->aplCode] = $table->getJsonOutput();
+
+        $tableJson = $table->getJsonOutput();
+        if ($tableJson) {
+            $this->json['tables'][$table->aplCode] = $tableJson;
+        }
     }
 
     public function addNotice(string $text): void

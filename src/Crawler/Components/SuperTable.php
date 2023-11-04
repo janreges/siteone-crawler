@@ -23,6 +23,10 @@ class SuperTable
     public readonly ?string $description;
     public readonly ?int $maxRows;
 
+    private bool $visibleInHtml = true;
+    private bool $visibleInConsole = true;
+    private bool $visibleInJson = true;
+
     /**
      * @var SuperTableColumn[]
      */
@@ -87,6 +91,10 @@ class SuperTable
      */
     public function getHtmlOutput(): string
     {
+        if (!$this->visibleInHtml) {
+            return '';
+        }
+
         $output = "<h2>" . htmlspecialchars($this->title) . "</h2>";
         if (!$this->data) {
             $output .= "<p>" . htmlspecialchars($this->emptyTableMessage) . "</p>";
@@ -157,7 +165,8 @@ class SuperTable
                     $formattedValue = "<a href='" . htmlspecialchars($finalUrl) . "' target='_blank'>" . Utils::truncateUrl($formattedValue, 100, '...', $this->hostToStripFromUrls) . "</a>";
                 }
 
-                $output .= "<td data-value='" . htmlspecialchars(is_scalar($value) && strlen(strval($value)) < 200 ? strval($value) : 'complex-data') . "'>{$formattedValue}</td>";
+                $dataValue = is_scalar($value) && strlen(strval($value)) < 200 ? strval($value) : (strlen(strval($formattedValue)) < 50 ? strval($formattedValue) : 'complex-data');
+                $output .= "<td data-value='" . htmlspecialchars($dataValue) . "'>{$formattedValue}</td>";
             }
             $output .= "</tr>";
             $counter++;
@@ -180,6 +189,9 @@ class SuperTable
      */
     public function getConsoleOutput(): string
     {
+        if (!$this->visibleInConsole) {
+            return '';
+        }
         $titleOutput = $this->title . PHP_EOL . str_repeat('-', mb_strlen($this->title)) . PHP_EOL . PHP_EOL;;
         $output = Utils::getColorText($titleOutput, 'blue');
 
@@ -222,7 +234,7 @@ class SuperTable
                     $value = call_user_func($column->renderer, $row);
                 }
 
-                if ($column->truncateIfLonger && $value && mb_strlen($value) > $columnWidth) {
+                if ($column->truncateIfLonger && $value && mb_strlen(strval($value)) > $columnWidth) {
                     $value = Utils::truncateInTwoThirds($value, $columnWidth);
                 }
 
@@ -237,8 +249,12 @@ class SuperTable
         return $output;
     }
 
-    public function getJsonOutput(): array
+    public function getJsonOutput(): ?array
     {
+        if (!$this->visibleInJson) {
+            return null;
+        }
+
         return [
             'aplCode' => $this->aplCode,
             'title' => $this->title,
@@ -274,6 +290,36 @@ class SuperTable
     public function setInitialUrl(?string $initialUrl): void
     {
         $this->initialUrl = $initialUrl;
+    }
+
+    public function setVisibilityInHtml(bool $visibleInHtml): void
+    {
+        $this->visibleInHtml = $visibleInHtml;
+    }
+
+    public function setVisibilityInConsole(bool $visibleInConsole): void
+    {
+        $this->visibleInConsole = $visibleInConsole;
+    }
+
+    public function setVisibilityInJson(bool $visibleInJson): void
+    {
+        $this->visibleInJson = $visibleInJson;
+    }
+
+    public function isVisibleInHtml(): bool
+    {
+        return $this->visibleInHtml;
+    }
+
+    public function isVisibleInConsole(): bool
+    {
+        return $this->visibleInConsole;
+    }
+
+    public function isVisibleInJson(): bool
+    {
+        return $this->visibleInJson;
     }
 
     private function sortData(string $columnKey, string $direction): void
