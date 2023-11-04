@@ -135,6 +135,7 @@ class Option
                     }
                     if (str_contains($argValue, ',')) {
                         $value = preg_split('/\s*,\s*/', $argValue);
+                        $value = array_filter($value, fn($item) => trim($item) !== '');
                     } else {
                         $value[] = $argValue;
                     }
