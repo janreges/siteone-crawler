@@ -37,6 +37,7 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
     const ANALYSIS_DOM_DEPTH = 'DOM depth';
     const ANALYSIS_TITLE_UNIQUENESS = 'Title uniqueness';
     const ANALYSIS_DESCRIPTION_UNIQUENESS = 'Description uniqueness';
+    const ANALYSIS_BROTLI_SUPPORT = 'Brotli support';
 
     const SUPER_TABLE_BEST_PRACTICES = 'best-practices';
 
@@ -146,7 +147,7 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
         $brotliSupportedInRequests = str_contains($this->crawler->getCoreOptions()->acceptEncoding, 'br');
         if ($brotliSupportedInRequests) {
             $s = microtime(true);
-            $this->checkBrotliSupport(array_filter($urls, function (VisitedUrl $url) {
+            $data[] = $this->checkBrotliSupport(array_filter($urls, function (VisitedUrl $url) {
                 return !$url->isExternal && $url->contentType === Crawler::CONTENT_TYPE_ID_HTML;
             }));
             $this->measureExecTime(__CLASS__, 'checkBrotliSupport', $s);
@@ -659,20 +660,23 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
 
     /**
      * @param VisitedUrl[] $urls
-     * @return void
+     * @return array
      */
-    private function checkBrotliSupport(array $urls): void
+    private function checkBrotliSupport(array $urls): array
     {
         $summaryAplCode = 'brotli-support';
         $urlsWithoutBrotli = array_filter($urls, function (VisitedUrl $url) {
             return $url->contentEncoding !== 'br';
         });
+        $urlsWithBrotliSupport = count($urls) - count($urlsWithoutBrotli);
 
         if ($urlsWithoutBrotli) {
             $this->status->addWarningToSummary($summaryAplCode, count($urlsWithoutBrotli) . ' page(s) do not support Brotli compression.');
         } else {
             $this->status->addOkToSummary($summaryAplCode, 'All pages support Brotli compression.');
         }
+
+        return $this->getAnalysisResult(self::ANALYSIS_BROTLI_SUPPORT, $urlsWithBrotliSupport, 0, count($urlsWithoutBrotli), 0);
     }
 
     /**
