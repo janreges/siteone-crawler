@@ -43,6 +43,19 @@ class Utils
         }
     }
 
+    public static function getFormattedAge(int $age): string
+    {
+        if ($age < 60) {
+            return $age . ' sec(s)';
+        } elseif ($age < 3600) {
+            return round($age / 60, 1) . ' min(s)';
+        } elseif ($age < 86400) {
+            return round($age / 3600, 1) . ' hour(s)';
+        } else {
+            return round($age / 86400, 1) . ' day(s)';
+        }
+    }
+
     public static function getColorText(string $text, string $color, ?bool $setBackground = false): string
     {
         if (!self::$colorsEnabled) {

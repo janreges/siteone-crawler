@@ -1,0 +1,178 @@
+<?php
+
+/*
+ * This file is part of the SiteOne Website Crawler.
+ *
+ * (c) Ján Regeš <jan.reges@siteone.cz>
+ */
+
+declare(strict_types=1);
+
+namespace Crawler\Analysis;
+
+use Crawler\Analysis\Result\HeaderStats;
+use Crawler\Analysis\Result\UrlAnalysisResult;
+use Crawler\Components\SuperTable;
+use Crawler\Components\SuperTableColumn;
+use Crawler\Options\Options;
+use Crawler\Result\VisitedUrl;
+use Crawler\Utils;
+use DOMDocument;
+
+class HeadersAnalyzer extends BaseAnalyzer implements Analyzer
+{
+    const SUPER_TABLE_HEADERS = 'headers';
+    const SUPER_TABLE_HEADERS_VALUES = 'headers-values';
+
+    const ANALYSIS_HEADERS = 'Headers';
+
+    /**
+     * @var HeaderStats[]
+     */
+    private array $headerStats = [];
+
+    public function shouldBeActivated(): bool
+    {
+        return true;
+    }
+
+    public function analyze(): void
+    {
+        $consoleWidth = Utils::getConsoleWidth();
+
+        // basic info
+        $superTable = new SuperTable(
+            self::SUPER_TABLE_HEADERS,
+            'Headers',
+            'No headers found.',
+            [
+                new SuperTableColumn('header', 'Header', SuperTableColumn::AUTO_WIDTH, null, function (HeaderStats $header) {
+                    return $header->getFormattedHeaderName();
+                }),
+                new SuperTableColumn('occurrences', 'Occurs', 6),
+                new SuperTableColumn('uniqueValues', 'Unique', 6, null, function (HeaderStats $stats) {
+                    $count = count($stats->uniqueValues);
+                    if ($count === 0) {
+                        return '-';
+                    } elseif ($stats->uniqueValuesLimitReached) {
+                        return "{$count}+";
+                    } else {
+                        return $count;
+                    }
+                }, false),
+                new SuperTableColumn('valuesPreview', 'Values preview', $consoleWidth - 90, null, null, true),
+                new SuperTableColumn('minValue', 'Min value', 10, null, function (HeaderStats $header) {
+                    if ($header->header === 'content-length') {
+                        return Utils::getFormattedSize($header->minIntValue);
+                    } elseif ($header->header === 'age') {
+                        return Utils::getFormattedAge($header->minIntValue);
+                    }
+                    return $header->minIntValue !== null ? $header->minIntValue : ($header->minDateValue ?: '');
+                }),
+                new SuperTableColumn('maxValue', 'Max value', 10, null, function (HeaderStats $header) {
+                    if ($header->header === 'content-length') {
+                        return Utils::getFormattedSize($header->maxIntValue);
+                    } elseif ($header->header === 'age') {
+                        return Utils::getFormattedAge($header->maxIntValue);
+                    }
+                    return $header->maxIntValue !== null ? $header->maxIntValue : ($header->maxDateValue ?: '');
+                })
+            ], true, 'header', 'ASC');
+
+        $superTable->setData($this->headerStats);
+        $this->status->addSuperTableAtEnd($superTable);
+        $this->output->addSuperTable($superTable);
+
+        $this->status->addSummaryItemByRanges(
+            'unique-headers',
+            count($this->headerStats),
+            [[0, 20], [21, 30], [31, 40], [51, PHP_INT_MAX]],
+            [
+                "Unique headers OK - found %s unique headers",
+                "Unique headers NOTICE - found %s unique headers",
+                "Unique headers WARNING - found %s unique headers (too many)",
+                "Unique headers CRITICAL - found %s unique headers (too many)"
+            ]
+        );
+
+        // detail info with header values
+
+        $details = [];
+        foreach ($this->headerStats as $header) {
+            foreach ($header->uniqueValues as $value => $count) {
+                $key = $header->header . '-' . $value;
+                $details[$key] = [
+                    'header' => $header->getFormattedHeaderName(),
+                    'occurrences' => $count,
+                    'value' => $value,
+                ];
+            }
+        }
+
+        $superTable = new SuperTable(
+            self::SUPER_TABLE_HEADERS_VALUES,
+            'Header values',
+            'No headers found.',
+            [
+                new SuperTableColumn('header', 'Header'),
+                new SuperTableColumn('occurrences', 'Occurs', 6),
+                new SuperTableColumn('value', 'Value', $consoleWidth - 56, null, null, true),
+            ], true, null);
+
+        // sort by header asc, then by occurrences desc
+        usort($details, function ($a, $b) {
+            if ($a['header'] === $b['header']) {
+                return $b['occurrences'] <=> $a['occurrences'];
+            } else {
+                return $a['header'] <=> $b['header'];
+            }
+        });
+
+
+        $superTable->setData($details);
+        $this->status->addSuperTableAtEnd($superTable);
+        $this->output->addSuperTable($superTable);
+    }
+
+    /**
+     * Analyze headers of each request for internal URLs
+     *
+     * @param VisitedUrl $visitedUrl
+     * @param string|null $body
+     * @param DOMDocument|null $dom
+     * @param array|null $headers
+     * @return UrlAnalysisResult|null
+     */
+    public function analyzeVisitedUrl(VisitedUrl $visitedUrl, ?string $body, ?DOMDocument $dom, ?array $headers): ?UrlAnalysisResult
+    {
+        if (!$headers || $visitedUrl->isExternal) {
+            return null;
+        }
+
+        foreach ($headers as $header => $value) {
+            if (!isset($this->headerStats[$header])) {
+                $this->headerStats[$header] = new HeaderStats($header);
+            }
+            $this->headerStats[$header]->addValue($value);
+        }
+
+        return null;
+    }
+
+    public function getOrder(): int
+    {
+        return 115;
+    }
+
+    public static function getOptions(): Options
+    {
+        return new Options();
+    }
+
+    public static function getAnalysisNames(): array
+    {
+        return [
+            self::ANALYSIS_HEADERS,
+        ];
+    }
+}

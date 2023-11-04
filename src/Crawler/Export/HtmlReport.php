@@ -16,6 +16,7 @@ use Crawler\Analysis\BestPracticeAnalyzer;
 use Crawler\Analysis\ContentTypeAnalyzer;
 use Crawler\Analysis\DnsAnalyzer;
 use Crawler\Analysis\FastestAnalyzer;
+use Crawler\Analysis\HeadersAnalyzer;
 use Crawler\Analysis\Page404Analyzer;
 use Crawler\Analysis\RedirectsAnalyzer;
 use Crawler\Analysis\Result\UrlAnalysisResult;
@@ -57,6 +58,7 @@ class HtmlReport
         $this->maxExampleUrls = $maxExampleUrls;
         $this->skippedSuperTables = [
             AnalysisManager::SUPER_TABLE_ANALYSIS_STATS, // will be in tab Crawler info
+            HeadersAnalyzer::SUPER_TABLE_HEADERS_VALUES, // will be in tab Headers
         ];
     }
 
@@ -477,6 +479,11 @@ class HtmlReport
                 $color = $slowestTime < 0.5 ? Badge::COLOR_GREEN : ($slowestTime < 2 ? Badge::COLOR_ORANGE : Badge::COLOR_RED);
                 $badges[] = new Badge(Utils::getFormattedDuration($slowestTime ?: 0), $color);
                 break;
+            case HeadersAnalyzer::SUPER_TABLE_HEADERS:
+                $headers = $superTable->getTotalRows();
+                $color = $headers > 50 ? Badge::COLOR_RED : Badge::COLOR_NEUTRAL;
+                $badges[] = new Badge((string)$headers, $color);
+                break;
             case DnsAnalyzer::SUPER_TABLE_DNS:
                 $ipv4 = 0;
                 $ipv6 = 0;
@@ -613,6 +620,9 @@ class HtmlReport
                     }
                 }
                 break;
+            case HeadersAnalyzer::SUPER_TABLE_HEADERS:
+                $superTables[] = $this->status->getSuperTableByAplCode(HeadersAnalyzer::SUPER_TABLE_HEADERS_VALUES);
+                break;
         }
 
         foreach ($superTables as $superTable) {
@@ -634,6 +644,7 @@ class HtmlReport
             SlowestAnalyzer::SUPER_TABLE_SLOWEST_URLS,
             ContentTypeAnalyzer::SUPER_TABLE_CONTENT_TYPES,
             SourceDomainsAnalyzer::SUPER_TABLE_SOURCE_DOMAINS,
+            HeadersAnalyzer::SUPER_TABLE_HEADERS,
             DnsAnalyzer::SUPER_TABLE_DNS,
             self::SUPER_TABLE_VISITED_URLS,
         ];
