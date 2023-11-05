@@ -575,6 +575,7 @@ class Crawler
             $visitedUrl['time'],
             $visitedUrl['size'],
             $visitedUrl['type'],
+            $headers['content-type'] ?? null,
             $headers['content-encoding'] ?? null,
             $extras,
             $isExternal,

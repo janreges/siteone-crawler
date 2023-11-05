@@ -81,6 +81,12 @@ class VisitedUrl
     public readonly int $contentType;
 
     /**
+     * Content type header value (text/html, application/json, ...)
+     * @var string|null
+     */
+    public readonly ?string $contentTypeHeader;
+
+    /**
      * Extra data from the response required by --extra-columns (headers, Title, DOM, etc.
      * @var array|null
      */
@@ -106,12 +112,13 @@ class VisitedUrl
      * @param float $requestTime
      * @param int|null $size
      * @param int $contentType
+     * @param string|null $contentTypeHeader
      * @param string|null $contentEncoding
      * @param array|null $extras
      * @param bool $isExternal
      * @param bool $isAllowedForCrawling
      */
-    public function __construct(string $uqId, string $sourceUqId, string $url, int $statusCode, float $requestTime, ?int $size, int $contentType, ?string $contentEncoding, ?array $extras, bool $isExternal, bool $isAllowedForCrawling)
+    public function __construct(string $uqId, string $sourceUqId, string $url, int $statusCode, float $requestTime, ?int $size, int $contentType, ?string $contentTypeHeader, ?string $contentEncoding, ?array $extras, bool $isExternal, bool $isAllowedForCrawling)
     {
         $this->uqId = $uqId;
         $this->sourceUqId = $sourceUqId;
@@ -122,6 +129,7 @@ class VisitedUrl
         $this->size = $size;
         $this->sizeFormatted = $size !== null ? Utils::getFormattedSize($size) : null;
         $this->contentType = $contentType;
+        $this->contentTypeHeader = $contentTypeHeader;
         $this->contentEncoding = $contentEncoding;
         $this->extras = $extras;
         $this->isExternal = $isExternal;

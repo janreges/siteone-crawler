@@ -38,6 +38,8 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
     const ANALYSIS_TITLE_UNIQUENESS = 'Title uniqueness';
     const ANALYSIS_DESCRIPTION_UNIQUENESS = 'Description uniqueness';
     const ANALYSIS_BROTLI_SUPPORT = 'Brotli support';
+    const ANALYSIS_WEBP_SUPPORT = 'WebP support';
+    const ANALYSIS_AVIF_SUPPORT = 'AVIF support';
 
     const SUPER_TABLE_BEST_PRACTICES = 'best-practices';
 
@@ -76,8 +78,12 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
 
     public function analyze(): void
     {
-        $htmlUrls = array_filter($this->status->getVisitedUrls(), function ($visitedUrl) {
+        $imagesUrls = array_filter($this->status->getVisitedUrls(), function ($visitedUrl) {
             return $visitedUrl->statusCode === 200 && $visitedUrl->contentType === Crawler::CONTENT_TYPE_ID_HTML;
+        });
+
+        $imagesUrls = array_filter($this->status->getVisitedUrls(), function ($visitedUrl) {
+            return $visitedUrl->statusCode === 200 && $visitedUrl->contentType === Crawler::CONTENT_TYPE_ID_IMAGE;
         });
 
         $superTable = new SuperTable(
@@ -114,7 +120,7 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
             ], true, null
         );
 
-        $superTable->setData($this->analyzeUrls($htmlUrls));
+        $superTable->setData($this->analyzeUrls($imagesUrls, $imagesUrls));
         $this->status->addSuperTableAtEnd($superTable);
         $this->output->addSuperTable($superTable);
 
@@ -122,10 +128,11 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
     }
 
     /**
-     * @param VisitedUrl[] $urls
+     * @param VisitedUrl[] $htmlUrls
+     * @param VisitedUrl[] $imagesUrls
      * @return array
      */
-    private function analyzeUrls(array $urls): array
+    private function analyzeUrls(array $htmlUrls, array $imagesUrls): array
     {
         $data = $this->stats->toTableArray();
 
@@ -133,25 +140,35 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
         $s = microtime(true);
         $data[] = $this->checkTitleUniqueness(array_map(function (VisitedUrl $url) {
             return $url->extras['Title'] ?? null;
-        }, $urls));
+        }, $htmlUrls));
         $this->measureExecTime(__CLASS__, 'checkTitleUniqueness', $s);
 
         // check for meta description uniqueness
         $s = microtime(true);
         $data[] = $this->checkMetaDescriptionUniqueness(array_map(function (VisitedUrl $url) {
             return $url->extras['Description'] ?? null;
-        }, $urls));
+        }, $htmlUrls));
         $this->measureExecTime(__CLASS__, 'checkMetaDescriptionUniqueness', $s);
 
         // check for brotli support on HTML pages (just for non-external URLs)
         $brotliSupportedInRequests = str_contains($this->crawler->getCoreOptions()->acceptEncoding, 'br');
         if ($brotliSupportedInRequests) {
             $s = microtime(true);
-            $data[] = $this->checkBrotliSupport(array_filter($urls, function (VisitedUrl $url) {
+            $data[] = $this->checkBrotliSupport(array_filter($htmlUrls, function (VisitedUrl $url) {
                 return !$url->isExternal && $url->contentType === Crawler::CONTENT_TYPE_ID_HTML;
             }));
             $this->measureExecTime(__CLASS__, 'checkBrotliSupport', $s);
         }
+
+        // check for webp support on images
+        $s = microtime(true);
+        $data[] = $this->checkWebpSupport($imagesUrls);
+        $this->measureExecTime(__CLASS__, 'checkWebpSupport', $s);
+
+        // check for avif support on images
+        $s = microtime(true);
+        $data[] = $this->checkAvifSupport($imagesUrls);
+        $this->measureExecTime(__CLASS__, 'checkAvifSupport', $s);
 
         return $data;
     }
@@ -677,6 +694,46 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
         }
 
         return $this->getAnalysisResult(self::ANALYSIS_BROTLI_SUPPORT, $urlsWithBrotliSupport, 0, count($urlsWithoutBrotli), 0);
+    }
+
+    /**
+     * @param VisitedUrl[] $urls
+     * @return array
+     */
+    private function checkWebpSupport(array $urls): array
+    {
+        $summaryAplCode = 'webp-support';
+        $webpImages = array_filter($urls, function (VisitedUrl $url) {
+            return $url->contentTypeHeader === 'image/webp';
+        });
+
+        if ($webpImages) {
+            $this->status->addOkToSummary($summaryAplCode, count($webpImages) . ' WebP image(s) found on the website.');
+        } else {
+            $this->status->addWarningToSummary($summaryAplCode, 'No WebP image found on the website.');
+        }
+
+        return $this->getAnalysisResult(self::ANALYSIS_WEBP_SUPPORT, count($webpImages), 0, $webpImages ? 0 : 1, 0);
+    }
+
+    /**
+     * @param VisitedUrl[] $urls
+     * @return array
+     */
+    private function checkAvifSupport(array $urls): array
+    {
+        $summaryAplCode = 'avif-support';
+        $avifImages = array_filter($urls, function (VisitedUrl $url) {
+            return $url->contentTypeHeader === 'image/avif';
+        });
+
+        if ($avifImages) {
+            $this->status->addOkToSummary($summaryAplCode, count($avifImages) . ' AVIF image(s) found on the website.');
+        } else {
+            $this->status->addWarningToSummary($summaryAplCode, 'No AVIF image found on the website.');
+        }
+
+        return $this->getAnalysisResult(self::ANALYSIS_AVIF_SUPPORT, count($avifImages), 0, $avifImages ? 0 : 1, 0);
     }
 
     /**
