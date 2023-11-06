@@ -68,6 +68,7 @@ class HtmlReport
             SslTlsAnalyzer::SUPER_TABLE_CERTIFICATE_INFO, // will be in tab DNS and SSL/TLS
             BestPracticeAnalyzer::SUPER_TABLE_NON_UNIQUE_TITLES, // will be in tab SEO and OpenGraph
             BestPracticeAnalyzer::SUPER_TABLE_NON_UNIQUE_DESCRIPTIONS, // will be in tab SEO and OpenGraph
+            ContentTypeAnalyzer::SUPER_TABLE_CONTENT_MIME_TYPES, // will be in tab Content Types
         ];
     }
 
@@ -570,7 +571,11 @@ class HtmlReport
                 break;
             case ContentTypeAnalyzer::SUPER_TABLE_CONTENT_TYPES:
                 $contentTypes = $superTable->getTotalRows();
-                $badges[] = new Badge((string)$contentTypes, Badge::COLOR_NEUTRAL);
+                $badges[] = new Badge((string)$contentTypes, Badge::COLOR_NEUTRAL, 'Total content types');
+                $superTableMimeTypes = $this->status->getSuperTableByAplCode(ContentTypeAnalyzer::SUPER_TABLE_CONTENT_MIME_TYPES);
+                if ($superTableMimeTypes) {
+                    $badges[] = new Badge((string)$superTableMimeTypes->getTotalRows(), Badge::COLOR_NEUTRAL, 'Total MIME types');
+                }
                 break;
             case FastestAnalyzer::SUPER_TABLE_FASTEST_URLS:
                 $fastestTime = null;
@@ -728,6 +733,9 @@ class HtmlReport
                 break;
             case HeadersAnalyzer::SUPER_TABLE_HEADERS:
                 $superTables[] = $this->status->getSuperTableByAplCode(HeadersAnalyzer::SUPER_TABLE_HEADERS_VALUES);
+                break;
+            case ContentTypeAnalyzer::SUPER_TABLE_CONTENT_TYPES:
+                $superTables[] = $this->status->getSuperTableByAplCode(ContentTypeAnalyzer::SUPER_TABLE_CONTENT_MIME_TYPES);
                 break;
         }
 
