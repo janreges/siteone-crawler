@@ -392,7 +392,7 @@ class HtmlReport
                 } elseif ($superTable->aplCode === SslTlsAnalyzer::SUPER_TABLE_CERTIFICATE_INFO) {
                     $errors = 0;
                     foreach ($superTable->getData() as $row) {
-                        if (is_array($row['value'])) {
+                        if ($row['info'] === 'Errors' && is_array($row['value'])) {
                             $errors += count($row['value']);
                         }
                     }
