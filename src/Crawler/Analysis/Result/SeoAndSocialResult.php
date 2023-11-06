@@ -120,7 +120,7 @@ class SeoAndSocialResult
     {
         $count = 0;
         foreach ($headingTreeItems as $headingTreeItem) {
-            if (!$onlyErrors || ($onlyErrors && $headingTreeItem->level !== $headingTreeItem->realLevel)) {
+            if (!$onlyErrors || $headingTreeItem->level !== $headingTreeItem->realLevel) {
                 $count++;
             }
             $count += self::getHeadingsCount($headingTreeItem->children, $onlyErrors);
@@ -158,7 +158,7 @@ class SeoAndSocialResult
         return null;
     }
 
-    private static function getRobotsIndex(DOMNodeList $metaTags): string
+    private static function getRobotsIndex(DOMNodeList $metaTags): int
     {
         foreach ($metaTags as $metaTag) {
             if ($metaTag->getAttribute('name') === 'robots') {
@@ -172,7 +172,7 @@ class SeoAndSocialResult
         return self::ROBOTS_INDEX;
     }
 
-    private static function getRobotsFollow(DOMNodeList $metaTags): string
+    private static function getRobotsFollow(DOMNodeList $metaTags): int
     {
         foreach ($metaTags as $metaTag) {
             if ($metaTag->getAttribute('name') === 'robots') {
