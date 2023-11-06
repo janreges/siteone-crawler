@@ -186,6 +186,11 @@ class HtmlReport
             $tabs[] = new Tab($superTable->title, null, $this->getTabContentBySuperTable($superTable), false, $badges, $this->getSuperTableOrder($superTable));
         }
 
+        // unset empty tabs
+        $tabs = array_filter($tabs, function (?Tab $tab) {
+            return $tab && $tab->tabContent !== '';
+        });
+
         // sort tabs by order
         usort($tabs, function (Tab $a, Tab $b) {
             return $a->getFinalSortOrder() <=> $b->getFinalSortOrder();
@@ -287,9 +292,12 @@ class HtmlReport
         return $css;
     }
 
-    private function getSummaryTab(): Tab
+    private function getSummaryTab(): ?Tab
     {
         $summary = $this->status->getSummary();
+        if (!$summary->getItems()) {
+            return null;
+        }
         $colorToCount = [
             Badge::COLOR_RED => $summary->getCountByItemStatus(ItemStatus::CRITICAL),
             Badge::COLOR_ORANGE => $summary->getCountByItemStatus(ItemStatus::WARNING),
@@ -338,6 +346,10 @@ class HtmlReport
             }
         }
 
+        if (!$html) {
+            return null;
+        }
+
         $badges = [
             new Badge(strval($badgeCount), Badge::COLOR_NEUTRAL, 'Total URL with SEO info'),
             new Badge(strval($headingsErrors), $headingsErrors ? Badge::COLOR_RED : Badge::COLOR_NEUTRAL, 'Errors in headings structure'),
@@ -345,7 +357,7 @@ class HtmlReport
         return new Tab('SEO and OpenGraph', null, $html, false, $badges, $order);
     }
 
-    private function getDnsAndSslTlsTab(): Tab
+    private function getDnsAndSslTlsTab(): ?Tab
     {
         $html = '';
         $superTables = [
@@ -388,7 +400,12 @@ class HtmlReport
                 }
             }
         }
-        return new Tab('DNS and SSL/TLS', null, $html, false, $badges, $order);
+
+        if (!$html) {
+            return null;
+        }
+
+        return new Tab('DNS and SSL', null, $html, false, $badges, $order);
     }
 
     private function getCrawlerStatsTab(): Tab
