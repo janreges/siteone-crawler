@@ -42,6 +42,8 @@ class SuperTable
     private string $uniqueId;
     private ?string $hostToStripFromUrls = null;
     private ?string $initialUrl = null;
+    private bool $fulltextEnabled = true;
+    private int $minRowsForFulltext = 10;
 
     /**
      * @param string $aplCode
@@ -106,12 +108,28 @@ class SuperTable
             $output .= strip_tags($this->description, 'p,b,strong,i,em,ul,li,ol,br,a') . "<br>";
         }
 
-        $output .= '<div class="fulltext-container">';
-        $output .= '    <input type="text" class="fulltext" onkeyup="debouncedTableFulltext(\'' . htmlspecialchars($this->uniqueId) . '\', this.value)" style="width: 300px;" placeholder="Fulltext search">';
-        $output .= '    <span id="foundRows_' . htmlspecialchars($this->uniqueId) . '" class="found-rows">Found ' . count($this->data) . ' row(s).</span>';
-        $output .= '</div>';
+        if ($this->isFulltextEnabled()) {
+            $output .= '<div class="fulltext-container">';
+            $output .= '    <input type="text" class="fulltext" onkeyup="debouncedTableFulltext(\'' . htmlspecialchars($this->uniqueId) . '\', this.value)" style="width: 300px;" placeholder="Fulltext search">';
+            $output .= '    <span id="foundRows_' . htmlspecialchars($this->uniqueId) . '" class="found-rows">Found ' . count($this->data) . ' row(s).</span>';
+            $output .= '</div>';
+        }
 
-        $output .= "<table id='" . htmlspecialchars($this->uniqueId) . "' border='1' class='table table-bordered table-hover table-sortable {$this->aplCode}' style='border-collapse: collapse;'>";
+        $showMore = count($this->data) > 20;
+
+        $extraClasses = [
+            $this->aplCode,
+        ];
+        if ($showMore) {
+            $extraClasses[] = 'table-with-show-more';
+        }
+
+        $output .= "<div class='table-container-top" . ($showMore ? ' show-more' : '') . "'>";
+        if ($showMore) {
+            $output .= "<input id='showMore_" . htmlspecialchars($this->uniqueId) . "' name='showMore' class='show-more-checkbox' type='checkbox' />";
+        }
+        $output .= "<div class='table-container" . ($showMore ? ' show-more' : '') . "'>";
+        $output .= "<table id='" . htmlspecialchars($this->uniqueId) . "' border='1' class='table table-bordered table-hover table-sortable " . implode(' ', $extraClasses) . "' style='border-collapse: collapse;'>";
         $output .= "<thead>";
         foreach ($this->columns as $key => $column) {
             $direction = ($this->currentOrderColumn === $key && $this->currentOrderDirection === 'ASC') ? 'DESC' : 'ASC';
@@ -181,8 +199,19 @@ class SuperTable
         }
 
         $output .= "</tbody>";
-        $output .= "<tr class='empty-fulltext'><td colspan='" . count($this->columns) . "' class='warning'>No rows found, please edit your search term.</td></tr>";
-        $output .= "</table>";
+        if ($this->isFulltextEnabled()) {
+            $output .= "<tfoot>";
+            $output .= "  <tr class='empty-fulltext'><td colspan='" . count($this->columns) . "' class='warning'>No rows found, please edit your search term.</td></tr>";
+            $output .= "</tfoot>";
+        }
+        $output .= "</table></div>";
+
+        // unfortunately, we need to add this next to table because tbody ignores "max-height" and "display: block"
+        // will cause that tbody disconnect from thead, so columns will not be aligned properly
+        if ($showMore) {
+            $output .= "<label for='showMore_" . htmlspecialchars($this->uniqueId) . "' class='show-more-label'>(+) Show entire table</label>";
+        }
+        $output .= "</div>";
 
         return $output;
     }
@@ -320,6 +349,11 @@ class SuperTable
         return $this->visibleInJson;
     }
 
+    public function disableFulltext(): void
+    {
+        $this->fulltextEnabled = false;
+    }
+
     private function sortData(string $columnKey, string $direction): void
     {
         $direction = strtoupper($direction);
@@ -333,5 +367,10 @@ class SuperTable
                 return $aValue < $bValue ? 1 : ($aValue > $bValue ? -1 : 0);
             }
         });
+    }
+
+    private function isFulltextEnabled(): bool
+    {
+        return $this->fulltextEnabled && count($this->data) >= $this->minRowsForFulltext;
     }
 }
