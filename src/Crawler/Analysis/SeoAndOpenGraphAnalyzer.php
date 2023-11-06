@@ -11,21 +11,26 @@ declare(strict_types=1);
 namespace Crawler\Analysis;
 
 use Crawler\Analysis\Result\HeadingTreeItem;
-use Crawler\Analysis\Result\SeoAndSocialResult;
+use Crawler\Analysis\Result\SeoAndOpenGraphResult;
 use Crawler\Components\SuperTable;
 use Crawler\Components\SuperTableColumn;
 use Crawler\Crawler;
+use Crawler\Options\Group;
+use Crawler\Options\Option;
 use Crawler\Options\Options;
+use Crawler\Options\Type;
 use Crawler\Result\Status;
 use Crawler\Result\VisitedUrl;
 use Crawler\Utils;
 use DOMDocument;
 
-class SeoAndSocialAnalyzer extends BaseAnalyzer implements Analyzer
+class SeoAndOpenGraphAnalyzer extends BaseAnalyzer implements Analyzer
 {
     const SUPER_TABLE_SEO = 'seo';
-    const SUPER_TABLE_SHARING = 'sharing';
+    const SUPER_TABLE_OPEN_GRAPH = 'open-graph';
     const SUPER_TABLE_SEO_HEADINGS = 'seo-headings';
+
+    const GROUP_SEO_AND_OPENGRAPH_ANALYZER = 'seo-and-opengraph-analyzer';
 
     protected int $maxHeadingLevel = 3;
 
@@ -43,7 +48,7 @@ class SeoAndSocialAnalyzer extends BaseAnalyzer implements Analyzer
             return $visitedUrl->statusCode === 200 && !$visitedUrl->isExternal && $visitedUrl->contentType === Crawler::CONTENT_TYPE_ID_HTML;
         });
 
-        $urlResults = $this->getSeoAndSocialResults($htmlUrls);
+        $urlResults = $this->getSeoAndOpenGraphResults($htmlUrls);
 
         // check if there are any OG or Twitter tags
         foreach ($urlResults as $urlResult) {
@@ -64,19 +69,20 @@ class SeoAndSocialAnalyzer extends BaseAnalyzer implements Analyzer
         $this->measureExecTime(__CLASS__, 'analyzeSeo', $s);
 
         $s = microtime(true);
-        $this->analyzeSocials($urlResults);
-        $this->measureExecTime(__CLASS__, 'analyzeSocials', $s);
+        $this->analyzeOpenGraph($urlResults);
+        $this->measureExecTime(__CLASS__, 'analyzeOpenGraph', $s);
 
         $s = microtime(true);
         $this->analyzeHeadings($urlResults);
+
         $this->measureExecTime(__CLASS__, 'analyzeHeadings', $s);
     }
 
     /**
      * @param VisitedUrl[] $htmlUrls
-     * @return SeoAndSocialResult[]
+     * @return SeoAndOpenGraphResult[]
      */
-    private function getSeoAndSocialResults(array $htmlUrls): array
+    private function getSeoAndOpenGraphResults(array $htmlUrls): array
     {
         $results = [];
         $robotsTxtContent = Status::getRobotsTxtContent();
@@ -84,31 +90,34 @@ class SeoAndSocialAnalyzer extends BaseAnalyzer implements Analyzer
             $htmlBody = $this->status->getStorage()->load($visitedUrl->uqId);
 
             $dom = new DOMDocument();
-            @$dom->loadHTML($htmlBody);
-            $urlPath = parse_url($visitedUrl->url, PHP_URL_PATH);
+            @$dom->loadHTML(@mb_convert_encoding($htmlBody, 'HTML-ENTITIES', 'UTF-8'));
 
-            $urlResult = SeoAndSocialResult::getFromHtml($visitedUrl->uqId, $urlPath, $dom, $robotsTxtContent, $this->maxHeadingLevel);
+            $urlPath = parse_url($visitedUrl->url, PHP_URL_PATH);
+            $urlQuery = parse_url($visitedUrl->url, PHP_URL_QUERY);
+            $urlPathAndQuery = $urlPath . ($urlQuery ? '?' . $urlQuery : '');
+
+            $urlResult = SeoAndOpenGraphResult::getFromHtml($visitedUrl->uqId, $urlPathAndQuery, $dom, $robotsTxtContent, $this->maxHeadingLevel);
             $results[] = $urlResult;
         }
         return $results;
     }
 
     /**
-     * @param SeoAndSocialResult[] $urlResults
+     * @param SeoAndOpenGraphResult[] $urlResults
      * @return void
      */
     private function analyzeSeo(array $urlResults): void
     {
         $superTable = new SuperTable(
             self::SUPER_TABLE_SEO,
-            "SEO meta",
+            "SEO metadata",
             "No URLs.",
             [
-                new SuperTableColumn('urlPath', 'URL', 50, null, null, true),
-                new SuperTableColumn('indexing', 'Indexing', 17, null, function (SeoAndSocialResult $urlResult) {
+                new SuperTableColumn('urlPathAndQuery', 'URL', 50, null, null, true),
+                new SuperTableColumn('indexing', 'Indexing', 17, null, function (SeoAndOpenGraphResult $urlResult) {
                     if ($urlResult->deniedByRobotsTxt) {
                         return Utils::getColorText('DENY (robots.txt)', 'magenta');
-                    } elseif ($urlResult->robotsIndex === SeoAndSocialResult::ROBOTS_NOINDEX) {
+                    } elseif ($urlResult->robotsIndex === SeoAndOpenGraphResult::ROBOTS_NOINDEX) {
                         return Utils::getColorText('DENY (meta)', 'magenta');
                     } else {
                         return 'Allowed';
@@ -123,8 +132,11 @@ class SeoAndSocialAnalyzer extends BaseAnalyzer implements Analyzer
                 }, null, true, false),
                 new SuperTableColumn('description', 'Description', 30, null, null, true),
                 new SuperTableColumn('keywords', 'Keywords', 30, null, null, true),
-            ], true, 'urlPath', 'ASC'
+            ], true, 'urlPathAndQuery', 'ASC'
         );
+
+        // set initial URL (required for urlPath column and active link building)
+        $superTable->setInitialUrl($this->status->getOptions()->url);
 
         $superTable->setData($urlResults);
         $this->status->addSuperTableAtBeginning($superTable);
@@ -132,13 +144,13 @@ class SeoAndSocialAnalyzer extends BaseAnalyzer implements Analyzer
     }
 
     /**
-     * @param SeoAndSocialResult[] $urlResults
+     * @param SeoAndOpenGraphResult[] $urlResults
      * @return void
      */
-    private function analyzeSocials(array $urlResults): void
+    private function analyzeOpenGraph(array $urlResults): void
     {
         $columns = [
-            new SuperTableColumn('urlPath', 'URL', 50, null, null, true),
+            new SuperTableColumn('urlPathAndQuery', 'URL', 50, null, null, true),
         ];
 
         if ($this->hasOgTags) {
@@ -147,19 +159,18 @@ class SeoAndSocialAnalyzer extends BaseAnalyzer implements Analyzer
             $columns[] = new SuperTableColumn('ogImage', 'OG Image', 18, null, null, true);
         }
         if ($this->hasTwitterTags) {
-            $columns[] = new SuperTableColumn('twitterCard', 'Twitter Card', 18, null, null, true);
             $columns[] = new SuperTableColumn('twitterTitle', 'Twitter Title', 32, null, null, true);
             $columns[] = new SuperTableColumn('twitterDescription', 'Twitter Description', 32, null, null, true);
             $columns[] = new SuperTableColumn('twitterImage', 'Twitter Image', 18, null, null, true);
         }
 
         $superTable = new SuperTable(
-            self::SUPER_TABLE_SHARING,
-            "Sharing metadata",
-            "No URLs with OG or Twitter tags.",
+            self::SUPER_TABLE_OPEN_GRAPH,
+            "OpenGraph metadata",
+            "No URLs with OpenGraph data (og:* or twitter:* meta tags).",
             $columns,
             true,
-            'urlPath',
+            'urlPathAndQuery',
             'ASC'
         );
 
@@ -168,31 +179,26 @@ class SeoAndSocialAnalyzer extends BaseAnalyzer implements Analyzer
             $superTableData = $urlResults;
         }
 
+        // set initial URL (required for urlPath column and active link building)
+        $superTable->setInitialUrl($this->status->getOptions()->url);
+
         $superTable->setData($superTableData);
         $this->status->addSuperTableAtBeginning($superTable);
         $this->output->addSuperTable($superTable);
     }
 
     /**
-     * @param SeoAndSocialResult[] $urlResults
+     * @param SeoAndOpenGraphResult[] $urlResults
      * @return void
      */
     private function analyzeHeadings(array $urlResults): void
     {
         $superTable = new SuperTable(
             self::SUPER_TABLE_SEO_HEADINGS,
-            "SEO headings structure",
-            "No URLs.",
+            "Headings structure",
+            "No URLs to analyze heading structure.",
             [
-                new SuperTableColumn('urlPath', 'URL', 50, null, null, true),
-                new SuperTableColumn('headingsCount', 'Count', 5),
-                new SuperTableColumn('headingsErrorsCount', 'Errors', 6, function ($value) {
-                    if ($value > 0) {
-                        return Utils::getColorText(strval($value), 'red', true);
-                    }
-                    return $value;
-                }, null, false, false),
-                new SuperTableColumn('headings', 'Headings structure', 80, null, function (SeoAndSocialResult $urlResult, string $renderInfo) {
+                new SuperTableColumn('headings', 'Headings structure', 80, null, function (SeoAndOpenGraphResult $urlResult, string $renderInfo) {
                     if (!$urlResult->headingTreeItems) {
                         return '';
                     }
@@ -202,8 +208,16 @@ class SeoAndSocialAnalyzer extends BaseAnalyzer implements Analyzer
                         return HeadingTreeItem::getHeadingTreeUlLiList($urlResult->headingTreeItems);
                     }
                 }, true, false),
-            ], true, 'urlPath', 'ASC'
+                new SuperTableColumn('headingsCount', 'Count', 5),
+                new SuperTableColumn('headingsErrorsCount', 'Errors', 6, function ($value) {
+                    return Utils::getColorText(strval($value), $value > 0 ? 'red' : 'green', true);
+                }, null, false, false),
+                new SuperTableColumn('urlPathAndQuery', 'URL', 30, null, null, true),
+            ], true, 'urlPathAndQuery', 'ASC'
         );
+
+        // set initial URL (required for urlPath column and active link building)
+        $superTable->setInitialUrl($this->status->getOptions()->url);
 
         $superTable->setData($urlResults);
         $this->status->addSuperTableAtBeginning($superTable);
@@ -212,7 +226,13 @@ class SeoAndSocialAnalyzer extends BaseAnalyzer implements Analyzer
 
     public static function getOptions(): Options
     {
-        return new Options();
+        $options = new Options();
+        $options->addGroup(new Group(
+            self::GROUP_SEO_AND_OPENGRAPH_ANALYZER,
+            'SEO and OpenGraph analyzer', [
+            new Option('--max-heading-level', null, 'maxHeadingLevel', Type::INT, false, 'Maximal analyzer heading level from 1 to 6.', 3, false, false, [1, 6]),
+        ]));
+        return $options;
     }
 
     public function getOrder(): int

@@ -19,10 +19,10 @@ use Crawler\Analysis\FastestAnalyzer;
 use Crawler\Analysis\HeadersAnalyzer;
 use Crawler\Analysis\Page404Analyzer;
 use Crawler\Analysis\RedirectsAnalyzer;
-use Crawler\Analysis\Result\SeoAndSocialResult;
+use Crawler\Analysis\Result\SeoAndOpenGraphResult;
 use Crawler\Analysis\Result\UrlAnalysisResult;
 use Crawler\Analysis\SecurityAnalyzer;
-use Crawler\Analysis\SeoAndSocialAnalyzer;
+use Crawler\Analysis\SeoAndOpenGraphAnalyzer;
 use Crawler\Analysis\SlowestAnalyzer;
 use Crawler\Analysis\SourceDomainsAnalyzer;
 use Crawler\Analysis\SslTlsAnalyzer;
@@ -62,9 +62,8 @@ class HtmlReport
         $this->skippedSuperTables = [
             AnalysisManager::SUPER_TABLE_ANALYSIS_STATS, // will be in tab Crawler info
             HeadersAnalyzer::SUPER_TABLE_HEADERS_VALUES, // will be in tab Headers
-            SeoAndSocialAnalyzer::SUPER_TABLE_SEO, // will be in tab SEO and Sharing
-            SeoAndSocialAnalyzer::SUPER_TABLE_SHARING, // will be in tab SEO and Sharing
-            SeoAndSocialAnalyzer::SUPER_TABLE_SEO_HEADINGS, // will be in tab SEO and Sharing
+            SeoAndOpenGraphAnalyzer::SUPER_TABLE_SEO, // will be in tab SEO and OpenGraph
+            SeoAndOpenGraphAnalyzer::SUPER_TABLE_OPEN_GRAPH, // will be in tab SEO and OpenGraph
             DnsAnalyzer::SUPER_TABLE_DNS, // will be in tab DNS and SSL/TLS
             SslTlsAnalyzer::SUPER_TABLE_CERTIFICATE_INFO, // will be in tab DNS and SSL/TLS
         ];
@@ -161,7 +160,7 @@ class HtmlReport
     {
         $tabs = [];
         $tabs[] = $this->getSummaryTab();
-        $tabs[] = $this->getSeoAndSocialTab();
+        $tabs[] = $this->getSeoAndOpenGraphTab();
         $tabs[] = $this->getVisitedUrlsTab();
         $tabs[] = $this->getDnsAndSslTlsTab();
         $tabs[] = $this->getCrawlerStatsTab();
@@ -309,13 +308,12 @@ class HtmlReport
         return new Tab('Summary', null, $summary->getAsHtml(), true, $badges, -100);
     }
 
-    private function getSeoAndSocialTab(): Tab
+    private function getSeoAndOpenGraphTab(): ?Tab
     {
         $html = '';
         $superTables = [
-            SeoAndSocialAnalyzer::SUPER_TABLE_SEO,
-            SeoAndSocialAnalyzer::SUPER_TABLE_SHARING,
-            SeoAndSocialAnalyzer::SUPER_TABLE_SEO_HEADINGS,
+            SeoAndOpenGraphAnalyzer::SUPER_TABLE_SEO,
+            SeoAndOpenGraphAnalyzer::SUPER_TABLE_OPEN_GRAPH,
         ];
 
         $badgeCount = 0;
@@ -329,11 +327,11 @@ class HtmlReport
                 if (!$badgeCount) {
                     $badgeCount = $superTable->getTotalRows();
                 }
-                if ($superTable->aplCode === SeoAndSocialAnalyzer::SUPER_TABLE_SEO) {
+                if ($superTable->aplCode === SeoAndOpenGraphAnalyzer::SUPER_TABLE_SEO) {
                     $order = $this->getSuperTableOrder($superTable);
-                } elseif ($superTable->aplCode === SeoAndSocialAnalyzer::SUPER_TABLE_SEO_HEADINGS) {
+                } elseif ($superTable->aplCode === SeoAndOpenGraphAnalyzer::SUPER_TABLE_SEO_HEADINGS) {
                     foreach ($superTable->getData() as $row) {
-                        /* @var SeoAndSocialResult $row */
+                        /* @var SeoAndOpenGraphResult $row */
                         $headingsErrors += $row->headingsErrorsCount;
                     }
                 }
@@ -344,7 +342,7 @@ class HtmlReport
             new Badge(strval($badgeCount), Badge::COLOR_NEUTRAL, 'Total URL with SEO info'),
             new Badge(strval($headingsErrors), $headingsErrors ? Badge::COLOR_RED : Badge::COLOR_NEUTRAL, 'Errors in headings structure'),
         ];
-        return new Tab('SEO and Sharing', null, $html, false, $badges, $order);
+        return new Tab('SEO and OpenGraph', null, $html, false, $badges, $order);
     }
 
     private function getDnsAndSslTlsTab(): Tab
@@ -573,6 +571,14 @@ class HtmlReport
                 $color = $slowestTime < 0.5 ? Badge::COLOR_GREEN : ($slowestTime < 2 ? Badge::COLOR_ORANGE : Badge::COLOR_RED);
                 $badges[] = new Badge(Utils::getFormattedDuration($slowestTime ?: 0), $color);
                 break;
+            case SeoAndOpenGraphAnalyzer::SUPER_TABLE_SEO_HEADINGS:
+                $errors = 0;
+                foreach ($superTable->getData() as $row) {
+                    /* @var SeoAndOpenGraphResult $row */
+                    $errors += $row->headingsErrorsCount;
+                }
+                $badges[] = new Badge((string)$errors, $errors ? Badge::COLOR_RED : Badge::COLOR_NEUTRAL, $errors ? "Errors in headings structure" : "Headings structure OK");
+                break;
             case HeadersAnalyzer::SUPER_TABLE_HEADERS:
                 $headers = $superTable->getTotalRows();
                 $color = $headers > 50 ? Badge::COLOR_RED : Badge::COLOR_NEUTRAL;
@@ -714,7 +720,8 @@ class HtmlReport
             BestPracticeAnalyzer::SUPER_TABLE_BEST_PRACTICES,
             AccessibilityAnalyzer::SUPER_TABLE_ACCESSIBILITY,
             SecurityAnalyzer::SUPER_TABLE_SECURITY,
-            SeoAndSocialAnalyzer::SUPER_TABLE_SEO,
+            SeoAndOpenGraphAnalyzer::SUPER_TABLE_SEO,
+            SeoAndOpenGraphAnalyzer::SUPER_TABLE_SEO_HEADINGS,
             Page404Analyzer::SUPER_TABLE_404,
             RedirectsAnalyzer::SUPER_TABLE_REDIRECTS,
             FastestAnalyzer::SUPER_TABLE_FASTEST_URLS,

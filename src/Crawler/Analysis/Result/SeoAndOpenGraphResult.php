@@ -13,7 +13,7 @@ namespace Crawler\Analysis\Result;
 use DOMDocument;
 use DOMNodeList;
 
-class SeoAndSocialResult
+class SeoAndOpenGraphResult
 {
 
     const ROBOTS_INDEX = 1;
@@ -22,7 +22,7 @@ class SeoAndSocialResult
     const ROBOTS_NOFOLLOW = 2;
 
     public readonly string $urlUqId;
-    public readonly string $urlPath;
+    public readonly string $urlPathAndQuery;
 
     public ?string $title;
     public ?string $description;
@@ -57,25 +57,25 @@ class SeoAndSocialResult
 
     /**
      * @param string $urlUqId
-     * @param string $urlPath
+     * @param string $urlPathAndQuery
      */
-    public function __construct(string $urlUqId, string $urlPath)
+    public function __construct(string $urlUqId, string $urlPathAndQuery)
     {
         $this->urlUqId = $urlUqId;
-        $this->urlPath = $urlPath;
+        $this->urlPathAndQuery = $urlPathAndQuery;
     }
 
     /**
      * @param string $urlUqId
-     * @param string $urlPath
+     * @param string $urlPathAndQuery
      * @param DOMDocument $dom
      * @param string|null $robotsTxtContent
      * @param int $maxHeadingLevel
-     * @return SeoAndSocialResult
+     * @return SeoAndOpenGraphResult
      */
-    public static function getFromHtml(string $urlUqId, string $urlPath, DOMDocument $dom, ?string $robotsTxtContent, int $maxHeadingLevel): SeoAndSocialResult
+    public static function getFromHtml(string $urlUqId, string $urlPathAndQuery, DOMDocument $dom, ?string $robotsTxtContent, int $maxHeadingLevel): SeoAndOpenGraphResult
     {
-        $result = new SeoAndSocialResult($urlUqId, $urlPath);
+        $result = new SeoAndOpenGraphResult($urlUqId, $urlPathAndQuery);
 
         $metaTags = $dom->getElementsByTagName('meta');
 
@@ -87,7 +87,7 @@ class SeoAndSocialResult
         $result->robotsIndex = self::getRobotsIndex($metaTags);
         $result->robotsFollow = self::getRobotsFollow($metaTags);
         if ($robotsTxtContent) {
-            $result->deniedByRobotsTxt = self::isDeniedByRobotsTxt($urlPath, $robotsTxtContent);
+            $result->deniedByRobotsTxt = self::isDeniedByRobotsTxt($urlPathAndQuery, $robotsTxtContent);
         }
 
         $result->ogTitle = self::getMetaTagContent($metaTags, 'og:title');
@@ -186,11 +186,13 @@ class SeoAndSocialResult
         return self::ROBOTS_FOLLOW;
     }
 
-    private static function isDeniedByRobotsTxt(string $urlPath, string $robotsTxtContent): bool
+    private static function isDeniedByRobotsTxt(string $urlPathAndQuery, string $robotsTxtContent): bool
     {
         if (!$robotsTxtContent) {
             return false;
         }
+
+        $urlPath = preg_replace('/\?.*/', '', $urlPathAndQuery);
 
         $lines = explode("\n", $robotsTxtContent);
         foreach ($lines as $line) {
