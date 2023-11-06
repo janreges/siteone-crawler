@@ -10,6 +10,8 @@ declare(strict_types=1);
 
 namespace Crawler\Result\Summary;
 
+use Crawler\Utils;
+
 class Item
 {
     public readonly string $aplCode;
@@ -28,7 +30,8 @@ class Item
         $this->status = $status;
     }
 
-    public function getAsHtml(string $okIcon = '✅', string $noticeIcon = '🌟', string $warningIcon = '⚠️', string $errorIcon = '⛔', string $infoIcon = 'ℹ️'): string
+    // public function getAsHtml(string $okIcon = '✅', string $noticeIcon = '📌', string $warningIcon = '⚠️', string $errorIcon = '⛔', string $infoIcon = '⏩'): string
+    public function getAsHtml(string $okIcon = '✅', string $noticeIcon = '⏩', string $warningIcon = '⚠️', string $errorIcon = '⛔', string $infoIcon = '📌'): string
     {
         $icon = match ($this->status) {
             ItemStatus::OK => $okIcon,
@@ -37,10 +40,10 @@ class Item
             ItemStatus::CRITICAL => $errorIcon,
             ItemStatus::INFO => $infoIcon,
         };
-        return $icon . ' ' . rtrim(htmlspecialchars($this->text), '. ') . '.';
+        return $icon . ' ' . rtrim(htmlspecialchars(Utils::removeAnsiColors($this->text)), '. ') . '.';
     }
 
-    public function getAsConsoleText(string $okIcon = '✅', string $noticeIcon = '🌟', string $warningIcon = '⚠️', string $errorIcon = '⛔', string $infoIcon = 'ℹ️'): string
+    public function getAsConsoleText(string $okIcon = '✅', string $noticeIcon = '⏩', string $warningIcon = '⚠️', string $errorIcon = '⛔', string $infoIcon = '📌'): string
     {
         $icon = match ($this->status) {
             ItemStatus::OK => $okIcon,
