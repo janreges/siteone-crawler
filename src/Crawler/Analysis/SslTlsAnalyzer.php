@@ -66,15 +66,13 @@ class SslTlsAnalyzer extends BaseAnalyzer implements Analyzer
                             $result = str_replace('TLSv1.2', Utils::getColorText('TLSv1.2', 'green', true), $result);
                             $result = str_replace('TLSv1.3', Utils::getColorText('TLSv1.3', 'green', true), $result);
                             return $result;
-                        } elseif ($value) {
+                        } else {
                             // errors
                             $result = count($value) . " error(s): ";
                             $result .= implode($renderInto === SuperTable::RENDER_INTO_HTML ? '<br>' : ", ", $value);
 
                             $result = trim($result, ' :,');
                             return count($value) > 0 ? Utils::getColorText($result, 'red', true) : Utils::getColorText($result, 'green');
-                        } else {
-                            return '-';
                         }
                     }
 
@@ -161,8 +159,11 @@ class SslTlsAnalyzer extends BaseAnalyzer implements Analyzer
                 $validFrom .= " (" . Utils::getColorText('VALID already ' . Utils::getFormattedAge(abs(strtotime($validFrom) - time())), 'green') . ")";
             }
         }
+
+        $validToOrig = "";
         if (preg_match("/Not After\s*:\s*(.+?)\n/", $certificateOutput, $matches)) {
             $validTo = $matches[1];
+            $validToOrig = $validTo;
 
             // check if the certificate is expired
             if (time() > strtotime($validTo)) {
@@ -177,8 +178,8 @@ class SslTlsAnalyzer extends BaseAnalyzer implements Analyzer
             }
         }
 
-        if (!$errors && $issuer) {
-            $this->status->getSummary()->addItem(new Item('ssl-certificate-valid', "SSL/TLS certificate is valid until {$validTo}. Issued by {$issuer}. Subject is {$subject}", ItemStatus::OK));
+        if (!$errors && $issuer && $validToOrig) {
+            $this->status->getSummary()->addItem(new Item('ssl-certificate-valid', "SSL/TLS certificate is valid until {$validToOrig}. Issued by {$issuer}. Subject is {$subject}", ItemStatus::OK));
         }
 
         return [
