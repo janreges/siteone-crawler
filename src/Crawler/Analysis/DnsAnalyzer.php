@@ -32,7 +32,7 @@ class DnsAnalyzer extends BaseAnalyzer implements Analyzer
             self::SUPER_TABLE_DNS,
             'DNS info',
             'No DNS info found.', [
-            new SuperTableColumn('info', 'DNS resolving tree', SuperTableColumn::AUTO_WIDTH, function ($value, $renderInto) {
+            new SuperTableColumn('info', 'DNS resolving tree', 70, function ($value, $renderInto) {
                 // find and colorize all IPv4 addresses in $value
                 $value = preg_replace_callback('/([0-9]{1,3}\.){3}[0-9]{1,3}/', function ($matches) {
                     $ip = $matches[0];
