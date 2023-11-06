@@ -12,5 +12,5 @@ namespace Crawler;
 
 abstract class Version
 {
-    const CODE = '2023.11.02';
+    const CODE = '1.0.0';
 }
