@@ -66,6 +66,8 @@ class HtmlReport
             SeoAndOpenGraphAnalyzer::SUPER_TABLE_OPEN_GRAPH, // will be in tab SEO and OpenGraph
             DnsAnalyzer::SUPER_TABLE_DNS, // will be in tab DNS and SSL/TLS
             SslTlsAnalyzer::SUPER_TABLE_CERTIFICATE_INFO, // will be in tab DNS and SSL/TLS
+            BestPracticeAnalyzer::SUPER_TABLE_NON_UNIQUE_TITLES, // will be in tab SEO and OpenGraph
+            BestPracticeAnalyzer::SUPER_TABLE_NON_UNIQUE_DESCRIPTIONS, // will be in tab SEO and OpenGraph
         ];
     }
 
@@ -320,12 +322,13 @@ class HtmlReport
     {
         $html = '';
         $superTables = [
+            BestPracticeAnalyzer::SUPER_TABLE_NON_UNIQUE_TITLES,
+            BestPracticeAnalyzer::SUPER_TABLE_NON_UNIQUE_DESCRIPTIONS,
             SeoAndOpenGraphAnalyzer::SUPER_TABLE_SEO,
             SeoAndOpenGraphAnalyzer::SUPER_TABLE_OPEN_GRAPH,
         ];
 
         $badgeCount = 0;
-        $headingsErrors = 0;
 
         $order = null;
         foreach ($superTables as $superTable) {
@@ -337,11 +340,6 @@ class HtmlReport
                 }
                 if ($superTable->aplCode === SeoAndOpenGraphAnalyzer::SUPER_TABLE_SEO) {
                     $order = $this->getSuperTableOrder($superTable);
-                } elseif ($superTable->aplCode === SeoAndOpenGraphAnalyzer::SUPER_TABLE_SEO_HEADINGS) {
-                    foreach ($superTable->getData() as $row) {
-                        /* @var SeoAndOpenGraphResult $row */
-                        $headingsErrors += $row->headingsErrorsCount;
-                    }
                 }
             }
         }
@@ -350,10 +348,20 @@ class HtmlReport
             return null;
         }
 
-        $badges = [
-            new Badge(strval($badgeCount), Badge::COLOR_NEUTRAL, 'Total URL with SEO info'),
-            new Badge(strval($headingsErrors), $headingsErrors ? Badge::COLOR_RED : Badge::COLOR_NEUTRAL, 'Errors in headings structure'),
-        ];
+        $badges = [];
+
+        $nonUniqueTitles = $this->status->getSuperTableByAplCode(BestPracticeAnalyzer::SUPER_TABLE_NON_UNIQUE_TITLES);
+        if ($nonUniqueTitles && $nonUniqueTitles->getTotalRows() > 0) {
+            $badges[] = new Badge(strval($nonUniqueTitles->getTotalRows()), Badge::COLOR_ORANGE, 'Non-unique titles');
+        }
+
+        $nonUniqueDescriptions = $this->status->getSuperTableByAplCode(BestPracticeAnalyzer::SUPER_TABLE_NON_UNIQUE_DESCRIPTIONS);
+        if ($nonUniqueDescriptions && $nonUniqueDescriptions->getTotalRows() > 0) {
+            $badges[] = new Badge(strval($nonUniqueDescriptions->getTotalRows()), Badge::COLOR_ORANGE, 'Non-unique descriptions');
+        }
+
+        $badges[] = new Badge(strval($badgeCount), Badge::COLOR_NEUTRAL, 'Total URL with SEO info');
+
         return new Tab('SEO and OpenGraph', null, $html, false, $badges, $order);
     }
 

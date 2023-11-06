@@ -42,8 +42,13 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
     const ANALYSIS_AVIF_SUPPORT = 'AVIF support';
 
     const SUPER_TABLE_BEST_PRACTICES = 'best-practices';
+    const SUPER_TABLE_NON_UNIQUE_TITLES = 'non-unique-titles';
+    const SUPER_TABLE_NON_UNIQUE_DESCRIPTIONS = 'non-unique-descriptions';
 
     private readonly AnalyzerStats $stats;
+
+    private array $topTitlesToCount = [];
+    private array $topDescriptionsToCount = [];
 
     // options
     private int $maxInlineSvgSize = 5 * 1024;
@@ -616,6 +621,29 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
             }
         }
 
+        // sort $counts by value descending
+        arsort($counts);
+        foreach ($counts as $title => $count) {
+            if ($count > 1 && count($this->topTitlesToCount) < 10) {
+                $this->topTitlesToCount[$title] = ['title' => $title, 'count' => $count];
+            }
+        }
+
+        // add supertable for $this->topTitlesToCount
+        $consoleWidth = Utils::getConsoleWidth();
+        $superTable = new SuperTable(
+            self::SUPER_TABLE_NON_UNIQUE_TITLES,
+            "TOP non-unique titles",
+            "Nothing to report.",
+            [
+                new SuperTableColumn('count', 'Count', 5, null, null, false, false),
+                new SuperTableColumn('title', 'Title', max(20, min(200, $consoleWidth)), null, null, true, false),
+            ], true, 'count', 'DESC'
+        );
+        $superTable->setData($this->topTitlesToCount);
+        $this->status->addSuperTableAtEnd($superTable);
+        $this->output->addSuperTable($superTable);
+
         // If no non-unique titles were found, report a success message
         if (!$nonUniqueFound) {
             $this->status->addOkToSummary($summaryAplCode, "All {$ok} unique title(s) are within the allowed {$this->titleUniquenessPercentage}% duplicity. Highest duplicity title has {$highestDuplicityPercentage}%.");
@@ -666,6 +694,29 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
                 $ok++;
             }
         }
+
+        // sort $counts by value descending
+        arsort($counts);
+        foreach ($counts as $desc => $count) {
+            if ($count > 1 && count($this->topDescriptionsToCount) < 10) {
+                $this->topDescriptionsToCount[$desc] = ['description' => $desc, 'count' => $count];
+            }
+        }
+
+        // add supertable for $this->topDescriptionsToCount
+        $consoleWidth = Utils::getConsoleWidth();
+        $superTable = new SuperTable(
+            self::SUPER_TABLE_NON_UNIQUE_DESCRIPTIONS,
+            "TOP non-unique descriptions",
+            "Nothing to report.",
+            [
+                new SuperTableColumn('count', 'Count', 5, null, null, false, false),
+                new SuperTableColumn('description', 'Description', max(20, min(200, $consoleWidth)), null, null, true, false),
+            ], true, 'count', 'DESC'
+        );
+        $superTable->setData($this->topDescriptionsToCount);
+        $this->status->addSuperTableAtEnd($superTable);
+        $this->output->addSuperTable($superTable);
 
         // If no non-unique descriptions were found, report a success message
         if (!$nonUniqueFound) {
