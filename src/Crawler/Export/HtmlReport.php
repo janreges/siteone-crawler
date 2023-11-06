@@ -92,7 +92,7 @@ class HtmlReport
         $html = preg_replace('/(<span)\s+(style="background-color:[^"]+">)/i', '$1 class="badge" $2', $html);
         $html = preg_replace('/(<span)\s+(style="color:[^"]+">)/i', '$1 class="badge in-table" $2', $html);
         $html = str_replace('style="background-color: #ffff00"', 'style="background-color: #ffff00; color: #1F2937"', $html);
-        $html = str_ireplace("<td data-value='0'>0</td>", '<td data-value="0"><span class="badge">0</span></td>', $html);
+        $html = preg_replace("/(<td data-value='[0-9]+'[^>]*>)([0-9]+)(<\/td>)/", '$1<span class="badge">$2</span>$3', $html);
 
         // other changes
         $html = str_replace('color: #ff00ff', 'color: #ff9234', $html); // change magenta to orange
