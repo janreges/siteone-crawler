@@ -25,6 +25,7 @@ use Crawler\Analysis\SecurityAnalyzer;
 use Crawler\Analysis\SeoAndSocialAnalyzer;
 use Crawler\Analysis\SlowestAnalyzer;
 use Crawler\Analysis\SourceDomainsAnalyzer;
+use Crawler\Analysis\SslTlsAnalyzer;
 use Crawler\Components\SuperTable;
 use Crawler\Components\SuperTableColumn;
 use Crawler\Export\HtmlReport\Badge;
@@ -64,6 +65,8 @@ class HtmlReport
             SeoAndSocialAnalyzer::SUPER_TABLE_SEO, // will be in tab SEO and Sharing
             SeoAndSocialAnalyzer::SUPER_TABLE_SHARING, // will be in tab SEO and Sharing
             SeoAndSocialAnalyzer::SUPER_TABLE_SEO_HEADINGS, // will be in tab SEO and Sharing
+            DnsAnalyzer::SUPER_TABLE_DNS, // will be in tab DNS and SSL/TLS
+            SslTlsAnalyzer::SUPER_TABLE_CERTIFICATE_INFO, // will be in tab DNS and SSL/TLS
         ];
     }
 
@@ -160,6 +163,7 @@ class HtmlReport
         $tabs[] = $this->getSummaryTab();
         $tabs[] = $this->getSeoAndSocialTab();
         $tabs[] = $this->getVisitedUrlsTab();
+        $tabs[] = $this->getDnsAndSslTlsTab();
         $tabs[] = $this->getCrawlerStatsTab();
         $tabs[] = $this->getCrawlerInfo();
 
@@ -341,6 +345,52 @@ class HtmlReport
             new Badge(strval($headingsErrors), $headingsErrors ? Badge::COLOR_RED : Badge::COLOR_NEUTRAL, 'Errors in headings structure'),
         ];
         return new Tab('SEO and Sharing', null, $html, false, $badges, $order);
+    }
+
+    private function getDnsAndSslTlsTab(): Tab
+    {
+        $html = '';
+        $superTables = [
+            DnsAnalyzer::SUPER_TABLE_DNS,
+            SslTlsAnalyzer::SUPER_TABLE_CERTIFICATE_INFO
+        ];
+
+        $order = null;
+        $badges = [];
+        foreach ($superTables as $superTable) {
+            $superTable = $this->status->getSuperTableByAplCode($superTable);
+            if ($superTable) {
+                $html .= $superTable->getHtmlOutput() . '<br/>';
+                if ($superTable->aplCode === DnsAnalyzer::SUPER_TABLE_DNS) {
+                    $order = $this->getSuperTableOrder($superTable);
+                    $ipv4 = 0;
+                    $ipv6 = 0;
+                    foreach ($superTable->getData() as $row) {
+                        if (stripos($row['info'], 'IPv4') !== false) {
+                            $ipv4++;
+                        } elseif (stripos($row['info'], 'IPv6') !== false) {
+                            $ipv6++;
+                        }
+                    }
+
+                    if ($ipv4) {
+                        $badges[] = new Badge("{$ipv4}x IPv4", $ipv4 > 1 ? Badge::COLOR_GREEN : Badge::COLOR_NEUTRAL);
+                    }
+                    if ($ipv6) {
+                        $badges[] = new Badge("{$ipv6}x IPv6", $ipv6 > 1 ? Badge::COLOR_GREEN : Badge::COLOR_NEUTRAL);
+                    }
+                } elseif ($superTable->aplCode === SslTlsAnalyzer::SUPER_TABLE_CERTIFICATE_INFO) {
+                    $errors = 0;
+                    foreach ($superTable->getData() as $row) {
+                        if (is_array($row['value'])) {
+                            $errors += count($row['value']);
+                        }
+                    }
+                    $badges[] = new Badge("TLS", $errors ? Badge::COLOR_RED : Badge::COLOR_GREEN, $errors ? "SSL/TLS certificate: {$errors} error(s)" : 'SSL/TLS certificate OK');
+                }
+            }
+        }
+        return new Tab('DNS and SSL/TLS', null, $html, false, $badges, $order);
     }
 
     private function getCrawlerStatsTab(): Tab
@@ -528,25 +578,6 @@ class HtmlReport
                 $color = $headers > 50 ? Badge::COLOR_RED : Badge::COLOR_NEUTRAL;
                 $badges[] = new Badge((string)$headers, $color);
                 break;
-            case DnsAnalyzer::SUPER_TABLE_DNS:
-                $ipv4 = 0;
-                $ipv6 = 0;
-                foreach ($superTable->getData() as $row) {
-                    if (stripos($row['info'], 'IPv4') !== false) {
-                        $ipv4++;
-                    } elseif (stripos($row['info'], 'IPv6') !== false) {
-                        $ipv6++;
-                    }
-                }
-
-                if ($ipv4) {
-                    $badges[] = new Badge("{$ipv4}x IPv4", $ipv4 > 1 ? Badge::COLOR_GREEN : Badge::COLOR_NEUTRAL);
-                }
-                if ($ipv6) {
-                    $badges[] = new Badge("{$ipv6}x IPv6", $ipv6 > 1 ? Badge::COLOR_GREEN : Badge::COLOR_NEUTRAL);
-                }
-
-                break;
             case self::SUPER_TABLE_VISITED_URLS:
                 $red = 0;
                 $orange = 0;
@@ -679,6 +710,7 @@ class HtmlReport
     public function getSuperTableOrder(SuperTable $superTable): int
     {
         static $orders = [
+            self::SUPER_TABLE_VISITED_URLS,
             BestPracticeAnalyzer::SUPER_TABLE_BEST_PRACTICES,
             AccessibilityAnalyzer::SUPER_TABLE_ACCESSIBILITY,
             SecurityAnalyzer::SUPER_TABLE_SECURITY,
@@ -691,7 +723,6 @@ class HtmlReport
             SourceDomainsAnalyzer::SUPER_TABLE_SOURCE_DOMAINS,
             HeadersAnalyzer::SUPER_TABLE_HEADERS,
             DnsAnalyzer::SUPER_TABLE_DNS,
-            self::SUPER_TABLE_VISITED_URLS,
         ];
 
         $index = array_search($superTable->aplCode, $orders, true);

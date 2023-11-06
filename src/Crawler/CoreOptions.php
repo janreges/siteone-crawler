@@ -253,17 +253,20 @@ class CoreOptions
     /**
      * Get initial host from URL (with port if is explicitly set
      *
+     * @param bool $includePortIfDefined
      * @return string
      */
-    public function getInitialHost(): string
+    public function getInitialHost(bool $includePortIfDefined = true): string
     {
         static $initialHost = null;
 
         if ($initialHost === null) {
             $initialHost = parse_url($this->url, PHP_URL_HOST);
-            $initialPort = parse_url($this->url, PHP_URL_PORT);
-            if ($initialPort) {
-                $initialHost .= ":{$initialPort}";
+            if ($includePortIfDefined) {
+                $initialPort = parse_url($this->url, PHP_URL_PORT);
+                if ($initialPort) {
+                    $initialHost .= ":{$initialPort}";
+                }
             }
         }
 
