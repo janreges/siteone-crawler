@@ -68,6 +68,12 @@ class Option
     public readonly bool $callableMultipleTimes;
 
     /**
+     * Optional extras
+     * @var array
+     */
+    public readonly ?array $extras;
+
+    /**
      * Value parsed and validate from argv
      * @var mixed
      */
@@ -89,8 +95,9 @@ class Option
      * @param mixed|null $defaultValue
      * @param bool $isNullable
      * @param bool $callableMultipleTimes
+     * @param ?array $extras
      */
-    public function __construct(string $name, ?string $altName, string $propertyToFill, Type $type, bool $isArray, string $description, mixed $defaultValue = null, bool $isNullable = true, bool $callableMultipleTimes = false)
+    public function __construct(string $name, ?string $altName, string $propertyToFill, Type $type, bool $isArray, string $description, mixed $defaultValue = null, bool $isNullable = true, bool $callableMultipleTimes = false, ?array $extras = null)
     {
         $this->name = $name;
         $this->altName = $altName;
@@ -101,6 +108,7 @@ class Option
         $this->defaultValue = $defaultValue;
         $this->isNullable = $isNullable;
         $this->callableMultipleTimes = $callableMultipleTimes;
+        $this->extras = $extras;
     }
 
     /**
@@ -226,6 +234,14 @@ class Option
             }
         } else if ($this->type === Type::PROXY && (!is_string($value) || !preg_match('/^[a-z0-9\-.:]{1,100}:[0-9]{1,5}$/i', $value))) {
             throw new Exception("Option {$this->name} ({$value}) must be in format host:port");
+        }
+
+        // extra validations
+        $isNumber = $this->type === Type::INT || $this->type === Type::FLOAT;
+        if ($isNumber && $this->extras && count($this->extras) === 2) {
+            if ($value < $this->extras[0] || $value > $this->extras[1]) {
+                throw new Exception("Option {$this->name} ({$value}) must be in range {$this->extras[0]}-{$this->extras[1]}");
+            }
         }
     }
 
