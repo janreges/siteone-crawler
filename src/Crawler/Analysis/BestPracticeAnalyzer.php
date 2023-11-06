@@ -78,8 +78,12 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
 
     public function analyze(): void
     {
+        $htmlUrls = array_filter($this->status->getVisitedUrls(), function ($visitedUrl) {
+            return !$visitedUrl->isExternal && $visitedUrl->statusCode === 200 && $visitedUrl->contentType === Crawler::CONTENT_TYPE_ID_HTML;
+        });
+
         $imagesUrls = array_filter($this->status->getVisitedUrls(), function ($visitedUrl) {
-            return $visitedUrl->statusCode === 200 && $visitedUrl->contentType === Crawler::CONTENT_TYPE_ID_IMAGE;
+            return !$visitedUrl->isExternal && $visitedUrl->statusCode === 200 && $visitedUrl->contentType === Crawler::CONTENT_TYPE_ID_IMAGE;
         });
 
         $superTable = new SuperTable(
@@ -116,7 +120,7 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
             ], true, null
         );
 
-        $superTable->setData($this->analyzeUrls($imagesUrls, $imagesUrls));
+        $superTable->setData($this->analyzeUrls($htmlUrls, $imagesUrls));
         $this->status->addSuperTableAtEnd($superTable);
         $this->output->addSuperTable($superTable);
 
@@ -261,7 +265,7 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
             // check inline SVG size
             if ($size > $this->maxInlineSvgSize) {
                 unset($okSvg[$svg]);
-                $largeSvgs[$svgHash] = $svg;
+                $largeSvgs[$svgHash] = Utils::sanitizeSvg($svg);
                 $maxFoundSvgSize = max($maxFoundSvgSize, $size);
                 $this->stats->addWarning(self::ANALYSIS_LARGE_SVGS, $svg);
             } else {
@@ -270,7 +274,7 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
 
             // check duplicates
             if (!isset($duplicates[$svgHash])) {
-                $duplicates[$svgHash] = ['count' => 0, 'svg' => $svg, 'size' => strlen($svg)];
+                $duplicates[$svgHash] = ['count' => 0, 'svg' => Utils::sanitizeSvg($svg), 'size' => strlen($svg)];
             }
             $duplicates[$svgHash]['count']++;
 
@@ -278,7 +282,7 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
             $errors = $this->validateSvg($svg);
             if ($errors) {
                 unset($okSvg[$svg]);
-                $invalidSvgs[$svgHash] = ['svg' => $svg, 'errors' => $errors];
+                $invalidSvgs[$svgHash] = ['svg' => Utils::sanitizeSvg($svg), 'errors' => $errors];
                 $this->stats->addWarning(self::ANALYSIS_INVALID_SVGS, $svg);
             } else {
                 $this->stats->addOk(self::ANALYSIS_INVALID_SVGS, $svg);
@@ -356,8 +360,8 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
                 if (!isset($match[2])) {
                     continue;
                 }
-                // skip <astro-* tags from Astro framework (it uses custom syntax for attributes)
-                if (str_starts_with($match[0], '<astro')) {
+                // skip <astro-* tags from Astro framework (it uses custom syntax for attributes) and backslash-escaped quotes (typically in JS code)
+                if (str_starts_with($match[0], '<astro') || str_contains($match[0], '\\"') || str_contains($match[0], "\\'")) {
                     continue;
                 }
 
@@ -743,7 +747,7 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
         if ($this->pagesWithMissingQuotes > 0) {
             $this->status->addWarningToSummary('pages-with-missing-quotes', "{$this->pagesWithMissingQuotes} page(s) with missing quotes on attributes");
         } else {
-            $this->status->addOkToSummary('pages-with-missing-quotes', "All pages have quotes on attributes");
+            $this->status->addOkToSummary('pages-with-missing-quotes', "All pages have quoted attributes");
         }
 
         // inline SVGs

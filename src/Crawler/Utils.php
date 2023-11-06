@@ -933,4 +933,50 @@ class Utils
         return $html;
     }
 
+    /**
+     * Remove all invalid/unsafe tags from SVC
+     * @param string $svg
+     * @return string
+     */
+    public static function sanitizeSvg(string $svg): string
+    {
+        return strip_tags($svg, [
+            'animate',
+            'animateColor',
+            'animateMotion',
+            'animateTransform',
+            'circle',
+            'clipPath',
+            'defs',
+            'desc',
+            'filter',
+            'foreignObject',
+            'g',
+            'image',
+            'line',
+            'linearGradient',
+            'marker',
+            'mask',
+            'metadata',
+            'mpath',
+            'path',
+            'pattern',
+            'polygon',
+            'polyline',
+            'radialGradient',
+            'rect',
+            'set',
+            'stop',
+            'style',
+            'svg',
+            'switch',
+            'symbol',
+            'text',
+            'title',
+            'tspan',
+            'use',
+            'view',
+        ]);
+    }
+
 }
