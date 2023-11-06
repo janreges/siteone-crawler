@@ -238,7 +238,7 @@ class Utils
 
     public static function removeAnsiColors(string $text): string
     {
-        return preg_replace('/\033\[\d+(;\d+)*m/', '', $text);
+        return preg_replace('/\033\[\d+(;\d+)*m|\e\[\d+(;\d+)*m/', '', $text);
     }
 
     public static function getHttpClientCodeWithErrorDescription(int $httpCode, bool $shortVersion = false): string
@@ -932,6 +932,5 @@ class Utils
 
         return $html;
     }
-
 
 }

@@ -18,6 +18,9 @@ class SuperTable
     const POSITION_BEFORE_URL_TABLE = 'before-url-table';
     const POSITION_AFTER_URL_TABLE = 'after-url-table';
 
+    const RENDER_INTO_HTML = 'html';
+    const RENDER_INTO_CONSOLE = 'console';
+
     public readonly string $aplCode;
     public readonly string $title;
     public readonly ?string $description;
@@ -108,7 +111,7 @@ class SuperTable
         $output .= '    <span id="foundRows_' . htmlspecialchars($this->uniqueId) . '" class="found-rows">Found ' . count($this->data) . ' row(s).</span>';
         $output .= '</div>';
 
-        $output .= "<table id='" . htmlspecialchars($this->uniqueId) . "' border='1' class='table table-bordered table-hover table-sortable' style='border-collapse: collapse;'>";
+        $output .= "<table id='" . htmlspecialchars($this->uniqueId) . "' border='1' class='table table-bordered table-hover table-sortable {$this->aplCode}' style='border-collapse: collapse;'>";
         $output .= "<thead>";
         foreach ($this->columns as $key => $column) {
             $direction = ($this->currentOrderColumn === $key && $this->currentOrderDirection === 'ASC') ? 'DESC' : 'ASC';
@@ -139,9 +142,9 @@ class SuperTable
                 $formattedValue = $value;
 
                 if ($column->formatter) {
-                    $formattedValue = call_user_func($column->formatter, $value);
+                    $formattedValue = call_user_func($column->formatter, $value, self::RENDER_INTO_HTML);
                 } elseif ($column->renderer) {
-                    $formattedValue = call_user_func($column->renderer, $row);
+                    $formattedValue = call_user_func($column->renderer, $row, self::RENDER_INTO_HTML);
                 } else {
                     if ($column->nonBreakingSpaces && is_string($formattedValue)) {
                         $formattedValue = str_replace([' ', "\t"], ['&nbsp;', str_repeat('&nbsp;', 4)], $formattedValue);
@@ -166,7 +169,7 @@ class SuperTable
                 }
 
                 $dataValue = is_scalar($value) && strlen(strval($value)) < 200 ? strval($value) : (strlen(strval($formattedValue)) < 50 ? strval($formattedValue) : 'complex-data');
-                $output .= "<td data-value='" . htmlspecialchars($dataValue) . "'>{$formattedValue}</td>";
+                $output .= "<td data-value='" . htmlspecialchars($dataValue) . "' class='" . htmlspecialchars($key) . "'>{$formattedValue}</td>";
             }
             $output .= "</tr>";
             $counter++;
@@ -222,16 +225,11 @@ class SuperTable
             $rowData = [];
             foreach ($this->columns as $key => $column) {
                 $value = is_object($row) ? ($row->{$key} ?? '') : ($row[$key] ?? '');
-                if (is_scalar($value)) {
-                    $valueLength = mb_strlen(strval($value));
-                } else {
-                    $valueLength = 100;
-                }
                 $columnWidth = $columnToWidth[$column->aplCode];
                 if (isset($column->formatter)) {
-                    $value = call_user_func($column->formatter, $value);
+                    $value = call_user_func($column->formatter, $value, self::RENDER_INTO_CONSOLE);
                 } else if (isset($column->renderer)) {
-                    $value = call_user_func($column->renderer, $row);
+                    $value = call_user_func($column->renderer, $row, self::RENDER_INTO_CONSOLE);
                 }
 
                 if ($column->truncateIfLonger && $value && mb_strlen(strval($value)) > $columnWidth) {
@@ -240,7 +238,7 @@ class SuperTable
 
                 $rowData[] = $column->formatterWillChangeValueLength
                     ? str_pad(strval($value), $columnWidth)
-                    : ($value . (str_repeat(' ', max(0, $columnWidth - $valueLength))));
+                    : ($value . (str_repeat(' ', max(0, $columnWidth - mb_strlen(Utils::removeAnsiColors(strval($value)))))));
             }
             $output .= implode(' | ', $rowData) . PHP_EOL;
         }

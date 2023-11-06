@@ -81,6 +81,11 @@ class Status
     private array $visitedUrlToAnalysisResult = [];
 
     /**
+     * @var string|null
+     */
+    private static ?string $robotsTxtContent = null;
+
+    /**
      * @param Storage $storage
      * @param bool $storeContent
      * @param Info $crawlerInfo
@@ -287,6 +292,16 @@ class Status
     public function getVisitedUrlToAnalysisResult(): array
     {
         return $this->visitedUrlToAnalysisResult;
+    }
+
+    public static function setRobotsTxtContent(string $robotsTxtContent): void
+    {
+        self::$robotsTxtContent = $robotsTxtContent;
+    }
+
+    public static function getRobotsTxtContent(): ?string
+    {
+        return self::$robotsTxtContent;
     }
 
 }

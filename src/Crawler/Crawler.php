@@ -844,6 +844,8 @@ class Crawler
                         }
                     }
 
+                    Status::setRobotsTxtContent($robotsTxt);
+
                     Debugger::debug(
                         'robots-txt',
                         "Loaded robots.txt for domain '%s' and port '%s'. Disallowed paths: %s",

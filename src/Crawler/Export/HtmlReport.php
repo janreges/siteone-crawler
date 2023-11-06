@@ -19,8 +19,10 @@ use Crawler\Analysis\FastestAnalyzer;
 use Crawler\Analysis\HeadersAnalyzer;
 use Crawler\Analysis\Page404Analyzer;
 use Crawler\Analysis\RedirectsAnalyzer;
+use Crawler\Analysis\Result\SeoAndSocialResult;
 use Crawler\Analysis\Result\UrlAnalysisResult;
 use Crawler\Analysis\SecurityAnalyzer;
+use Crawler\Analysis\SeoAndSocialAnalyzer;
 use Crawler\Analysis\SlowestAnalyzer;
 use Crawler\Analysis\SourceDomainsAnalyzer;
 use Crawler\Components\SuperTable;
@@ -59,6 +61,9 @@ class HtmlReport
         $this->skippedSuperTables = [
             AnalysisManager::SUPER_TABLE_ANALYSIS_STATS, // will be in tab Crawler info
             HeadersAnalyzer::SUPER_TABLE_HEADERS_VALUES, // will be in tab Headers
+            SeoAndSocialAnalyzer::SUPER_TABLE_SEO, // will be in tab SEO and Sharing
+            SeoAndSocialAnalyzer::SUPER_TABLE_SHARING, // will be in tab SEO and Sharing
+            SeoAndSocialAnalyzer::SUPER_TABLE_SEO_HEADINGS, // will be in tab SEO and Sharing
         ];
     }
 
@@ -153,6 +158,7 @@ class HtmlReport
     {
         $tabs = [];
         $tabs[] = $this->getSummaryTab();
+        $tabs[] = $this->getSeoAndSocialTab();
         $tabs[] = $this->getVisitedUrlsTab();
         $tabs[] = $this->getCrawlerStatsTab();
         $tabs[] = $this->getCrawlerInfo();
@@ -297,6 +303,44 @@ class HtmlReport
         }
 
         return new Tab('Summary', null, $summary->getAsHtml(), true, $badges, -100);
+    }
+
+    private function getSeoAndSocialTab(): Tab
+    {
+        $html = '';
+        $superTables = [
+            SeoAndSocialAnalyzer::SUPER_TABLE_SEO,
+            SeoAndSocialAnalyzer::SUPER_TABLE_SHARING,
+            SeoAndSocialAnalyzer::SUPER_TABLE_SEO_HEADINGS,
+        ];
+
+        $badgeCount = 0;
+        $headingsErrors = 0;
+
+        $order = null;
+        foreach ($superTables as $superTable) {
+            $superTable = $this->status->getSuperTableByAplCode($superTable);
+            if ($superTable) {
+                $html .= $superTable->getHtmlOutput() . '<br/>';
+                if (!$badgeCount) {
+                    $badgeCount = $superTable->getTotalRows();
+                }
+                if ($superTable->aplCode === SeoAndSocialAnalyzer::SUPER_TABLE_SEO) {
+                    $order = $this->getSuperTableOrder($superTable);
+                } elseif ($superTable->aplCode === SeoAndSocialAnalyzer::SUPER_TABLE_SEO_HEADINGS) {
+                    foreach ($superTable->getData() as $row) {
+                        /* @var SeoAndSocialResult $row */
+                        $headingsErrors += $row->headingsErrorsCount;
+                    }
+                }
+            }
+        }
+
+        $badges = [
+            new Badge(strval($badgeCount), Badge::COLOR_NEUTRAL, 'Total URL with SEO info'),
+            new Badge(strval($headingsErrors), $headingsErrors ? Badge::COLOR_RED : Badge::COLOR_NEUTRAL, 'Errors in headings structure'),
+        ];
+        return new Tab('SEO and Sharing', null, $html, false, $badges, $order);
     }
 
     private function getCrawlerStatsTab(): Tab
@@ -638,6 +682,7 @@ class HtmlReport
             BestPracticeAnalyzer::SUPER_TABLE_BEST_PRACTICES,
             AccessibilityAnalyzer::SUPER_TABLE_ACCESSIBILITY,
             SecurityAnalyzer::SUPER_TABLE_SECURITY,
+            SeoAndSocialAnalyzer::SUPER_TABLE_SEO,
             Page404Analyzer::SUPER_TABLE_404,
             RedirectsAnalyzer::SUPER_TABLE_REDIRECTS,
             FastestAnalyzer::SUPER_TABLE_FASTEST_URLS,
