@@ -42,20 +42,24 @@ class HeaderStats
         $this->header = $header;
     }
 
-    public function addValue(string $value): void
+    public function addValue(string|array $value): void
     {
         $this->occurrences++;
 
         if ($this->ignoreHeaderValues($this->header)) {
             return;
-        } elseif ($this->isValueForMinMaxDate($this->header)) {
+        } elseif (is_string($value) && $this->isValueForMinMaxDate($this->header)) {
             $this->addValueForMinMaxDate($value);
-        } elseif ($this->isValueForMinMaxInt($this->header)) {
+        } elseif (is_string($value) && $this->isValueForMinMaxInt($this->header)) {
             $this->addValueForMinMaxInt($value);
         } else {
             if (count($this->uniqueValues) >= self::MAX_UNIQUE_VALUES) {
                 $this->uniqueValuesLimitReached = true;
                 return;
+            }
+
+            if (is_array($value)) {
+                $value = json_encode($value);
             }
 
             if (!isset($this->uniqueValues[$value])) {
