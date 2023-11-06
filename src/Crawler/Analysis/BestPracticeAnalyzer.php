@@ -425,11 +425,11 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
 
         // Report based on the depth
         if ($maxDepth >= $this->maxDomDepthCritical) {
-            $result->addCritical("The DOM depth exceeds the critical limit: {$this->maxDomDepthCritical}. Found depth: {$maxDepth}", self::ANALYSIS_DOM_DEPTH, ["The DOM depth exceeds the critical limit: {$this->maxDomDepthCritical}."]);
+            $result->addCritical("The DOM depth exceeds the critical limit: {$this->maxDomDepthCritical}. Found depth: {$maxDepth}.", self::ANALYSIS_DOM_DEPTH, ["The DOM depth exceeds the critical limit: {$this->maxDomDepthCritical}. Found depth: {$maxDepth}."]);
             $this->stats->addCritical(self::ANALYSIS_DOM_DEPTH, $html);
             $this->pagesWithDeepDom++;
         } elseif ($maxDepth >= $this->maxDomDepthWarning) {
-            $result->addWarning("The DOM depth exceeds the warning limit: {$this->maxDomDepthWarning}. Found depth: {$maxDepth}", self::ANALYSIS_DOM_DEPTH, ["The DOM depth exceeds the warning limit: {$this->maxDomDepthWarning}."]);
+            $result->addWarning("The DOM depth exceeds the warning limit: {$this->maxDomDepthWarning}. Found depth: {$maxDepth}.", self::ANALYSIS_DOM_DEPTH, ["The DOM depth exceeds the warning limit: {$this->maxDomDepthWarning}. Found depth: {$maxDepth}."]);
             $this->stats->addWarning(self::ANALYSIS_DOM_DEPTH, $html);
             $this->pagesWithDeepDom++;
         } else {
