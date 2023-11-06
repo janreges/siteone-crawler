@@ -77,9 +77,9 @@ class SecurityAnalyzer extends BaseAnalyzer implements Analyzer
                 new SuperTableColumn('critical', 'Critical', 8, function ($value) {
                     return $value > 0 ? Utils::getColorText(strval($value), 'red', true) : '0';
                 }, null, false, false),
-                new SuperTableColumn('recommendation', 'Recommendation', SuperTableColumn::AUTO_WIDTH, function ($value) {
+                new SuperTableColumn('recommendation', 'Recommendation', SuperTableColumn::AUTO_WIDTH, function ($value, $renderInto) {
                     if ($value) {
-                        return implode("\n", $value);
+                        return implode($renderInto === SuperTable::RENDER_INTO_HTML ? '<br>' : "\n > ", $value);
                     } else {
                         return '';
                     }
@@ -251,7 +251,7 @@ class SecurityAnalyzer extends BaseAnalyzer implements Analyzer
 
         if ($value === null) {
             $severity = SecurityCheckedHeader::CRITICAL;
-            $recommendation = "Strict-Transport-Security header is not set. This can be a security risk.";
+            $recommendation = "Strict-Transport-Security header is not set. It enforces secure connections and protects against MITM attacks.";
             $urlAnalysisResult->addCritical($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
         } elseif (str_contains($value, 'max-age=0')) {
             $severity = SecurityCheckedHeader::CRITICAL;
@@ -280,7 +280,7 @@ class SecurityAnalyzer extends BaseAnalyzer implements Analyzer
 
         if ($value === null) {
             $severity = SecurityCheckedHeader::WARNING;
-            $recommendation = "X-Frame-Options header is not set. This can be a security risk.";
+            $recommendation = "X-Frame-Options header is not set. It prevents clickjacking attacks when set to 'deny' or 'sameorigin.";
             $urlAnalysisResult->addWarning($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
         } elseif ($value === 'DENY') {
             $severity = SecurityCheckedHeader::OK;
@@ -309,7 +309,7 @@ class SecurityAnalyzer extends BaseAnalyzer implements Analyzer
 
         if ($value === null) {
             $severity = SecurityCheckedHeader::CRITICAL;
-            $recommendation = "X-XSS-Protection header is not set. This can be a security risk.";
+            $recommendation = "X-XSS-Protection header is not set. It enables browser's built-in defenses against XSS attacks.";
             $urlAnalysisResult->addCritical($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
         } elseif ($value === '0') {
             $severity = SecurityCheckedHeader::CRITICAL;
@@ -337,7 +337,7 @@ class SecurityAnalyzer extends BaseAnalyzer implements Analyzer
 
         if ($value === null) {
             $severity = SecurityCheckedHeader::WARNING;
-            $recommendation = "X-Content-Type-Options header is not set. This can be a security risk.";
+            $recommendation = "X-Content-Type-Options header is not set. It stops MIME type sniffing and mitigates content type attacks.";
             $urlAnalysisResult->addWarning($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
         } elseif ($value === 'nosniff') {
             $severity = SecurityCheckedHeader::OK;
@@ -369,7 +369,7 @@ class SecurityAnalyzer extends BaseAnalyzer implements Analyzer
 
         if ($value === null) {
             $severity = SecurityCheckedHeader::WARNING;
-            $recommendation = "Referrer-Policy header is not set. This can be a security risk.";
+            $recommendation = "Referrer-Policy header is not set. It controls referrer header sharing and enhances privacy and security.";
             $urlAnalysisResult->addWarning($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
         } elseif (in_array($value, $okValues)) {
             $severity = SecurityCheckedHeader::OK;
@@ -390,7 +390,7 @@ class SecurityAnalyzer extends BaseAnalyzer implements Analyzer
 
         if ($value === null) {
             $severity = SecurityCheckedHeader::CRITICAL;
-            $recommendation = "Content-Security-Policy header is not set. This can be a security risk.";
+            $recommendation = "Content-Security-Policy header is not set. It restricts resources the page can load and prevents XSS attacks.";
             $urlAnalysisResult->addCritical($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
         } else {
             $severity = SecurityCheckedHeader::OK;
@@ -405,9 +405,13 @@ class SecurityAnalyzer extends BaseAnalyzer implements Analyzer
         $recommendation = null;
         $value = $headers[$header] ?? null;
 
-        if ($value === null) {
+        if ($value === null && isset($headers[self::HEADER_PERMISSIONS_POLICY]) && $headers[self::HEADER_PERMISSIONS_POLICY]) {
+            $severity = SecurityCheckedHeader::NOTICE;
+            $recommendation = "Feature-Policy header is not set but Permissions-Policy is set. That's enough.";
+            $urlAnalysisResult->addNotice($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
+        } else if ($value === null) {
             $severity = SecurityCheckedHeader::WARNING;
-            $recommendation = "Feature-Policy header is not set. This can be a security risk.";
+            $recommendation = "Feature-Policy header is not set. It allows enabling/disabling browser APIs and features for security. Not important if Permissions-Policy is set.";
             $urlAnalysisResult->addWarning($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
         } else {
             $severity = SecurityCheckedHeader::OK;
@@ -422,9 +426,13 @@ class SecurityAnalyzer extends BaseAnalyzer implements Analyzer
         $recommendation = null;
         $value = $headers[$header] ?? null;
 
-        if ($value === null) {
+        if ($value === null && isset($headers[self::HEADER_FEATURE_POLICY]) && $headers[self::HEADER_FEATURE_POLICY]) {
             $severity = SecurityCheckedHeader::WARNING;
-            $recommendation = "Permissions-Policy header is not set. This can be a security risk.";
+            $recommendation = "Permissions-Policy header is not set but Feature-Policy is. We recommend transforming it to this newer header.";
+            $urlAnalysisResult->addWarning($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
+        } elseif ($value === null) {
+            $severity = SecurityCheckedHeader::WARNING;
+            $recommendation = "Permissions-Policy header is not set. It allows enabling/disabling browser APIs and features for security.";
             $urlAnalysisResult->addWarning($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
         } else {
             $severity = SecurityCheckedHeader::OK;
@@ -436,30 +444,38 @@ class SecurityAnalyzer extends BaseAnalyzer implements Analyzer
     private function checkServer(array $headers, UrlAnalysisResult $urlAnalysisResult): void
     {
         $header = self::HEADER_SERVER;
-        $recommendation = null;
         $value = $headers[$header] ?? null;
 
-        if ($value === null) {
-            return;
+        $knownValues = [
+            'Apache',
+            'nginx',
+            'Microsoft-IIS',
+        ];
+
+        $checkForKnownValues = function ($value) use ($knownValues) {
+            foreach ($knownValues as $knownValue) {
+                if (stripos($value, $knownValue) !== false) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        if ($value === null || trim(strval($value), ' /-.~:') === '') {
+            $severity = SecurityCheckedHeader::OK;
+            $recommendation = "Server header is not set or empty. This is recommended.";
+            $urlAnalysisResult->addNotice($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
         } elseif (preg_match('/[0-9]/', $value) === 1) {
             $severity = SecurityCheckedHeader::CRITICAL;
-            $recommendation = "Server header is set to '{$value}'. Webserver version should not be disclosed.";
+            $recommendation = "Server header is set to '{$value}'. It is better not to reveal the technologies used and especially their versions.";
             $urlAnalysisResult->addCritical($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
-        } elseif (str_contains($value, 'Apache')) {
-            $severity = SecurityCheckedHeader::NOTICE;
-            $recommendation = "Server header is set to '{$value}'. This can be a security risk.";
-            $urlAnalysisResult->addNotice($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
-        } elseif (str_contains($value, 'nginx')) {
-            $severity = SecurityCheckedHeader::NOTICE;
-            $recommendation = "Server header is set to '{$value}'. This can be a security risk.";
-            $urlAnalysisResult->addNotice($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
-        } elseif (str_contains($value, 'Microsoft-IIS')) {
-            $severity = SecurityCheckedHeader::NOTICE;
-            $recommendation = "Server header is set to '{$value}'. This can be a security risk.";
+        } elseif ($checkForKnownValues($value)) {
+            $severity = SecurityCheckedHeader::WARNING;
+            $recommendation = "Server header is set to known '{$value}'. It is better not to reveal used technologies.";
             $urlAnalysisResult->addNotice($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
         } else {
             $severity = SecurityCheckedHeader::NOTICE;
-            $recommendation = "Server header is set to '{$value}'. This can be low security risk.";
+            $recommendation = "Server header is set to '{$value}'. It is better not to reveal used technologies.";
             $urlAnalysisResult->addNotice($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
         }
 
@@ -476,7 +492,7 @@ class SecurityAnalyzer extends BaseAnalyzer implements Analyzer
             return;
         } elseif (preg_match('/[0-9]/', $value) === 1) {
             $severity = SecurityCheckedHeader::CRITICAL;
-            $recommendation = "X-Powered-By header is set to '{$value}'. App server version should not be disclosed.";
+            $recommendation = "X-Powered-By header is set to '{$value}'. It is better not to reveal the technologies used and especially their versions.";
             $urlAnalysisResult->addCritical($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
         } else {
             $severity = SecurityCheckedHeader::WARNING;
@@ -507,9 +523,9 @@ class SecurityAnalyzer extends BaseAnalyzer implements Analyzer
         list($cookieName) = explode('=', $setCookie);
 
         if (stripos($setCookie, 'SameSite') === false) {
-            $severity = SecurityCheckedHeader::WARNING;
+            $severity = SecurityCheckedHeader::NOTICE;
             $recommendation = "Set-Cookie header for '{$cookieName}' does not have 'SameSite' flag. Consider using 'SameSite=Strict' or 'SameSite=Lax'.";
-            $urlAnalysisResult->addWarning($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
+            $urlAnalysisResult->addNotice($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
         }
         if (stripos($setCookie, 'HttpOnly') === false) {
             $severity = SecurityCheckedHeader::WARNING;
@@ -522,7 +538,7 @@ class SecurityAnalyzer extends BaseAnalyzer implements Analyzer
             $urlAnalysisResult->addCritical($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
         }
 
-        $this->result->getCheckedHeader($cookieName)->setFinding($cookieName, $severity, $recommendation);
+        $this->result->getCheckedHeader(self::HEADER_SET_COOKIE)->setFinding($cookieName, $severity, $recommendation);
     }
 
     public function getOrder(): int
