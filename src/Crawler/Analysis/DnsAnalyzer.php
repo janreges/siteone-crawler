@@ -14,6 +14,7 @@ use Crawler\Analysis\Result\DnsAnalysisResult;
 use Crawler\Components\SuperTable;
 use Crawler\Components\SuperTableColumn;
 use Crawler\Options\Options;
+use Crawler\Utils;
 use Exception;
 
 class DnsAnalyzer extends BaseAnalyzer implements Analyzer
@@ -31,7 +32,33 @@ class DnsAnalyzer extends BaseAnalyzer implements Analyzer
             self::SUPER_TABLE_DNS,
             'DNS info',
             'No DNS info found.', [
-            new SuperTableColumn('info', 'Info', SuperTableColumn::AUTO_WIDTH, null, null, true, false, true),
+            new SuperTableColumn('info', 'DNS resolving tree', SuperTableColumn::AUTO_WIDTH, function ($value, $renderInto) {
+                // find and colorize all IPv4 addresses in $value
+                $value = preg_replace_callback('/([0-9]{1,3}\.){3}[0-9]{1,3}/', function ($matches) {
+                    $ip = $matches[0];
+                    if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+                        return Utils::getColorText($ip, 'blue', true);
+                    } else {
+                        return $ip;
+                    }
+                }, $value);
+
+                // find and colorize all IPv6 addresses in $value
+                $value = preg_replace_callback('/([0-9a-f:]+:+)+[0-9a-f]+/i', function ($matches) {
+                    $ip = $matches[0];
+                    if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+                        return Utils::getColorText($ip, 'blue', true);
+                    } else {
+                        return $ip;
+                    }
+                }, $value);
+
+                if ($renderInto === SuperTable::RENDER_INTO_HTML) {
+                    $value = nl2br(str_replace(' ', '&nbsp;', $value));
+                }
+
+                return $value;
+            }, null, true, false, true),
         ], false);
 
         $data = [];
@@ -56,6 +83,11 @@ class DnsAnalyzer extends BaseAnalyzer implements Analyzer
             } else {
                 $this->status->addNoticeToSummary('dns-ipv6', "DNS IPv6: domain {$domain} does not support IPv6 (DNS server: {$dnsInfo->dnsServerName})");
             }
+
+            if (count($dnsInfo->resolvedDomains) > 1) {
+                $this->status->addInfoToSummary('dns-aliases', "DNS Aliases: IP(s) for domain {$domain} were resolved by CNAME chain " . implode(' > ', $dnsInfo->resolvedDomains) . '.');
+            }
+
         } catch (Exception $e) {
             $data[] = ['info' => $e->getMessage()];
             $this->status->addCriticalToSummary('dns', "Problem with DNS analysis: {$e->getMessage()}");
