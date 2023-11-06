@@ -43,23 +43,39 @@ class SslTlsAnalyzer extends BaseAnalyzer implements Analyzer
 
         $tableData = [];
         foreach ($certificateInfo as $key => $value) {
-            if (trim(strval($value)) !== '') {
+            if ($value) {
                 $tableData[] = ['info' => $key, 'value' => $value];
             }
         }
 
         $superTable = new SuperTable(
             self::SUPER_TABLE_CERTIFICATE_INFO,
-            'SSL/TLS certificate info',
+            'SSL/TLS info',
             'No SSL/TLS info.',
             [
                 new SuperTableColumn('info', 'Info', SuperTableColumn::AUTO_WIDTH),
                 new SuperTableColumn('value', 'Text', $consoleWidth - 30, function ($value, $renderInto) {
                     if (is_array($value)) {
-                        $result = count($value) . " error(s): ";
-                        $result .= implode($renderInto === SuperTable::RENDER_INTO_HTML ? '<br>' : ", ", $value);
-                        $result = trim($result, ' :,');
-                        return count($value) > 0 ? Utils::getColorText($result, 'red', true) : Utils::getColorText($result, 'green');
+                        if ($value && (str_contains($value[0], 'TLS') || str_contains($value[0], 'SSL'))) {
+                            // ssl/tls protocols
+                            $value = implode(', ', $value);
+                            $result = str_replace('SSLv2', Utils::getColorText('SSLv2', 'red', true), $value);
+                            $result = str_replace('SSLv3', Utils::getColorText('SSLv3', 'red', true), $result);
+                            $result = str_replace('TLSv1.0', Utils::getColorText('TLSv1.0', 'red', true), $result);
+                            $result = str_replace('TLSv1.1', Utils::getColorText('TLSv1.1', 'red', true), $result);
+                            $result = str_replace('TLSv1.2', Utils::getColorText('TLSv1.2', 'green', true), $result);
+                            $result = str_replace('TLSv1.3', Utils::getColorText('TLSv1.3', 'green', true), $result);
+                            return $result;
+                        } elseif ($value) {
+                            // errors
+                            $result = count($value) . " error(s): ";
+                            $result .= implode($renderInto === SuperTable::RENDER_INTO_HTML ? '<br>' : ", ", $value);
+
+                            $result = trim($result, ' :,');
+                            return count($value) > 0 ? Utils::getColorText($result, 'red', true) : Utils::getColorText($result, 'green');
+                        } else {
+                            return '-';
+                        }
                     }
 
                     if ($renderInto === SuperTable::RENDER_INTO_HTML) {
@@ -93,12 +109,14 @@ class SslTlsAnalyzer extends BaseAnalyzer implements Analyzer
         $protocols = [
             'ssl2' => 'SSLv2',
             'ssl3' => 'SSLv3',
-            'tls1' => 'TLSv1',
+            'tls1' => 'TLSv1.0',
             'tls1_1' => 'TLSv1.1',
             'tls1_2' => 'TLSv1.2',
             'tls1_3' => 'TLSv1.3',
         ];
         $supportedProtocols = [];
+
+        $unsafeProtocols = ['ssl2', 'ssl3', 'tls1', 'tls1_1'];
 
         foreach ($protocols as $protocolCode => $protocolName) {
             $protocolsCommand = "echo 'Q' | openssl s_client -connect {$hostname}:{$port} -servername {$hostname} -{$protocolCode} 2>&1";
@@ -106,7 +124,18 @@ class SslTlsAnalyzer extends BaseAnalyzer implements Analyzer
 
             if ($protocolsOutput && str_contains($protocolsOutput, 'Certificate chain')) {
                 $supportedProtocols[] = $protocolName;
+
+                // report unsafe protocols
+                if (in_array($protocolCode, $unsafeProtocols)) {
+                    $this->status->getSummary()->addItem(new Item('ssl-protocol-unsafe', "SSL/TLS protocol {$protocolName} is unsafe.", ItemStatus::CRITICAL));
+                }
             }
+        }
+
+        if (!in_array('TLSv1.3', $supportedProtocols)) {
+            $this->status->getSummary()->addItem(new Item('ssl-protocol-hint', "Latest SSL/TLS protocol TLSv1.3 is not supported. Ask your admin/provider to add TLSv1.3 support.", ItemStatus::WARNING));
+        } else if (!in_array('TLSv1.2', $supportedProtocols)) {
+            $this->status->getSummary()->addItem(new Item('ssl-protocol-hint', "SSL/TLS protocol TLSv1.2 is not supported. Ask your admin/provider to add TLSv1.2 support.", ItemStatus::CRITICAL));
         }
 
         // parse info
@@ -157,10 +186,10 @@ class SslTlsAnalyzer extends BaseAnalyzer implements Analyzer
             'Subject' => $subject,
             'Valid from' => $validFrom,
             'Valid to' => $validTo,
-            'Supported protocols' => implode(', ', $supportedProtocols),
+            'Supported protocols' => $supportedProtocols,
             'Errors' => $errors,
             'RAW certificate output' => $certificateOutput,
-            'ROW protocols output' => $protocolsOutput,
+            'RAW protocols output' => $protocolsOutput,
         ];
     }
 
