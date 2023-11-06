@@ -86,12 +86,12 @@ class HeadersAnalyzer extends BaseAnalyzer implements Analyzer
         $this->status->addSummaryItemByRanges(
             'unique-headers',
             count($this->headerStats),
-            [[0, 20], [21, 30], [31, 40], [51, PHP_INT_MAX]],
+            [[0, 30], [31, 40], [41, 50], [51, PHP_INT_MAX]],
             [
-                "Unique headers OK - found %s unique headers",
-                "Unique headers NOTICE - found %s unique headers",
-                "Unique headers WARNING - found %s unique headers (too many)",
-                "Unique headers CRITICAL - found %s unique headers (too many)"
+                "HTTP headers - found %s unique headers",
+                "HTTP headers - found %s unique headers",
+                "HTTP headers - found %s unique headers (too many)",
+                "HTTP headers - found %s unique headers (too many)"
             ]
         );
 
