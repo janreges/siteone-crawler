@@ -73,7 +73,7 @@ class HttpClient
     {
         $path = @parse_url($url, PHP_URL_PATH);
         $extension = is_string($path) ? @pathinfo($path, PATHINFO_EXTENSION) : null;
-        $cacheKey = $this->getCacheKey($host, func_get_args(), $extension);
+        $cacheKey = $this->getCacheKey($host, $port, func_get_args(), $extension);
         $cachedResult = $this->getFromCache($cacheKey);
         if ($cachedResult !== null && str_contains($url, ' ') === false) {
             $cachedResult->setLoadedFromCache(true);
@@ -177,14 +177,15 @@ class HttpClient
 
     /**
      * @param string $host
+     * @param int $port
      * @param array $args
      * @param array|string|null $extension
      * @return string
      */
-    private function getCacheKey(string $host, array $args, array|string|null $extension): string
+    private function getCacheKey(string $host, int $port, array $args, array|string|null $extension): string
     {
         $md5 = md5(serialize($args));
-        return $host . '/' . substr($md5, 0, 2) . '/' . $md5 . ($extension ? ".{$extension}" : '');
+        return $host . '-' . $port . '/' . substr($md5, 0, 2) . '/' . $md5 . ($extension ? ".{$extension}" : '');
     }
 
 }
