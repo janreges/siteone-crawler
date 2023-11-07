@@ -686,7 +686,7 @@ class Utils
     {
         $orig = $html;
         // script tags
-        $scriptPattern = '/<script[^>]*>(.*)<\/script>/is';
+        $scriptPattern = '/<script[^>]*>(.*?)<\/script>/is';
         $html = preg_replace($scriptPattern, '', $html);
 
         // link tags by "href"
