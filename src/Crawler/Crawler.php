@@ -417,7 +417,7 @@ class Crawler
             while ($this->getActiveWorkersNumber() < $this->options->workers && $this->queue->count() > 0) {
                 // rate limiting
                 $currentTimestamp = microtime(true);
-                if (($currentTimestamp - $this->lastRequestTime) < $this->optimalDelayBetweenRequests) {
+                if (!$httpResponse->isLoadedFromCache() && ($currentTimestamp - $this->lastRequestTime) < $this->optimalDelayBetweenRequests) {
                     $sleep = $this->optimalDelayBetweenRequests - ($currentTimestamp - $this->lastRequestTime);
                     Coroutine::sleep(max($sleep, 0.001));
                     continue;

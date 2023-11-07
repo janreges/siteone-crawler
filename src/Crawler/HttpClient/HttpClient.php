@@ -74,6 +74,7 @@ class HttpClient
         $cacheKey = $host . '.' . md5(serialize(func_get_args())) . ($extension ? ".{$extension}" : '');
         $cachedResult = $this->getFromCache($cacheKey);
         if ($cachedResult !== null && str_contains($url, ' ') === false) {
+            $cachedResult->setLoadedFromCache(true);
             return $cachedResult;
         }
 

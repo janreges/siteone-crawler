@@ -19,6 +19,7 @@ class HttpResponse
     public readonly ?string $body;
     public readonly array $headers;
     public readonly float $execTime;
+    private bool $loadedFromCache = false;
 
     /**
      * @param string $url
@@ -66,6 +67,16 @@ class HttpResponse
             );
             $headers['content-type'] = 'text/html';
         }
+    }
+
+    public function setLoadedFromCache(bool $loadedFromCache): void
+    {
+        $this->loadedFromCache = $loadedFromCache;
+    }
+
+    public function isLoadedFromCache(): bool
+    {
+        return $this->loadedFromCache;
     }
 
 }
