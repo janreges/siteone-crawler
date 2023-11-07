@@ -357,8 +357,8 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
      */
     private function updateHtmlPathsToRelative(string $html, string $baseUrl, ?array &$debug = null): string
     {
-        $patternHrefSrc = '/(\.|<[a-z0-9]{1,10}[^>]*\s+)(href|src)\s*=\s*([\'"]?)([^\'">]+)\3([^>]*)/im';
-        $patternSrcset = '/(\.|<[a-z0-9]{1,10}[^>]*\s+)(imagesrcset|srcset)\s*=\s*([\'"]?)([^\'">]+)\3([^>]*)/im';
+        $patternHrefSrc = '/(\.|<[a-z0-9]{1,10}[^>]*\s+)(href|src)\s*=\s*([\'"]?)([^\'">]+)\3([^>]*)/is';
+        $patternSrcset = '/(\.|<[a-z0-9]{1,10}[^>]*\s+)(imagesrcset|srcset)\s*=\s*([\'"]?)([^\'">]+)\3([^>]*)/is';
         $patternMetaUrl = '/(<meta[^>]*)(url)\s*=\s*([\'"]?)([^\'">]+)\3(")/im';
         $isUrlForDebug = $this->crawler->getCoreOptions()->isUrlSelectedForDebug($baseUrl);
 
@@ -383,8 +383,11 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
                 $sources = preg_split('/\s*,\s*/', $value);
                 foreach ($sources as &$source) {
                     if (!str_contains($source, ' ')) {
-                        continue;
+                        // URL in srcset without a defined size by "url 2x", "url 100w", etc.
+                        $relativeUrl = $this->convertUrlToRelative($baseUrl, trim($source), $attribute);
+                        $source = $relativeUrl;
                     } else {
+                        // URL in srcset with format "url 2x", "url 100w", etc.
                         @list($url, $size) = preg_split('/\s+/', trim($source), 2);
                         $relativeUrl = $this->convertUrlToRelative($baseUrl, $url, $attribute);
                         $source = $relativeUrl . ' ' . $size;
