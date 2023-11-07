@@ -158,4 +158,9 @@ class VisitedUrl
         return in_array($this->contentType, $staticTypes);
     }
 
+    public function looksLikeStaticFileByUrl(): bool
+    {
+        return preg_match('/\.(jpg|jpeg|png|gif|webp|svg|ico|js|css|woff|woff2|ttf|eot|mp4|webm|ogg|mp3|wav|flac|pdf|doc|docx|xls|xlsx|ppt|pptx|zip|rar|gz|bz2|7z|xml|json)/i', $this->url) === 1;
+    }
+
 }

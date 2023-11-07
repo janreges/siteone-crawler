@@ -118,7 +118,7 @@ class SecurityAnalyzer extends BaseAnalyzer implements Analyzer
      */
     public function analyzeVisitedUrl(VisitedUrl $visitedUrl, ?string $body, ?DOMDocument $dom, ?array $headers): ?UrlAnalysisResult
     {
-        if ($visitedUrl->contentType !== Crawler::CONTENT_TYPE_ID_HTML) {
+        if ($visitedUrl->contentType !== Crawler::CONTENT_TYPE_ID_HTML || $visitedUrl->looksLikeStaticFileByUrl()) {
             return null;
         }
 
@@ -496,7 +496,7 @@ class SecurityAnalyzer extends BaseAnalyzer implements Analyzer
             $urlAnalysisResult->addCritical($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
         } else {
             $severity = SecurityCheckedHeader::WARNING;
-            $recommendation = "X-Powered-By header is set to '{$value}'. This can be a security risk.";
+            $recommendation = "X-Powered-By header is set to '{$value}'. It is better not to reveal used technologies.";
             $urlAnalysisResult->addWarning($recommendation, self::ANALYSIS_HEADERS, [$recommendation]);
         }
 
