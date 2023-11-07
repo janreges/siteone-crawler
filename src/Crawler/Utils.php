@@ -866,8 +866,9 @@ class Utils
         if ($onlyNonClickable) {
             $phoneNumbers = array_filter($phoneNumbers, function ($number) use ($html) {
                 $telPattern1 = '/<a[^>]*href=["\']tel:' . preg_quote($number, '/') . '["\'][^>]*>.*?<\/a>/';
-                $telPattern2 = '/<a[^>]*href=["\']tel:[^"\'>]+["\'][^>]*>.*' . preg_quote($number, '/') . '.*<\/a>/s';
-                return !preg_match($telPattern1, $html) && !preg_match($telPattern2, $html);
+                $telPattern2 = '/<a[^>]*href=["\']tel:[^"\'>]+["\'][^>]*>.*?' . preg_quote($number, '/') . '.*?<\/a>/s';
+                $unwantedPattern = '/[0-9a-z._-]' . preg_quote($number, '/') . '[0-9a-z._-]/i';
+                return !preg_match($telPattern1, $html) && !preg_match($telPattern2, $html) && !preg_match($unwantedPattern, $html);
             });
         }
 
