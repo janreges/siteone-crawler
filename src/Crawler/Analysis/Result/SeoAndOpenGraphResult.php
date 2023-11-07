@@ -10,7 +10,9 @@ declare(strict_types=1);
 
 namespace Crawler\Analysis\Result;
 
+use Crawler\Utils;
 use DOMDocument;
+use DOMNode;
 use DOMNodeList;
 
 class SeoAndOpenGraphResult
@@ -82,7 +84,13 @@ class SeoAndOpenGraphResult
         $result->title = trim(self::getTitle($dom) ?: '');
         $result->description = trim(self::getMetaTagContent($metaTags, 'description') ?: '');
         $result->keywords = trim(self::getMetaTagContent($metaTags, 'keywords') ?: '');
-        $result->h1 = trim(self::getH1($dom) ?: '');
+
+        $h1Content = self::getH1($dom);
+        // strip tags from h1 content if it contains html tags
+        if ($h1Content && str_contains($h1Content, "<")) {
+            $h1Content = strip_tags(Utils::stripJavaScript($h1Content));
+        }
+        $result->h1 = trim($h1Content ?: '');
 
         $result->robotsIndex = self::getRobotsIndex($metaTags);
         $result->robotsFollow = self::getRobotsFollow($metaTags);
@@ -106,7 +114,6 @@ class SeoAndOpenGraphResult
         $result->headingTreeItems = HeadingTreeItem::getHeadingTreeFromHtml($dom, $maxHeadingLevel);
         $result->headingsCount = self::getHeadingsCount($result->headingTreeItems, false);
         $result->headingsErrorsCount = self::getHeadingsCount($result->headingTreeItems, true);
-
 
         return $result;
     }
@@ -153,7 +160,11 @@ class SeoAndOpenGraphResult
     {
         $h1s = $dom->getElementsByTagName('h1');
         foreach ($h1s as $h1) {
-            return $h1->textContent;
+            /* @var $h1 DOMNode */
+            // WARNING: textContent is not working properly in cases, where website uses other HTML elements inside H1,
+            // including <script> so JS code is included in the textContent
+            // return $h1->textContent;
+            return strip_tags(Utils::stripJavaScript($h1->ownerDocument->saveHTML($h1)));
         }
         return null;
     }

@@ -12,6 +12,7 @@ namespace Crawler\Analysis\Result;
 
 use Crawler\Utils;
 use DOMDocument;
+use DOMNode;
 use DOMXPath;
 
 class HeadingTreeItem
@@ -87,8 +88,15 @@ class HeadingTreeItem
         $currentNode = $root;
 
         foreach ($nodes as $node) {
+            /* @var $node DOMNode */
             $level = (int)substr($node->nodeName, 1);
-            $text = trim(preg_replace('/\s+/', ' ', $node->textContent));
+
+            // WARNING: $node->textContent is not working properly in cases where the website uses other HTML elements
+            // inside <h*>, including <script>, so JS code (without <script> tag) is included in the textContent
+            //  $text = trim(preg_replace('/\s+/', ' ', $node->textContent));
+            $nodeContent = strip_tags(Utils::stripJavaScript($node->ownerDocument->saveHTML($node)));
+            $text = trim(preg_replace('/\s+/', ' ', $nodeContent));
+
             $id = $node->getAttribute('id') ?: null;
 
             $item = new HeadingTreeItem($level, $text, $id);
