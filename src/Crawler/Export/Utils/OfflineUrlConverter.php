@@ -297,6 +297,9 @@ class OfflineUrlConverter
         // "foo/template.com/" vs file "foo/template.com" (real cases from vercel.com)
         $filePath = preg_replace('/([^.]+)\.([0-9a-z]{1,10})\//i', '$1.$2_/', $filePath);
 
+        // replace extensions of typical dynamic pages
+        $filePath = preg_replace('/\.(action|asp|aspx|cfm|cfml|cgi|do|gsp|jsp|jspx|lasso|phtml|php|php3|php4|php5|php7|php8|php9|pl|py|rb|rbw|rhtml|shtml|srv|vm)$/i', '.$1.html', $filePath);
+
         if (!$keepFragment && str_contains($filePath, '#')) {
             $filePath = preg_replace('/#.+$/', '', $filePath);
         }
