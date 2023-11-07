@@ -337,7 +337,7 @@ class Crawler
         // setup HTTP client, send request and get response
         $httpResponse = $this->httpClient->request(
             $parsedUrl->host,
-            $this->initialParsedUrl->port,
+            $parsedUrl->port ?: ($scheme === 'https' ? 443 : 80),
             $scheme,
             $finalUrlForHttpClient,
             'GET',
