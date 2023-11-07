@@ -382,14 +382,14 @@ class AccessibilityAnalyzer extends BaseAnalyzer implements Analyzer
 
         // pages without roles
         if ($this->pagesWithoutRoles > 0) {
-            $this->status->addWarningToSummary('pages-without-roles', "{$this->pagesWithoutRoles} page(s) without roles");
+            $this->status->addWarningToSummary('pages-without-roles', "{$this->pagesWithoutRoles} page(s) without role attributes");
         } else {
-            $this->status->addOkToSummary('pages-without-roles', "All pages have roles");
+            $this->status->addOkToSummary('pages-without-roles', "All pages have role attributes");
         }
 
         // pages without lang
         if ($this->pagesWithoutLang > 0) {
-            $this->status->addCriticalToSummary('pages-without-lang', "{$this->pagesWithoutLang} page(s) without lang");
+            $this->status->addCriticalToSummary('pages-without-lang', "{$this->pagesWithoutLang} page(s) without lang attribute");
         } else {
             $this->status->addOkToSummary('pages-without-lang', "All pages have lang attribute");
         }
