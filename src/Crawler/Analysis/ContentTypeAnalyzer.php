@@ -155,7 +155,7 @@ class ContentTypeAnalyzer extends BaseAnalyzer implements Analyzer
             "Content types (MIME types)",
             "No MIME types found.",
             [
-                new SuperTableColumn('contentType', 'Content type', 20),
+                new SuperTableColumn('contentType', 'Content type', 26),
                 new SuperTableColumn('count', 'URLs', 5),
                 new SuperTableColumn('totalSize', 'Total size', 10, function ($value) {
                     if ($value) {
