@@ -895,9 +895,15 @@ class Utils
         }
 
         $regex = '/<([a-z][a-z0-9]*)\s+([^>]*)>/i';
-        $callback = function ($matches) use ($allowedAttrs, $replaceTo) {
+        $tagsUsedInSvg = ['svg', 'g', 'path', 'circle', 'rect', 'line', 'polyline', 'polygon', 'text', 'tspan', 'use', 'defs', 'clipPath', 'mask', 'pattern', 'marker', 'linearGradient', 'radialGradient', 'stop', 'image', 'foreignObject'];
+        $callback = function ($matches) use ($allowedAttrs, $replaceTo, $tagsUsedInSvg) {
             $tagName = $matches[1];
             $attrsString = $matches[2];
+
+            // do not replace in SVG
+            if (in_array($tagName, $tagsUsedInSvg)) {
+                return $matches[0];
+            }
 
             preg_match_all('/([a-z][-a-z0-9_]*)\s*=\s*("|\')(.*?)\2/si', $attrsString, $attrMatches, PREG_SET_ORDER);
             $allowedAttributes = '';
