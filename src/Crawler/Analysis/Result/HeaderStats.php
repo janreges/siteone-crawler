@@ -128,7 +128,12 @@ class HeaderStats
 
     private function addValueForMinMaxDate(string $value): void
     {
-        $date = @date('Y-m-d', @strtotime($value));
+        $timestamp = @strtotime($value);
+        if (!$timestamp) {
+            return;
+        }
+
+        $date = @date('Y-m-d', $timestamp);
         if (trim(strval($date)) === '') {
             return;
         }
@@ -140,14 +145,18 @@ class HeaderStats
         }
     }
 
-    public function getValuesPreview(int $maxLength = 200): string
+    public function getValuesPreview(int $maxLength = 120): string
     {
         if (count($this->uniqueValues) === 1) {
-            return Utils::truncateInTwoThirds(strval(array_key_first($this->uniqueValues)), $maxLength);
+            $firstValue = array_key_first($this->uniqueValues);
+            if (is_string($firstValue) && mb_strlen($firstValue) > $maxLength) {
+                return Utils::truncateInTwoThirds($firstValue, $maxLength);
+            }
+            return (string)$firstValue;
         }
 
         $valuesLength = array_reduce(array_keys($this->uniqueValues), function ($carry, $item) {
-            return $carry + strlen($item);
+            return $carry + strlen((string)$item);
         }, 0);
 
         if ($valuesLength < $maxLength - 10) {
@@ -156,10 +165,15 @@ class HeaderStats
             foreach ($this->uniqueValues as $value => $count) {
                 $result .= $value . ' (' . $count . ') / ';
             }
+
+            if (trim($result) === '') {
+                return '[ignored generic values]';
+            }
+
             return Utils::truncateInTwoThirds(rtrim($result, ' /'), $maxLength);
         }
 
-        return '';
+        return '[see values below]';
     }
 
 }

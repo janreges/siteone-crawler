@@ -60,7 +60,12 @@ class HeadersAnalyzer extends BaseAnalyzer implements Analyzer
                         return $count;
                     }
                 }, false),
-                new SuperTableColumn('valuesPreview', 'Values preview', $consoleWidth - 90, null, null, true),
+                new SuperTableColumn('valuesPreview', 'Values preview', $consoleWidth - 90, function($value, $renderInto) {
+                    if (is_string($value) && $renderInto === SuperTable::RENDER_INTO_HTML) {
+                        return preg_replace('/\[[^\]]+\]/', '<span class="text-muted">$0</span>', $value);
+                    }
+                    return $value;
+                }, null, true, true, false, false),
                 new SuperTableColumn('minValue', 'Min value', 10, null, function (HeaderStats $header) {
                     if ($header->header === 'content-length') {
                         return Utils::getFormattedSize($header->minIntValue);
