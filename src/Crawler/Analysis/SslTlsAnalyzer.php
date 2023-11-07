@@ -139,13 +139,13 @@ class SslTlsAnalyzer extends BaseAnalyzer implements Analyzer
         // parse info
         $errors = [];
         $issuer = $subject = $validFrom = $validTo = "";
-        if (preg_match("/Issuer:\s*(.+?)\n/", $certificateOutput, $matches)) {
+        if ($certificateOutput && preg_match("/Issuer:\s*(.+?)\n/", $certificateOutput, $matches)) {
             $issuer = $matches[1];
         }
-        if (preg_match("/Subject:\s*(.+?)\n/", $certificateOutput, $matches)) {
+        if ($certificateOutput && preg_match("/Subject:\s*(.+?)\n/", $certificateOutput, $matches)) {
             $subject = $matches[1];
         }
-        if (preg_match("/Not Before:\s*(.+?)\n/", $certificateOutput, $matches)) {
+        if ($certificateOutput && preg_match("/Not Before:\s*(.+?)\n/", $certificateOutput, $matches)) {
             $validFrom = $matches[1];
 
             // check if the certificate is not yet valid
@@ -161,7 +161,7 @@ class SslTlsAnalyzer extends BaseAnalyzer implements Analyzer
         }
 
         $validToOrig = "";
-        if (preg_match("/Not After\s*:\s*(.+?)\n/", $certificateOutput, $matches)) {
+        if ($certificateOutput && preg_match("/Not After\s*:\s*(.+?)\n/", $certificateOutput, $matches)) {
             $validTo = $matches[1];
             $validToOrig = $validTo;
 
