@@ -81,7 +81,7 @@ class SslTlsAnalyzer extends BaseAnalyzer implements Analyzer
                     } else {
                         return $value;
                     }
-                }, null, true),
+                }, null, true, true, false, false),
             ],
             true
         );

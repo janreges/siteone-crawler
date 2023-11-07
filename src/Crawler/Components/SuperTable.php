@@ -163,10 +163,14 @@ class SuperTable
                     $formattedValue = call_user_func($column->formatter, $value, self::RENDER_INTO_HTML);
                 } elseif ($column->renderer) {
                     $formattedValue = call_user_func($column->renderer, $row, self::RENDER_INTO_HTML);
-                } else {
-                    if ($column->nonBreakingSpaces && is_string($formattedValue)) {
-                        $formattedValue = str_replace([' ', "\t"], ['&nbsp;', str_repeat('&nbsp;', 4)], $formattedValue);
-                    }
+                }
+
+                if ($column->escapeOutputHtml) {
+                    $formattedValue = htmlspecialchars(strval($formattedValue));
+                }
+
+                if ($column->nonBreakingSpaces && is_string($formattedValue)) {
+                    $formattedValue = str_replace([' ', "\t"], ['&nbsp;', str_repeat('&nbsp;', 4)], $formattedValue);
                 }
 
                 // colored text

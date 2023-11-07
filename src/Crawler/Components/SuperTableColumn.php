@@ -24,6 +24,7 @@ class SuperTableColumn
     public readonly bool $truncateIfLonger;
     public readonly bool $formatterWillChangeValueLength;
     public readonly bool $nonBreakingSpaces;
+    public readonly bool $escapeOutputHtml;
 
     /**
      * @param string $aplCode
@@ -34,8 +35,9 @@ class SuperTableColumn
      * @param bool $truncateIfLonger
      * @param bool $formatterWillChangeValueLength
      * @param bool $nonBreakingSpaces
+     * @param bool $escapeOutputHtml
      */
-    public function __construct(string $aplCode, string $name, int $width = self::AUTO_WIDTH, ?callable $formatter = null, ?callable $renderer = null, bool $truncateIfLonger = false, bool $formatterWillChangeValueLength = true, bool $nonBreakingSpaces = false)
+    public function __construct(string $aplCode, string $name, int $width = self::AUTO_WIDTH, ?callable $formatter = null, ?callable $renderer = null, bool $truncateIfLonger = false, bool $formatterWillChangeValueLength = true, bool $nonBreakingSpaces = false, $escapeOutputHtml = true)
     {
         $this->aplCode = $aplCode;
         $this->name = $name;
@@ -45,6 +47,7 @@ class SuperTableColumn
         $this->truncateIfLonger = $truncateIfLonger;
         $this->formatterWillChangeValueLength = $formatterWillChangeValueLength;
         $this->nonBreakingSpaces = $nonBreakingSpaces;
+        $this->escapeOutputHtml = $escapeOutputHtml;
     }
 
     public function getWidthPx(): int

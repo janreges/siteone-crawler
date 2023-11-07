@@ -207,7 +207,7 @@ class SeoAndOpenGraphAnalyzer extends BaseAnalyzer implements Analyzer
                     } else {
                         return HeadingTreeItem::getHeadingTreeUlLiList($urlResult->headingTreeItems);
                     }
-                }, true, false),
+                }, true, false, false, false),
                 new SuperTableColumn('headingsCount', 'Count', 5),
                 new SuperTableColumn('headingsErrorsCount', 'Errors', 6, function ($value) {
                     return Utils::getColorText(strval($value), $value > 0 ? 'red' : 'green', true);

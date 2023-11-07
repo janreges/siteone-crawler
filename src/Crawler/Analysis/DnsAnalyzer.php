@@ -58,7 +58,7 @@ class DnsAnalyzer extends BaseAnalyzer implements Analyzer
                 }
 
                 return $value;
-            }, null, true, false, true),
+            }, null, true, false, true, false),
         ], false);
 
         $data = [];

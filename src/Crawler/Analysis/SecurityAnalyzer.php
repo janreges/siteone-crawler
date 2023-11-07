@@ -83,7 +83,7 @@ class SecurityAnalyzer extends BaseAnalyzer implements Analyzer
                     } else {
                         return '';
                     }
-                }, null, false, false),
+                }, null, false, false, false, false),
             ], true, 'highestSeverity', 'DESC'
         );
 
