@@ -87,7 +87,7 @@ class HtmlUrlParser
      */
     private function findHrefUrls(FoundUrls $foundUrls, string $regexForHtmlExtensions): void
     {
-        preg_match_all('/<a[^>]*\shref=["\']?([^#][^"\'\s>]+)["\'\s]?[^>]*>/im', $this->html, $matches);
+        preg_match_all('/<a[^>]*\shref=["\']?([^#][^"\'\s>]+)["\'\s]?[^>]*>/is', $this->html, $matches);
         $foundUrlsTxt = $matches[1];
 
         if (!$this->files) {
@@ -106,11 +106,11 @@ class HtmlUrlParser
     private function findFonts(FoundUrls $foundUrls): void
     {
         // CSS @font-face
-        preg_match_all("/url\s*\(\s*['\"]?([^'\"\s>]+\.(eot|ttf|woff2|woff|otf))/im", $this->html, $matches);
+        preg_match_all("/url\s*\(\s*['\"]?([^'\"\s>]+\.(eot|ttf|woff2|woff|otf))/is", $this->html, $matches);
         $foundUrls->addUrlsFromTextArray($matches[1], $this->sourceUrl, FoundUrl::SOURCE_CSS_URL);
 
         // <link href="...(eot|ttf|woff2|woff|otf)
-        preg_match_all('/<link\s+[^>]*href=["\']([^"\']+\.(eot|ttf|woff2|woff|otf)[^"\']*)["\'][^>]*>/im', $this->html, $matches);
+        preg_match_all('/<link\s+[^>]*href=["\']([^"\']+\.(eot|ttf|woff2|woff|otf)[^"\']*)["\'][^>]*>/is', $this->html, $matches);
         $foundUrls->addUrlsFromTextArray($matches[1], $this->sourceUrl, FoundUrl::SOURCE_LINK_HREF);
     }
 
@@ -121,23 +121,23 @@ class HtmlUrlParser
     private function findImages(FoundUrls $foundUrls): void
     {
         // <img src="..."
-        preg_match_all('/<img\s+[^>]*?src=["\']([^"\'>]+)["\'][^>]*>/im', $this->html, $matches);
+        preg_match_all('/<img\s+[^>]*?src=["\']([^"\'>]+)["\'][^>]*>/is', $this->html, $matches);
         $foundUrls->addUrlsFromTextArray($matches[1], $this->sourceUrl, FoundUrl::SOURCE_IMG_SRC);
 
         // <input src="..."
-        preg_match_all('/<input\s+[^>]*?src=["\']([^"\'>]+\.[a-z0-9]{1,10})["\'][^>]*>/im', $this->html, $matches);
+        preg_match_all('/<input\s+[^>]*?src=["\']([^"\'>]+\.[a-z0-9]{1,10})["\'][^>]*>/is', $this->html, $matches);
         $foundUrls->addUrlsFromTextArray($matches[1], $this->sourceUrl, FoundUrl::SOURCE_IMG_SRC);
 
         // <link href="...(png|gif|jpg|jpeg|webp|avif|tif|bmp|svg)"
-        preg_match_all('/<link\s+[^>]*?href=["\']([^"\'>]+\.(png|gif|jpg|jpeg|webp|avif|tif|bmp|svg|ico)(|\?[^"\']))["\'][^>]*>/im', $this->html, $matches);
+        preg_match_all('/<link\s+[^>]*?href=["\']([^"\'>]+\.(png|gif|jpg|jpeg|webp|avif|tif|bmp|svg|ico)(|\?[^"\']))["\'][^>]*>/is', $this->html, $matches);
         $foundUrls->addUrlsFromTextArray($matches[1], $this->sourceUrl, FoundUrl::SOURCE_LINK_HREF);
 
         // <source src="..."
-        preg_match_all('/<source\s+[^>]*?src=["\']([^"\'>]+)["\'][^>]*>/im', $this->html, $matches);
+        preg_match_all('/<source\s+[^>]*?src=["\']([^"\'>]+)["\'][^>]*>/is', $this->html, $matches);
         $foundUrls->addUrlsFromTextArray($matches[1], $this->sourceUrl, FoundUrl::SOURCE_IMG_SRC);
 
         // find
-        preg_match_all("/url\s*\(\s*['\"]?([^'\")]+\.(jpg|jpeg|png|gif|bmp|tif|webp|avif))/im", $this->html, $matches);
+        preg_match_all("/url\s*\(\s*['\"]?([^'\")]+\.(jpg|jpeg|png|gif|bmp|tif|webp|avif))/is", $this->html, $matches);
         $foundUrls->addUrlsFromTextArray($matches[1], $this->sourceUrl, FoundUrl::SOURCE_CSS_URL);
 
         // <picture><source srcset="..."><img src="..."></picture>
@@ -145,11 +145,11 @@ class HtmlUrlParser
         // <* imageSrcSet="..."
 
         $urls = [];
-        preg_match_all('/<source\s+[^>]*?srcset=["\']([^"\'>]+)["\'][^>]*>/im', $this->html, $matches);
+        preg_match_all('/<source\s+[^>]*?srcset=["\']([^"\'>]+)["\'][^>]*>/is', $this->html, $matches);
         $tmpMatches = $matches[1] ?? [];
-        preg_match_all('/<img[^>]+srcset=["\']([^"\']+)["\']/im', $this->html, $matches);
+        preg_match_all('/<img[^>]+srcset=["\']([^"\']+)["\']/is', $this->html, $matches);
         $tmpMatches = array_merge($tmpMatches, $matches[1] ?? []);
-        preg_match_all('/<[a-z]+[^>]+imagesrcset=["\']([^"\']+)["\']/im', $this->html, $matches);
+        preg_match_all('/<[a-z]+[^>]+imagesrcset=["\']([^"\']+)["\']/is', $this->html, $matches);
         $tmpMatches = array_merge($tmpMatches, $matches[1] ?? []);
 
         if ($tmpMatches) {
