@@ -232,7 +232,7 @@ required arguments:
   --analyzer-filter-regex="/^.*$/i" \
   --remove-query-params \
   --add-random-query-params \
-  --hide-scheme-and-host \
+  --show-scheme-and-host \
   --do-not-truncate-url \
   --output-html-file=/dir/report.html \
   --output-json-file=/dir/report.json \
@@ -278,7 +278,7 @@ required arguments:
 * `--url-column-size=<num>`        Basic URL column width. Default is `80`.
 * `--do-not-truncate-url`          In the text output, long URLs are truncated by default to `--url-column-size` so the
   table does not wrap due to long URLs. With this option, you can turn off the truncation.
-* `--hide-scheme-and-host`         On text output, hide scheme and host of URLs for more compact view.
+* `--show-scheme-and-host`         On text output, show scheme and host also for origin domain URLs.
 * `--hide-progress-bar`            Hide progress bar visible in text and JSON output for more compact view.
 * `--no-color`                     Disable colored output.
 
@@ -457,7 +457,7 @@ Output is truncated (only 3 URLs in results) for better readability.
     "crawlAssets": [],
     "addRandomQueryParams": false,
     "removeQueryParams": false,
-    "hideSchemeAndHost": false,
+    "showSchemeAndHost": true,
     "doNotTruncateUrl": true
   },
   "results": [

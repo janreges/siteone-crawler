@@ -36,6 +36,8 @@ class TextOutput implements Output
 
     private string $outputText = '';
 
+    private string $originHost;
+
     /**
      * @param string $version
      * @param Status $status
@@ -48,6 +50,7 @@ class TextOutput implements Output
         $this->status = $status;;
         $this->options = $options;
         $this->printToOutput = $printToOutput;
+        $this->originHost = parse_url($this->options->url, PHP_URL_HOST);
     }
 
     public function addBanner(): void
@@ -93,7 +96,8 @@ class TextOutput implements Output
 
     public function addTableRow(HttpResponse $httpResponse, string $url, int $status, float $elapsedTime, int $size, int $type, array $extraParsedContent, string $progressStatus): void
     {
-        $urlForTable = $this->options->hideSchemeAndHost ? (preg_replace('/^https?:\/\/[^\/]+\//i', '/', $url)) : $url;
+        $isExternalUrl = !str_contains($url, '://' . $this->originHost);
+        $urlForTable = !$this->options->showSchemeAndHost && !$isExternalUrl ? (preg_replace('/^https?:\/\/[^\/]+\//i', '/', $url)) : $url;
 
         $coloredStatus = Utils::getColoredStatusCode($status);
         $contentType = str_pad(Utils::getContentTypeNameById($type), 8);

@@ -46,7 +46,7 @@ class CoreOptions
      */
     public array $extraColumns = [];
     public array $extraColumnsNamesOnly = [];
-    public bool $hideSchemeAndHost = false;
+    public bool $showSchemeAndHost = false;
     public bool $doNotTruncateUrl = false;
     public bool $hideProgressBar = false;
     public bool $noColor = false;
@@ -173,7 +173,7 @@ class CoreOptions
             new Option('--show-inline-criticals', null, 'showInlineCriticals', Type::BOOL, false, 'Show criticals from the analyzer directly in the URL table.', false, false),
             new Option('--show-inline-warnings', null, 'showInlineWarnings', Type::BOOL, false, 'Show warnings from the analyzer directly in the URL table.', false, false),
             new Option('--do-not-truncate-url', null, 'doNotTruncateUrl', Type::BOOL, false, 'Avoid truncating URLs to `--url-column-size`.', false, false),
-            new Option('--hide-scheme-and-host', null, 'hideSchemeAndHost', Type::BOOL, false, 'Hide URL scheme/host in output.', false, false),
+            new Option('--show-scheme-and-host', null, 'showSchemeAndHost', Type::BOOL, false, 'Show the schema://host also of the original domain URL as well. By default, only path+query is displayed for original domain.', false, false),
             new Option('--hide-progress-bar', null, 'hideProgressBar', Type::BOOL, false, 'Suppress progress bar in output.', false, false),
             new Option('--no-color', null, 'noColor', Type::BOOL, false, 'Disable colored output.', false, false),
         ]));
