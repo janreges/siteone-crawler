@@ -11,6 +11,7 @@ declare(strict_types=1);
 namespace Crawler\HttpClient;
 
 use Crawler\Version;
+use Exception;
 use Swoole\Coroutine\Http\Client;
 
 class HttpClient
@@ -66,12 +67,13 @@ class HttpClient
      * @param string $acceptEncoding
      * @param ?string $origin
      * @return HttpResponse
+     * @throws Exception
      */
     public function request(string $host, int $port, string $scheme, string $url, string $httpMethod, int $timeout, string $userAgent, string $accept, string $acceptEncoding, ?string $origin = null): HttpResponse
     {
         $path = @parse_url($url, PHP_URL_PATH);
         $extension = is_string($path) ? @pathinfo($path, PATHINFO_EXTENSION) : null;
-        $cacheKey = $host . '.' . md5(serialize(func_get_args())) . ($extension ? ".{$extension}" : '');
+        $cacheKey = $this->getCacheKey($host, func_get_args(), $extension);
         $cachedResult = $this->getFromCache($cacheKey);
         if ($cachedResult !== null && str_contains($url, ' ') === false) {
             $cachedResult->setLoadedFromCache(true);
@@ -128,7 +130,7 @@ class HttpClient
         }
 
         $cacheFile = $this->getCacheFilePath($cacheKey);
-        if (!is_file($cacheFile)) {
+        if (!$cacheFile || !is_file($cacheFile)) {
             return null;
         }
 
@@ -147,23 +149,42 @@ class HttpClient
      * @param string $cacheKey
      * @param HttpResponse $result
      * @return void
+     * @throws Exception
      */
     private function saveToCache(string $cacheKey, HttpResponse $result): void
     {
-        if ($this->cacheDir === null) {
+        $cacheFile = $this->getCacheFilePath($cacheKey);
+        if ($cacheFile === null) {
             return;
-        };
-        if ((!is_dir($this->cacheDir) || !is_writable($this->cacheDir)) && !mkdir($this->cacheDir, 0777, true)) {
-            throw new \RuntimeException('Cannot create or write to cache dir ' . $this->cacheDir);
+        }
+        $cacheDir = dirname($cacheFile);
+        if ((!is_dir($cacheDir) || !is_writable($cacheDir)) && !mkdir($cacheDir, 0777, true)) {
+            throw new Exception('Cannot create or write to cache dir ' . $cacheDir);
         }
 
-        $cacheFile = $this->getCacheFilePath($cacheKey);
-        file_put_contents($cacheFile, $this->compression ? gzencode(serialize($result)) : serialize($result));
+        if (!@file_put_contents($cacheFile, $this->compression ? gzencode(serialize($result)) : serialize($result))) {
+            throw new Exception('Cannot write to cache file ' . $cacheFile . '. Check permissions.');
+        }
     }
 
-    private function getCacheFilePath(string $cacheKey): string
+    private function getCacheFilePath(string $cacheKey): ?string
     {
+        if ($this->cacheDir === null) {
+            return null;
+        }
         return $this->cacheDir . '/' . $cacheKey . '.cache' . ($this->compression ? '.gz' : '');
+    }
+
+    /**
+     * @param string $host
+     * @param array $args
+     * @param array|string|null $extension
+     * @return string
+     */
+    private function getCacheKey(string $host, array $args, array|string|null $extension): string
+    {
+        $md5 = md5(serialize($args));
+        return $host . '/' . substr($md5, 0, 2) . '/' . $md5 . ($extension ? ".{$extension}" : '');
     }
 
 }
