@@ -200,7 +200,7 @@ class Utils
         return $baseUrl . '?' . $newQuery;
     }
 
-    public static function truncateInTwoThirds(string $text, int $maxLength, string $placeholder = '...'): string
+    public static function truncateInTwoThirds(string $text, int $maxLength, string $placeholder = '…'): string
     {
         if (mb_strlen($text) <= $maxLength) {
             return $text;
@@ -215,7 +215,7 @@ class Utils
         return $firstPart . $placeholder . $secondPart;
     }
 
-    public static function truncateUrl(string $url, int $maxLength, string $placeholder = '...', ?string $stripHostname = null): string
+    public static function truncateUrl(string $url, int $maxLength, string $placeholder = '…', ?string $stripHostname = null): string
     {
         if ($stripHostname) {
             $url = str_ireplace(['http://' . $stripHostname, 'https://' . $stripHostname], ['', ''], $url);

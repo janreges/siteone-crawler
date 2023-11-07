@@ -176,14 +176,14 @@ class SuperTable
 
                 // full URL in value
                 if (is_string($formattedValue) && is_string($value) && str_starts_with($value, 'http')) {
-                    $formattedValue = "<a href='" . htmlspecialchars($value) . "' target='_blank'>" . Utils::truncateUrl($value, 100, '...', $this->hostToStripFromUrls) . "</a>";
+                    $formattedValue = "<a href='" . htmlspecialchars($value) . "' target='_blank'>" . Utils::truncateUrl($value, 100, '…', $this->hostToStripFromUrls) . "</a>";
                 } // full URL in formatted value
                 else if (is_string($formattedValue) && is_string($value) && str_starts_with($formattedValue, 'http')) {
-                    $formattedValue = "<a href='" . htmlspecialchars($formattedValue) . "' target='_blank'>" . Utils::truncateUrl($formattedValue, 100, '...', $this->hostToStripFromUrls) . "</a>";
+                    $formattedValue = "<a href='" . htmlspecialchars($formattedValue) . "' target='_blank'>" . Utils::truncateUrl($formattedValue, 100, '…', $this->hostToStripFromUrls) . "</a>";
                 } // relative URL
                 elseif ($initialRootUrl && is_string($formattedValue) && str_starts_with($formattedValue, '/') && preg_match('/^\/[a-z0-9\-_.\/?&#+=%@()|]+$/i', $formattedValue)) {
                     $finalUrl = $initialRootUrl . $formattedValue;
-                    $formattedValue = "<a href='" . htmlspecialchars($finalUrl) . "' target='_blank'>" . Utils::truncateUrl($formattedValue, 100, '...', $this->hostToStripFromUrls) . "</a>";
+                    $formattedValue = "<a href='" . htmlspecialchars($finalUrl) . "' target='_blank'>" . Utils::truncateUrl($formattedValue, 100, '…', $this->hostToStripFromUrls) . "</a>";
                 }
 
                 $dataValue = is_scalar($value) && strlen(strval($value)) < 200 ? strval($value) : (strlen(strval($formattedValue)) < 50 ? strval($formattedValue) : 'complex-data');

@@ -497,7 +497,7 @@ class HtmlReport
         // setup columns
         $columns = [
             new SuperTableColumn('url', 'URL', $this->status->getOptions()->urlColumnSize, null, function ($row) use ($initialHost) {
-                return '<a href="' . htmlspecialchars($row['url']) . '" target="_blank">' . Utils::truncateUrl($row['url'], 80, '...', $initialHost) . '</a>';
+                return '<a href="' . htmlspecialchars($row['url']) . '" target="_blank">' . Utils::truncateUrl($row['url'], 80, '…', $initialHost) . '</a>';
             }),
             new SuperTableColumn('status', 'Status', 6, function ($value) {
                 return Utils::getColoredStatusCode($value);
