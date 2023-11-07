@@ -52,6 +52,7 @@ class FileExporter extends BaseExporter implements Exporter
 
         // text file
         if ($this->outputTextFile) {
+            $s = microtime(true);
             $textOutput = $multiOutput->getOutputByType(OutputType::TEXT);
             if (!($textOutput instanceof TextOutput)) {
                 throw new Exception(__METHOD__ . ': TextOutput expected');
@@ -64,7 +65,7 @@ class FileExporter extends BaseExporter implements Exporter
                 Utils::removeAnsiColors($textOutput->getOutputText())
             );
 
-            $this->status->addInfoToSummary('export-to-text', "Text report saved to '{$reportFile}'");
+            $this->status->addInfoToSummary('export-to-text', "Text report saved to '{$reportFile}' and took " . Utils::getFormattedDuration(microtime(true) - $s));
         }
 
         $jsonOutput = null;
@@ -72,6 +73,7 @@ class FileExporter extends BaseExporter implements Exporter
 
         // json file
         if ($this->outputJsonFile) {
+            $s = microtime(true);
             $jsonOutput = $multiOutput->getOutputByType(OutputType::JSON);
             if (!($jsonOutput instanceof JsonOutput)) {
                 throw new Exception(__METHOD__ . ': JsonOutput expected');
@@ -84,13 +86,12 @@ class FileExporter extends BaseExporter implements Exporter
                 $jsonOutput->getJson()
             );
 
-            $this->status->addInfoToSummary('export-to-json', "JSON report saved to '{$reportFile}'");
+            $this->status->addInfoToSummary('export-to-json', "JSON report saved to '{$reportFile}' and took " . Utils::getFormattedDuration(microtime(true) - $s));
         }
 
         // html file
         if ($this->outputHtmlFile) {
-            $jsonOutput = $jsonOutput ?: $multiOutput->getOutputByType(OutputType::JSON);
-
+            $s = microtime(true);
             $htmlReport = new HtmlReport($this->status);
             $htmlReportBody = $htmlReport->getHtml();
             $reportFile = $this->getExportFilePath($this->outputHtmlFile, 'html');
@@ -99,7 +100,7 @@ class FileExporter extends BaseExporter implements Exporter
                 $htmlReportBody
             );
 
-            $this->status->addInfoToSummary('export-to-html', "HTML report saved to '{$reportFile}'");
+            $this->status->addInfoToSummary('export-to-html', "HTML report saved to '{$reportFile}' and took " . Utils::getFormattedDuration(microtime(true) - $s));
         }
     }
 

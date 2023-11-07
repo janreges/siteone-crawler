@@ -105,7 +105,7 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
         $this->status->addInfoToSummary(
             'offline-website-generated',
             sprintf(
-                "Offline website generated to '%s'. It takes %s",
+                "Offline website generated to '%s' and took %s",
                 $this->offlineExportDirectory,
                 Utils::getFormattedDuration(microtime(true) - $startTime)
             )
