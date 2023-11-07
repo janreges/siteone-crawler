@@ -371,8 +371,35 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
                 if (!isset($match[2]) || trim($match[2]) === '') {
                     continue;
                 }
+
+                // skip attributes with quotes inside real HTML tag attribute .. eg. <code data-value="some <a href={foo}>">
+                $regex = '/=["\'][^"\']*' . preg_quote($match[0], '/') . '/';
+                $isMatchInsideTagAttribute = preg_match($regex, $html) === 1;
+                if ($isMatchInsideTagAttribute) {
+                    continue;
+                }
+
+                // skip cases like this, see "href={to}":
+                // <button title="Copy to clipboard" data-copied="Copied!" data-code="---const { to } = Astro.props---<a href={to}>
+                $regex2 = '/=["\'][^"\']*' . preg_quote($match[1], '/') . '\s*=\s*' . preg_quote($match[2], '/') . '/';
+                $isMatchInsideTagAttribute2 = preg_match($regex2, $match[0]) === 1;
+                if ($isMatchInsideTagAttribute2) {
+                    continue;
+                }
+
+                // skip cases where attribute is in <svg> and its content
+                $regex3 = '/<svg[^>]*>.{1,500}' . preg_quote($match[1], '/') . '\s*=\s*' . preg_quote($match[2], '/') . '.{1,500}<\/svg>/is';
+                $isInSvg = preg_match($regex3, $html) === 1;
+                if ($isInSvg) {
+                    continue;
+                }
+
+
                 // skip <astro-* tags from Astro framework (it uses custom syntax for attributes) and backslash-escaped quotes (typically in JS code)
-                if (str_starts_with($match[0], '<astro') || str_contains($match[0], '\\"') || str_contains($match[0], "\\'")) {
+                $containsEscapedQuotes = str_contains($match[0], '\\"') || str_contains($match[0], "\\'");
+                $containsEscapes = str_contains($match[0], '&#');
+                $containsSpecialFrameworkCases = str_starts_with($match[0], '<astro');
+                if ($containsEscapedQuotes || $containsEscapes || $containsSpecialFrameworkCases) {
                     continue;
                 }
 
