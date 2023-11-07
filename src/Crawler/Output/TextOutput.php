@@ -54,7 +54,7 @@ class TextOutput implements Output
     {
         $this->addToOutput("===========================\n");
         $this->addToOutput("= SiteOne Website Crawler =\n");
-        $this->addToOutput("= Version: " . $this->version . "      =\n");
+        $this->addToOutput("= Version: " . $this->version . " =\n");
         $this->addToOutput("= jan.reges@siteone.cz    =\n");
         $this->addToOutput("===========================\n\n");
     }
