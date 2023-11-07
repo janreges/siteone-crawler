@@ -135,11 +135,21 @@ or [Screaming Frog SEO Spider](https://www.screamingfrog.co.uk/seo-spider/), or 
 these tools covered all our needs. That's why we decided to create our own tool.
 
 Ehmmmm... Enough of the marketing bullshit! What was really the most real reason? The author, head of development and
-infrastructure at [SiteOne](https://www.siteone.io/), wanted to prove that he could develop a great tool in 16 hours of
+infrastructure at [SiteOne](https://www.siteone.io/), wanted to prove that he could develop a great tool in dozens hours of
 pure working time and take a break from caring for his extremely prematurely born son. And he did it! :-) The tool is
 great, and his son is doing great too! ♥
 
 ## Installation
+
+###  Ready-to-use releases
+
+You can download ready-to-use releases from [GitHub releases](https://github.com/janreges/siteone-website-crawler/releases) for all major platforms (Linux, Windows, macOS, arm64).
+
+Unpack the downloaded archive, and you will find the `crawler` or `crawler.bat` (Windows) executable binary.
+
+In the case of using a release package, you can use the command `./crawler --url=https://my.domain.tld` instead of `./swoole-cli crawler.php --url=https://my.domain.tld` as mentioned in the examples below.
+
+**Note for Windows users**: use Cygwin-based release `*-win-x64.zip` only if you can't use WSL (Ubuntu/Debian), what is recommended. If you really have to use the Cygwin version, set `--workers=1` for higher stability.
 
 ### Linux (x64)
 
