@@ -17,6 +17,7 @@ sitemaps or send reports via email.
     * [For active contributors](#for-active-contributors)
 - [Motivation to create this tool](#motivation-to-create-this-tool)
 - [Installation](#installation)
+    * [Ready-to-use releases](#ready-to-use-releases)
     * [Linux (x64)](#linux-x64)
     * [Windows (x64)](#windows-x64)
     * [macOS (arm64, x64)](#macos-arm64-x64)
