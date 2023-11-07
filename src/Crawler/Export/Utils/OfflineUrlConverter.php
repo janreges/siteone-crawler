@@ -292,6 +292,11 @@ class OfflineUrlConverter
             $filePath = str_replace($basename, substr(md5($basename), 0, 10) . '.' . $extension, $filePath);
         }
 
+        // adding "_" to the end of the folder that contains the potential file extension .. it solves the
+        // situation where I may need the folder "foo/next.js/" and the file "foo/next.js" or
+        // "foo/template.com/" vs file "foo/template.com" (real cases from vercel.com)
+        $filePath = preg_replace('/([^.]+)\.([0-9a-z]{1,10})\//i', '$1.$2_/', $filePath);
+
         if (!$keepFragment && str_contains($filePath, '#')) {
             $filePath = preg_replace('/#.+$/', '', $filePath);
         }

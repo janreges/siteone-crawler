@@ -150,8 +150,11 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
 
         // sanitize and replace special chars because they are not allowed in file/dir names on some platforms (e.g. Windows)
         // same logic is in method convertUrlToRelative()
-        $storeFilePath = $this->offlineExportDirectory . '/' . $this->getRelativeFilePathForFileByUrl($visitedUrl);
-        $storeFilePath = OfflineUrlConverter::sanitizeFilePath($storeFilePath, false);
+        $storeFilePath = sprintf(
+            '%s/%s',
+            $this->offlineExportDirectory,
+            OfflineUrlConverter::sanitizeFilePath($this->getRelativeFilePathForFileByUrl($visitedUrl), false)
+        );
 
         $directoryPath = dirname($storeFilePath);
         if (!is_dir($directoryPath)) {
