@@ -78,10 +78,13 @@ class Manager
             ? ($baseDir . '/' . $options->resultStorageDir)
             : $options->resultStorageDir;
 
+        $originUrl = ParsedUrl::parse($options->url);
+        $originUrlDomain = $originUrl->host . ($originUrl->port ? "-{$originUrl->port}" : '');
+
         $this->status = new Status(
             $options->resultStorage === StorageType::MEMORY
                 ? new MemoryStorage($options->resultStorageCompression)
-                : new FileStorage($resultStorageDir, $options->resultStorageCompression),
+                : new FileStorage($resultStorageDir, $options->resultStorageCompression, $originUrlDomain),
             true,
             $crawlerInfo,
             $options,
