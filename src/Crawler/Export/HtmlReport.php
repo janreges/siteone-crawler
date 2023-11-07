@@ -95,7 +95,7 @@ class HtmlReport
         $html = preg_replace('/(<span)\s+(style="background-color:[^"]+">)/i', '$1 class="badge" $2', $html);
         $html = preg_replace('/(<span)\s+(style="color:[^"]+">)/i', '$1 class="badge in-table" $2', $html);
         $html = str_replace('style="background-color: #ffff00"', 'style="background-color: #ffff00; color: #1F2937"', $html);
-        $html = preg_replace("/(<td data-value='[0-9]+'[^>]*>)([0-9]+)(<\/td>)/", '$1<span class="badge">$2</span>$3', $html);
+        $html = preg_replace("/(<td data-value='[0-9]+'[^>]*>)([0-9\-]+)(<\/td>)/", '$1<span class="badge">$2</span>$3', $html);
 
         // other changes
         $html = str_replace('color: #ff00ff', 'color: #ff9234', $html); // change magenta to orange
@@ -602,12 +602,20 @@ class HtmlReport
                 $badges[] = new Badge(Utils::getFormattedDuration($slowestTime ?: 0), $color);
                 break;
             case SeoAndOpenGraphAnalyzer::SUPER_TABLE_SEO_HEADINGS:
+                $ok = 0;
                 $errors = 0;
                 foreach ($superTable->getData() as $row) {
                     /* @var SeoAndOpenGraphResult $row */
-                    $errors += $row->headingsErrorsCount;
+                    if ($row->headingsErrorsCount > 0) {
+                        $errors++;
+                    } else {
+                        $ok++;
+                    }
                 }
-                $badges[] = new Badge((string)$errors, $errors ? Badge::COLOR_RED : Badge::COLOR_NEUTRAL, $errors ? "Errors in headings structure" : "Headings structure OK");
+                $badges[] = new Badge((string)$ok, Badge::COLOR_GREEN, "Pages with proper heading structure");
+                if ($errors) {
+                    $badges[] = new Badge((string)$errors, Badge::COLOR_RED, "Pages with errors in heading structure");
+                }
                 break;
             case HeadersAnalyzer::SUPER_TABLE_HEADERS:
                 $headers = $superTable->getTotalRows();
@@ -777,70 +785,68 @@ class HtmlReport
         }
 
         $initialHost = $this->getInitialHost();
+        $data = $details[$analysisName] ?? [];
 
-        if (isset($details[$analysisName])) {
-            $superTable = new SuperTable($analysisName, $analysisName, 'No details.', [
-                new SuperTableColumn('severity', 'Severity', 10, null, function ($row) {
-                    return Utils::getColoredSeverity($row['severityFormatted']);
-                }),
-                new SuperTableColumn('count', 'Occurs', 8, function ($value) {
-                    return $value;
-                }),
-                new SuperTableColumn('detail', 'Detail', 200, function ($detail) {
-                    if (is_string($detail) || is_numeric($detail)) {
-                        // check if string contains only non-HTML content or HTML tags <svg>
-                        $isSvg = preg_match('/<svg/i', $detail) === 1;
-                        if (preg_match('/^[\s\w\d.,:;!?()\/\-]*$/i', $detail) || $isSvg) {
-                            if ($isSvg) {
-                                $detail = str_replace(' display="block', '', $detail);
-                                // add SVG size to the detail if detail contains only SVG
-                                if (str_starts_with($detail, '<')) {
-                                    return Utils::getFormattedSize(strlen($detail)) . ' ' . $detail;
-                                } else {
-                                    return $detail;
-                                }
+        $analysisAplCode = strtolower(str_replace(' ', '-', $analysisName));
+        $superTable = new SuperTable($analysisAplCode, $analysisName, 'No problems found.', [
+            new SuperTableColumn('severity', 'Severity', 10, null, function ($row) {
+                return Utils::getColoredSeverity($row['severityFormatted']);
+            }),
+            new SuperTableColumn('count', 'Occurs', 8, function ($value) {
+                return $value;
+            }),
+            new SuperTableColumn('detail', 'Detail', 200, function ($detail) {
+                if (is_string($detail) || is_numeric($detail)) {
+                    // check if string contains only non-HTML content or HTML tags <svg>
+                    $isSvg = preg_match('/<svg/i', $detail) === 1;
+                    if ($isSvg || preg_match('/^[\s\w\d.,:;!?()\/\-]*$/i', $detail)) {
+                        if ($isSvg) {
+                            $detail = str_replace(' display="block', '', $detail);
+                            // add SVG size to the detail if detail contains only SVG
+                            if (str_starts_with($detail, '<')) {
+                                return Utils::getFormattedSize(strlen($detail)) . ' ' . $detail;
                             } else {
                                 return $detail;
                             }
                         } else {
-                            return nl2br(htmlspecialchars($detail));
+                            return htmlspecialchars($detail);
                         }
-                    } elseif (is_array($detail) || is_object($detail)) {
-                        return nl2br(htmlspecialchars(json_encode($detail, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)));
                     } else {
-                        return '';
+                        return nl2br(htmlspecialchars($detail));
                     }
-                }),
-                new SuperTableColumn('exampleUrls', 'Affected URLs (max ' . $this->maxExampleUrls . ')', 60, null, function ($row) use ($initialHost) {
-                    $result = '';
-                    if (isset($row['exampleUrls']) && $row['exampleUrls'] && count($row['exampleUrls']) === 1) {
-                        foreach ($row['exampleUrls'] as $exampleUrl) {
-                            $result .= '<a href="' . htmlspecialchars($exampleUrl) . '" target="_blank">' . htmlspecialchars(Utils::truncateUrl($exampleUrl, 60, '...', $initialHost)) . '</a><br />';
-                        }
-                    } elseif (isset($row['exampleUrls']) && $row['exampleUrls']) {
-                        $counter = 1;
-                        foreach ($row['exampleUrls'] as $exampleUrl) {
-                            $result .= '<a href="' . htmlspecialchars($exampleUrl) . '" target="_blank">' . "URL {$counter}</a>, ";
-                            $counter++;
-                        }
-                    }
-                    return rtrim($result, ', ');
-                }),
-            ], false, null, 'ASC', null, 100);// sort primary by severity and secondary by count
-            ;
-            usort($details[$analysisName], function ($a, $b) {
-                if ($a['severity'] === $b['severity']) {
-                    return $b['count'] <=> $a['count'];
+                } elseif (is_array($detail) || is_object($detail)) {
+                    return nl2br(htmlspecialchars(json_encode($detail, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)));
                 } else {
-                    return $a['severity'] <=> $b['severity'];
+                    return '';
                 }
-            });
+            }, null, false, true, false, false),
+            new SuperTableColumn('exampleUrls', 'Affected URLs (max ' . $this->maxExampleUrls . ')', 60, null, function ($row) use ($initialHost) {
+                $result = '';
+                if (isset($row['exampleUrls']) && $row['exampleUrls'] && count($row['exampleUrls']) === 1) {
+                    foreach ($row['exampleUrls'] as $exampleUrl) {
+                        $result .= '<a href="' . htmlspecialchars($exampleUrl) . '" target="_blank">' . htmlspecialchars(Utils::truncateUrl($exampleUrl, 60, '…', $initialHost)) . '</a><br />';
+                    }
+                } elseif (isset($row['exampleUrls']) && $row['exampleUrls']) {
+                    $counter = 1;
+                    foreach ($row['exampleUrls'] as $exampleUrl) {
+                        $result .= '<a href="' . htmlspecialchars($exampleUrl) . '" target="_blank">' . "URL {$counter}</a>, ";
+                        $counter++;
+                    }
+                }
+                return rtrim($result, ', ');
+            }, false, true, false, false),
+        ], false, null, 'ASC', null, 100);// sort primary by severity and secondary by count
+        ;
+        usort($data, function ($a, $b) {
+            if ($a['severity'] === $b['severity']) {
+                return $b['count'] <=> $a['count'];
+            } else {
+                return $a['severity'] <=> $b['severity'];
+            }
+        });
 
-            $superTable->setData($details[$analysisName]);
-            return $superTable;
-        }
-
-        return null;
+        $superTable->setData($data);
+        return $superTable;
     }
 
     /**
