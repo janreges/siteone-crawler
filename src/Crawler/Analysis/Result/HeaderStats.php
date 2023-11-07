@@ -99,7 +99,13 @@ class HeaderStats
 
     public function ignoreHeaderValues(string $header): bool
     {
-        return $header === 'etag' || $header === 'cf-ray' || $header === 'set-cookie';
+        static $ignoredHeaders = [
+            'etag',
+            'cf-ray',
+            'set-cookie',
+            'content-disposition',
+        ];
+        return in_array($header, $ignoredHeaders, true);
     }
 
     public function __get($name)
