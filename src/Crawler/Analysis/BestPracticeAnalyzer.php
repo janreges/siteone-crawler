@@ -247,7 +247,6 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
      */
     private function checkInlineSvg(string $html, UrlAnalysisResult $result): void
     {
-        $svgCount = 0;
         $largeSvgs = [];
         $maxFoundSvgSize = 0;
         $duplicatedSvgs = [];
@@ -261,6 +260,13 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
         $svgCount = count($matches[0]);
         $okSvg = [];
         foreach ($matches[0] as $svg) {
+
+            // skip SVGs which are escaped because they are not inline SVGs but e.g. code example
+            $isEscapedSvg = str_contains($svg, '&#x22;') || str_contains($svg, '&#x27;');
+            if ($isEscapedSvg) {
+                continue;
+            }
+
             $svg = trim($svg);
             $okSvg[$svg] = true;
             // get hash of svg because svg can be larger than PHP array key limit
@@ -331,7 +337,7 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
         if ($invalidSvgs) {
             $invalidSvgsDetail = [];
             foreach ($invalidSvgs as $hash => $info) {
-                $invalidSvgsDetail[] = "Found " . count($info['errors']) . " error(s) in SVG " . htmlspecialchars($info['svg']) . ".\nErrors:\n" . implode("\n", $info['errors']);
+                $invalidSvgsDetail[] = $info['svg'] . '<br />Found ' . count($info['errors']) . " error(s) in SVG. Errors:<br /> &nbsp; &gt; " . implode("<br /> &nbsp; &gt; ", $info['errors']);
             }
             $result->addCritical(count($invalidSvgs) . ' invalid inline svg(s). Check the content of the SVG as it may contain invalid XML and cause unexpected display problems', self::ANALYSIS_INVALID_SVGS, $invalidSvgsDetail);
             $this->pagesWithInvalidSvgs++;
@@ -362,7 +368,7 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
         if (preg_match_all($tagPattern, $html, $matches, PREG_SET_ORDER)) {
             foreach ($matches as $match) {
                 // skip attributes without value
-                if (!isset($match[2])) {
+                if (!isset($match[2]) || trim($match[2]) === '') {
                     continue;
                 }
                 // skip <astro-* tags from Astro framework (it uses custom syntax for attributes) and backslash-escaped quotes (typically in JS code)
@@ -395,13 +401,16 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
     {
         libxml_use_internal_errors(true);
         $dom = new DOMDocument();
+        $dom->preserveWhiteSpace = false;
 
         if (!$dom->loadXML($svg)) {
             $errors = libxml_get_errors();
             $errorMessages = [];
 
             foreach ($errors as $error) {
-                $errorMessages[] = trim($error->message);
+                if ($error->level === LIBXML_ERR_FATAL) {
+                    $errorMessages[] = trim($error->message);
+                }
             }
 
             libxml_clear_errors();
@@ -815,7 +824,7 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
         }
 
         if ($this->pagesWithInvalidSvgs > 0) {
-            $this->status->addCriticalToSummary('pages-with-invalid-svgs', "{$this->pagesWithInvalidSvgs} page(s) with invalid inline SVGs");
+            $this->status->addWarningToSummary('pages-with-invalid-svgs', "{$this->pagesWithInvalidSvgs} page(s) with invalid inline SVGs");
         } else {
             $this->status->addOkToSummary('pages-with-invalid-svgs', "All pages have valid or none inline SVGs");
         }

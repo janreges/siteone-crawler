@@ -505,6 +505,19 @@
             white-space: nowrap;
         }
 
+        table.large-inline-svgs tr td.detail, table.duplicate-inline-svgs tr td.detail, table.invalid-inline-svgs tr td.detail  {
+            min-width: 150px;
+            /*
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+             */
+        }
+
+        table.large-inline-svgs tr td.detail svg, table.duplicate-inline-svgs tr td.detail svg, table.invalid-inline-svgs tr td.detail svg {
+            float: right;
+            /* margin-left: auto; */
+        }
         {$tabsCss}
 
     </style>
