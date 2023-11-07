@@ -195,10 +195,10 @@ class SeoAndOpenGraphAnalyzer extends BaseAnalyzer implements Analyzer
     {
         $superTable = new SuperTable(
             self::SUPER_TABLE_SEO_HEADINGS,
-            "Headings structure",
+            "Heading structure",
             "No URLs to analyze heading structure.",
             [
-                new SuperTableColumn('headings', 'Headings structure', 80, null, function (SeoAndOpenGraphResult $urlResult, string $renderInfo) {
+                new SuperTableColumn('headings', 'Heading structure', 80, null, function (SeoAndOpenGraphResult $urlResult, string $renderInfo) {
                     if (!$urlResult->headingTreeItems) {
                         return '';
                     }
@@ -213,7 +213,7 @@ class SeoAndOpenGraphAnalyzer extends BaseAnalyzer implements Analyzer
                     return Utils::getColorText(strval($value), $value > 0 ? 'red' : 'green', true);
                 }, null, false, false),
                 new SuperTableColumn('urlPathAndQuery', 'URL', 30, null, null, true),
-            ], true, 'urlPathAndQuery', 'ASC'
+            ], true, 'headingsErrorsCount', 'DESC'
         );
 
         // set initial URL (required for urlPath column and active link building)
