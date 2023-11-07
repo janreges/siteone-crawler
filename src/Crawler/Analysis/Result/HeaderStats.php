@@ -143,7 +143,7 @@ class HeaderStats
     public function getValuesPreview(int $maxLength = 200): string
     {
         if (count($this->uniqueValues) === 1) {
-            return Utils::truncateInTwoThirds(array_key_first($this->uniqueValues), $maxLength);
+            return Utils::truncateInTwoThirds(strval(array_key_first($this->uniqueValues)), $maxLength);
         }
 
         $valuesLength = array_reduce(array_keys($this->uniqueValues), function ($carry, $item) {
