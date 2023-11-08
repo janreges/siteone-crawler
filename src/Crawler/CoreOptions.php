@@ -37,7 +37,7 @@ class CoreOptions
 
     // output setting
     public OutputType $outputType = OutputType::TEXT;
-    public int $urlColumnSize = 80;
+    public ?int $urlColumnSize;
     public bool $showInlineCriticals = false;
     public bool $showInlineWarnings = false;
 
@@ -168,8 +168,8 @@ class CoreOptions
             self::GROUP_OUTPUT_SETTINGS,
             'Output settings', [
             new Option('--output', '-o', 'outputType', Type::STRING, false, 'Output type `text` or `json`.', 'text', false),
-            new Option('--extra-columns', null, 'extraColumns', Type::STRING, true, 'Extra table headers for output table with option to set width and truncate (!), e.g., `DOM,X-Cache(10),Title(40!)`.', null, true, true),
-            new Option('--url-column-size', null, 'urlColumnSize', Type::INT, false, 'URL column width.', 80, false),
+            new Option('--extra-columns', null, 'extraColumns', Type::STRING, true, 'Extra table headers for output table with option to set width and do-not-truncate (>), e.g., `DOM,X-Cache(10),Title(40>)`.', null, true, true),
+            new Option('--url-column-size', null, 'urlColumnSize', Type::INT, false, 'URL column width. By default, it is calculated from the size of your terminal window.', null, true),
             new Option('--show-inline-criticals', null, 'showInlineCriticals', Type::BOOL, false, 'Show criticals from the analyzer directly in the URL table.', false, false),
             new Option('--show-inline-warnings', null, 'showInlineWarnings', Type::BOOL, false, 'Show warnings from the analyzer directly in the URL table.', false, false),
             new Option('--do-not-truncate-url', null, 'doNotTruncateUrl', Type::BOOL, false, 'Avoid truncating URLs to `--url-column-size`.', false, false),

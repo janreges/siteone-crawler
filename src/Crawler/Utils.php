@@ -212,7 +212,7 @@ class Utils
         $firstPart = mb_substr($text, 0, intval($firstPartLength));
         $secondPart = mb_substr($text, -1 * intval($secondPartLength));
 
-        return $firstPart . $placeholder . $secondPart;
+        return trim($firstPart) . self::getColorText($placeholder, 'red') . trim($secondPart);
     }
 
     public static function truncateUrl(string $url, int $maxLength, string $placeholder = '…', ?string $stripHostname = null): string
@@ -1000,5 +1000,15 @@ class Utils
 
         return BASE_DIR . '/' . $path;
     }
-    
+
+    public static function mb_str_pad($input, $pad_length, $pad_string = ' ', $pad_type = STR_PAD_RIGHT, $encoding = 'UTF-8'): string
+    {
+        if (!$encoding) {
+            $diff = strlen($input) - mb_strlen($input);
+        } else {
+            $diff = strlen($input) - mb_strlen($input, $encoding);
+        }
+        return str_pad($input, $pad_length + $diff, $pad_string, $pad_type);
+    }
+
 }

@@ -58,7 +58,7 @@ class SlowestAnalyzer extends BaseAnalyzer implements Analyzer
                 new SuperTableColumn('statusCode', 'Status', 6, function ($value) {
                     return Utils::getColoredStatusCode($value);
                 }),
-                new SuperTableColumn('url', 'Slow URL', $urlColumnWidth),
+                new SuperTableColumn('url', 'Slow URL', $urlColumnWidth, null, null, true),
             ], true, 'requestTime', 'DESC');
 
         $superTable->setData($slowUrls);

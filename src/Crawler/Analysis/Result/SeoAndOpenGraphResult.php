@@ -90,7 +90,7 @@ class SeoAndOpenGraphResult
         if ($h1Content && str_contains($h1Content, "<")) {
             $h1Content = strip_tags(Utils::stripJavaScript($h1Content));
         }
-        $result->h1 = trim($h1Content ?: '');
+        $result->h1 = trim($h1Content) != '' ? trim(preg_replace('/\s+/', ' ', $h1Content)) : '';
 
         $result->robotsIndex = self::getRobotsIndex($metaTags);
         $result->robotsFollow = self::getRobotsFollow($metaTags);

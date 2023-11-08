@@ -451,9 +451,10 @@ class Crawler
         $isAlreadyVisited = $this->visited->exist($urlKey);
         $isParsable = @parse_url($url) !== false;
         $isUrlWithHtml = preg_match('/\.[a-z0-9]{1,10}(|\?.*)$/i', $url) === 0 || preg_match($regexForHtmlExtensions, $url) === 1;
+        $isUrlTooLong = strlen($url) > $this->options->maxUrlLength;
         $allowedAreOnlyHtmlFiles = $this->options->crawlOnlyHtmlFiles();
 
-        return !$isInQueue && !$isAlreadyVisited && $isParsable && ($isUrlWithHtml || !$allowedAreOnlyHtmlFiles);
+        return !$isInQueue && !$isAlreadyVisited && $isParsable && !$isUrlTooLong && ($isUrlWithHtml || !$allowedAreOnlyHtmlFiles);
     }
 
 
@@ -471,17 +472,17 @@ class Crawler
     private function addRedirectLocationToQueueIfSuitable(string $redirectLocation, ?string $sourceUqId, string $scheme, string $hostAndPort, ParsedUrl $parsedUrl): void
     {
         if (str_starts_with($redirectLocation, '//')) {
-            $redirectToQueue = $scheme . ':' . $redirectLocation;
+            $redirectUrlToQueue = $scheme . ':' . $redirectLocation;
         } elseif (str_starts_with($redirectLocation, '/')) {
-            $redirectToQueue = $scheme . '://' . $hostAndPort . $redirectLocation;
+            $redirectUrlToQueue = $scheme . '://' . $hostAndPort . $redirectLocation;
         } elseif (str_starts_with($redirectLocation, 'http://') || str_starts_with($redirectLocation, 'https://')) {
-            $redirectToQueue = $redirectLocation;
+            $redirectUrlToQueue = $redirectLocation;
         } else {
-            $redirectToQueue = $scheme . '://' . $hostAndPort . $parsedUrl->path . '/' . $redirectLocation;
+            $redirectUrlToQueue = $scheme . '://' . $hostAndPort . $parsedUrl->path . '/' . $redirectLocation;
         }
 
-        if ($this->isUrlSuitableForQueue($redirectToQueue)) {
-            $this->addUrlToQueue($redirectToQueue, $sourceUqId);
+        if ($this->isUrlSuitableForQueue($redirectUrlToQueue)) {
+            $this->addUrlToQueue($redirectUrlToQueue, $sourceUqId);
         }
     }
 

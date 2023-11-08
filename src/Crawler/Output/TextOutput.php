@@ -27,6 +27,12 @@ class TextOutput implements Output
     private Status $status;
     private CoreOptions $options;
     private bool $printToOutput = true;
+    private int $extraColumnsFromAnalysisWidth = 0;
+    private int $extraColumnsWidth = 0;
+
+    private int $terminalWidth;
+    private bool $compactMode = false;
+    private int $progressBarWidth = 0;
 
     /**
      * Extra columns from analysis that will be added to the table via showAnalyzedVisitedUrlResultAsColumn() in Analyzer
@@ -51,6 +57,15 @@ class TextOutput implements Output
         $this->options = $options;
         $this->printToOutput = $printToOutput;
         $this->originHost = parse_url($this->options->url, PHP_URL_HOST);
+
+        $this->extraColumnsWidth = 0;
+        foreach ($this->options->extraColumns as $extraColumn) {
+            $this->extraColumnsWidth += $extraColumn->getLength() + 3; // 3 = 2 spaces + 1 pipe
+        }
+
+        $this->terminalWidth = Utils::getConsoleWidth();
+        $this->compactMode = $this->terminalWidth < 140;
+        $this->progressBarWidth = $this->options->hideProgressBar ? 0 : ($this->compactMode ? 8 : 26);
     }
 
     public function addBanner(): void
@@ -60,6 +75,10 @@ class TextOutput implements Output
         $this->addToOutput("= Version: " . $this->version . " =\n");
         $this->addToOutput("= jan.reges@siteone.cz    =\n");
         $this->addToOutput("===========================\n\n");
+
+        if ($this->compactMode) {
+            $this->addToOutput(Utils::getColorText("Detected terminal width {$this->terminalWidth} < 140 chars - compact mode activated.\n\n", 'yellow'));
+        }
     }
 
     public function addUsedOptions(): void
@@ -74,13 +93,20 @@ class TextOutput implements Output
     public function setExtraColumnsFromAnalysis(array $extraColumnsFromAnalysis): void
     {
         $this->extraColumnsFromAnalysis = $extraColumnsFromAnalysis;
+        $this->extraColumnsFromAnalysisWidth = 0;
+        foreach ($this->extraColumnsFromAnalysis as $extraColumn) {
+            $this->extraColumnsFromAnalysisWidth += $extraColumn->getLength() + 3; // 3 = 2 spaces + 1 pipe
+        }
     }
 
     public function addTableHeader(): void
     {
-        $header = str_pad("URL", $this->options->urlColumnSize) . " |" . " Status " . "|" . " Type     " . "|" . " Time   " . "|" . " Size   ";
+        $header = str_pad("URL", $this->getUrlColumnSize()) . " |" . " Status " . "|" . " Type     " . "|" . " Time   " . "|" . " Size   ";
         if (!$this->options->hideProgressBar) {
-            $header = str_pad("Progress report", 26) . "| " . $header;
+            $header = str_pad(
+                    $this->compactMode ? "Progress" : "Progress report",
+                    $this->progressBarWidth
+                ) . "| " . $header;
         }
 
         foreach ($this->extraColumnsFromAnalysis as $extraColumn) {
@@ -110,6 +136,7 @@ class TextOutput implements Output
         $extraHeadersContent = '';
         $extraNewLine = '';
         $extraNewLinePrefix = str_repeat(' ', 2);
+
         foreach ($this->extraColumnsFromAnalysis as $extraColumn) {
             $value = '';
             $headerName = $extraColumn->name;
@@ -151,25 +178,29 @@ class TextOutput implements Output
         }
 
         if (!$this->options->doNotTruncateUrl) {
-            $urlForTable = Utils::truncateInTwoThirds($urlForTable, $this->options->urlColumnSize);
+            $urlForTable = Utils::truncateInTwoThirds($urlForTable, $this->getUrlColumnSize());
         }
 
         // put progress to stderr
         $progressContent = '';
         if (!$this->options->hideProgressBar) {
             list($done, $total) = explode('/', $progressStatus);
-            $progressToStdErr = sprintf(
-                "%s | %s",
-                str_pad($progressStatus, 7),
-                Utils::getProgressBar(intval($done), intval($total), 10)
-            );
-            $progressContent = str_pad($progressToStdErr, 17);
+            if ($this->compactMode) {
+                $progressContent = str_pad($progressStatus, 7) . ' |';
+            } else {
+                $progressToStdErr = sprintf(
+                    "%s | %s",
+                    str_pad($progressStatus, 7),
+                    Utils::getProgressBar(intval($done), intval($total), 10)
+                );
+                $progressContent = str_pad($progressToStdErr, 17);
+            }
         }
 
         $output = sprintf(
                 '%s %s | %s | %s | %s | %s %s',
                 $progressContent,
-                str_pad($urlForTable, $this->options->urlColumnSize),
+                str_pad($urlForTable, $this->getUrlColumnSize()),
                 $coloredStatus,
                 $contentType,
                 $coloredElapsedTime,
@@ -202,7 +233,7 @@ class TextOutput implements Output
             Utils::getColorText($this->options->memoryLimit, 'cyan'),
             Utils::getColorText(Utils::getFormattedSize(memory_get_peak_usage(true)), 'cyan')
         );
-        $this->addToOutput(str_repeat('=', Utils::getConsoleWidth()) . "\n");
+        $this->addToOutput(str_repeat('=', $this->terminalWidth) . "\n");
         $this->addToOutput($resultHeader);
         $this->addToOutput(
             sprintf("Total of %s visited URLs with a total size of %s and power of %s with download speed %s\n",
@@ -222,16 +253,7 @@ class TextOutput implements Output
             )
         );
 
-        /*
-        $this->addToOutput("URLs by status:\n");
-        $statuses = '';
-        foreach ($stats->countByStatus as $status => $count) {
-            $statuses .= " " . Utils::getHttpClientCodeWithErrorDescription($status) . ": $count\n";
-        }
-        $this->addToOutput(Utils::getColorText(rtrim($statuses), 'yellow') . "\n");
-        */
-
-        $this->addToOutput(str_repeat('=', Utils::getConsoleWidth()) . "\n");
+        $this->addToOutput(str_repeat('=', $this->terminalWidth) . "\n");
     }
 
     public function addNotice(string $text): void
@@ -272,5 +294,33 @@ class TextOutput implements Output
     public function getType(): OutputType
     {
         return OutputType::TEXT;
+    }
+
+    private function getUrlColumnSize(): int
+    {
+        static $urlColumnSize = null;
+
+        if ($urlColumnSize === null) {
+            if ($this->options->urlColumnSize) {
+                $urlColumnSize = $this->options->urlColumnSize;
+            } else {
+                $progressBarWidth = $this->progressBarWidth;
+                $statusTypeTimeSizeWidth = 40;
+                $extraColumnsWidth = $this->extraColumnsWidth;
+                $extraColumnsFromAnalysisWidth = $this->extraColumnsFromAnalysisWidth;
+                $freeReserve = 5; // small reserve for unpredictable situations
+
+                $urlColumnSize = $this->terminalWidth
+                    - $progressBarWidth
+                    - $statusTypeTimeSizeWidth
+                    - $extraColumnsWidth
+                    - $extraColumnsFromAnalysisWidth
+                    - $freeReserve;
+
+                $urlColumnSize = max(20, $urlColumnSize);
+            }
+        }
+
+        return $urlColumnSize;
     }
 }

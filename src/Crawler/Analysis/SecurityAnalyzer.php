@@ -59,12 +59,15 @@ class SecurityAnalyzer extends BaseAnalyzer implements Analyzer
 
     public function analyze(): void
     {
+        $consoleWidth = Utils::getConsoleWidth();
+        $recommendationColWidth = $consoleWidth - 70; // 70 = width of other columns (with spaces and pipes)
+
         $superTable = new SuperTable(
             self::SUPER_TABLE_SECURITY,
             "Security",
             "Nothing to report.",
             [
-                new SuperTableColumn('header', 'Header', SuperTableColumn::AUTO_WIDTH),
+                new SuperTableColumn('header', 'Header', 26, null, null, true),
                 new SuperTableColumn('ok', 'OK', 5, function ($value) {
                     return $value > 0 ? Utils::getColorText(strval($value), 'green') : '0';
                 }, null, false, false),
@@ -77,13 +80,13 @@ class SecurityAnalyzer extends BaseAnalyzer implements Analyzer
                 new SuperTableColumn('critical', 'Critical', 8, function ($value) {
                     return $value > 0 ? Utils::getColorText(strval($value), 'red', true) : '0';
                 }, null, false, false),
-                new SuperTableColumn('recommendation', 'Recommendation', SuperTableColumn::AUTO_WIDTH, function ($value, $renderInto) {
+                new SuperTableColumn('recommendation', 'Recommendation', $recommendationColWidth, function ($value, $renderInto) {
                     if ($value) {
                         return implode($renderInto === SuperTable::RENDER_INTO_HTML ? '<br>' : "\n > ", $value);
                     } else {
                         return '';
                     }
-                }, null, false, false, false, false),
+                }, null, true, false, false, false),
             ], true, 'highestSeverity', 'DESC'
         );
 

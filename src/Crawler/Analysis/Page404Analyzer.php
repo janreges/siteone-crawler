@@ -44,7 +44,7 @@ class Page404Analyzer extends BaseAnalyzer implements Analyzer
                 new SuperTableColumn('url', 'URL 404', $urlColumnSize, null, null, true),
                 new SuperTableColumn('sourceUqId', 'Found at URL', $urlColumnSize, function ($value) use ($status) {
                     return $value ? $status->getUrlByUqId($value) : '';
-                }),
+                }, null, true),
             ], true, 'url', 'ASC');
 
         $superTable->setData($urls404);

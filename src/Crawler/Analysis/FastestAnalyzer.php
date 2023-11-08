@@ -44,7 +44,7 @@ class FastestAnalyzer extends BaseAnalyzer implements Analyzer
         $fastUrls = array_slice($fastUrls, 0, $this->fastestTopLimit);
 
         $consoleWidth = Utils::getConsoleWidth();
-        $urlColumnWidth = max($consoleWidth - 25, 20);
+        $urlColumnWidth = max($consoleWidth - 20, 20);
 
         $superTable = new SuperTable(
             self::SUPER_TABLE_FASTEST_URLS,
@@ -57,7 +57,7 @@ class FastestAnalyzer extends BaseAnalyzer implements Analyzer
                 new SuperTableColumn('statusCode', 'Status', 6, function ($value) {
                     return Utils::getColoredStatusCode($value);
                 }),
-                new SuperTableColumn('url', 'Fast URL', $urlColumnWidth),
+                new SuperTableColumn('url', 'Fast URL', $urlColumnWidth, null, null, true),
             ], true, 'requestTime', 'ASC'
         );
 

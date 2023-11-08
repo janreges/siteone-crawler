@@ -673,7 +673,7 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
             "Nothing to report.",
             [
                 new SuperTableColumn('count', 'Count', 5, null, null, false, false),
-                new SuperTableColumn('title', 'Title', max(20, min(200, $consoleWidth)), null, null, true, false),
+                new SuperTableColumn('title', 'Title', max(20, min(200, $consoleWidth - 10)), null, null, true, false),
             ], true, 'count', 'DESC'
         );
         $superTable->setData($this->topTitlesToCount);
@@ -747,7 +747,7 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
             "Nothing to report.",
             [
                 new SuperTableColumn('count', 'Count', 5, null, null, false, false),
-                new SuperTableColumn('description', 'Description', max(20, min(200, $consoleWidth)), null, null, true, false),
+                new SuperTableColumn('description', 'Description', max(20, min(200, $consoleWidth - 10)), null, null, true, false),
             ], true, 'count', 'DESC'
         );
         $superTable->setData($this->topDescriptionsToCount);

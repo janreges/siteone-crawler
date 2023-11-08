@@ -17,6 +17,12 @@ class ExtraColumn
     public readonly ?int $length;
     public readonly bool $truncate;
 
+    private static array $defaultColumnSizes = [
+        'Title' => 20,
+        'Description' => 20,
+        'Keywords' => 20,
+    ];
+
     public function __construct(string $name, ?int $length, bool $truncate)
     {
         $this->name = $name;
@@ -37,27 +43,29 @@ class ExtraColumn
 
         $length = $this->getLength();
         if ($this->truncate && mb_strlen($value) > $length) {
-            return trim(mb_substr($value, 0, $this->length - 2)) . '..';
+            return trim(mb_substr($value, 0, $length)) . '…';
         }
 
         return str_pad($value, $length);
     }
 
     /**
-     * Get ExtraColumn instance from text like "Column", "Column(20)" or "Column(20!)"
+     * Get ExtraColumn instance from text like "Column", "Column(20)" or "Column(20>)"
      * @param string $text
      * @return ExtraColumn
      */
     public static function fromText(string $text): ExtraColumn
     {
         $length = null;
-        $truncate = false;
+        $truncate = true;
 
-        if (preg_match('/^([^(]+)(\((\d+)(!?)\))?$/', $text, $matches)) {
+        if (preg_match('/^([^(]+)(\((\d+)(>?)\))?$/', $text, $matches)) {
             $name = trim($matches[1]);
             if (isset($matches[3])) {
                 $length = (int)$matches[3];
-                $truncate = isset($matches[4]) && $matches[4] === '!';
+                $truncate = !(isset($matches[4]) && $matches[4] === '>');
+            } elseif (isset(self::$defaultColumnSizes[$name])) {
+                $length = self::$defaultColumnSizes[$name];
             }
         } else {
             $name = trim($text);

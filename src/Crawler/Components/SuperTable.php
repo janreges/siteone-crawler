@@ -27,8 +27,10 @@ class SuperTable
     public readonly ?int $maxRows;
 
     private bool $visibleInHtml = true;
-    private bool $visibleInConsole = true;
     private bool $visibleInJson = true;
+    private bool $visibleInConsole = true;
+    private ?int $visibleInConsoleRowsLimit = null; // null = no limit, otherwise limit to X rows + message about HTML report with full data
+    private bool $showOnlyColumnsWithValues = false;
 
     /**
      * @var SuperTableColumn[]
@@ -89,6 +91,8 @@ class SuperTable
         if ($this->currentOrderColumn) {
             $this->sortData($this->currentOrderColumn, $this->currentOrderDirection);
         }
+
+        $this->removeColumnsWithEmptyData();
     }
 
     /**
@@ -225,15 +229,20 @@ class SuperTable
      */
     public function getConsoleOutput(): string
     {
-        if (!$this->visibleInConsole) {
-            return '';
-        }
         $titleOutput = $this->title . PHP_EOL . str_repeat('-', mb_strlen($this->title)) . PHP_EOL . PHP_EOL;;
         $output = Utils::getColorText($titleOutput, 'blue');
 
-        if (!$this->data) {
+        $data = $this->data;
+
+        if (!$data) {
             $output .= Utils::getColorText($this->emptyTableMessage, 'gray') . PHP_EOL . PHP_EOL;
             return $output;
+        } else if (!$this->visibleInConsole) {
+            $output .= Utils::getColorText("This table contains large data. To see them, use output to HTML using `--output-html-file=tmp/myreport.html`.", 'yellow') . PHP_EOL . PHP_EOL;
+            return $output;
+        } elseif ($this->visibleInConsoleRowsLimit) {
+            $output .= Utils::getColorText("This table contains large data and shows max {$this->visibleInConsoleRowsLimit} rows. To see them all, use output to HTML using `--output-html-file=tmp/myreport.html`.", 'yellow') . PHP_EOL . PHP_EOL;
+            $data = array_slice($data, 0, $this->visibleInConsoleRowsLimit);
         }
 
         $columnToWidth = [];
@@ -245,7 +254,7 @@ class SuperTable
 
         $headers = [];
         foreach ($this->columns as $column) {
-            $headers[] = str_pad($column->name, $columnToWidth[$column->aplCode]);
+            $headers[] = Utils::mb_str_pad($column->name, $columnToWidth[$column->aplCode]);
         }
         $output .= Utils::getColorText(implode(' | ', $headers), 'gray') . PHP_EOL;
 
@@ -254,7 +263,7 @@ class SuperTable
             }, $this->columns)) + (count($this->columns) * 3) - 1;
         $output .= str_repeat('-', $repeat) . PHP_EOL;
 
-        foreach ($this->data as $row) {
+        foreach ($data as $row) {
             $rowData = [];
             foreach ($this->columns as $key => $column) {
                 $value = is_object($row) ? ($row->{$key} ?? '') : ($row[$key] ?? '');
@@ -270,7 +279,7 @@ class SuperTable
                 }
 
                 $rowData[] = $column->formatterWillChangeValueLength
-                    ? str_pad(strval($value), $columnWidth)
+                    ? Utils::mb_str_pad(strval($value), $columnWidth, ' ')
                     : ($value . (str_repeat(' ', max(0, $columnWidth - mb_strlen(Utils::removeAnsiColors(strval($value)))))));
             }
             $output .= implode(' | ', $rowData) . PHP_EOL;
@@ -328,9 +337,10 @@ class SuperTable
         $this->visibleInHtml = $visibleInHtml;
     }
 
-    public function setVisibilityInConsole(bool $visibleInConsole): void
+    public function setVisibilityInConsole(bool $visibleInConsole, ?int $visibleInConsoleRowsLimit): void
     {
         $this->visibleInConsole = $visibleInConsole;
+        $this->visibleInConsoleRowsLimit = $visibleInConsoleRowsLimit;
     }
 
     public function setVisibilityInJson(bool $visibleInJson): void
@@ -376,5 +386,39 @@ class SuperTable
     private function isFulltextEnabled(): bool
     {
         return $this->fulltextEnabled && count($this->data) >= $this->minRowsForFulltext;
+    }
+
+    public function setShowOnlyColumnsWithValues(bool $showOnlyColumnsWithValues): void
+    {
+        $this->showOnlyColumnsWithValues = $showOnlyColumnsWithValues;
+    }
+
+    private function removeColumnsWithEmptyData(): void
+    {
+        if (!$this->showOnlyColumnsWithValues) {
+            return;
+        }
+
+        $columnsToRemove = [];
+        foreach ($this->columns as $column) {
+            $columnHasData = false;
+            foreach ($this->data as $row) {
+                $value = is_object($row) ? ($row->{$column->aplCode} ?? '') : ($row[$column->aplCode] ?? '');
+                if (trim((string)$value, ' 0.,') !== '') {
+                    $columnHasData = true;
+                    break;
+                }
+            }
+            if (!$columnHasData) {
+                $columnsToRemove[] = $column->aplCode;
+            }
+        }
+
+        foreach ($columnsToRemove as $columnToRemove) {
+            unset($this->columns[$columnToRemove]);
+            foreach ($this->data as &$row) {
+                unset($row[$columnToRemove]);
+            }
+        }
     }
 }

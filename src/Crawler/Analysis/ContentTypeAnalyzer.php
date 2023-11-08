@@ -116,6 +116,7 @@ class ContentTypeAnalyzer extends BaseAnalyzer implements Analyzer
             }
         }
 
+        $superTable->setShowOnlyColumnsWithValues(true); // show only rows with values != 0
         $superTable->setData($stats);
         $this->status->addSuperTableAtBeginning($superTable);
         $this->output->addSuperTable($superTable);
@@ -195,6 +196,7 @@ class ContentTypeAnalyzer extends BaseAnalyzer implements Analyzer
             $stats[$key]['avgTime'] = $stats[$key]['totalTime'] / $stats[$key]['count'];
         }
 
+        $superTable->setShowOnlyColumnsWithValues(true); // show only rows with values != 0
         $superTable->setData($stats);
         $this->status->addSuperTableAtBeginning($superTable);
         $this->output->addSuperTable($superTable);

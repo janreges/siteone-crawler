@@ -102,8 +102,12 @@ class SourceDomainsAnalyzer extends BaseAnalyzer implements Analyzer
 
         // setup supertable
         $delimiter = Utils::getColorText('/', 'dark-gray');
-        $statsFormatter = function ($value) use ($delimiter) {
-            return str_replace('/', $delimiter, $value);
+        $statsFormatter = function ($value, $renderInto) use ($delimiter) {
+            if ($renderInto === SuperTable::RENDER_INTO_HTML) {
+                return str_replace('/', " {$delimiter} ", $value);
+            } else {
+                return str_replace('/', $delimiter, $value);
+            }
         };
         $superTableColumns = [
             new SuperTableColumn('domain', 'Domain'),

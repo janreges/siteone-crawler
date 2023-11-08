@@ -108,13 +108,20 @@ class SeoAndOpenGraphAnalyzer extends BaseAnalyzer implements Analyzer
      */
     private function analyzeSeo(array $urlResults): void
     {
+        $consoleWidth = Utils::getConsoleWidth();
+        $urlColWidth = 50;
+        $indexingColWidth = 20;
+        $commonColCount = 4;
+        $spacesAndPipes = 6 * 3;
+        $commonColWidth = intval(($consoleWidth - $urlColWidth - $indexingColWidth - $spacesAndPipes) / $commonColCount);
+
         $superTable = new SuperTable(
             self::SUPER_TABLE_SEO,
             "SEO metadata",
             "No URLs.",
             [
-                new SuperTableColumn('urlPathAndQuery', 'URL', 50, null, null, true),
-                new SuperTableColumn('indexing', 'Indexing', 17, null, function (SeoAndOpenGraphResult $urlResult) {
+                new SuperTableColumn('urlPathAndQuery', 'URL', $urlColWidth, null, null, true),
+                new SuperTableColumn('indexing', 'Indexing', $indexingColWidth, null, function (SeoAndOpenGraphResult $urlResult) {
                     if ($urlResult->deniedByRobotsTxt) {
                         return Utils::getColorText('DENY (robots.txt)', 'magenta');
                     } elseif ($urlResult->robotsIndex === SeoAndOpenGraphResult::ROBOTS_NOINDEX) {
@@ -123,17 +130,20 @@ class SeoAndOpenGraphAnalyzer extends BaseAnalyzer implements Analyzer
                         return 'Allowed';
                     }
                 }, false, false),
-                new SuperTableColumn('title', 'Title', 30, null, null, true),
-                new SuperTableColumn('h1', 'H1', 30, function ($value) {
+                new SuperTableColumn('title', 'Title', $commonColWidth, null, null, true),
+                new SuperTableColumn('h1', 'H1', $commonColWidth, function ($value) {
                     if (!$value) {
                         return Utils::getColorText('Missing H1', 'red', true);
                     }
                     return $value;
                 }, null, true, false),
-                new SuperTableColumn('description', 'Description', 30, null, null, true),
-                new SuperTableColumn('keywords', 'Keywords', 30, null, null, true),
+                new SuperTableColumn('description', 'Description', $commonColWidth, null, null, true),
+                new SuperTableColumn('keywords', 'Keywords', $commonColWidth, null, null, true),
             ], true, 'urlPathAndQuery', 'ASC'
         );
+
+        // hide in console because of too many columns and long values
+        $superTable->setVisibilityInConsole(true, 10);
 
         // set initial URL (required for urlPath column and active link building)
         $superTable->setInitialUrl($this->status->getOptions()->url);
@@ -149,19 +159,27 @@ class SeoAndOpenGraphAnalyzer extends BaseAnalyzer implements Analyzer
      */
     private function analyzeOpenGraph(array $urlResults): void
     {
+        $consoleWidth = Utils::getConsoleWidth();
+        $urlColWidth = 50;
+        $imageColWidth = 18;
+        $imageColCount = ($this->hasOgTags ? 1 : 0) + ($this->hasTwitterTags ? 1 : 0);
+        $commonColCount = ($this->hasOgTags ? 2 : 0) + ($this->hasTwitterTags ? 2 : 0);
+        $spacesAndPipes = (1 + $imageColCount + $commonColCount) * 3;
+        $commonColWidth = intval(($consoleWidth - $urlColWidth - ($imageColCount * $imageColWidth) - $spacesAndPipes) / $commonColCount);
+
         $columns = [
-            new SuperTableColumn('urlPathAndQuery', 'URL', 50, null, null, true),
+            new SuperTableColumn('urlPathAndQuery', 'URL', $urlColWidth, null, null, true),
         ];
 
         if ($this->hasOgTags) {
-            $columns[] = new SuperTableColumn('ogTitle', 'OG Title', 32, null, null, true);
-            $columns[] = new SuperTableColumn('ogDescription', 'OG Description', 32, null, null, true);
-            $columns[] = new SuperTableColumn('ogImage', 'OG Image', 18, null, null, true);
+            $columns[] = new SuperTableColumn('ogTitle', 'OG Title', $commonColWidth, null, null, true);
+            $columns[] = new SuperTableColumn('ogDescription', 'OG Description', $commonColWidth, null, null, true);
+            $columns[] = new SuperTableColumn('ogImage', 'OG Image', $imageColWidth, null, null, true);
         }
         if ($this->hasTwitterTags) {
-            $columns[] = new SuperTableColumn('twitterTitle', 'Twitter Title', 32, null, null, true);
-            $columns[] = new SuperTableColumn('twitterDescription', 'Twitter Description', 32, null, null, true);
-            $columns[] = new SuperTableColumn('twitterImage', 'Twitter Image', 18, null, null, true);
+            $columns[] = new SuperTableColumn('twitterTitle', 'Twitter Title', $commonColWidth, null, null, true);
+            $columns[] = new SuperTableColumn('twitterDescription', 'Twitter Description', $commonColWidth, null, null, true);
+            $columns[] = new SuperTableColumn('twitterImage', 'Twitter Image', $imageColWidth, null, null, true);
         }
 
         $superTable = new SuperTable(
@@ -173,6 +191,9 @@ class SeoAndOpenGraphAnalyzer extends BaseAnalyzer implements Analyzer
             'urlPathAndQuery',
             'ASC'
         );
+
+        // hide in console because of too many columns and long values
+        $superTable->setVisibilityInConsole(true, 10);
 
         $superTableData = [];
         if ($this->hasOgTags || $this->hasTwitterTags) {
@@ -193,12 +214,16 @@ class SeoAndOpenGraphAnalyzer extends BaseAnalyzer implements Analyzer
      */
     private function analyzeHeadings(array $urlResults): void
     {
+        $consoleWidth = Utils::getConsoleWidth();
+        $urlColWidth = 30;
+        $headingColWidth = $consoleWidth - $urlColWidth - 24;
+
         $superTable = new SuperTable(
             self::SUPER_TABLE_SEO_HEADINGS,
             "Heading structure",
             "No URLs to analyze heading structure.",
             [
-                new SuperTableColumn('headings', 'Heading structure', 80, null, function (SeoAndOpenGraphResult $urlResult, string $renderInfo) {
+                new SuperTableColumn('headings', 'Heading structure', $headingColWidth, null, function (SeoAndOpenGraphResult $urlResult, string $renderInfo) {
                     if (!$urlResult->headingTreeItems) {
                         return '';
                     }
@@ -212,9 +237,12 @@ class SeoAndOpenGraphAnalyzer extends BaseAnalyzer implements Analyzer
                 new SuperTableColumn('headingsErrorsCount', 'Errors', 6, function ($value) {
                     return Utils::getColorText(strval($value), $value > 0 ? 'red' : 'green', true);
                 }, null, false, false),
-                new SuperTableColumn('urlPathAndQuery', 'URL', 30, null, null, true),
+                new SuperTableColumn('urlPathAndQuery', 'URL', $urlColWidth, null, null, true),
             ], true, 'headingsErrorsCount', 'DESC'
         );
+
+        // hide in console because of too many columns and long values
+        $superTable->setVisibilityInConsole(true, 10);
 
         // set initial URL (required for urlPath column and active link building)
         $superTable->setInitialUrl($this->status->getOptions()->url);
