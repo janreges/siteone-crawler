@@ -18,6 +18,7 @@ class FoundUrl
     const SOURCE_INLINE_SCRIPT_SRC = 40;
     const SOURCE_LINK_HREF = 50;
     const SOURCE_CSS_URL = 60;
+    const SOURCE_JS_URL = 70;
 
     /**
      * Founded URL, parsed from $this->sourceUrl

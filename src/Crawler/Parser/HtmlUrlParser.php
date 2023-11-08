@@ -172,12 +172,20 @@ class HtmlUrlParser
      */
     private function findScripts(FoundUrls $foundUrls): void
     {
-        preg_match_all('/<script\s+[^>]*?src=["\']([^"\']+)["\'][^>]*>/im', $this->html, $matches);
+        preg_match_all('/<script\s+[^>]*?src=["\']([^"\']+)["\'][^>]*>/is', $this->html, $matches);
         $foundUrls->addUrlsFromTextArray($matches[1], $this->sourceUrl, FoundUrl::SOURCE_SCRIPT_SRC);
 
         // often used for lazy loading in JS code
-        preg_match_all('/\.src\s*=\s*["\']([^"\']+)["\']/im', $this->html, $matches);
+        preg_match_all('/\.src\s*=\s*["\']([^"\']+)["\']/is', $this->html, $matches);
         $foundUrls->addUrlsFromTextArray($matches[1], $this->sourceUrl, FoundUrl::SOURCE_INLINE_SCRIPT_SRC);
+
+        // NextJS chunks
+        preg_match_all('/:([a-z0-9\/._\-\[\]]+chunks[a-z0-9\/._\-\[\]]+.js)/is', $this->html, $matches);
+        $nextJsChunks = [];
+        foreach ($matches[1] ?? [] as $match) {
+            $nextJsChunks[] = '/_next/' . ltrim($match, '/ ');
+        }
+        $foundUrls->addUrlsFromTextArray($nextJsChunks, $this->sourceUrl, FoundUrl::SOURCE_INLINE_SCRIPT_SRC);
     }
 
     /**
@@ -186,7 +194,7 @@ class HtmlUrlParser
      */
     private function findStylesheets(FoundUrls $foundUrls): void
     {
-        preg_match_all('/<link\s+[^>]*?href=["\']([^"\']+)["\'][^>]*>/im', $this->html, $matches);
+        preg_match_all('/<link\s+[^>]*?href=["\']([^"\']+)["\'][^>]*>/is', $this->html, $matches);
         foreach ($matches[0] as $key => $match) {
             if (stripos($match, 'rel=') !== false && stripos($match, 'stylesheet') === false) {
                 unset($matches[0][$key]);

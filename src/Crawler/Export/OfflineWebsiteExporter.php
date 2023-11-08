@@ -150,8 +150,7 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
 
         // sanitize and replace special chars because they are not allowed in file/dir names on some platforms (e.g. Windows)
         // same logic is in method convertUrlToRelative()
-        $storeFilePath = sprintf(
-            '%s/%s',
+        $storeFilePath = sprintf('%s/%s',
             $this->offlineExportDirectory,
             OfflineUrlConverter::sanitizeFilePath($this->getRelativeFilePathForFileByUrl($visitedUrl), false)
         );
@@ -465,31 +464,9 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
 
     private function updateNextJsCode(string $js): string
     {
-        $js = preg_replace(
-            '/\(t\.src\s*=\s*s\.src\)/i',
-            '(t.src = "../".repeat(' . self::JS_VARIABLE_NAME_URL_DEPTH . ') + s.src)',
-            $js
-        );
-
-        $js = preg_replace(
-            '/r\.href\s*=\s*t\s*,/i',
-            'r.href = "../".repeat(' . self::JS_VARIABLE_NAME_URL_DEPTH . ') + t,',
-            $js
-        );
-
-        $js = preg_replace(
-            '/t\.src\s*=\s*e,/i',
-            't.src = "../".repeat(' . self::JS_VARIABLE_NAME_URL_DEPTH . ') + e,',
-            $js
-        );
-
-        $js = preg_replace(
-            "/var\s*s\s*=\s*'link\[rel=\"preload\"\]/i",
-            "n = '../'.repeat(" . self::JS_VARIABLE_NAME_URL_DEPTH . "); var s = 'link[rel=\"preload\"]",
-            $js,
-        );
-
-        return $js;
+        // add relative prefix to all _next/ paths
+        $nextJsPrefix = '(' . self::JS_VARIABLE_NAME_URL_DEPTH . ' > 0 ? "../".repeat(' . self::JS_VARIABLE_NAME_URL_DEPTH . ') : "./")';
+        return preg_replace('/(["\'])\/_next\//is', '$1' . $nextJsPrefix . ' + "_next/', $js);
     }
 
     /**
@@ -548,9 +525,10 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
         if (!$basePath) {
             $basePath = '/';
         }
-        $depth = substr_count($basePath, '/') - 1;
-        $baseUrlNeedsIndexHtml = preg_match('/\.[a-z0-9]{1,10}$/i', $basePath) === 0 && trim($basePath, '/') !== '';
-        if ($baseUrlNeedsIndexHtml && !str_ends_with($basePath, '/')) {
+
+        $depth = substr_count(ltrim($basePath, '/'), '/');
+        $baseUrlNeedsIndexHtml = $basePath !== '/' && str_ends_with($basePath, '/');
+        if ($baseUrlNeedsIndexHtml) {
             $depth++;
         }
 

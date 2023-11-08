@@ -14,6 +14,7 @@ use Crawler\HttpClient\HttpClient;
 use Crawler\Output\Output;
 use Crawler\Parser\CssUrlParser;
 use Crawler\Parser\HtmlUrlParser;
+use Crawler\Parser\JsUrlParser;
 use Crawler\Result\Status;
 use Crawler\Result\VisitedUrl;
 use Exception;
@@ -221,6 +222,28 @@ class Crawler
     }
 
     /**
+     * Parse JS body (e.g. manifest from NextJS) and fill queue with new founded URLs (e.g. JS chunks) if are allowed
+     *
+     * @param string $body
+     * @param string $url
+     * @param string $urlUqId
+     * @return void
+     * @throws Exception
+     */
+    private function parseJsBodyAndFillQueue(string $body, string $url, string $urlUqId): void
+    {
+        $urlParser = new JsUrlParser(
+            $body,
+            $url,
+        );
+
+        $foundUrls = $urlParser->getUrlsFromJs();
+        if ($foundUrls) {
+            $this->addSuitableUrlsToQueue($foundUrls, $url, $urlUqId);
+        }
+    }
+
+    /**
      * Check if domain for static file download is allowed
      * Supported records:
      *  - exact.domain.tld
@@ -370,12 +393,15 @@ class Crawler
         // parse HTML body and fill queue with new URLs
         $isHtmlBody = isset($httpResponse->headers['content-type']) && stripos($httpResponse->headers['content-type'], 'text/html') !== false;
         $isCssBody = isset($httpResponse->headers['content-type']) && stripos($httpResponse->headers['content-type'], 'text/css') !== false;
+        $isJsBody = isset($httpResponse->headers['content-type']) && (stripos($httpResponse->headers['content-type'], 'application/javascript') !== false || stripos($httpResponse->headers['content-type'], 'text/javascript') !== false);
         $isAllowedForCrawling = $this->isUrlAllowedByRegexes($url) && $this->isExternalDomainAllowedForCrawling($parsedUrl->host);
         $extraParsedContent = [];
         if ($body && $isHtmlBody && $isAllowedForCrawling) {
             $extraParsedContent = $this->parseHtmlBodyAndFillQueue($body, $url);
         } elseif ($body && $isCssBody) {
             $this->parseCssBodyAndFillQueue($body, $url, $this->getUrlUqId($url));
+        } elseif ($body && $isJsBody) {
+            $this->parseJsBodyAndFillQueue($body, $url, $this->getUrlUqId($url));
         }
 
         // handle redirect
