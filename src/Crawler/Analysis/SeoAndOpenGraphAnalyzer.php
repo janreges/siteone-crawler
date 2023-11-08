@@ -165,7 +165,7 @@ class SeoAndOpenGraphAnalyzer extends BaseAnalyzer implements Analyzer
         $imageColCount = ($this->hasOgTags ? 1 : 0) + ($this->hasTwitterTags ? 1 : 0);
         $commonColCount = ($this->hasOgTags ? 2 : 0) + ($this->hasTwitterTags ? 2 : 0);
         $spacesAndPipes = (1 + $imageColCount + $commonColCount) * 3;
-        $commonColWidth = intval(($consoleWidth - $urlColWidth - ($imageColCount * $imageColWidth) - $spacesAndPipes) / $commonColCount);
+        $commonColWidth = intval(($consoleWidth - $urlColWidth - ($imageColCount * $imageColWidth) - $spacesAndPipes) / max(1, $commonColCount));
 
         $columns = [
             new SuperTableColumn('urlPathAndQuery', 'URL', $urlColWidth, null, null, true),
