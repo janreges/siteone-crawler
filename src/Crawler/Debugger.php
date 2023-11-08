@@ -132,7 +132,7 @@ class Debugger
     private static function log(string $message): void
     {
         if (self::$debugLogFile) {
-            file_put_contents(self::$debugLogFile, $message . "\n", FILE_APPEND);
+            file_put_contents(Utils::getAbsolutePath(self::$debugLogFile), $message . "\n", FILE_APPEND);
         }
     }
 

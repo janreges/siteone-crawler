@@ -9,8 +9,9 @@ use Crawler\Version;
 $startTime = microtime(true);
 
 // class loader
+define('BASE_DIR', dirname(platformCompatiblePath($_SERVER['PHP_SELF']), 2));
 spl_autoload_register(function ($class) {
-    $classFile = dirname(platformCompatiblePath($_SERVER['PHP_SELF'])) . '/src/' . str_replace('\\', '/', $class) . '.php';
+    $classFile = BASE_DIR . '/src/' . str_replace('\\', '/', $class) . '.php';
     require_once($classFile);
 });
 
@@ -20,7 +21,7 @@ ini_set('pcre.recursion_limit', '10000000');
 
 // initiator
 try {
-    $initiator = new Initiator($argv, dirname(platformCompatiblePath($_SERVER['PHP_SELF'])) . '/src/Crawler');
+    $initiator = new Initiator($argv, BASE_DIR . '/src/Crawler');
 } catch (Exception $e) {
     echo Utils::getColorText("ERROR: Unable to initialize crawler: {$e->getMessage()}", 'red');
     exit(100);
@@ -51,7 +52,7 @@ try {
         implode(' ', $argv),
         $initiator->getExporters(),
         $initiator->getAnalysisManager(),
-        dirname(platformCompatiblePath($_SERVER['PHP_SELF']))
+        BASE_DIR
     );
 
     $manager->run();

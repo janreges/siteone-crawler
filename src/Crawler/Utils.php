@@ -986,4 +986,19 @@ class Utils
         ]);
     }
 
+    /**
+     * Check if $path is relative (does not start with '/') and prefix it with BASE_DIR
+     *
+     * @param string $path
+     * @return string
+     */
+    public static function getAbsolutePath(string $path): string
+    {
+        if (str_starts_with($path, '/')) {
+            return $path;
+        }
+
+        return BASE_DIR . '/' . $path;
+    }
+    
 }

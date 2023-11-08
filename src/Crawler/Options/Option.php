@@ -10,6 +10,7 @@ declare(strict_types=1);
 
 namespace Crawler\Options;
 
+use Crawler\Utils;
 use Exception;
 
 class Option
@@ -271,9 +272,9 @@ class Option
         } else if ($this->type === Type::EMAIL) {
             return (string)$value;
         } else if ($this->type === Type::FILE) {
-            return (string)$value;
+            return Utils::getAbsolutePath((string)$value);
         } else if ($this->type === Type::DIR) {
-            return (string)$value;
+            return Utils::getAbsolutePath((string)$value);
         } else if ($this->type === Type::PROXY) {
             return (string)$value;
         } /* @phpstan-ignore-line */ else {
