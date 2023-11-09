@@ -26,7 +26,10 @@ class FileStorage implements Storage
     {
         $this->cacheDir = $tmpDir . '/' . preg_replace('/[^a-z0-9.-_]/i', '-', strtolower($originUrlDomain));
         if (!is_dir($this->cacheDir) && !@mkdir($this->cacheDir, 0777, true)) {
-            throw new Exception(sprintf('Directory "%s" was not created', $this->cacheDir));
+            clearstatcache(true);
+            if (!is_dir($this->cacheDir) || !is_writable($this->cacheDir)) {
+                throw new Exception(sprintf('Directory "%s" was not created', $this->cacheDir));
+            }
         }
         $this->compress = $compress;
     }
@@ -93,7 +96,10 @@ class FileStorage implements Storage
     {
         if (!is_dir($path) || !is_writable($path)) {
             if (!@mkdir($path, 0777, true)) {
-                throw new Exception("Directory '{$path}' was not created. Please check permissions.");
+                clearstatcache(true);
+                if (!is_dir($path) || !is_writable($path)) {
+                    throw new Exception("Directory '{$path}' was not created. Please check permissions.");
+                }
             }
         }
     }

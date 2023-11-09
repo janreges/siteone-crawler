@@ -158,8 +158,11 @@ class HttpClient
             return;
         }
         $cacheDir = dirname($cacheFile);
-        if ((!is_dir($cacheDir) || !is_writable($cacheDir)) && !mkdir($cacheDir, 0777, true)) {
-            throw new Exception('Cannot create or write to cache dir ' . $cacheDir);
+        if ((!is_dir($cacheDir) || !is_writable($cacheDir)) && !@mkdir($cacheDir, 0777, true)) {
+            clearstatcache(true);
+            if (!is_dir($cacheDir) || !is_writable($cacheDir)) {
+                throw new Exception('Cannot create or write to cache dir ' . $cacheDir);
+            }
         }
 
         if (!@file_put_contents($cacheFile, $this->compression ? gzencode(serialize($result)) : serialize($result))) {
