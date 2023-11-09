@@ -21,6 +21,12 @@ class ParsedUrl
     public ?string $fragment;
     public ?string $extension = null;
 
+    /**
+     * Cache used in getFullUrl() method
+     * @var string[]
+     */
+    private array $fullUrlCache = [];
+
     private bool $debug = false;
 
     /**
@@ -47,21 +53,25 @@ class ParsedUrl
 
     public function getFullUrl(bool $includeSchemeAndHost = true, bool $includeFragment = true): string
     {
-        $result = $this->path . ($this->query !== null ? '?' . $this->query : '') . (($includeFragment && $this->fragment !== null) ? '#' . $this->fragment : '');
-        if ($includeSchemeAndHost && $this->scheme && $this->host) {
-            $port = $this->port;
-            if ($port === 80 && $this->scheme === 'http') {
-                $port = null;
-            } else if ($port === 443 && $this->scheme === 'https') {
-                $port = null;
+        $cacheKey = ($includeSchemeAndHost ? '1' : '0') . ($includeFragment ? '1' : '0');
+        if (!isset($this->fullUrlCache[$cacheKey])) {
+            $fullUrl = $this->path . ($this->query !== null ? '?' . $this->query : '') . (($includeFragment && $this->fragment !== null) ? '#' . $this->fragment : '');
+            if ($includeSchemeAndHost && $this->scheme && $this->host) {
+                $port = $this->port;
+                if ($port === 80 && $this->scheme === 'http') {
+                    $port = null;
+                } else if ($port === 443 && $this->scheme === 'https') {
+                    $port = null;
+                }
+                $fullUrl = $this->scheme . '://' . $this->host . ($port !== null ? ':' . $port : '') . $fullUrl;
+            } elseif ($includeSchemeAndHost && !$this->scheme && $this->host) {
+                $port = $this->port && !in_array($this->port, [80, 443]) ? $this->port : null;
+                $fullUrl = '//' . $this->host . ($port !== null ? ':' . $port : '') . $fullUrl;
             }
-            return $this->scheme . '://' . $this->host . ($port !== null ? ':' . $port : '') . $result;
-        } elseif ($includeSchemeAndHost && !$this->scheme && $this->host) {
-            $port = $this->port && !in_array($this->port, [80, 443]) ? $this->port : null;
-            return '//' . $this->host . ($port !== null ? ':' . $port : '') . $result;
-        } else {
-            return $result;
+            $this->fullUrlCache[$cacheKey] = $fullUrl;
         }
+
+        return $this->fullUrlCache[$cacheKey];
     }
 
     /**
@@ -141,6 +151,8 @@ class ParsedUrl
         if ($port) {
             $this->port = $url->port;
         }
+
+        $this->fullUrlCache = [];
     }
 
     public function setPath(string $path, ?string $reason = null): void
@@ -150,6 +162,8 @@ class ParsedUrl
         }
         $this->path = $path;
         $this->extension = pathinfo($this->path, PATHINFO_EXTENSION) ?: null;
+
+        $this->fullUrlCache = [];
     }
 
     /**
@@ -169,6 +183,8 @@ class ParsedUrl
         if ($newPath !== $this->path) {
             $this->setPath($newPath, "changed depth by {$change}, reason: {$reason})");
         }
+
+        $this->fullUrlCache = [];
     }
 
     public function setQuery(?string $query): void
@@ -177,16 +193,22 @@ class ParsedUrl
             Debugger::debug('parsed-url-set-query', "Changed from '{$this->query}' to '{$query}'");
         }
         $this->query = $query;
+
+        $this->fullUrlCache = [];
     }
 
     public function setFragment(?string $fragment): void
     {
         $this->fragment = $fragment;
+
+        $this->fullUrlCache = [];
     }
 
     public function setExtension(?string $extension): void
     {
         $this->extension = $extension;
+
+        $this->fullUrlCache = [];
     }
 
     public function setDebug(bool $debug): void
@@ -202,12 +224,51 @@ class ParsedUrl
         return $this->path === '' && $this->query === null && $this->host === null && $this->fragment !== null;
     }
 
-    public static function parse(string $url): self
+    /**
+     * Get full homepage URL (scheme://host[:port]) without trailing slash
+     *
+     * @return string
+     */
+    public function getFullHomepageUrl(): string
     {
+        return $this->scheme . '://' . $this->host . ($this->port !== null ? ':' . $this->port : '');
+    }
+
+    /**
+     * Parse URL and return ParsedUrl object
+     * When $baseUrl is provided, it is used to fill missing parts of URL (scheme, host, port)
+     *
+     * @param string $url
+     * @param ParsedUrl|null $baseUrl
+     * @return self
+     */
+    public static function parse(string $url, ?ParsedUrl $baseUrl = null): self
+    {
+        if ($baseUrl) {
+            if (str_starts_with($url, './')) {
+                // URL is relative to base URL by ./xyz
+                if (str_ends_with($baseUrl->path, '/')) {
+                    $url = $baseUrl->path . substr($url, 2);
+                } else {
+                    $url = dirname($baseUrl->path) . substr($url, 1);
+                }
+            } else if (!str_starts_with($url, 'http:') && !str_starts_with($url, 'https:') && preg_match('/^[a-z0-9_]/i', $url) === 1) {
+                // URL is relative to base URL by xyz/abc
+                if (str_ends_with($baseUrl->path, '/')) {
+                    $url = $baseUrl->path . $url;
+                } else {
+                    $url = dirname($baseUrl->path) . $url;
+                }
+            } elseif (str_starts_with($url, '/') && !str_starts_with($url, '//')) {
+                // absolute URL /xyz/abc
+                $url = $baseUrl->getFullHomepageUrl() . $url;
+            }
+        }
+
         $parsedUrl = parse_url($url);
-        $scheme = $parsedUrl['scheme'] ?? null;
-        $host = $parsedUrl['host'] ?? null;
-        $port = $parsedUrl['port'] ?? null;
+        $scheme = $parsedUrl['scheme'] ?? ($baseUrl?->scheme);
+        $host = $parsedUrl['host'] ?? ($baseUrl?->host);
+        $port = $parsedUrl['port'] ?? (!isset($parsedUrl['host']) ? ($baseUrl?->port) : null);
         if ($port === null) {
             $port = $scheme === 'http' ? 80 : 443;
         }

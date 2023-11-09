@@ -10,6 +10,7 @@ declare(strict_types=1);
 
 namespace Crawler\Export;
 
+use Crawler\ContentProcessor\HtmlProcessor;
 use Crawler\Crawler;
 use Crawler\Debugger;
 use Crawler\Export\Utils\OfflineUrlConverter;
@@ -19,7 +20,6 @@ use Crawler\Options\Option;
 use Crawler\Options\Options;
 use Crawler\Options\Type;
 use Crawler\ParsedUrl;
-use Crawler\Parser\HtmlUrlParser;
 use Crawler\Result\VisitedUrl;
 use Crawler\Utils;
 use Exception;
@@ -28,11 +28,15 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
 {
 
     const GROUP_OFFLINE_WEBSITE_EXPORTER = 'offline-website-exporter';
-    const JS_VARIABLE_NAME_URL_DEPTH = '_SiteOneUrlDepth';
+
+    private static $contentTypesThatRequireChanges = [
+        Crawler::CONTENT_TYPE_ID_HTML,
+        Crawler::CONTENT_TYPE_ID_SCRIPT,
+        Crawler::CONTENT_TYPE_ID_STYLESHEET,
+        Crawler::CONTENT_TYPE_ID_REDIRECT
+    ];
 
     protected ?string $offlineExportDirectory = null;
-
-    public ?string $initialUrlHost;
 
     /**
      * For debug - when filled it will activate debug mode and store only URLs which match one of these regexes
@@ -65,7 +69,6 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
     {
         $startTime = microtime(true);
         $visitedUrls = $this->status->getVisitedUrls();
-        $this->initialUrlHost = parse_url($this->status->getOptions()->url, PHP_URL_HOST);
 
         // filter only relevant URLs with OK status codes
         $exportedUrls = array_filter($visitedUrls, function (VisitedUrl $visitedUrl) {
@@ -123,28 +126,12 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
     {
         $content = $this->status->getUrlBody($visitedUrl->uqId);
 
-        // apply all required changes to HTML/JS/CSS and REDIRECT content (is HTML with redirect by META tag)
-        $contentTypesThatRequireChanges = [
-            Crawler::CONTENT_TYPE_ID_HTML,
-            Crawler::CONTENT_TYPE_ID_SCRIPT,
-            Crawler::CONTENT_TYPE_ID_STYLESHEET,
-            Crawler::CONTENT_TYPE_ID_REDIRECT
-        ];
-
-        if (in_array($visitedUrl->contentType, $contentTypesThatRequireChanges)) {
-            $content = $this->applyRequiredContentChanges($content, $visitedUrl->contentType, $visitedUrl->url, $this->debugMessages);
-        }
-
-        // apply HTML changes optimal for offline use (e.g. remove Google Analytics, Facebook Pixel, etc.)
-        if ($visitedUrl->contentType === Crawler::CONTENT_TYPE_ID_HTML) {
-            $content = Utils::applySpecificHtmlChanges(
+        // apply required changes through all content processors
+        if (in_array($visitedUrl->contentType, self::$contentTypesThatRequireChanges)) {
+            $this->crawler->getContentProcessorManager()->applyContentChangesForOfflineVersion(
                 $content,
-                $visitedUrl->url,
-                $this->crawler->getCoreOptions()->disableJavascript,
-                true,
-                true,
-                true,
-                true
+                $visitedUrl->contentType,
+                ParsedUrl::parse($visitedUrl->url)
             );
         }
 
@@ -207,7 +194,7 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
     private function getRelativeFilePathForFileByUrl(VisitedUrl $visitedUrl): string
     {
         $urlConverter = new OfflineUrlConverter(
-            ParsedUrl::parse($this->crawler->getCoreOptions()->url),
+            $this->crawler->getInitialParsedUrl(),
             ParsedUrl::parse($visitedUrl->sourceUqId ? $this->status->getUrlByUqId($visitedUrl->sourceUqId) : $this->crawler->getCoreOptions()->url),
             ParsedUrl::parse($visitedUrl->url),
             [$this->crawler, 'isDomainAllowedForStaticFiles'],
@@ -235,393 +222,6 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
         }
 
         return $relativePath;
-    }
-
-    /**
-     * Apply all required content changes (URL to relative, remove unwanted code, etc.)
-     *
-     * @param string $content
-     * @param int $contentType
-     * @param string $baseUrl
-     * @param array|null $debug
-     * @return string
-     */
-    private function applyRequiredContentChanges(string $content, int $contentType, string $baseUrl, ?array &$debug = null): string
-    {
-        if ($contentType === Crawler::CONTENT_TYPE_ID_HTML || $contentType === Crawler::CONTENT_TYPE_ID_REDIRECT) {
-            $content = $this->applyHtmlContentChanges($content, $baseUrl, $debug);
-            $content = $this->applyJsContentChanges($content, $baseUrl, $debug);
-        } else if ($contentType === Crawler::CONTENT_TYPE_ID_STYLESHEET) {
-            $content = $this->applyCssContentChanges($content, $baseUrl, $debug);
-        } elseif ($contentType === Crawler::CONTENT_TYPE_ID_SCRIPT) {
-            $content = $this->applyJsContentChanges($content, $baseUrl, $debug);
-        }
-
-        return $content;
-    }
-
-    /**
-     * Apply all required changes to HTML content
-     *
-     * @param string $html
-     * @param string $baseUrl
-     * @param array|null $debug
-     * @return string
-     */
-    private function applyHtmlContentChanges(string $html, string $baseUrl, ?array &$debug): string
-    {
-        // treat some framework-specific code which could cause problems during parsing
-        $html = HtmlUrlParser::treatFrameworkSpecificCode($html);
-
-        // remove unwanted full urls (width initial domain) from HTML - it simplifies relative paths conversion
-        $baseUrlRoot = preg_replace('/((https?:)?\/\/[^\/]+\/?).*/i', '$1', $baseUrl);
-        $html = preg_replace('/((https?:)?\/\/[a-z0-9._-]+):[0-9]+/i', '$1', $html);
-        $html = str_replace(
-            [
-                'href="' . $baseUrlRoot,
-                "href='" . $baseUrlRoot,
-                'src="' . $baseUrlRoot,
-                "src='" . $baseUrlRoot,
-                "url(" . $baseUrlRoot,
-                'url("' . $baseUrlRoot,
-                "url('" . $baseUrlRoot,
-            ],
-            [
-                'href="/',
-                "href='/",
-                'src="/',
-                "src='/",
-                "url(/",
-                'url("/',
-                "url('/",
-            ],
-            $html
-        );
-
-        // remove unwanted code from HTML with respect to --disable-* options
-        $html = $this->removeUnwantedCodeFromHtml($html);
-
-        // update all paths to relative (for href, src, srcset and also for url() in CSS or some special cases in JS)
-        $html = $this->updateHtmlPathsToRelative($html, $baseUrl, $debug);
-
-        // apply all paths to relative in <style> tags
-        if (!$this->crawler->getCoreOptions()->disableStyles) {
-            $html = $this->updateCssPathsToRelative($html, $baseUrl, $debug);
-        }
-
-        // set JS variable with number of levels before close </head> tag and remove all anchor listeners when needed
-        if (!$this->crawler->getCoreOptions()->disableJavascript) {
-            $html = $this->setJsVariableWithUrlDepth($html, $baseUrl);
-            if ($this->crawler->getCoreOptions()->removeAllAnchorListeners) {
-                $html = $this->setJsFunctionToRemoveAllAnchorListeners($html);
-            }
-        }
-
-        return $html;
-    }
-
-    /**
-     * Apply all required changes to CSS content
-     *
-     * @param string $css
-     * @param string $baseUrl
-     * @param array|null $debug
-     * @return string
-     */
-    private function applyCssContentChanges(string $css, string $baseUrl, ?array &$debug): string
-    {
-        $css = $this->removeUnwantedCodeFromCss($css);
-        return $this->updateCssPathsToRelative($css, $baseUrl, $debug);
-    }
-
-    /**
-     * Apply all required changes to JS content
-     *
-     * @param string $js
-     * @param string $baseUrl
-     * @param array|null $debug
-     * @return string
-     */
-    private function applyJsContentChanges(string $js, string $baseUrl, ?array &$debug): string
-    {
-        return $this->updateJsPathsToRelative($js, $baseUrl, $debug);
-    }
-
-    /**
-     * Update all paths to relative (for href, src, srcset and also for url() in CSS or some special cases in JS)
-     *
-     * @param string $html
-     * @param string $baseUrl
-     * @param array|null $debug
-     * @return string
-     */
-    private function updateHtmlPathsToRelative(string $html, string $baseUrl, ?array &$debug = null): string
-    {
-        $patternHrefSrc = '/(\.|<[a-z0-9]{1,10}[^>]*\s+)(href|src)\s*(=)\s*([\'"]?)([^\'">]+)\4([^>]*)/is';
-        $patternSrcset = '/(\.|<[a-z0-9]{1,10}[^>]*\s+)(imagesrcset|srcset)\s*(=)\s*([\'"]?)([^\'">]+)\4([^>]*)/is';
-        $patternMetaUrl = '/(<meta[^>]*)(url)\s*(=)\s*([\'"]?)([^\'">]+)\4(")/im';
-        $escapedHref = '/(.)(href\\\\["\']|src\\\\["\'])([:=])(\\\\["\'])([^"\'\\\\]+)\\\\["\'](.)/is';
-        $isUrlForDebug = $this->crawler->getCoreOptions()->isUrlSelectedForDebug($baseUrl);
-
-        $replaceCallback = function ($matches) use ($baseUrl, &$debug, $isUrlForDebug) {
-            $start = $matches[1];
-            $attribute = trim($matches[2], ' \\"\'');
-            $attributeRaw = $matches[2];
-            $assignmentChar = $matches[3];
-            $quote = $matches[4];
-            $value = $matches[5];
-            $end = $matches[6];
-
-            // when modifying x.src (JS) and there is no quote, we do not convert, because it is not a valid URL but JS code
-            if ($start === '.' && $quote === '') {
-                return $matches[0];
-            }
-
-            // ignore data URI, dotted relative path or #anchor
-            if (str_starts_with($value, '#') || preg_match('/^[a-z]+:[a-z0-9]/i', $value) === 1) {
-                return $matches[0];
-            }
-
-            if (in_array(strtolower($attribute), ['srcset', 'imagesrcset'])) {
-                $sources = preg_split('/\s*,\s*/', $value);
-                foreach ($sources as &$source) {
-                    if (!str_contains($source, ' ')) {
-                        // URL in srcset without a defined size by "url 2x", "url 100w", etc.
-                        $relativeUrl = $this->convertUrlToRelative($baseUrl, trim($source), $attribute);
-                        $source = $relativeUrl;
-                    } else {
-                        // URL in srcset with format "url 2x", "url 100w", etc.
-                        @list($url, $size) = preg_split('/\s+/', trim($source), 2);
-                        $relativeUrl = $this->convertUrlToRelative($baseUrl, $url, $attribute);
-                        $source = $relativeUrl . ' ' . $size;
-                    }
-                }
-                $newValue = implode(', ', $sources);
-            } else {
-                $newValue = $this->convertUrlToRelative($baseUrl, $value, $attribute);
-            }
-
-            if ($debug !== null && $value !== $newValue && $isUrlForDebug) {
-                $debug[] = ['updateHtmlPathsToRelative', $baseUrl, $value, '> ' . $newValue];
-            }
-
-            return $start . $attributeRaw . $assignmentChar . $quote . $newValue . $quote . $end;
-        };
-
-        // meta redirects e.g. in Astro projects - <meta http-equiv="refresh" content="0;url=/en/getting-started">
-        if (preg_match('/(<meta[^>]*url=)([^"\']+)(["\'][^>]*>)/i', $html, $matches) === 1) {
-            $html = str_replace($matches[0], $matches[1] . $this->convertUrlToRelative($baseUrl, $matches[2]) . $matches[3], $html);
-        }
-
-        $html = preg_replace_callback($patternHrefSrc, $replaceCallback, $html);
-        $html = preg_replace_callback($patternSrcset, $replaceCallback, $html);
-        $html = preg_replace_callback($patternMetaUrl, $replaceCallback, $html);
-        $html = preg_replace_callback($escapedHref, $replaceCallback, $html);
-
-        return $html;
-    }
-
-    /**
-     * Update all paths to relative in CSS (for url() in CSS or some special cases in JS)
-     *
-     * @param string $css
-     * @param string $baseUrl
-     * @param array|null $debug
-     * @return string
-     */
-    private function updateCssPathsToRelative(string $css, string $baseUrl, ?array &$debug = null): string
-    {
-        $pattern = '/url\((["\']?)([^)]+\.[a-z0-9]{1,10}[^)]*)\1\)/i';
-        $isUrlForDebug = $this->crawler->getCoreOptions()->isUrlSelectedForDebug($baseUrl);
-
-        return preg_replace_callback($pattern, function ($matches) use ($baseUrl, &$debug, $isUrlForDebug) {
-            // if is data URI, dotted relative path or #anchor, do not convert
-            $url = $matches[2];
-            if (!Utils::isHrefForRequestableResource($url) || str_starts_with($url, '.') || str_starts_with($matches[2], '#')) {
-                return $matches[0];
-            }
-            $relativeUrl = $this->convertUrlToRelative($baseUrl, $url);
-
-            $newValue = 'url(' . $matches[1] . $relativeUrl . $matches[1] . ')';
-            if ($debug !== null && $matches[0] !== $newValue && $isUrlForDebug) {
-                $debug[] = ['updateCssPathsToRelative', $baseUrl, $matches[0], '> ' . $newValue];
-            }
-
-            return $newValue;
-        }, $css);
-    }
-
-    /**
-     * Update specific JS code to use relative paths
-     *
-     * @param string $js
-     * @param string $baseUrl
-     * @param array|null $debug
-     * @return string
-     */
-    private function updateJsPathsToRelative(string $js, string $baseUrl, ?array &$debug = null): string
-    {
-        $js = $this->updateNextJsCode($js, $baseUrl);
-
-        // rename "crossorigin" in JS to brake it functionality as fix to CORS issues in offline website
-        return str_ireplace('crossorigin', '_SiteOne_CO_', $js);
-    }
-
-    private function updateNextJsCode(string $js, string $baseUrl): string
-    {
-        // disable prefetching in NextJS
-        $js = preg_replace('/(prefetch:\([a-z]+,[a-z]+\)=>\{)if/i', '$1 return; if', $js);
-
-        // add relative prefix to all _next/
-        $basePath = parse_url($baseUrl, PHP_URL_PATH);
-        $depth = $basePath ? substr_count(ltrim($basePath, '/'), '/') : 0;
-        $baseUrlNeedsIndexHtml = $basePath !== '/' && $basePath && str_ends_with($basePath, '/');
-        if ($baseUrlNeedsIndexHtml) {
-            $depth++;
-        }
-
-        $nextJsPrefix1 = $depth > 0 ? str_repeat('../', $depth) : './';
-        $js = preg_replace('/\\\\(["\'])\/_next\//i', '\\\\$1' . $nextJsPrefix1 . '_next/', $js);
-
-        $nextJsPrefix2 = '(' . self::JS_VARIABLE_NAME_URL_DEPTH . ' > 0 ? "../".repeat(' . self::JS_VARIABLE_NAME_URL_DEPTH . ') : "./")';
-        $js = preg_replace('/([a-z0-9]+\.[a-z0-9]+=|:)(["\'])\/_next\//i', '$1' . $nextJsPrefix2 . ' + $2_next/', $js);
-
-        // concat(e,"/_next/" -> concat(e,(PREFIX)"/next/")
-        $js = preg_replace('/(concat\([a-z]+,)(["\']\/_next\/)(["\'])/i', '$1' . $nextJsPrefix2 . '+$2$3', $js);
-
-        // remove <script id="__NEXT_DATA__" type="application/json">...</script>
-        $emptyNextJsData = '<script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{}}}</script>';
-        $js = preg_replace('/<script[^>]+__NEXT_DATA__[^>]*>.*?<\/script>/is', $emptyNextJsData, $js);
-
-        // add prefix to prefetch(t) { let ...}
-        $js = preg_replace('/(prefetch\()([a-z]+)(\)\s*\{)\s*let/is', '$1$2$3 $2=' . $nextJsPrefix2 . '+$2; let', $js);
-
-        // {href:"/".concat
-        $js = preg_replace('/(\{href:)(["\'])(\/)(["\']\.)/i', '$1' . $nextJsPrefix2 . '+$2$3$4', $js);
-
-        // push(["/[slug]"
-        $js = preg_replace('/(push\(\[)(["\']\/)/i', '$1' . $nextJsPrefix2 . '+$2', $js);
-
-        // return"?dpl=dpl_Es8ZzBRosxdiiRhkKSKrp9h56u6K"
-        $js = preg_replace('/(return\s*["\'])\s*\?[^"\']+=[^"\']*(["\'])/i', '$1$2', $js);
-
-        // ./_next/static/css/832b02c26afacbf3.css?dpl=dpl_Es8ZzBRosxdiiRhkKSKrp9h56u6K
-        // static/chunks/css/832b02c26afacbf3.css?dpl=dpl_Es8ZzBRosxdiiRhkKSKrp9h56u6K
-        $js = preg_replace('/((_next|chunks)\/[a-z0-9\/()\[\]._@%^{}-]+\.[a-z0-9]{1,5})\?[a-z0-9_&=.-]+/i', '$1', $js);
-        $js = preg_replace('/\?dpl=[^"\' ]+/i', '', $js);
-
-        return $js;
-    }
-
-    /**
-     * Remove all unwanted code from HTML with respect to --disable-* options
-     *
-     * @param string $html
-     * @return string
-     */
-    private function removeUnwantedCodeFromHtml(string $html): string
-    {
-        if ($this->crawler->getCoreOptions()->disableJavascript) {
-            $html = Utils::stripJavaScript($html);
-        }
-        if ($this->crawler->getCoreOptions()->disableStyles) {
-            $html = Utils::stripStyles($html);
-        }
-        if ($this->crawler->getCoreOptions()->disableFonts) {
-            $html = Utils::stripFonts($html);
-        }
-        if ($this->crawler->getCoreOptions()->disableImages) {
-            $html = Utils::stripImages($html);
-        }
-
-        return $html;
-    }
-
-    /**
-     * Remove all unwanted code from CSS with respect to --disable-* options
-     *
-     * @param string $css
-     * @return string
-     */
-    private function removeUnwantedCodeFromCss(string $css): string
-    {
-        if ($this->crawler->getCoreOptions()->disableFonts) {
-            $css = Utils::stripFonts($css);
-        }
-        if ($this->crawler->getCoreOptions()->disableImages) {
-            $css = Utils::stripImages($css);
-        }
-
-        return $css;
-    }
-
-    /**
-     * Add JS variable _SiteOneUrlDepth with number of levels before close </head> tag
-     * This variable is used in replaced JS code for relative paths (for example in NextJS framework*.js files)
-     *
-     * @param string $html
-     * @param string $baseUrl
-     * @return string
-     */
-    private function setJsVariableWithUrlDepth(string $html, string $baseUrl): string
-    {
-        $basePath = parse_url($baseUrl, PHP_URL_PATH);
-        if (!$basePath) {
-            $basePath = '/';
-        }
-
-        $depth = substr_count(ltrim($basePath, '/'), '/');
-        $baseUrlNeedsIndexHtml = $basePath !== '/' && str_ends_with($basePath, '/');
-        if ($baseUrlNeedsIndexHtml) {
-            $depth++;
-        }
-
-        return preg_replace(
-            '/<\s*\/\s*head\s*>/i',
-            sprintf("<script>var %s = %d;</script></head>", self::JS_VARIABLE_NAME_URL_DEPTH, $depth),
-            $html
-        );
-    }
-
-    private function setJsFunctionToRemoveAllAnchorListeners(string $html): string
-    {
-        return preg_replace(
-            '/<\s*\/\s*body\s*>/i',
-            "<script>
-                function _SiteOneRemoveAllAnchorListeners(){
-                    var anchors=document.getElementsByTagName('a');
-                    for(var i=0;i<anchors.length;i++){
-                        var anchor=anchors[i];
-                        var newAnchor=anchor.cloneNode(true);
-                        anchor.parentNode.replaceChild(newAnchor,anchor);
-                    }
-                }
-                setTimeout(_SiteOneRemoveAllAnchorListeners, 200);
-                setTimeout(_SiteOneRemoveAllAnchorListeners, 1000);
-                setTimeout(_SiteOneRemoveAllAnchorListeners, 5000);
-             </script></body>",
-            $html
-        );
-    }
-
-    /**
-     * @param string $baseUrl
-     * @param string $targetUrl
-     * @param string|null $attribute
-     * @return string
-     */
-    public function convertUrlToRelative(string $baseUrl, string $targetUrl, ?string $attribute = null): string
-    {
-        $urlConverter = new OfflineUrlConverter(
-            ParsedUrl::parse($this->crawler->getCoreOptions()->url),
-            ParsedUrl::parse($baseUrl),
-            ParsedUrl::parse($targetUrl),
-            [$this->crawler, 'isDomainAllowedForStaticFiles'],
-            [$this->crawler, 'isExternalDomainAllowedForCrawling'],
-            $attribute
-        );
-
-        return $urlConverter->convertUrlToRelative(true);
     }
 
     private function isValidUrl(string $url): bool

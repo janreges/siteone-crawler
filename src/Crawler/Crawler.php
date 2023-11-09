@@ -10,11 +10,15 @@ declare(strict_types=1);
 
 namespace Crawler;
 
+use Crawler\ContentProcessor\AstroProcessor;
+use Crawler\ContentProcessor\ContentProcessor;
+use Crawler\ContentProcessor\CssProcessor;
+use Crawler\ContentProcessor\HtmlProcessor;
+use Crawler\ContentProcessor\JavaScriptProcessor;
+use Crawler\ContentProcessor\NextJsProcessor;
+use Crawler\ContentProcessor\SvelteProcessor;
 use Crawler\HttpClient\HttpClient;
 use Crawler\Output\Output;
-use Crawler\Parser\CssUrlParser;
-use Crawler\Parser\HtmlUrlParser;
-use Crawler\Parser\JsUrlParser;
 use Crawler\Result\Status;
 use Crawler\Result\VisitedUrl;
 use Exception;
@@ -33,6 +37,8 @@ class Crawler
     private Table $statusTable;
     private Table $queue;
     private Table $visited;
+
+    private \Crawler\ContentProcessor\Manager $contentProcessorManager;
 
     private ParsedUrl $initialParsedUrl;
     private string $finalUserAgent;
@@ -76,6 +82,8 @@ class Crawler
         $this->finalUserAgent = $this->getFinalUserAgent();
         $this->status->setFinalUserAgent($this->finalUserAgent);
         $this->initialParsedUrl = ParsedUrl::parse($this->options->url);
+
+        $this->registerFrameworkProcessors();
     }
 
     /**
@@ -120,7 +128,7 @@ class Crawler
         $this->optimalDelayBetweenRequests = max(1 / ($this->options->maxReqsPerSec), 0.001);
 
         // add initial URL to queue
-        $this->addUrlToQueue($this->options->url);
+        $this->addUrlToQueue($this->initialParsedUrl);
 
         // print table header
         $this->output->addTableHeader();
@@ -149,34 +157,22 @@ class Crawler
      * Returns array with extra parsed content (Title, Keywords, Description, DOM, ...)
      *
      * @param string $body
-     * @param string $url
+     * @param ParsedUrl $url
      * @return array
      * @throws Exception
      */
-    private function parseHtmlBodyAndFillQueue(string $body, string $url): array
+    private function parseHtmlBodyAndFillQueue(string $body, ParsedUrl $url): array
     {
         static $regexForHtmlExtensions = null;
         if (!$regexForHtmlExtensions) {
-            $regexForHtmlExtensions = '/\.(' . implode('|', HtmlUrlParser::$htmlPagesExtensions) . ')/i';
+            $regexForHtmlExtensions = '/\.(' . implode('|', HtmlProcessor::$htmlPagesExtensions) . ')/i';
         }
 
         $result = [];
         $urlUqId = $this->getUrlUqId($url);
 
-        $urlParser = new HtmlUrlParser(
-            $body,
-            $url,
-            !$this->options->disableFiles,
-            !$this->options->disableImages,
-            !$this->options->disableJavascript,
-            !$this->options->disableStyles,
-            !$this->options->disableFonts,
-        );
-
-        $foundUrls = $urlParser->getUrlsFromHtml();
-
         // add suitable URLs to queue
-        $this->addSuitableUrlsToQueue($foundUrls, $url, $urlUqId);
+        $this->parseContentAndFillUrlQueue($body, $url, $urlUqId);
 
         // add extra parsed content to result (Title, Keywords, Description) if needed
         // title & descriptions are needed by BestPracticeAnalyzer so they are parsed even if not needed for output
@@ -201,44 +197,18 @@ class Crawler
     }
 
     /**
-     * Parse CSS body for url('xyz') and fill queue with new founded URLs (images, fonts) if are allowed
+     * Parse HTML/CSS/JS body and fill queue with new founded URLs if are allowed
      *
-     * @param string $body
-     * @param string $url
+     * @param string $content
+     * @param ParsedUrl $url
      * @param string $urlUqId
      * @return void
      * @throws Exception
      */
-    private function parseCssBodyAndFillQueue(string $body, string $url, string $urlUqId): void
+    private function parseContentAndFillUrlQueue(string $content, ParsedUrl $url, string $urlUqId): void
     {
-        $urlParser = new CssUrlParser(
-            $body,
-            $url,
-            !$this->options->disableImages,
-            !$this->options->disableFonts,
-        );
-
-        $this->addSuitableUrlsToQueue($urlParser->getUrlsFromCss(), $url, $urlUqId);
-    }
-
-    /**
-     * Parse JS body (e.g. manifest from NextJS) and fill queue with new founded URLs (e.g. JS chunks) if are allowed
-     *
-     * @param string $body
-     * @param string $url
-     * @param string $urlUqId
-     * @return void
-     * @throws Exception
-     */
-    private function parseJsBodyAndFillQueue(string $body, string $url, string $urlUqId): void
-    {
-        $urlParser = new JsUrlParser(
-            $body,
-            $url,
-        );
-
-        $foundUrls = $urlParser->getUrlsFromJs();
-        if ($foundUrls) {
+        $foundUrlsList = $this->contentProcessorManager->findUrls($content, $url);
+        foreach ($foundUrlsList as $foundUrls) {
             $this->addSuitableUrlsToQueue($foundUrls, $url, $urlUqId);
         }
     }
@@ -325,7 +295,7 @@ class Crawler
         foreach ($this->queue as $urlKey => $queuedUrl) {
             $url = $queuedUrl['url'];
             $sourceUqId = $queuedUrl['sourceUqId'];
-            $this->addUrlToVisited($url, $queuedUrl['uqId'], $sourceUqId);
+            $this->addUrlToVisited(ParsedUrl::parse($url), $queuedUrl['uqId'], $sourceUqId);
             $this->queue->del($urlKey);
             break;
         }
@@ -339,7 +309,8 @@ class Crawler
         $this->statusTable->incr('1', 'workers');
 
         $parsedUrl = ParsedUrl::parse($url);
-        $isAssetUrl = $parsedUrl->extension && !in_array($parsedUrl->extension, HtmlUrlParser::$htmlPagesExtensions);
+        $parsedUrlUqId = $this->getUrlUqId($parsedUrl);
+        $isAssetUrl = $parsedUrl->extension && !in_array($parsedUrl->extension, HtmlProcessor::$htmlPagesExtensions);
 
         $scheme = $parsedUrl->scheme ?: $this->initialParsedUrl->scheme;
         if (!$parsedUrl->host || $parsedUrl->host === $this->initialParsedUrl->host) {
@@ -356,6 +327,7 @@ class Crawler
         $absoluteUrl = $scheme . '://' . $hostAndPort . $parsedUrl->path . ($parsedUrl->query ? '?' . $parsedUrl->query : '');
         $finalUrlForHttpClient = $this->options->addRandomQueryParams ? Utils::addRandomQueryParams($parsedUrl->path) : ($parsedUrl->path . ($parsedUrl->query ? '?' . $parsedUrl->query : ''));
         $origin = $sourceUqId ? $this->status->getOriginHeaderValueBySourceUqId($sourceUqId) : null;
+        $fullUrlWithoutFragment = $parsedUrl->getFullUrl(true, false);
 
         // setup HTTP client, send request and get response
         $httpResponse = $this->httpClient->request(
@@ -394,7 +366,7 @@ class Crawler
         $isHtmlBody = isset($httpResponse->headers['content-type']) && stripos($httpResponse->headers['content-type'], 'text/html') !== false;
         $isCssBody = isset($httpResponse->headers['content-type']) && stripos($httpResponse->headers['content-type'], 'text/css') !== false;
         $isJsBody = isset($httpResponse->headers['content-type']) && (stripos($httpResponse->headers['content-type'], 'application/javascript') !== false || stripos($httpResponse->headers['content-type'], 'text/javascript') !== false);
-        $isAllowedForCrawling = $this->isUrlAllowedByRegexes($url) && $this->isExternalDomainAllowedForCrawling($parsedUrl->host);
+        $isAllowedForCrawling = $this->isUrlAllowedByRegexes($parsedUrl) && $this->isExternalDomainAllowedForCrawling($parsedUrl->host);
         $extraParsedContent = [];
 
         // remove query params in NextJS to static assets
@@ -404,11 +376,9 @@ class Crawler
         }
 
         if ($body && $isHtmlBody && $isAllowedForCrawling) {
-            $extraParsedContent = $this->parseHtmlBodyAndFillQueue($body, $url);
-        } elseif ($body && $isCssBody) {
-            $this->parseCssBodyAndFillQueue($body, $url, $this->getUrlUqId($url));
-        } elseif ($body && $isJsBody) {
-            $this->parseJsBodyAndFillQueue($body, $url, $this->getUrlUqId($url));
+            $extraParsedContent = $this->parseHtmlBodyAndFillQueue($body, $parsedUrl);
+        } elseif ($body && ($isJsBody || $isCssBody)) {
+            $this->parseContentAndFillUrlQueue($body, $parsedUrl, $parsedUrlUqId);
         }
 
         // handle redirect
@@ -416,7 +386,7 @@ class Crawler
             $redirectLocation = $httpResponse->headers['location'];
             if ($redirectLocation) {
                 $extraParsedContent['Location'] = $redirectLocation;
-                $this->addRedirectLocationToQueueIfSuitable($redirectLocation, $this->getUrlUqId($url), $scheme, $hostAndPort, $parsedUrl);
+                $this->addRedirectLocationToQueueIfSuitable($redirectLocation, $parsedUrlUqId, $scheme, $hostAndPort, $parsedUrl);
             }
         }
 
@@ -430,7 +400,7 @@ class Crawler
 
         // update info about visited URL
         $isExternal = $parsedUrl->host && $parsedUrl->host !== $this->initialParsedUrl->host;
-        $visitedUrl = $this->updateVisitedUrl($url, $elapsedTime, $status, $bodySize, $type, $body, $httpResponse->headers, $extraParsedContent, $isExternal, $isAllowedForCrawling);
+        $visitedUrl = $this->updateVisitedUrl($parsedUrl, $elapsedTime, $status, $bodySize, $type, $body, $httpResponse->headers, $extraParsedContent, $isExternal, $isAllowedForCrawling);
 
         // call visited URL callback (it runs analyzers)
         $extraColumnsFromAnalysis = call_user_func($this->visitedUrlCallback, $visitedUrl, $body, $httpResponse->headers);
@@ -463,11 +433,11 @@ class Crawler
         }
     }
 
-    private function isUrlSuitableForQueue(string $url): bool
+    private function isUrlSuitableForQueue(ParsedUrl $url): bool
     {
         static $regexForHtmlExtensions = null;
         if (!$regexForHtmlExtensions) {
-            $regexForHtmlExtensions = '/\.(' . implode('|', HtmlUrlParser::$htmlPagesExtensions) . ')/i';
+            $regexForHtmlExtensions = '/\.(' . implode('|', HtmlProcessor::$htmlPagesExtensions) . ')/i';
         }
 
         if (!$this->isUrlAllowedByRegexes($url)) {
@@ -478,16 +448,16 @@ class Crawler
             return false;
         }
 
+        $fullUrl = $url->getFullUrl(true, false);
         $urlKey = $this->getUrlKeyForSwooleTable($url);
 
         $isInQueue = $this->queue->exist($urlKey);
         $isAlreadyVisited = $this->visited->exist($urlKey);
-        $isParsable = @parse_url($url) !== false;
-        $isUrlWithHtml = preg_match('/\.[a-z0-9]{1,10}(|\?.*)$/i', $url) === 0 || preg_match($regexForHtmlExtensions, $url) === 1;
-        $isUrlTooLong = strlen($url) > $this->options->maxUrlLength;
+        $isUrlWithHtml = !$url->extension || preg_match($regexForHtmlExtensions, $url->path) === 1;
+        $isUrlTooLong = strlen($fullUrl) > $this->options->maxUrlLength;
         $allowedAreOnlyHtmlFiles = $this->options->crawlOnlyHtmlFiles();
 
-        return !$isInQueue && !$isAlreadyVisited && $isParsable && !$isUrlTooLong && ($isUrlWithHtml || !$allowedAreOnlyHtmlFiles);
+        return !$isInQueue && !$isAlreadyVisited && !$isUrlTooLong && ($isUrlWithHtml || !$allowedAreOnlyHtmlFiles);
     }
 
 
@@ -498,11 +468,11 @@ class Crawler
      * @param string|null $sourceUqId
      * @param string $scheme
      * @param string $hostAndPort
-     * @param ParsedUrl $parsedUrl
+     * @param ParsedUrl $sourceUrl
      * @return void
      * @throws Exception
      */
-    private function addRedirectLocationToQueueIfSuitable(string $redirectLocation, ?string $sourceUqId, string $scheme, string $hostAndPort, ParsedUrl $parsedUrl): void
+    private function addRedirectLocationToQueueIfSuitable(string $redirectLocation, ?string $sourceUqId, string $scheme, string $hostAndPort, ParsedUrl $sourceUrl): void
     {
         if (str_starts_with($redirectLocation, '//')) {
             $redirectUrlToQueue = $scheme . ':' . $redirectLocation;
@@ -511,25 +481,27 @@ class Crawler
         } elseif (str_starts_with($redirectLocation, 'http://') || str_starts_with($redirectLocation, 'https://')) {
             $redirectUrlToQueue = $redirectLocation;
         } else {
-            $redirectUrlToQueue = $scheme . '://' . $hostAndPort . $parsedUrl->path . '/' . $redirectLocation;
+            $redirectUrlToQueue = $scheme . '://' . $hostAndPort . $sourceUrl->path . '/' . $redirectLocation;
         }
 
-        if ($this->isUrlSuitableForQueue($redirectUrlToQueue)) {
-            $this->addUrlToQueue($redirectUrlToQueue, $sourceUqId);
+        $parsedRedirectUrl = ParsedUrl::parse($redirectUrlToQueue, $sourceUrl);
+
+        if ($this->isUrlSuitableForQueue($parsedRedirectUrl)) {
+            $this->addUrlToQueue($parsedRedirectUrl, $sourceUqId);
         }
     }
 
-    private function isUrlAllowedByRegexes(string $url): bool
+    private function isUrlAllowedByRegexes(ParsedUrl $url): bool
     {
         $isAllowed = $this->options->includeRegex === [];
         foreach ($this->options->includeRegex as $includeRegex) {
-            if (preg_match($includeRegex, $url) === 1) {
+            if (preg_match($includeRegex, $url->getFullUrl()) === 1) {
                 $isAllowed = true;
                 break;
             }
         }
         foreach ($this->options->ignoreRegex as $ignoreRegex) {
-            if (preg_match($ignoreRegex, $url) === 1) {
+            if (preg_match($ignoreRegex, $url->getFullUrl()) === 1) {
                 $isAllowed = false;
                 break;
             }
@@ -538,42 +510,44 @@ class Crawler
     }
 
     /**
-     * @param string $url
+     * @param ParsedUrl $url
      * @param string|null $sourceUqId
      * @return void
      * @throws Exception
      */
-    private function addUrlToQueue(string $url, ?string $sourceUqId = null): void
+    private function addUrlToQueue(ParsedUrl $url, ?string $sourceUqId = null): void
     {
+        $urlStr = $url->getFullUrl(true, false);
         if (!$this->queue->set($this->getUrlKeyForSwooleTable($url), [
-            'url' => $url,
+            'url' => $urlStr,
             'uqId' => $this->getUrlUqId($url),
             'sourceUqId' => $sourceUqId,
         ])) {
-            $error = "ERROR: Unable to queue URL '{$url}'. Set higher --max-queue-length.";
+            $error = "ERROR: Unable to queue URL '{$urlStr}'. Set higher --max-queue-length.";
             $this->output->addError($error);
             throw new Exception($error);
         }
     }
 
     /**
-     * @param string $url
+     * @param ParsedUrl $url
      * @param string $uqId
      * @param string $sourceUqId
      * @return void
      * @throws Exception
      */
-    private function addUrlToVisited(string $url, string $uqId, string $sourceUqId): void
+    private function addUrlToVisited(ParsedUrl $url, string $uqId, string $sourceUqId): void
     {
-        if (!$this->visited->set($this->getUrlKeyForSwooleTable($url), ['url' => $url, 'uqId' => $uqId, 'sourceUqId' => $sourceUqId])) {
-            $error = "ERROR: Unable to add visited URL '{$url}'. Set higher --max-visited-urls or --max-url-length.";
+        $urlStr = $url->getFullUrl(true, false);
+        if (!$this->visited->set($this->getUrlKeyForSwooleTable($url), ['url' => $urlStr, 'uqId' => $uqId, 'sourceUqId' => $sourceUqId])) {
+            $error = "ERROR: Unable to add visited URL '{$urlStr}'. Set higher --max-visited-urls or --max-url-length.";
             $this->output->addError($error);
             throw new Exception($error);
         }
     }
 
     /**
-     * @param string $url
+     * @param ParsedUrl $url
      * @param float $elapsedTime
      * @param int $status
      * @param int $size
@@ -586,12 +560,12 @@ class Crawler
      * @return VisitedUrl
      * @throws Exception
      */
-    private function updateVisitedUrl(string $url, float $elapsedTime, int $status, int $size, int $type, ?string $body, ?array $headers, ?array $extras, bool $isExternal, bool $isAllowedForCrawling): VisitedUrl
+    private function updateVisitedUrl(ParsedUrl $url, float $elapsedTime, int $status, int $size, int $type, ?string $body, ?array $headers, ?array $extras, bool $isExternal, bool $isAllowedForCrawling): VisitedUrl
     {
         $urlKey = $this->getUrlKeyForSwooleTable($url);
         $visitedUrl = $this->visited->get($urlKey);
         if (!$visitedUrl) {
-            throw new Exception("ERROR: Unable to handle visited URL '{$url}'. Set higher --max-visited-urls or --max-url-length.");
+            throw new Exception("ERROR: Unable to handle visited URL '{$url->getFullUrl(true, false)}'. Set higher --max-visited-urls or --max-url-length.");
         }
         $visitedUrl['time'] = $elapsedTime;
         $visitedUrl['status'] = $status;
@@ -620,10 +594,9 @@ class Crawler
         return $visitedUrl;
     }
 
-    private function getUrlKeyForSwooleTable(string $url): string
+    private function getUrlKeyForSwooleTable(ParsedUrl $url): string
     {
-        $parsedUrl = parse_url($url);
-        $relevantParts = ($parsedUrl['host'] ?? '') . ($parsedUrl['path'] ?? '/') . ($parsedUrl['query'] ?? '');
+        $relevantParts = $url->getFullUrl(true, false);
         return md5($relevantParts);
     }
 
@@ -632,9 +605,9 @@ class Crawler
         return $this->statusTable->get('1', 'workers');
     }
 
-    private function getUrlUqId(string $url): string
+    public function getUrlUqId(ParsedUrl $url): string
     {
-        return substr(md5($url), 0, 8);
+        return substr(md5($url->getFullUrl(true, false)), 0, 8);
     }
 
     private function getContentTypeIdByContentTypeHeader(string $contentTypeHeader): int
@@ -741,18 +714,18 @@ class Crawler
 
     /**
      * @param FoundUrls $foundUrls
-     * @param string $url
-     * @param string $urlUqId
+     * @param ParsedUrl $sourceUrl
+     * @param string $sourceUrlUqId
      * @return void
      * @throws Exception
      */
-    private function addSuitableUrlsToQueue(FoundUrls $foundUrls, string $url, string $urlUqId): void
+    private function addSuitableUrlsToQueue(FoundUrls $foundUrls, ParsedUrl $sourceUrl, string $sourceUrlUqId): void
     {
         foreach ($foundUrls->getUrls() as $foundUrl) {
             $urlForQueue = trim($foundUrl->url);
             $origUrlForQueue = $urlForQueue;
             $isUrlForDebug = $this->options->isUrlSelectedForDebug($origUrlForQueue);
-            $parsedUrlForQueue = ParsedUrl::parse(trim($urlForQueue));
+            $parsedUrlForQueue = ParsedUrl::parse(trim($urlForQueue), $sourceUrl);
 
             // skip URLs that are not on the same host, allowed domain or are not real resource URL (data:, mailto:, etc.
             $isRequestableResource = Utils::isHrefForRequestableResource($urlForQueue);
@@ -784,7 +757,7 @@ class Crawler
             }
 
             // build URL for queue
-            $urlForQueue = Utils::getAbsoluteUrlByBaseUrl($url, $urlForQueue);
+            $urlForQueue = Utils::getAbsoluteUrlByBaseUrl($sourceUrl->getFullUrl(), $urlForQueue);
 
             if (!$urlForQueue) {
                 $isUrlForDebug && Debugger::debug('ignored-url_unable-to-build-absolute', "URL '{$origUrlForQueue}' ignored because it's not possible to build absolute URL.");
@@ -800,8 +773,9 @@ class Crawler
             }
 
             // add URL to queue if it's not already there
-            if ($this->isUrlSuitableForQueue($urlForQueue)) {
-                $this->addUrlToQueue($urlForQueue, $urlUqId);
+            $parsedUrlForQueue = ParsedUrl::parse($urlForQueue, $sourceUrl);
+            if ($this->isUrlSuitableForQueue($parsedUrlForQueue)) {
+                $this->addUrlToQueue($parsedUrlForQueue, $sourceUrlUqId);
             }
         }
     }
@@ -962,6 +936,35 @@ class Crawler
         ];
 
         Coroutine::set($options);
+    }
+
+    /**
+     * @return void
+     */
+    private function registerFrameworkProcessors(): void
+    {
+        $this->contentProcessorManager = new \Crawler\ContentProcessor\Manager();
+        $this->contentProcessorManager->registerProcessor(new AstroProcessor($this));
+        $this->contentProcessorManager->registerProcessor(new HtmlProcessor($this));
+        $this->contentProcessorManager->registerProcessor(new JavaScriptProcessor($this));
+        $this->contentProcessorManager->registerProcessor(new CssProcessor($this));
+        $this->contentProcessorManager->registerProcessor(new NextJsProcessor($this));
+        $this->contentProcessorManager->registerProcessor(new SvelteProcessor($this));
+    }
+
+    public function getContentProcessorManager(): \Crawler\ContentProcessor\Manager
+    {
+        return $this->contentProcessorManager;
+    }
+
+    public function getInitialParsedUrl(): ParsedUrl
+    {
+        return $this->initialParsedUrl;
+    }
+
+    public function getStatus(): Status
+    {
+        return $this->status;
     }
 
 }

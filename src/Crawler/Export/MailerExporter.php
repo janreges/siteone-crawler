@@ -58,7 +58,7 @@ class MailerExporter extends BaseExporter implements Exporter
     private function sendEmail(string $htmlBody, ?string $attachedFileName = null, ?string $attachedFileContent = null): void
     {
         $htmlBodyForEmail = $this->styleHtmlBodyForEmail($htmlBody);
-        $parsedUrl = ParsedUrl::parse($this->crawler->getCoreOptions()->url);
+        $parsedUrl = $this->crawler->getInitialParsedUrl();
 
         $this->mailFrom = str_replace('@your-hostname.com', '@' . gethostname(), $this->mailFrom);
 

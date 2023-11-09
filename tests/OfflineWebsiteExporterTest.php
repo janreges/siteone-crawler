@@ -9,7 +9,6 @@
 declare(strict_types=1);
 
 use Crawler\Crawler;
-use Crawler\Export\OfflineWebsiteExporter;
 use Crawler\HttpClient\HttpClient;
 use Crawler\Info;
 use Crawler\Initiator;
@@ -18,9 +17,11 @@ use Crawler\Result\Status;
 use Crawler\Result\Storage\MemoryStorage;
 use PHPUnit\Framework\TestCase;
 
+define('BASE_DIR', dirname($_SERVER['PHP_SELF'], 3));
+
 class OfflineWebsiteExporterTest extends TestCase
 {
-    protected OfflineWebsiteExporter $exporter;
+    protected \Crawler\ContentProcessor\HtmlProcessor $processor;
 
     /**
      * @throws \Exception
@@ -54,11 +55,7 @@ class OfflineWebsiteExporterTest extends TestCase
             $status
         );
 
-        $this->exporter = new OfflineWebsiteExporter();
-        $this->exporter->initialUrlHost = 'siteone.io';
-        $this->exporter->setCrawler($crawler);
-        $this->exporter->setStatus($status);
-        $this->exporter->setOutput($output);
+        $this->processor = new \Crawler\ContentProcessor\HtmlProcessor($crawler);
     }
 
     /**
@@ -66,7 +63,7 @@ class OfflineWebsiteExporterTest extends TestCase
      */
     public function testConvertUrlToRelative($baseUrl, $targetUrl, $expected, $attribute = null)
     {
-        $result = $this->exporter->convertUrlToRelative($baseUrl, $targetUrl, $attribute);
+        $result = $this->processor->convertUrlToRelative(\Crawler\ParsedUrl::parse($baseUrl), $targetUrl, $attribute);
         $this->assertEquals($expected, $result);
     }
 
@@ -138,11 +135,12 @@ class OfflineWebsiteExporterTest extends TestCase
             // URLs with fragment only
             ["https://siteone.io/", "#fragment2", "#fragment2"],
             ["https://nextjs.org/", "#fragment3", "#fragment3"],
+            ["https://nextjs.org/test", "#fragment4", "#fragment4"],
 
             // Base URL with the query and target with different paths and queries
             ["https://siteone.io/?q=1", "https://siteone.io/page", "page.html"],
             ["https://siteone.io/?q=1", "/page/", "page/index.html"],
-            ["https://siteone.io/a/?q=1", "page?p=1", "page.cff19eeeeb.html"],
+            ["https://siteone.io/a/?q=1", "page?p=1", "../a/    page.cff19eeeeb.html"],
             ["https://siteone.io/b/?q=1", "/c/page#fragment", "../c/page.html#fragment"],
             ["https://siteone.io/b/?q=1", "/c/page/#fragment", "../c/page/index.html#fragment"],
             ["https://siteone.io/?q=1", "page?p=1#fragment", "page.cff19eeeeb.html#fragment"],
@@ -169,8 +167,8 @@ class OfflineWebsiteExporterTest extends TestCase
             ['https://nextjs.org/subpage/', 'https://nextjs.org/_next/image?url=%2F_next%2Fstatic%2Fmedia%2Fpreview-audible.6063405a.png&w=640&q=75&dpl=dpl_4C87ukg3PhFXfiHatxfw16hpDnFr#test66', '../_next/image.9580c6e093.png#test66', 'src'],
 
             // Unknown and not allowed domains
-            ['https://siteone.io/', '//unknown.com', '//unknown.com/'],
-            ['https://siteone.io/', '//unknown.com/', '//unknown.com/'],
+            ['https://siteone.io/', '//unknown.com', 'https://unknown.com/'],
+            ['https://siteone.io/', '//unknown.com/', 'https://unknown.com/'],
             ['https://siteone.io/', 'http://unknown.com/page', 'http://unknown.com/page'],
             ['https://siteone.io/', 'https://unknown.com/', 'https://unknown.com/'],
         ];

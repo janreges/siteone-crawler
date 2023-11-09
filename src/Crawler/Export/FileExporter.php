@@ -117,7 +117,7 @@ class FileExporter extends BaseExporter implements Exporter
             $file .= ".{$extension}";
         }
         if ($this->addHostToOutputFile) {
-            $host = ParsedUrl::parse($this->crawler->getCoreOptions()->url)->host;
+            $host = $this->crawler->getInitialParsedUrl()->host;
             $file = preg_replace('/\.[a-z0-9]{1,10}$/i', '.' . $host . '$0', $file);
         }
         if ($this->addTimestampToOutputFile) {

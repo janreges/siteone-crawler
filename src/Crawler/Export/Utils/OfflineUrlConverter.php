@@ -129,6 +129,9 @@ class OfflineUrlConverter
             if ($queryHash) {
                 $this->relativeTargetUrl->setPath("/index.{$queryHash}.html", "Set '/index.{$queryHash}.html' because path is empty or '/' and has query string");
                 $this->relativeTargetUrl->setQuery(null);
+            } elseif ($this->relativeTargetUrl->path === '' && $this->relativeTargetUrl->fragment) {
+                // only #fragment
+                return;
             } else {
                 $this->relativeTargetUrl->setPath('/index.html', "Set '/index.html' because path is empty or '/'");
             }
