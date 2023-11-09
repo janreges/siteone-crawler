@@ -32,6 +32,14 @@ class MailerExporter extends BaseExporter implements Exporter
     protected ?string $mailSmtpPass = null;
     protected string $mailSubjectTemplate = '';
 
+    /**
+     * If true, crawler will not send any e-mails
+     * Easy way how to disable e-mail sending in case of CTRL+C (handled in Crawler.php->run())
+     *
+     * @var bool
+     */
+    public static bool $crawlerInterrupted = false;
+
     public function shouldBeActivated(): bool
     {
         return count($this->mailTo) > 0;
@@ -39,6 +47,10 @@ class MailerExporter extends BaseExporter implements Exporter
 
     public function export(): void
     {
+        if (self::$crawlerInterrupted) {
+            return;
+        }
+
         $host = parse_url($this->status->getOptions()->url, PHP_URL_HOST);
         $datetime = date('YmdHis', strtotime($this->status->getCrawlerInfo()->executedAt));
         $htmlReport = new HtmlReport($this->status);

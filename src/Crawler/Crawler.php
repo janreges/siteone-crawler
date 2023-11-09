@@ -17,6 +17,7 @@ use Crawler\ContentProcessor\JavaScriptProcessor;
 use Crawler\ContentProcessor\Manager as ContentProcessorManager;
 use Crawler\ContentProcessor\NextJsProcessor;
 use Crawler\ContentProcessor\SvelteProcessor;
+use Crawler\Export\MailerExporter;
 use Crawler\HttpClient\HttpClient;
 use Crawler\Output\Output;
 use Crawler\Result\Status;
@@ -142,6 +143,7 @@ class Crawler
             // catch SIGINT (Ctrl+C), print statistics and stop crawler
             Process::signal(SIGINT, function () {
                 Coroutine::cancel(Coroutine::getCid());
+                MailerExporter::$crawlerInterrupted = true; // stop sending emails
                 call_user_func($this->doneCallback);
                 throw new ExitException(Utils::getColorText('I caught the manual stop of the script. Therefore, the statistics only contain processed URLs until the script stops.', 'red', true));
             });
