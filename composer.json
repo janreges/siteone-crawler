@@ -1,6 +1,7 @@
 {
     "name": "janreges/siteone-website-crawler",
-    "description": "The best and easy-to-use command-line website crawler, sitemap and offline-website generator for Linux/Windows/macOS you've ever seen.",
+    "description": "The best and easy-to-use command-line website crawler, analyzer, sitemap and offline-website generator for Linux/Windows/macOS you've ever seen.",
+    "version": "1.0.2.20231110",
     "type": "project",
     "require-dev": {
         "phpunit/phpunit": "^10.4",
@@ -27,6 +28,6 @@
     "scripts": {
       "test": "phpunit --color=always --testdox",
       "phpstan": "phpstan analyse",
-      "changelog": "auto-changelog --commit-limit false --sort-commits date-desc"
+      "changelog": "auto-changelog --commit-limit false --sort-commits date-desc --package"
     }
 }
