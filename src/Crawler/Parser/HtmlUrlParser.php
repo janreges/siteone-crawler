@@ -90,6 +90,9 @@ class HtmlUrlParser
         preg_match_all('/<a[^>]*\shref=["\']?([^#][^"\'\s>]+)["\'\s]?[^>]*>/is', $this->html, $matches);
         $foundUrlsTxt = $matches[1];
 
+        preg_match_all('/href\\\\["\'][:=]\\\\["\'](https?:\/\/[^"\'\\\\]+)\\\\["\']/i', $this->html, $matches);
+        $foundUrlsTxt = array_merge($foundUrlsTxt, $matches[1] ?? []);
+
         if (!$this->files) {
             $foundUrlsTxt = array_filter($foundUrlsTxt, function ($url) use ($regexForHtmlExtensions) {
                 return preg_match('/\.[a-z0-9]{1,10}(|\?.*)$/i', $url) === 0 || preg_match($regexForHtmlExtensions, $url) === 1;

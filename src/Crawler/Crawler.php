@@ -396,6 +396,13 @@ class Crawler
         $isJsBody = isset($httpResponse->headers['content-type']) && (stripos($httpResponse->headers['content-type'], 'application/javascript') !== false || stripos($httpResponse->headers['content-type'], 'text/javascript') !== false);
         $isAllowedForCrawling = $this->isUrlAllowedByRegexes($url) && $this->isExternalDomainAllowedForCrawling($parsedUrl->host);
         $extraParsedContent = [];
+
+        // remove query params in NextJS to static assets
+        if ($body && ($isHtmlBody || $isJsBody || $isCssBody) && str_contains($body, '_next')) {
+            $body = preg_replace('/((_next|chunks)\/[a-z0-9\/()\[\]._@%^{}-]+\.[a-z0-9]{1,5})\?[a-z0-9_&=.-]+/i', '$1', $body);
+            $body = preg_replace('/\?dpl=[^"\' ]+/i', '', $body);
+        }
+
         if ($body && $isHtmlBody && $isAllowedForCrawling) {
             $extraParsedContent = $this->parseHtmlBodyAndFillQueue($body, $url);
         } elseif ($body && $isCssBody) {
