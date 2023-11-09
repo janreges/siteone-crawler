@@ -82,11 +82,11 @@ class SecurityAnalyzer extends BaseAnalyzer implements Analyzer
                 }, null, false, false),
                 new SuperTableColumn('recommendation', 'Recommendation', $recommendationColWidth, function ($value, $renderInto) {
                     if ($value) {
-                        return implode($renderInto === SuperTable::RENDER_INTO_HTML ? '<br>' : "\n > ", $value);
+                        return implode($renderInto === SuperTable::RENDER_INTO_HTML ? '<br>' : '.', $value);
                     } else {
                         return '';
                     }
-                }, null, true, false, false, false),
+                }, null, true, true, false, false),
             ], true, 'highestSeverity', 'DESC'
         );
 

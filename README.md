@@ -234,7 +234,7 @@ required arguments:
   --add-random-query-params \
   --show-scheme-and-host \
   --do-not-truncate-url \
-  --output-html-file=/dir/report.html \
+  --output-html-report=tmp/myreport.html \
   --output-json-file=/dir/report.json \
   --output-text-file=/dir/report.txt \
   --add-timestamp-to-output-file \
@@ -339,14 +339,12 @@ through the file:// protocol.
 
 #### File export settings
 
-* `--output-html-file=<file>`      File path for HTML output. Extension `.html` is automatically added if not specified.
-* `--output-json-file=<file>`      File path for JSON output. Extension `.json` is automatically added if not
-  specified.
-* `--output-text-file=<file>`      File path for text output. Extension `.txt` is automatically added if not specified.
-* `--add-host-to-output-file`      Add host from initial URL as suffix to output file name. Example: you
-  set `--output-json-file=/dir/report` and target filename will be `/dir/report.www.mydomain.tld.json`.
-* `--add-timestamp-to-output-file` Add timestamp as suffix to output file name. Example: you
-  set `--output-html-file=/dir/report` and target filename will be `/dir/report.2023-10-06.14-33-12.html`.
+* `--output-html-report=<file>`    Save HTML report into that file. Set to empty '' to disable HTML report. By default
+  saved into `tmp/report.%domain%.%datetime%.html`.
+* `--output-json-file=<file>`      File path for JSON output. Set to empty '' to disable JSON file. By default saved
+ into `tmp/output.%domain%.%datetime%.json`.
+* `--output-text-file=<file>`      File path for TXT output. Set to empty '' to disable TXT file. By default saved
+  into `tmp/output.%domain%.%datetime%.txt`.
 
 #### Mailer options
 
