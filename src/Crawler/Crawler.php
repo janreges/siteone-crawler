@@ -11,10 +11,10 @@ declare(strict_types=1);
 namespace Crawler;
 
 use Crawler\ContentProcessor\AstroProcessor;
-use Crawler\ContentProcessor\ContentProcessor;
 use Crawler\ContentProcessor\CssProcessor;
 use Crawler\ContentProcessor\HtmlProcessor;
 use Crawler\ContentProcessor\JavaScriptProcessor;
+use Crawler\ContentProcessor\Manager as ContentProcessorManager;
 use Crawler\ContentProcessor\NextJsProcessor;
 use Crawler\ContentProcessor\SvelteProcessor;
 use Crawler\HttpClient\HttpClient;
@@ -38,7 +38,7 @@ class Crawler
     private Table $queue;
     private Table $visited;
 
-    private \Crawler\ContentProcessor\Manager $contentProcessorManager;
+    private ContentProcessorManager $contentProcessorManager;
 
     private ParsedUrl $initialParsedUrl;
     private string $finalUserAgent;
@@ -940,10 +940,11 @@ class Crawler
 
     /**
      * @return void
+     * @throws Exception
      */
     private function registerFrameworkProcessors(): void
     {
-        $this->contentProcessorManager = new \Crawler\ContentProcessor\Manager();
+        $this->contentProcessorManager = new ContentProcessorManager();
         $this->contentProcessorManager->registerProcessor(new AstroProcessor($this));
         $this->contentProcessorManager->registerProcessor(new HtmlProcessor($this));
         $this->contentProcessorManager->registerProcessor(new JavaScriptProcessor($this));
@@ -952,7 +953,7 @@ class Crawler
         $this->contentProcessorManager->registerProcessor(new SvelteProcessor($this));
     }
 
-    public function getContentProcessorManager(): \Crawler\ContentProcessor\Manager
+    public function getContentProcessorManager(): ContentProcessorManager
     {
         return $this->contentProcessorManager;
     }

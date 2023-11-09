@@ -10,7 +10,8 @@ declare(strict_types=1);
 
 namespace Crawler;
 
-use Crawler\Analysis\AnalysisManager;
+use Crawler\Analysis\Manager as AnalysisManager;
+use Crawler\ContentProcessor\Manager as ContentProcessorManager;
 use Crawler\Export\Exporter;
 use Crawler\Export\FileExporter;
 use Crawler\Export\MailerExporter;
@@ -135,12 +136,32 @@ class Manager
         $alreadyDone = true;
 
         $this->analysisManager->runAnalyzers();
+
+        // crawler stats for HTML report
+        $this->addCompressorManagerStats(false);
+
         $this->runExporters();
+
+        // crawler stats to output (with stats from exporters)
+        $this->addCompressorManagerStats(true);
 
         $this->output->addUsedOptions();
         $this->output->addTotalStats($this->crawler->getVisited());
         $this->output->addSummary($this->status->getSummary());
         $this->output->end();
+    }
+
+    private function addCompressorManagerStats(bool $alsoToOutput): void
+    {
+        $contentProcessorsSuperTable = $this->crawler->getContentProcessorManager()->getStats()->getSuperTable(
+            ContentProcessorManager::SUPER_TABLE_CONTENT_PROCESSORS_STATS,
+            'Content processor stats',
+            'No content processors found.'
+        );
+        $this->status->addSuperTableAtEnd($contentProcessorsSuperTable);
+        if ($alsoToOutput) {
+            $this->output->addSuperTable($contentProcessorsSuperTable);
+        }
     }
 
     /**

@@ -11,7 +11,7 @@ declare(strict_types=1);
 namespace Crawler\Export;
 
 use Crawler\Analysis\AccessibilityAnalyzer;
-use Crawler\Analysis\AnalysisManager;
+use Crawler\Analysis\Manager;
 use Crawler\Analysis\BestPracticeAnalyzer;
 use Crawler\Analysis\ContentTypeAnalyzer;
 use Crawler\Analysis\DnsAnalyzer;
@@ -28,6 +28,7 @@ use Crawler\Analysis\SourceDomainsAnalyzer;
 use Crawler\Analysis\SslTlsAnalyzer;
 use Crawler\Components\SuperTable;
 use Crawler\Components\SuperTableColumn;
+use Crawler\ContentProcessor\Manager as ContentProcessorManager;
 use Crawler\Export\HtmlReport\Badge;
 use Crawler\Export\HtmlReport\Tab;
 use Crawler\Result\Status;
@@ -60,7 +61,7 @@ class HtmlReport
         $this->status = $status;
         $this->maxExampleUrls = $maxExampleUrls;
         $this->skippedSuperTables = [
-            AnalysisManager::SUPER_TABLE_ANALYSIS_STATS, // will be in tab Crawler info
+            Manager::SUPER_TABLE_ANALYSIS_STATS, // will be in tab Crawler info
             HeadersAnalyzer::SUPER_TABLE_HEADERS_VALUES, // will be in tab Headers
             SeoAndOpenGraphAnalyzer::SUPER_TABLE_SEO, // will be in tab SEO and OpenGraph
             SeoAndOpenGraphAnalyzer::SUPER_TABLE_OPEN_GRAPH, // will be in tab SEO and OpenGraph
@@ -69,6 +70,7 @@ class HtmlReport
             BestPracticeAnalyzer::SUPER_TABLE_NON_UNIQUE_TITLES, // will be in tab SEO and OpenGraph
             BestPracticeAnalyzer::SUPER_TABLE_NON_UNIQUE_DESCRIPTIONS, // will be in tab SEO and OpenGraph
             ContentTypeAnalyzer::SUPER_TABLE_CONTENT_MIME_TYPES, // will be in tab Content Types
+            ContentProcessorManager::SUPER_TABLE_CONTENT_PROCESSORS_STATS, // will be in tab Crawler stats
         ];
     }
 
@@ -430,9 +432,14 @@ class HtmlReport
 
         $html .= $stats->getAsHtml();
 
-        $analysisStats = $this->status->getSuperTableByAplCode(AnalysisManager::SUPER_TABLE_ANALYSIS_STATS);
+        $analysisStats = $this->status->getSuperTableByAplCode(Manager::SUPER_TABLE_ANALYSIS_STATS);
         if ($analysisStats) {
             $html .= '<br/>' . $analysisStats->getHtmlOutput();
+        }
+
+        $contentProcessorsStats = $this->status->getSuperTableByAplCode(ContentProcessorManager::SUPER_TABLE_CONTENT_PROCESSORS_STATS);
+        if ($contentProcessorsStats) {
+            $html .= '<br/>' . $contentProcessorsStats->getHtmlOutput();
         }
 
         return new Tab('Crawler stats', null, $html, true, $badges, 900);

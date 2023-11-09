@@ -12,14 +12,24 @@ namespace Crawler\ContentProcessor;
 
 use Crawler\FoundUrls;
 use Crawler\ParsedUrl;
+use Crawler\Result\ManagerStats;
 use Exception;
 
 class Manager
 {
+    const SUPER_TABLE_CONTENT_PROCESSORS_STATS = 'content-processors-stats';
+
     /**
      * @var ContentProcessor[]
      */
     private array $processors = [];
+
+    private ManagerStats $stats;
+
+    public function __construct()
+    {
+        $this->stats = new ManagerStats();
+    }
 
     /**
      * @param ContentProcessor $processor
@@ -50,10 +60,12 @@ class Manager
     {
         $result = [];
         foreach ($this->processors as $processor) {
+            $s = microtime(true);
             $foundUrls = $processor->findUrls($content, $url);
             if ($foundUrls) {
                 $result[] = $foundUrls;
             }
+            $this->stats->measureExecTime($processor::class, 'findUrls', $s);
         }
         return $result;
     }
@@ -68,9 +80,16 @@ class Manager
     {
         foreach ($this->processors as $processor) {
             if ($processor->isContentTypeRelevant($contentType)) {
+                $s = microtime(true);
                 $processor->applyContentChangesForOfflineVersion($content, $contentType, $url);
+                $this->stats->measureExecTime($processor::class, 'applyContentChangesForOfflineVersion', $s);
             }
         }
+    }
+
+    public function getStats(): ManagerStats
+    {
+        return $this->stats;
     }
 
 }

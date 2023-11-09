@@ -11,18 +11,16 @@ declare(strict_types=1);
 namespace Crawler\Analysis;
 
 use Crawler\Analysis\Result\UrlAnalysisResult;
-use Crawler\Components\SuperTable;
-use Crawler\Components\SuperTableColumn;
 use Crawler\Crawler;
 use Crawler\Options\Options;
 use Crawler\Output\Output;
+use Crawler\Result\ManagerStats;
 use Crawler\Result\Status;
 use Crawler\Result\VisitedUrl;
-use Crawler\Utils;
 use DOMDocument;
 use Exception;
 
-class AnalysisManager
+class Manager
 {
 
     const SUPER_TABLE_ANALYSIS_STATS = 'analysis-stats';
@@ -43,17 +41,7 @@ class AnalysisManager
      */
     private array $analyzers;
 
-    /**
-     * Total exec times of analyzer methods
-     * @var array [string => int]
-     */
-    protected array $execTimes = [];
-
-    /**
-     * Total exec counts of analyzer methods
-     * @var array [string => int]
-     */
-    protected array $execCounts = [];
+    private ManagerStats $stats;
 
     /**
      * @param string $crawlerClassDir
@@ -61,6 +49,7 @@ class AnalysisManager
     public function __construct(string $crawlerClassDir)
     {
         $this->crawlerClassDir = $crawlerClassDir;
+        $this->stats = new ManagerStats();
     }
 
     /**
@@ -122,39 +111,16 @@ class AnalysisManager
 
         // add analysis stats table
         if ($analyzers) {
-            $data = [];
-
-            // stats from this class (AnalysisManager)
-            foreach ($this->execTimes as $analyzerAndMethod => $execTime) {
-                $data[] = [
-                    'analyzerAndMethod' => basename(str_replace('\\', '/', $analyzerAndMethod)),
-                    'execTime' => $execTime,
-                    'execTimeFormatted' => Utils::getFormattedDuration($execTime),
-                    'execCount' => $this->execCounts[$analyzerAndMethod] ?? 0,
-                ];
-            }
-
-            // stats aggregated all analyzers
             $execTimes = $this->getExecTimesFromAnalyzers();
             $execCounts = $this->getExecCountsFromAnalyzers();
-            foreach ($execTimes as $analyzerAndMethod => $execTime) {
-                $data[] = [
-                    'analyzerAndMethod' => basename(str_replace('\\', '/', $analyzerAndMethod)),
-                    'execTime' => $execTime,
-                    'execTimeFormatted' => Utils::getFormattedDuration($execTime),
-                    'execCount' => $execCounts[$analyzerAndMethod] ?? 0,
-                ];
-            }
 
-            // configure super table and add it to output
-            $superTable = new SuperTable(self::SUPER_TABLE_ANALYSIS_STATS, 'Analysis stats', 'No analysis stats', [
-                new SuperTableColumn('analyzerAndMethod', 'Analyzer::method'),
-                new SuperTableColumn('execTime', 'Exec time', 9, function ($value) {
-                    return Utils::getColoredRequestTime($value, 9);
-                }, null, false, false),
-                new SuperTableColumn('execCount', 'Exec count'),
-            ], false, 'execTime', 'DESC');
-            $superTable->setData($data);
+            $superTable = $this->stats->getSuperTable(
+                self::SUPER_TABLE_ANALYSIS_STATS,
+                'Analysis stats',
+                'No analysis stats',
+                $execTimes,
+                $execCounts
+            );
 
             $this->output->addSuperTable($superTable);
             $this->status->addSuperTableAtEnd($superTable);
@@ -188,7 +154,7 @@ class AnalysisManager
                 $dom = null;
             }
 
-            $this->measureExecTime('parseDOMDocument', $s);
+            $this->stats->measureExecTime(__CLASS__, 'parseDOMDocument', $s);
         }
 
         foreach ($this->analyzers as $analyzer) {
@@ -308,28 +274,5 @@ class AnalysisManager
         if ($extraTableColumns) {
             $this->output->setExtraColumnsFromAnalysis($extraTableColumns);
         }
-    }
-
-    /**
-     * Measure and increment exec time and count of analyzer method
-     *
-     * @param string $method
-     * @param float $startTime
-     * @return void
-     */
-    private function measureExecTime(string $method, float $startTime): void
-    {
-        $endTime = microtime(true);
-        $key = __CLASS__ . '::' . $method;
-
-        if (!isset($this->execTimes[$key])) {
-            $this->execTimes[$key] = 0;
-        }
-        if (!isset($this->execCounts[$key])) {
-            $this->execCounts[$key] = 0;
-        }
-
-        $this->execTimes[$key] += ($endTime - $startTime);
-        $this->execCounts[$key]++;
     }
 }

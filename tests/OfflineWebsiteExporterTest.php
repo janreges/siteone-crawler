@@ -140,7 +140,7 @@ class OfflineWebsiteExporterTest extends TestCase
             // Base URL with the query and target with different paths and queries
             ["https://siteone.io/?q=1", "https://siteone.io/page", "page.html"],
             ["https://siteone.io/?q=1", "/page/", "page/index.html"],
-            ["https://siteone.io/a/?q=1", "page?p=1", "../a/    page.cff19eeeeb.html"],
+            ["https://siteone.io/a/?q=1", "page?p=1", "../a/page.cff19eeeeb.html"],
             ["https://siteone.io/b/?q=1", "/c/page#fragment", "../c/page.html#fragment"],
             ["https://siteone.io/b/?q=1", "/c/page/#fragment", "../c/page/index.html#fragment"],
             ["https://siteone.io/?q=1", "page?p=1#fragment", "page.cff19eeeeb.html#fragment"],

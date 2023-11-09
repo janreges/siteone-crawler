@@ -10,7 +10,7 @@ declare(strict_types=1);
 
 namespace Crawler;
 
-use Crawler\Analysis\AnalysisManager;
+use Crawler\Analysis\Manager as AnalysisManager;
 use Crawler\Analysis\Analyzer;
 use Crawler\Export\Exporter;
 use Crawler\Options\Options;
