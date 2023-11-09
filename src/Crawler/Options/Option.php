@@ -87,6 +87,12 @@ class Option
     private bool $isValueSet = false;
 
     /**
+     * Domain for %domain% replacement in file path
+     * @var string|null
+     */
+    private static ?string $extrasDomain;
+
+    /**
      * @param string $name
      * @param string|null $altName
      * @param string $propertyToFill
@@ -249,6 +255,7 @@ class Option
     /**
      * @param mixed $value
      * @return string|int|bool|float|null
+     *
      * @throws Exception
      */
     private function correctValueType(mixed $value): string|int|bool|float|null
@@ -272,9 +279,13 @@ class Option
         } else if ($this->type === Type::EMAIL) {
             return (string)$value;
         } else if ($this->type === Type::FILE) {
-            return Utils::getAbsolutePath((string)$value);
+            $value = (string)$value;
+            $this->replacePlaceholders($value);
+            return Utils::getAbsolutePath($value);
         } else if ($this->type === Type::DIR) {
-            return Utils::getAbsolutePath((string)$value);
+            $value = (string)$value;
+            $this->replacePlaceholders($value);
+            return Utils::getAbsolutePath($value);
         } else if ($this->type === Type::PROXY) {
             return (string)$value;
         } /* @phpstan-ignore-line */ else {
@@ -294,6 +305,30 @@ class Option
             $result[$key] = $this->correctValueType($value2);
         }
         return $result;
+    }
+
+    private function replacePlaceholders(string &$value): void
+    {
+        static $date = null;
+        static $datetime = null;
+
+        if (!$date) {
+            $date = date('Y-m-d');
+        }
+        if (!$datetime) {
+            $datetime = date('Ymd-His');
+        }
+
+        $value = str_replace(
+            ['%domain%', '%date%', '%datetime%'],
+            [self::$extrasDomain, $date, $datetime],
+            $value
+        );
+    }
+
+    public static function setExtrasDomain(?string $extrasDomain): void
+    {
+        self::$extrasDomain = $extrasDomain;
     }
 
 }

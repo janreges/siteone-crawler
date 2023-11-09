@@ -238,10 +238,10 @@ class SuperTable
             $output .= Utils::getColorText($this->emptyTableMessage, 'gray') . PHP_EOL . PHP_EOL;
             return $output;
         } else if (!$this->visibleInConsole) {
-            $output .= Utils::getColorText("This table contains large data. To see them, use output to HTML using `--output-html-file=tmp/myreport.html`.", 'yellow') . PHP_EOL . PHP_EOL;
+            $output .= Utils::getColorText("This table contains large data. To see them, use output to HTML using `--output-html-report=tmp/myreport.html`.", 'yellow') . PHP_EOL . PHP_EOL;
             return $output;
         } elseif ($this->visibleInConsoleRowsLimit) {
-            $output .= Utils::getColorText("This table contains large data and shows max {$this->visibleInConsoleRowsLimit} rows. To see them all, use output to HTML using `--output-html-file=tmp/myreport.html`.", 'yellow') . PHP_EOL . PHP_EOL;
+            $output .= Utils::getColorText("This table contains large data and shows max {$this->visibleInConsoleRowsLimit} rows. To see them all, use output to HTML using `--output-html-report=tmp/myreport.html`.", 'yellow') . PHP_EOL . PHP_EOL;
             $data = array_slice($data, 0, $this->visibleInConsoleRowsLimit);
         }
 

@@ -18,7 +18,6 @@ use Crawler\Output\JsonOutput;
 use Crawler\Output\MultiOutput;
 use Crawler\Output\OutputType;
 use Crawler\Output\TextOutput;
-use Crawler\ParsedUrl;
 use Crawler\Utils;
 use Exception;
 
@@ -26,7 +25,7 @@ class FileExporter extends BaseExporter implements Exporter
 {
     const GROUP_FILE_EXPORT_SETTINGS = 'file-export-settings';
 
-    protected ?string $outputHtmlFile = null;
+    protected ?string $outputHtmlReport = null;
     protected ?string $outputJsonFile = null;
     protected ?string $outputTextFile = null;
     protected bool $addTimestampToOutputFile = false;
@@ -34,7 +33,7 @@ class FileExporter extends BaseExporter implements Exporter
 
     public function shouldBeActivated(): bool
     {
-        return $this->outputHtmlFile || $this->outputJsonFile || $this->outputTextFile;
+        return $this->outputHtmlReport || $this->outputJsonFile || $this->outputTextFile;
     }
 
     /**
@@ -90,11 +89,11 @@ class FileExporter extends BaseExporter implements Exporter
         }
 
         // html file
-        if ($this->outputHtmlFile) {
+        if ($this->outputHtmlReport) {
             $s = microtime(true);
             $htmlReport = new HtmlReport($this->status);
             $htmlReportBody = $htmlReport->getHtml();
-            $reportFile = $this->getExportFilePath($this->outputHtmlFile, 'html');
+            $reportFile = $this->getExportFilePath($this->outputHtmlReport, 'html');
             file_put_contents(
                 $reportFile,
                 $htmlReportBody
@@ -137,9 +136,9 @@ class FileExporter extends BaseExporter implements Exporter
         $options->addGroup(new Group(
             self::GROUP_FILE_EXPORT_SETTINGS,
             'File export settings', [
-            new Option('--output-html-file', null, 'outputHtmlFile', Type::FILE, false, 'Save HTML report. `.html` added if missing.', null, true),
-            new Option('--output-json-file', null, 'outputJsonFile', Type::FILE, false, 'Save report as JSON. `.json` added if missing.', null, true),
-            new Option('--output-text-file', null, 'outputTextFile', Type::FILE, false, 'Save output as TXT. `.txt` added if missing.', null, true),
+            new Option('--output-html-report', null, 'outputHtmlReport', Type::FILE, false, "Save HTML report into that file. Set to empty '' to disable HTML report.", 'tmp/report.%domain%.%datetime%.html', true),
+            new Option('--output-json-file', null, 'outputJsonFile', Type::FILE, false, "Save report as JSON. Set to empty '' to disable JSON report.", 'tmp/output.%domain%.%datetime%.json', true),
+            new Option('--output-text-file', null, 'outputTextFile', Type::FILE, false, "Save output as TXT. Set to empty '' to disable TXT report.", 'tmp/output.%domain%.%datetime%.txt', true),
             new Option('--add-host-to-output-file', null, 'addHostToOutputFile', Type::BOOL, false, 'Append initial URL host to filename except sitemaps.', false, false),
             new Option('--add-timestamp-to-output-file', null, 'addTimestampToOutputFile', Type::BOOL, false, 'Append timestamp to filename except sitemaps.', false, false),
         ]));

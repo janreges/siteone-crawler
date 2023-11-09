@@ -13,6 +13,7 @@ namespace Crawler;
 use Crawler\Analysis\Manager as AnalysisManager;
 use Crawler\Analysis\Analyzer;
 use Crawler\Export\Exporter;
+use Crawler\Options\Option;
 use Crawler\Options\Options;
 use Crawler\Options\Type;
 use Exception;
@@ -137,6 +138,7 @@ class Initiator
      */
     private function fillAllOptionsValues(): void
     {
+        $extras = [];
         foreach ($this->options->getGroups() as $group) {
             foreach ($group->options as $option) {
                 if (in_array($option->name, $this->knownOptions)) {
@@ -152,6 +154,11 @@ class Initiator
                 }
 
                 $option->setValueFromArgv($this->argv);
+
+                // set domain for use in file/dir %domain% placeholder
+                if ($option->propertyToFill === 'url') {
+                    Option::setExtrasDomain(parse_url($option->getValue(), PHP_URL_HOST));
+                }
             }
         }
     }
@@ -282,7 +289,7 @@ class Initiator
 
                 echo str_pad($nameAndValue, 32) . " " . rtrim($option->description, '. ') . '.';
                 if ($option->defaultValue != null) {
-                    echo " Default values is `{$option->defaultValue}`.";
+                    echo " Default value is `{$option->defaultValue}`.";
                 }
                 echo "\n";
             }
