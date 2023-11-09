@@ -280,4 +280,9 @@ class ParsedUrl
         return new self($url, $scheme, $host, $port, $path, $query, $fragment, $extension);
     }
 
+    public function isHttps(): bool
+    {
+        return $this->scheme === 'https';
+    }
+
 }

@@ -10,7 +10,6 @@ declare(strict_types=1);
 
 namespace Crawler\Export;
 
-use Crawler\ContentProcessor\HtmlProcessor;
 use Crawler\Crawler;
 use Crawler\Debugger;
 use Crawler\Export\Utils\OfflineUrlConverter;
@@ -149,7 +148,21 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
             }
         }
 
-        if (file_put_contents($storeFilePath, $content) === false) {
+        $saveFile = true;
+        clearstatcache(true);
+
+        // do not overwrite existing file if initial request was HTTPS and this request is HTTP, otherwise referenced
+        // http://your.domain.tld/ will override wanted HTTPS page with small HTML file with meta redirect
+        if (is_file($storeFilePath)) {
+            if (!$visitedUrl->isHttps() && $this->crawler->getInitialParsedUrl()->isHttps()) {
+                $saveFile = false;
+                $message = "File '$storeFilePath' already exists and will not be overwritten because initial request was HTTPS and this request is HTTP: " . $visitedUrl->url;
+                $this->output->addNotice($message);
+                $this->status->addNoticeToSummary('offline-exporter-store-file-ignored', $message);
+            }
+        }
+
+        if ($saveFile && file_put_contents($storeFilePath, $content) === false) {
             throw new Exception("Cannot store file '$storeFilePath'");
         }
     }
