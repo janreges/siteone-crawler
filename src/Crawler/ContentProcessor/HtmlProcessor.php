@@ -21,7 +21,7 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
     protected array $relevantContentTypes = [
         Crawler::CONTENT_TYPE_ID_HTML,
     ];
-    
+
     public const JS_VARIABLE_NAME_URL_DEPTH = '_SiteOneUrlDepth';
     public static array $htmlPagesExtensions = ['htm', 'html', 'shtml', 'php', 'phtml', 'ashx', 'xhtml', 'asp', 'aspx', 'jsp', 'jspx', 'do', 'cfm', 'cgi', 'pl'];
 
@@ -113,7 +113,7 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
         // set JS variable with number of levels before close </head> tag and remove all anchor listeners when needed
         if ($this->scriptsEnabled) {
             $content = $this->setJsVariableWithUrlDepth($content, $baseUrl);
-            if ($this->options->removeAllAnchorListeners) {
+            if ($this->options->removeAllAnchorListeners || $this->isForcedToRemoveAnchorListeners($content)) {
                 $content = $this->setJsFunctionToRemoveAllAnchorListeners($content);
             }
         }
@@ -528,6 +528,18 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
                 $html = preg_replace('/<iframe[^>]*(facebook\.com|twitter\.com|linkedin\.com)[^>]*>.*?<\/iframe>/is', '', $html);
             }
         }
+    }
+
+    /**
+     * Is it necessary to remove all anchor listeners due to modern JS framework which will add click handler and prevent default behavior?
+     * It is very hard to patch some framework's code (e.g. NextJS) to work properly with local file:// protocol
+     *
+     * @param string $html
+     * @return bool
+     */
+    private function isForcedToRemoveAnchorListeners(string $html): bool
+    {
+        return str_contains($html, '_next/');
     }
 
 }
