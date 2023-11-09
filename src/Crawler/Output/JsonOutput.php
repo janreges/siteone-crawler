@@ -157,7 +157,7 @@ class JsonOutput implements Output
 
     public function getJson(): string
     {
-        return json_encode($this->json, JSON_PRETTY_PRINT | JSON_INVALID_UTF8_IGNORE);
+        return json_encode($this->json, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_IGNORE);
     }
 
     public function end(): void
