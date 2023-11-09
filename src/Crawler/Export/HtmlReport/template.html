@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="author" content="Ján Regeš, www.siteone.io">
     <title>SiteOne Crawler Report - {$initialHost} | {$executedAt}</title>
 
     <style>
@@ -553,7 +554,7 @@
 <div class="container">
     <header class="header">
         <a href="https://www.siteone.io/?utm_source=siteone_crawler&utm_medium=logo&utm_campaign=crawler_report&utm_content=v{$version}"
-           target="_blank" class="logo">
+           target="_blank" class="logo" aria-label="Clickable logo of SiteOne.cz - the author of this crawler">
             <svg viewBox="0 0 119 59" width="70px" height="34px" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M92.0551 14.9476V48.07H75.2954V58.0351H118.638V48.07H102.303V0H92.9895L66.8594 26.13L73.8804 33.1223C73.9083 33.1223 92.0551 14.9476 92.0551 14.9476Z"
                       fill="var(--text-color-neutral)"></path>
@@ -562,10 +563,10 @@
                       fill="var(--text-color-default)"></path>
             </svg>
         </a>
-        <h1>Crawler Report for <a href="{$initialUrl}">{$initialHost}</a></h1>
+        <h1>Crawler Report for <a href="{$initialUrl}" aria-label="Link to Crawler target website {$initialHost}">{$initialHost}</a></h1>
         <div class="theme-switch">
             <label>
-                <input type="checkbox" class="theme-switch__input" checked>
+                <input type="checkbox" class="theme-switch__input" arial-label="Theme switch - dark mode is enabled by default" checked>
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                      stroke-linecap="round" stroke-linejoin="round" class="feather feather-sun">
                     <circle cx="12" cy="12" r="5"></circle>
@@ -591,21 +592,21 @@
     <main>
         <section class="tabs">
             {$tabsRadios}
-            <div class="tabs__navigation">
+            <nav class="tabs__navigation" aria-label="Navigation">
                 {$tabs}
-            </div>
+            </nav>
             <div class="tabs__content">
                 {$tabsContent}
             </div>
         </section>
     </main>
-    <footer>
+    <footer aria-label="Footer with basic info about report and crawler">
         <br/>
         <hr/>
         The report was generated <strong>{$executedAt}</strong> using the <span style="color: red;">♥</span>
-        <a href="https://github.com/janreges/siteone-website-crawler"><strong>SiteOne Website Crawler</strong></a>
+        <a href="https://github.com/janreges/siteone-website-crawler" aria-label="Link to SiteOne Crawler Github repository"><strong>SiteOne Website Crawler</strong></a>
         by Ján Regeš from <a
-            href="https://www.siteone.io/?utm_source=siteone_crawler&utm_medium=email&utm_campaign=crawler_report&utm_content=v{$version}"><strong>SiteOne</strong></a>
+            href="https://www.siteone.io/?utm_source=siteone_crawler&utm_medium=email&utm_campaign=crawler_report&utm_content=v{$version}" aria-label="Link to SiteOne.cz - the author of this crawler"><strong>SiteOne</strong></a>
         (Czech Republic).<br/>
         <br/>
     </footer>

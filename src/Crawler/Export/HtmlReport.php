@@ -216,7 +216,7 @@ class HtmlReport
         // which works in all browsers and e-
         $isFirst = true;
         foreach ($tabs as $tab) {
-            $html .= '<input type="radio" id="' . htmlspecialchars($tab->radioHtmlId) . '" name="tabs" class="tabs__radio"' . ($isFirst ? ' checked' : '') . '>' . "\n";
+            $html .= '<input type="radio" id="' . htmlspecialchars($tab->radioHtmlId) . '" name="tabs" arial-label="Show tab ' . htmlspecialchars($tab->name) . '" class="tabs__radio"' . ($isFirst ? ' checked' : '') . '>' . "\n";
             if ($isFirst) {
                 $isFirst = false;
             }
