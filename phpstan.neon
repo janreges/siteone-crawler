@@ -9,3 +9,4 @@ parameters:
 		- '/Swoole/'
 		- '/DOMNode::getAttribute/'
 		- '/DOMNode::\$tagName/'
+		- '/BASE_DIR/'
