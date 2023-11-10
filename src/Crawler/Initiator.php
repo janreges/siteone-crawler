@@ -256,7 +256,7 @@ class Initiator
     public function printHelp(): void
     {
         echo "\n";
-        echo "Usage: ./swoole-cli crawler.php --url=https://mydomain.tld/ [options]\n";
+        echo "Usage: ./crawler --url=https://mydomain.tld/ [options]\n";
         echo "Version: " . Version::CODE . "\n";
         echo "\n";
 

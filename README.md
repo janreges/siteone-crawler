@@ -146,20 +146,22 @@ great, and his son is doing great too! ♥
 
 You can download ready-to-use releases from [GitHub releases](https://github.com/janreges/siteone-website-crawler/releases) for all major platforms (Linux, Windows, macOS, arm64).
 
-Unpack the downloaded archive, and you will find the `crawler` or `crawler.bat` (Windows) executable binary.
-
-In the case of using a release package, you can use the command `./crawler --url=https://my.domain.tld` instead of `./swoole-cli crawler.php --url=https://my.domain.tld` as mentioned in the examples below.
+Unpack the downloaded archive, and you will find the `crawler` or `crawler.bat` (Windows) executable binary and run crawler by `./crawler --url=https://my.domain.tld`.
 
 **Note for Windows users**: use Cygwin-based release `*-win-x64.zip` only if you can't use WSL (Ubuntu/Debian), what is recommended. If you really have to use the Cygwin version, set `--workers=1` for higher stability.
 
+**Note for macOS users**: In case that Mac refuses to start the crawler from your Download folder, move the entire folder with the Crawler **via the terminal** to another location, for example to the homefolder `~`.
+
 ### Linux (x64)
 
-Most easily installation on most Linux (x64) distributions thanks to precompiled `swoole-cli` binary.
+Most easily installation is on most Linux (x64) distributions.
 
 ```bash
 git clone https://github.com/janreges/siteone-website-crawler.git
 cd siteone-website-crawler
-chmod +x ./swoole-cli
+
+# run crawler with basic options
+./crawler --url=https://my.domain.tld
 ````
 
 ### Windows (x64)
@@ -173,10 +175,10 @@ download [swoole-cli-v4.8.13-cygwin-x64.zip](https://github.com/swoole/swoole-sr
 from [Swoole releases](https://github.com/swoole/swoole-src/releases) and use precompiled
 Cygwin-based `bin/swoole-cli.exe`.
 
-A really functional and tested Windows command looks like this (modify path to your `swoole-cli.exe` and `crawler.php`):
+A really functional and tested Windows command looks like this (modify path to your `swoole-cli.exe` and `src\crawler.php`):
 
 ```bash
-c:\Work\swoole-cli-v4.8.13-cygwin-x64\bin\swoole-cli.exe C:\Work\siteone-website-crawler\crawler.php --url=https://www.siteone.io/
+c:\Work\swoole-cli-v4.8.13-cygwin-x64\bin\swoole-cli.exe C:\Work\siteone-website-crawler\src\crawler.php --url=https://www.siteone.io/
 ```
 
 **NOTICE**: Cygwin does not support STDERR with rewritable lines in the console. Therefore, the output is not as
@@ -200,22 +202,22 @@ and use its precompiled `swoole-cli`.
 
 ## Usage
 
-To run the crawler, execute the `crawler.php` file from the command line with precompiled `swoole-cli` and provide the
+To run the crawler, execute the `crawler` executable file from the command line and provide the
 required arguments:
 
 ### Basic example
 
 ```bash
-./swoole-cli crawler.php --url=https://mydomain.tld/ --device=mobile
+./crawler --url=https://mydomain.tld/ --device=mobile
 ```
 
 ### Fully-featured example
 
 ```bash
-./swoole-cli crawler.php --url=https://mydomain.tld/ \
+./crawler --url=https://mydomain.tld/ \
   --output=text \
   --workers=2 \
-  --memory-limit=512M \
+  --memory-limit=1024M \
   --timeout=5 \
   --proxy=proxy.mydomain.tld:8080 \
   --http-auth=myuser:secretPassword123 \
@@ -435,7 +437,7 @@ Output is truncated (only 3 URLs in results) for better readability.
     "name": "SiteOne Website Crawler",
     "version": "2023.10.2",
     "executedAt": "2023-10-05 16:50:27",
-    "command": "crawler.php --url=https:\/\/www.siteone.io\/ --extra-columns=Title --workers=2 --do-not-truncate-url --url-column-size=72 --output=json"
+    "command": "--url=https:\/\/www.siteone.io\/ --extra-columns=Title --workers=2 --output=json"
   },
   "options": {
     "url": "https:\/\/www.siteone.io\/",
