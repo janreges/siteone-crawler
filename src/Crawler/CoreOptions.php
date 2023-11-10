@@ -189,10 +189,11 @@ class CoreOptions
             new Option('--remove-all-anchor-listeners', null, 'removeAllAnchorListeners', Type::BOOL, false, 'On all links on the page remove any event listeners. Useful on some types of sites with modern JS frameworks.', false, false),
         ]));
 
+        $defaultWorkers = stripos(PHP_OS, 'CYGWIN') !== false ? 1 : 3;
         $options->addGroup(new Group(
             self::GROUP_ADVANCED_CRAWLER_SETTINGS,
             'Advanced crawler settings', [
-            new Option('--workers', '-w', 'workers', Type::INT, false, 'Max concurrent workers (threads). Crawler will not make more simultaneous requests to the server than this number.', 3, false),
+            new Option('--workers', '-w', 'workers', Type::INT, false, 'Max concurrent workers (threads). Crawler will not make more simultaneous requests to the server than this number.', $defaultWorkers, false),
             new Option('--max-reqs-per-sec', '-rps', 'maxReqsPerSec', Type::FLOAT, false, 'Max requests/s for whole crawler. Be careful not to cause a DoS attack.', 10, false),
             new Option('--memory-limit', null, 'memoryLimit', Type::SIZE_M_G, false, 'Memory limit in units M (Megabytes) or G (Gigabytes).', '2048M', false),
             new Option('--allowed-domain-for-external-files', null, 'allowedDomainsForExternalFiles', Type::STRING, true, "Primarily, the crawler crawls only the URL within the domain for initial URL. This allows you to enable loading of file content from another domain as well (e.g. if you want to load assets from a CDN). Can be specified multiple times. Use can use domains with wildcard '*'.", [], true, true),
