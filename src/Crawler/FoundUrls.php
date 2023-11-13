@@ -26,6 +26,9 @@ class FoundUrls
     public function addUrlsFromTextArray(array $urls, string $sourceUrl, int $source): void
     {
         foreach ($urls as $url) {
+            if (!self::isUrlValidForCrawling($url)) {
+                continue;
+            }
             $this->addUrl(new FoundUrl($url, $sourceUrl, $source));
         }
     }
@@ -41,6 +44,24 @@ class FoundUrls
     public function getCount(): int
     {
         return count($this->foundUrls);
+    }
+
+    /**
+     * Check if URL is valid for crawling. Ignored are:
+     *  - anchor #fragment links
+     *  - data:, mailto:, javascript: and other non-http(s) links
+     *  - file:// links
+     *
+     * @param string $url
+     * @return bool
+     */
+    private static function isUrlValidForCrawling(string $url): bool
+    {
+        $url = trim($url);
+        if (str_starts_with($url, '#') || preg_match('/^[a-z]+:[a-z0-9]/i', $url) === 1 || stripos($url, 'file://') === 0) {
+            return false;
+        }
+        return true;
     }
 
 }
