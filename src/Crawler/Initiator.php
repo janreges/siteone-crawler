@@ -72,10 +72,15 @@ class Initiator
 
         $this->argv = $argv;
         $this->crawlerClassDir = $crawlerClassDir;
+
+        // init analysis manager
         $this->analysisManager = new AnalysisManager($crawlerClassDir);
 
         // import options config from crawler and all exporters/analyzers
         $this->setupOptions();
+
+        // handle special options like --help, --version
+        $this->handleSpecialOptions();
     }
 
     /**
@@ -196,6 +201,28 @@ class Initiator
         $this->coreOptions = new CoreOptions($this->options);
     }
 
+    private function handleSpecialOptions(): void
+    {
+        $showVersion = false;
+        $showHelp = false;
+
+        foreach ($this->argv as $arg) {
+            if ($arg === '--version') {
+                $showVersion = true;
+            } elseif ($arg === '--help') {
+                $showHelp = true;
+            }
+        }
+
+        if ($showHelp) {
+            $this->printHelp();
+            exit(2);
+        } else if ($showVersion) {
+            echo Utils::getColorText("Version: " . Version::CODE, 'blue') . "\n";
+            exit(2);
+        }
+    }
+
     /**
      * Import all active exporters to $this->exporters based on filled CLI options
      * @return void
@@ -256,13 +283,13 @@ class Initiator
     public function printHelp(): void
     {
         echo "\n";
-        echo "Usage: ./crawler --url=https://mydomain.tld/ [options]\n";
-        echo "Version: " . Version::CODE . "\n";
+        echo Utils::getColorText("Usage: ./crawler --url=https://mydomain.tld/ [options]", "yellow") . "\n";
+        echo Utils::getColorText("Version: " . Version::CODE, "blue") . "\n";
         echo "\n";
 
         foreach ($this->options->getGroups() as $group) {
-            echo "{$group->name}:\n";
-            echo str_repeat('-', strlen($group->name) + 1) . "\n";
+            echo Utils::getColorText("{$group->name}:", 'yellow') . "\n";
+            echo Utils::getColorText(str_repeat('-', strlen($group->name) + 1), 'yellow') . "\n";
             foreach ($group->options as $option) {
                 $nameAndValue = $option->name;
                 if ($option->type === Type::INT) {
@@ -299,7 +326,7 @@ class Initiator
         echo "\n";
         echo "For more detailed descriptions of parameters, see README.md.\n";
         echo "\n";
-        echo "Created with ♥ by Ján Regeš (jan.reges@siteone.cz) from www.SiteOne.io (Czech Republic) [10/2023]\n";
+        echo Utils::getColorText("Created with ", 'gray') . Utils::getColorText('♥', 'red') . Utils::getColorText(" by Ján Regeš (jan.reges@siteone.cz) from www.SiteOne.io (Czech Republic) [11/2023]", 'gray') . "\n";
     }
 
 }

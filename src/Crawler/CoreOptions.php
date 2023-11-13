@@ -34,6 +34,8 @@ class CoreOptions
     public int $timeout = 5;
     public ?string $proxy = null;
     public ?string $httpAuth = null;
+    public ?bool $showVersionOnly = false;
+    public ?bool $showHelpOnly = false;
 
     // output setting
     public OutputType $outputType = OutputType::TEXT;
@@ -162,6 +164,8 @@ class CoreOptions
             new Option('--timeout', null, 'timeout', Type::INT, false, 'Request timeout (in sec).', 5, false),
             new Option('--proxy', null, 'proxy', Type::PROXY, false, 'HTTP proxy in `host:port` format.', null),
             new Option('--http-auth', null, 'httpAuth', Type::STRING, false, 'Basic HTTP authentication in `username:password` format.', null),
+            new Option('--help', '-h', 'showHelpOnly', Type::BOOL, false, 'Show help and exit.', false, false),
+            new Option('--version', '-v', 'showVersionOnly', Type::BOOL, false, 'Show crawler version and exit.', false, false),
         ]));
 
         $options->addGroup(new Group(
