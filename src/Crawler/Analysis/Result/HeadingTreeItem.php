@@ -54,6 +54,12 @@ class HeadingTreeItem
     public array $children = [];
 
     /**
+     * Error text in case of error (typically multiple H1s or wrong heading level)
+     * @var string|null
+     */
+    public ?string $errorText = null;
+
+    /**
      * @param int $level
      * @param string $text
      * @param string|null $id
@@ -68,6 +74,11 @@ class HeadingTreeItem
     public function addChild(HeadingTreeItem $child): void
     {
         $this->children[] = $child;
+    }
+
+    public function hasError(): bool
+    {
+        return $this->errorText !== null;
     }
 
     /**
@@ -87,6 +98,8 @@ class HeadingTreeItem
         $root = new HeadingTreeItem(0, '', null);
         $currentNode = $root;
 
+        $h1References = [];
+
         foreach ($nodes as $node) {
             /* @var $node DOMNode */
             $level = (int)substr($node->nodeName, 1);
@@ -100,6 +113,9 @@ class HeadingTreeItem
             $id = $node->getAttribute('id') ?: null;
 
             $item = new HeadingTreeItem($level, $text, $id);
+            if ($level === 1) {
+                $h1References[] = $item;
+            }
 
             while ($currentNode->level >= $level) {
                 $currentNode = $currentNode->parent;
@@ -111,12 +127,24 @@ class HeadingTreeItem
             $currentNode = $item;
         }
 
+        // set error to multiple h1s if exists
+        $h1Count = $dom->getElementsByTagName('h1')->length;
+        if ($h1Count > 1) {
+            foreach ($h1References as $h1Reference) {
+                $h1Reference->errorText = "Multiple H1s ({$h1Count}) found.";
+            }
+        }
+
         $finalTreeItemFixes = function (HeadingTreeItem $item, int $realLevel = 1) use (&$finalTreeItemFixes) {
             unset($item->parent);
             $item->realLevel = $realLevel;
             foreach ($item->children as $child) {
                 unset($child->parent);
                 $finalTreeItemFixes($child, $realLevel + 1);
+            }
+
+            if ($item->level !== $item->realLevel) {
+                $item->errorText = "Heading level {$item->level} is not correct. Should be {$item->realLevel}.";
             }
         };
 
@@ -146,8 +174,12 @@ class HeadingTreeItem
         $result = '';
         if ($addItem) {
             $txtRow = "<h{$item->level}> {$item->text}" . ($item->id ? ' [#' . $item->id . ']' : '');
-            $result = $item->level !== $item->realLevel
-                ? Utils::getColorText(htmlspecialchars($txtRow), 'magenta')
+            $result = $item->hasError()
+                ? (
+                    '<span class="help" title="' . htmlspecialchars($item->errorText) . '">'
+                    . Utils::getColorText(htmlspecialchars($txtRow), 'magenta')
+                    . '</span>'
+                )
                 : htmlspecialchars($txtRow);
         }
 
@@ -156,8 +188,12 @@ class HeadingTreeItem
             foreach ($item->children as $child) {
                 $result .= '<li>';
                 $txtRow = "<h{$child->level}> " . $child->text . ($child->id ? ' [#' . $child->id . ']' : '');
-                $result .= $child->level !== $child->realLevel
-                    ? Utils::getColorText(htmlspecialchars($txtRow), 'magenta')
+                $result .= $child->hasError()
+                    ? (
+                        '<span class="help" title="' . htmlspecialchars($child->errorText) . '">'
+                        . Utils::getColorText(htmlspecialchars($txtRow), 'magenta')
+                        . '</span>'
+                    )
                     : htmlspecialchars($txtRow);
                 $result .= self::getHeadingTreeUlLi($child, false);
                 $result .= '</li>';

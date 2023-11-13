@@ -112,25 +112,38 @@ class SeoAndOpenGraphResult
         $result->twitterImage = self::getMetaTagContent($metaTags, 'twitter:image');
 
         $result->headingTreeItems = HeadingTreeItem::getHeadingTreeFromHtml($dom, $maxHeadingLevel);
-        $result->headingsCount = self::getHeadingsCount($result->headingTreeItems, false);
-        $result->headingsErrorsCount = self::getHeadingsCount($result->headingTreeItems, true);
+        $result->headingsCount = self::getHeadingsCount($result->headingTreeItems);
+        $result->headingsErrorsCount = self::getHeadingsWithErrorCount($result->headingTreeItems);
 
         return $result;
     }
 
     /**
      * @param HeadingTreeItem[] $headingTreeItems
-     * @param bool $onlyErrors
      * @return int
      */
-    private static function getHeadingsCount(array $headingTreeItems, bool $onlyErrors): int
+    private static function getHeadingsCount(array $headingTreeItems): int
     {
         $count = 0;
         foreach ($headingTreeItems as $headingTreeItem) {
-            if (!$onlyErrors || $headingTreeItem->level !== $headingTreeItem->realLevel) {
+            $count++;
+            $count += self::getHeadingsCount($headingTreeItem->children);
+        }
+        return $count;
+    }
+
+    /**
+     * @param HeadingTreeItem[] $headingTreeItems
+     * @return int
+     */
+    private static function getHeadingsWithErrorCount(array $headingTreeItems): int
+    {
+        $count = 0;
+        foreach ($headingTreeItems as $headingTreeItem) {
+            if ($headingTreeItem->hasError()) {
                 $count++;
             }
-            $count += self::getHeadingsCount($headingTreeItem->children, $onlyErrors);
+            $count += self::getHeadingsWithErrorCount($headingTreeItem->children);
         }
         return $count;
     }
