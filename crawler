@@ -16,5 +16,5 @@ cd "$DIR"
 ./bin/swoole-cli "src/crawler.php" "$@"
 
 exit_code=$?
-cd -
+cd - > /dev/null
 exit $exit_code
