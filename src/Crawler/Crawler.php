@@ -749,6 +749,7 @@ class Crawler
                 $urlForQueue,
                 $this->options->proxy,
                 $this->options->httpAuth,
+                $this,
                 $parsedUrlForQueue->port ?: $this->initialParsedUrl->port)
             ) {
                 $isUrlForDebug && Debugger::debug('ignored-url_blocked-by-robots-txt', "URL '{$urlForQueue}' ignored because is blocked by website's robots.txt.");
@@ -806,10 +807,11 @@ class Crawler
      * @param string $url
      * @param string|null $proxy
      * @param string|null $httpAuth
+     * @param Crawler $crawler
      * @param int|null $extraPort
      * @return bool
      */
-    public static function isUrlAllowedByRobotsTxt(string $domain, string $url, ?string $proxy, ?string $httpAuth, ?int $extraPort = null): bool
+    public static function isUrlAllowedByRobotsTxt(string $domain, string $url, ?string $proxy, ?string $httpAuth, Crawler $crawler, ?int $extraPort = null): bool
     {
         // when URL is for frontend asset (internal or external), we can assume that it's allowed
         if (preg_match('/\.(js|css|json|eot|ttf|woff2|woff|otf|png|gif|jpg|jpeg|ico|webp|avif|tif|bmp|svg)/i', $url) === 1) {
@@ -825,6 +827,7 @@ class Crawler
         } else {
             $ports = $extraPort ? [$extraPort] : [443, 80];
             foreach ($ports as $port) {
+                $s = microtime(true);
                 $httpClient = new HttpClient($proxy, $httpAuth, null);
                 $robotsTxtResponse = $httpClient->request(
                     $domain,
@@ -837,6 +840,14 @@ class Crawler
                     'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
                     'gzip, deflate, br'
                 );
+
+                $crawler->getStatus()->addNoticeToSummary('robots-txt-' . $domain, sprintf(
+                    "Loaded robots.txt for domain '%s': status code %d, time %s, size %s.",
+                    $domain,
+                    $robotsTxtResponse->statusCode,
+                    Utils::getFormattedDuration($robotsTxtResponse->execTime),
+                    Utils::getFormattedSize(strlen($robotsTxtResponse->body ?: ''))
+                ));
 
                 if ($robotsTxtResponse->statusCode === 200 && $robotsTxtResponse->body) {
                     $robotsTxt = $robotsTxtResponse->body;
