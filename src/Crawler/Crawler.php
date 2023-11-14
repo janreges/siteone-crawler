@@ -53,6 +53,8 @@ class Crawler
 
     private string $acceptHeader = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7';
 
+    private static int $loadedRobotsTxtCount = 0;
+
     const CONTENT_TYPE_ID_HTML = 1;
     const CONTENT_TYPE_ID_SCRIPT = 2;
     const CONTENT_TYPE_ID_STYLESHEET = 3;
@@ -744,13 +746,13 @@ class Crawler
             } elseif (!$isUrlOnSameHost && !$isUrlOnAllowedHost) {
                 $isUrlForDebug && Debugger::debug('ignored-url_not-allowed-host', "URL '{$urlForQueue}' ignored because it's not requestable resource.");
                 continue;
-            } elseif (!self::isUrlAllowedByRobotsTxt(
-                $parsedUrlForQueue->host ?: $this->initialParsedUrl->host,
-                $urlForQueue,
-                $this->options->proxy,
-                $this->options->httpAuth,
-                $this,
-                $parsedUrlForQueue->port ?: $this->initialParsedUrl->port)
+            } elseif (!$parsedUrlForQueue->isStaticFile() && !self::isUrlAllowedByRobotsTxt(
+                    $parsedUrlForQueue->host ?: $this->initialParsedUrl->host,
+                    $urlForQueue,
+                    $this->options->proxy,
+                    $this->options->httpAuth,
+                    $this,
+                    $parsedUrlForQueue->port ?: $this->initialParsedUrl->port)
             ) {
                 $isUrlForDebug && Debugger::debug('ignored-url_blocked-by-robots-txt', "URL '{$urlForQueue}' ignored because is blocked by website's robots.txt.");
                 continue;
@@ -827,7 +829,6 @@ class Crawler
         } else {
             $ports = $extraPort ? [$extraPort] : [443, 80];
             foreach ($ports as $port) {
-                $s = microtime(true);
                 $httpClient = new HttpClient($proxy, $httpAuth, null);
                 $robotsTxtResponse = $httpClient->request(
                     $domain,
@@ -840,14 +841,23 @@ class Crawler
                     'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
                     'gzip, deflate, br'
                 );
+                self::$loadedRobotsTxtCount++;
 
-                $crawler->getStatus()->addNoticeToSummary('robots-txt-' . $domain, sprintf(
-                    "Loaded robots.txt for domain '%s': status code %d, time %s, size %s.",
-                    $domain,
-                    $robotsTxtResponse->statusCode,
-                    Utils::getFormattedDuration($robotsTxtResponse->execTime),
-                    Utils::getFormattedSize(strlen($robotsTxtResponse->body ?: ''))
-                ));
+                $maxReportedRobotsTxt = 10;
+                if (self::$loadedRobotsTxtCount <= $maxReportedRobotsTxt) {
+                    $crawler->getStatus()->addNoticeToSummary('robots-txt-' . $domain, sprintf(
+                        "Loaded robots.txt for domain '%s': status code %d, size %s and took %s.",
+                        $domain,
+                        $robotsTxtResponse->statusCode,
+                        Utils::getFormattedSize(strlen($robotsTxtResponse->body ?: '')),
+                        Utils::getFormattedDuration($robotsTxtResponse->execTime)
+                    ));
+                } elseif (self::$loadedRobotsTxtCount === ($maxReportedRobotsTxt + 1)) {
+                    $crawler->getStatus()->addNoticeToSummary(
+                        'robots-txt-limited',
+                        'The limit of the number of loaded robots.txt (' . $maxReportedRobotsTxt . ') has been exceeded. Other robots.txt will not be in this summary for the sake of clarity.'
+                    );
+                }
 
                 if ($robotsTxtResponse->statusCode === 200 && $robotsTxtResponse->body) {
                     $robotsTxt = $robotsTxtResponse->body;
