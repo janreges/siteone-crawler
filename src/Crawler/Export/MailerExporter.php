@@ -99,33 +99,24 @@ class MailerExporter extends BaseExporter implements Exporter
     {
         $body = 'Hello,<br>
 <br>
-We are pleased to deliver the attached report detailing a thorough crawling and analysis of your website, {$host}. Our advanced website crawler has identified key areas that require your attention, including found redirects, 404 error pages, and potential issues in accessibility, best practices, performance, and security.<br>
+We are pleased to deliver the attached report detailing a thorough crawling and analysis of your website, <b>{$host}</b>. Our advanced website crawler has identified key areas that require your attention, including found redirects, 404 error pages, and potential issues in accessibility, best practices, performance, and security.<br>
 <br>
-<b>How to Utilize the Report</b>:<br>
-<br>
-The report is in HTML format and for full functionality, it should be opened in a JavaScript-enabled browser. This will allow you to access enhanced features such as sorting data within tables.<br>
-For optimal viewing and functionality, we recommend opening the report on a desktop browser. Some mobile email clients may not support all interactive elements.<br>
-<br>
-<b>Benefits of the Report for You</b>:<br>
-<br>
-<b>Clarity</b>: Easily identify pages that need updates or fixes.<br>
-<b>Prioritization</b>: The report is structured to help you quickly determine which issues to address first.<br>
-<b>SEO Optimization</b>: Findings from the report can aid in improving your website’s visibility in search engines.<br>
-<b>User Experience Improvement</b>: Alerts on accessibility and performance issues enable you to create a better experience for your users.<br>
-<b>Security Checks</b>: Identifying potential security threats protects your data and users’ trust.<br>
+The report is in HTML format and for full functionality, it should be opened in a JavaScript-enabled browser. This will allow you to access advanced features such as searching and sorting data within tables. Some mobile email clients may not support all interactive elements.<br>
 <br>
 In case you have any suggestions for improvements and other useful features, feel free to send them as Feature requests to <a href="https://github.com/janreges/siteone-website-crawler/issues/">our project\'s GitHub</a>.<br>
 <br>
 Best regards,<br>
 <br>
-<a href="https://crawler.siteone.io/?utm_source=siteone_crawler&utm_medium=email-report&utm_campaign=crawler_report&utm_content=v"' . Version::CODE . '>SiteOne Website Crawler</a> Team';
+<a href="https://crawler.siteone.io/?utm_source=siteone_crawler&utm_medium=email-report&utm_campaign=crawler_report&utm_content=v{$version}">SiteOne Website Crawler</a> Team';
 
         $body = str_replace(
             [
                 '{$host}',
+                '{$version}'
             ],
             [
-                $host
+                $host,
+                Version::CODE
             ],
             $body);
 
