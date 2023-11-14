@@ -50,7 +50,8 @@ class RedirectsAnalyzer extends BaseAnalyzer implements Analyzer
                     return Utils::getUrlWithoutSchemeAndHost($row->extras['Location'] ?? '?', $initialHost);
                 }, true),
                 new SuperTableColumn('sourceUqId', 'Found at URL', $urlColumnWidth, function ($value) use ($status, $initialHost) {
-                    return $value ? Utils::getUrlWithoutSchemeAndHost($status->getUrlByUqId($value), $initialHost) : '';
+                    $urlByUqId = $value ? $status->getUrlByUqId($value) : null;
+                    return $urlByUqId ? Utils::getUrlWithoutSchemeAndHost($urlByUqId, $initialHost) : '';
                 }, null, true),
             ], true, 'url', 'ASC');
 
