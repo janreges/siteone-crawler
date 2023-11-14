@@ -27,6 +27,17 @@ interface ContentProcessor
     public function findUrls(string $content, ParsedUrl $sourceUrl): ?FoundUrls;
 
     /**
+     * Apply content changes for HTML/CSS/JS before URL parsing, directly to $content passed by reference
+     * Method is called by manager only if isContentTypeRelevant() returns true
+     *
+     * @param string $content
+     * @param int $contentType
+     * @param ParsedUrl $url
+     * @return void
+     */
+    public function applyContentChangesBeforeUrlParsing(string &$content, int $contentType, ParsedUrl $url): void;
+
+    /**
      * Apply content changes for offline version of the file, directly to $content (HTML/CSS/JS) passed by reference
      * Method is called by manager only if isContentTypeRelevant() returns true
      *

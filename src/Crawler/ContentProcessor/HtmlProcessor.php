@@ -253,7 +253,7 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
         preg_match_all('/<source\s+[^>]*?src=["\']([^"\'>]+)["\'][^>]*>/is', $html, $matches);
         $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrl->getFullUrl(true, false), FoundUrl::SOURCE_IMG_SRC);
 
-        // find
+        // CSS url()
         preg_match_all("/url\s*\(\s*['\"]?([^'\")]+\.(jpg|jpeg|png|gif|bmp|tif|webp|avif))/is", $html, $matches);
         $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrl->getFullUrl(true, false), FoundUrl::SOURCE_CSS_URL);
 
@@ -302,7 +302,20 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
         preg_match_all('/:([a-z0-9\/._\-\[\]]+chunks[a-z0-9\/._\-\[\]]+.js)/is', $html, $matches);
         $nextJsChunks = [];
         foreach ($matches[1] ?? [] as $match) {
-            $nextJsChunks[] = '/_next/' . ltrim($match, '/ ');
+            if (str_starts_with($match, '//')) {
+                $chunkUrl = ($sourceUrl->scheme ?: 'https') . ':' . $match;
+            } elseif (str_starts_with($match, 'http://') || str_starts_with($match, 'https://')) {
+                $chunkUrl = $match;
+            } elseif (str_contains($match, '/_next/')) {
+                $chunkUrl = $match;
+                if ($sourceUrl->host && $sourceUrl->host !== $this->crawler->getInitialParsedUrl()->host) {
+                    $chunkUrl = $sourceUrl->getFullHomepageUrl() . $chunkUrl;
+                }
+            } else {
+                $chunkUrl = $sourceUrl->getFullHomepageUrl() . '/_next/' . $match;
+            }
+
+            $nextJsChunks[] = $chunkUrl;
         }
         $foundUrls->addUrlsFromTextArray($nextJsChunks, $sourceUrl->getFullUrl(true, false), FoundUrl::SOURCE_INLINE_SCRIPT_SRC);
     }

@@ -53,19 +53,22 @@ class Manager
 
     /**
      * @param string $content
+     * @param int $contentType
      * @param ParsedUrl $url
      * @return FoundUrls[]
      */
-    public function findUrls(string $content, ParsedUrl $url): array
+    public function findUrls(string $content, int $contentType, ParsedUrl $url): array
     {
         $result = [];
         foreach ($this->processors as $processor) {
-            $s = microtime(true);
-            $foundUrls = $processor->findUrls($content, $url);
-            if ($foundUrls) {
-                $result[] = $foundUrls;
+            if ($processor->isContentTypeRelevant($contentType)) {
+                $s = microtime(true);
+                $foundUrls = $processor->findUrls($content, $url);
+                if ($foundUrls) {
+                    $result[] = $foundUrls;
+                }
+                $this->stats->measureExecTime($processor::class, 'findUrls', $s);
             }
-            $this->stats->measureExecTime($processor::class, 'findUrls', $s);
         }
         return $result;
     }
@@ -83,6 +86,23 @@ class Manager
                 $s = microtime(true);
                 $processor->applyContentChangesForOfflineVersion($content, $contentType, $url);
                 $this->stats->measureExecTime($processor::class, 'applyContentChangesForOfflineVersion', $s);
+            }
+        }
+    }
+
+    /**
+     * @param string $content
+     * @param int $contentType
+     * @param ParsedUrl $url
+     * @return void
+     */
+    public function applyContentChangesBeforeUrlParsing(string &$content, int $contentType, ParsedUrl $url): void
+    {
+        foreach ($this->processors as $processor) {
+            if ($processor->isContentTypeRelevant($contentType)) {
+                $s = microtime(true);
+                $processor->applyContentChangesBeforeUrlParsing($content, $contentType, $url);
+                $this->stats->measureExecTime($processor::class, 'applyContentChangesBeforeUrlParsing', $s);
             }
         }
     }

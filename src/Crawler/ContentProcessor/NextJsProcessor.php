@@ -20,8 +20,9 @@ class NextJsProcessor extends BaseProcessor implements ContentProcessor
     protected array $relevantContentTypes = [
         Crawler::CONTENT_TYPE_ID_HTML,
         Crawler::CONTENT_TYPE_ID_SCRIPT,
+        Crawler::CONTENT_TYPE_ID_STYLESHEET,
     ];
-    
+
     /**
      * @inheritDoc
      */
@@ -93,6 +94,21 @@ class NextJsProcessor extends BaseProcessor implements ContentProcessor
 
         // ./_next/static/css/832b02c26afacbf3.css?dpl=dpl_Es8ZzBRosxdiiRhkKSKrp9h56u6K
         // static/chunks/css/832b02c26afacbf3.css?dpl=dpl_Es8ZzBRosxdiiRhkKSKrp9h56u6K
+        $content = preg_replace('/((_next|chunks)\/[a-z0-9\/()\[\]._@%^{}-]+\.[a-z0-9]{1,5})\?[a-z0-9_&=.-]+/i', '$1', $content);
+        $content = preg_replace('/\?dpl=[^"\' ]+/i', '', $content);
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function applyContentChangesBeforeUrlParsing(string &$content, int $contentType, ParsedUrl $url): void
+    {
+        // do nothing if html/js does not contain _next (each html/js of NextJS contains _next)
+        if (stripos($content, '_next') === false) {
+            return;
+        }
+
+        // remove query params to static assets in NextJS
         $content = preg_replace('/((_next|chunks)\/[a-z0-9\/()\[\]._@%^{}-]+\.[a-z0-9]{1,5})\?[a-z0-9_&=.-]+/i', '$1', $content);
         $content = preg_replace('/\?dpl=[^"\' ]+/i', '', $content);
     }

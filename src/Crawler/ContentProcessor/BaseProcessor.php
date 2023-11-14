@@ -45,7 +45,15 @@ abstract class BaseProcessor implements ContentProcessor
      */
     public function applyContentChangesForOfflineVersion(string &$content, int $contentType, ParsedUrl $url): void
     {
-        throw new \Exception(__METHOD__ . ': Not implemented');
+        // do nothing = optionally implemented in child classes
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function applyContentChangesBeforeUrlParsing(string &$content, int $contentType, ParsedUrl $url): void
+    {
+        // do nothing = optionally implemented in child classes
     }
 
     public function setDebugMode(bool $debugMode): void

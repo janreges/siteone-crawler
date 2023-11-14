@@ -84,7 +84,7 @@ class Crawler
         $this->status->setFinalUserAgent($this->finalUserAgent);
         $this->initialParsedUrl = ParsedUrl::parse($this->options->url);
 
-        $this->registerFrameworkProcessors();
+        $this->registerContentProcessors();
     }
 
     /**
@@ -159,11 +159,12 @@ class Crawler
      * Returns array with extra parsed content (Title, Keywords, Description, DOM, ...)
      *
      * @param string $body
+     * @param int $contentType
      * @param ParsedUrl $url
      * @return array
      * @throws Exception
      */
-    private function parseHtmlBodyAndFillQueue(string $body, ParsedUrl $url): array
+    private function parseHtmlBodyAndFillQueue(string $body, int $contentType, ParsedUrl $url): array
     {
         static $regexForHtmlExtensions = null;
         if (!$regexForHtmlExtensions) {
@@ -174,7 +175,7 @@ class Crawler
         $urlUqId = $this->getUrlUqId($url);
 
         // add suitable URLs to queue
-        $this->parseContentAndFillUrlQueue($body, $url, $urlUqId);
+        $this->parseContentAndFillUrlQueue($body, $contentType, $url, $urlUqId);
 
         // add extra parsed content to result (Title, Keywords, Description) if needed
         // title & descriptions are needed by BestPracticeAnalyzer so they are parsed even if not needed for output
@@ -202,14 +203,15 @@ class Crawler
      * Parse HTML/CSS/JS body and fill queue with new founded URLs if are allowed
      *
      * @param string $content
+     * @param int $contentType
      * @param ParsedUrl $url
      * @param string $urlUqId
      * @return void
      * @throws Exception
      */
-    private function parseContentAndFillUrlQueue(string $content, ParsedUrl $url, string $urlUqId): void
+    private function parseContentAndFillUrlQueue(string $content, int $contentType, ParsedUrl $url, string $urlUqId): void
     {
-        $foundUrlsList = $this->contentProcessorManager->findUrls($content, $url);
+        $foundUrlsList = $this->contentProcessorManager->findUrls($content, $contentType, $url);
         foreach ($foundUrlsList as $foundUrls) {
             $this->addSuitableUrlsToQueue($foundUrls, $url, $urlUqId);
         }
@@ -329,7 +331,6 @@ class Crawler
         $absoluteUrl = $scheme . '://' . $hostAndPort . $parsedUrl->path . ($parsedUrl->query ? '?' . $parsedUrl->query : '');
         $finalUrlForHttpClient = $this->options->addRandomQueryParams ? Utils::addRandomQueryParams($parsedUrl->path) : ($parsedUrl->path . ($parsedUrl->query ? '?' . $parsedUrl->query : ''));
         $origin = $sourceUqId ? $this->status->getOriginHeaderValueBySourceUqId($sourceUqId) : null;
-        $fullUrlWithoutFragment = $parsedUrl->getFullUrl(true, false);
 
         // setup HTTP client, send request and get response
         $httpResponse = $this->httpClient->request(
@@ -371,16 +372,20 @@ class Crawler
         $isAllowedForCrawling = $this->isUrlAllowedByRegexes($parsedUrl) && $this->isExternalDomainAllowedForCrawling($parsedUrl->host);
         $extraParsedContent = [];
 
-        // remove query params in NextJS to static assets
-        if ($body && ($isHtmlBody || $isJsBody || $isCssBody) && str_contains($body, '_next')) {
-            $body = preg_replace('/((_next|chunks)\/[a-z0-9\/()\[\]._@%^{}-]+\.[a-z0-9]{1,5})\?[a-z0-9_&=.-]+/i', '$1', $body);
-            $body = preg_replace('/\?dpl=[^"\' ]+/i', '', $body);
+        // get type self::URL_TYPE_* based on content-type header
+        $contentTypeHeader = $httpResponse->headers['content-type'] ?? '';
+        if (isset($httpResponse->headers['location']) && $httpResponse->headers['location']) {
+            $contentType = self::CONTENT_TYPE_ID_REDIRECT;
+        } else {
+            $contentType = $this->getContentTypeIdByContentTypeHeader($contentTypeHeader);
         }
 
+        $this->contentProcessorManager->applyContentChangesBeforeUrlParsing($body, $contentType, $parsedUrl);
+
         if ($body && $isHtmlBody && $isAllowedForCrawling) {
-            $extraParsedContent = $this->parseHtmlBodyAndFillQueue($body, $parsedUrl);
+            $extraParsedContent = $this->parseHtmlBodyAndFillQueue($body, $contentType, $parsedUrl);
         } elseif ($body && ($isJsBody || $isCssBody)) {
-            $this->parseContentAndFillUrlQueue($body, $parsedUrl, $parsedUrlUqId);
+            $this->parseContentAndFillUrlQueue($body, $contentType, $parsedUrl, $parsedUrlUqId);
         }
 
         // handle redirect
@@ -392,17 +397,9 @@ class Crawler
             }
         }
 
-        // get type self::URL_TYPE_* based on content-type header
-        $contentType = $httpResponse->headers['content-type'] ?? '';
-        if (isset($extraParsedContent['Location'])) {
-            $type = self::CONTENT_TYPE_ID_REDIRECT;
-        } else {
-            $type = $this->getContentTypeIdByContentTypeHeader($contentType);
-        }
-
         // update info about visited URL
         $isExternal = $parsedUrl->host && $parsedUrl->host !== $this->initialParsedUrl->host;
-        $visitedUrl = $this->updateVisitedUrl($parsedUrl, $elapsedTime, $status, $bodySize, $type, $body, $httpResponse->headers, $extraParsedContent, $isExternal, $isAllowedForCrawling);
+        $visitedUrl = $this->updateVisitedUrl($parsedUrl, $elapsedTime, $status, $bodySize, $contentType, $body, $httpResponse->headers, $extraParsedContent, $isExternal, $isAllowedForCrawling);
 
         // call visited URL callback (it runs analyzers)
         $extraColumnsFromAnalysis = call_user_func($this->visitedUrlCallback, $visitedUrl, $body, $httpResponse->headers);
@@ -412,7 +409,7 @@ class Crawler
 
         // print table row to output
         $progressStatus = $this->statusTable->get('1', 'doneUrls') . '/' . ($this->queue->count() + $this->visited->count());
-        $this->output->addTableRow($httpResponse, $absoluteUrl, $status, $elapsedTime, $bodySize, $type, $extraParsedContent, $progressStatus);
+        $this->output->addTableRow($httpResponse, $absoluteUrl, $status, $elapsedTime, $bodySize, $contentType, $extraParsedContent, $progressStatus);
 
         // check if crawler is done and exit or start new coroutine to process the next URL
         if ($this->queue->count() === 0 && $this->getActiveWorkersNumber() === 0) {
@@ -944,7 +941,7 @@ class Crawler
      * @return void
      * @throws Exception
      */
-    private function registerFrameworkProcessors(): void
+    private function registerContentProcessors(): void
     {
         $this->contentProcessorManager = new ContentProcessorManager();
         $this->contentProcessorManager->registerProcessor(new AstroProcessor($this));
