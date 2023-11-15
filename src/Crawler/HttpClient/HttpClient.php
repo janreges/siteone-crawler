@@ -138,6 +138,11 @@ class HttpClient
             ? unserialize(gzdecode(file_get_contents($cacheFile)))
             : unserialize(file_get_contents($cacheFile));
 
+        // If cached response is bool (true/false), it means that content was not found or not properly loaded or serialized
+        if (is_bool($result)) {
+            return null;
+        }
+
         // If cached response is 429/500/503 or -1 to -4 (errors), we don't want to use it again, and we want to try to get new response
         if (in_array($result->statusCode, [429, 500, 502, 503, -1, -2, -3, -4])) {
             return null;
