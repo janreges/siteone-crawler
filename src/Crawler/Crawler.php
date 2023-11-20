@@ -52,8 +52,11 @@ class Crawler
     private float $lastRequestTime = 0;
 
     private string $acceptHeader = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7';
-
     private static int $loadedRobotsTxtCount = 0;
+
+    // websocket server & client to send messages through it
+    private ?Process $websocketServerProcess = null;
+    private ?Coroutine\Client $websocketClient = null;
 
     const CONTENT_TYPE_ID_HTML = 1;
     const CONTENT_TYPE_ID_SCRIPT = 2;
@@ -139,11 +142,14 @@ class Crawler
         // set corouting settings
         $this->setupCoroutines();
 
+        // start websocket if needed
+        $this->startWebSocketServerIfNeeded();
+
         // start recursive coroutine to process URLs
         Coroutine\run(function () {
-
             // catch SIGINT (Ctrl+C), print statistics and stop crawler
             Process::signal(SIGINT, function () {
+                $this->stopWebSocketServer();
                 Coroutine::cancel(Coroutine::getCid());
                 MailerExporter::$crawlerInterrupted = true; // stop sending emails
                 call_user_func($this->doneCallback);
@@ -152,8 +158,67 @@ class Crawler
 
             // run first recursive coroutine
             Coroutine::create([$this, 'processNextUrl']);
-
         });
+    }
+
+    /**
+     * @return void
+     * @throws Exception
+     */
+    private function startWebSocketServerIfNeeded(): void
+    {
+        if ($this->options->websocketServer) {
+            list($wsHost, $wsPort) = explode(':', $this->options->websocketServer);
+            $wsPort = intval($wsPort);
+            $tcpHost = $wsHost;
+            $tcpPort = $wsPort + 1;
+
+            $swooleBinFile = BASE_DIR . '/bin/swoole-cli';
+            if (!is_file($swooleBinFile) && is_file($swooleBinFile . '.exe')) {
+                $swooleBinFile = $swooleBinFile . '.exe';
+            } elseif (!is_file($swooleBinFile) || !is_executable($swooleBinFile)) {
+                throw new Exception("Swoole binary file '{$swooleBinFile}' not found or is not executable.");
+            }
+
+            $this->websocketServerProcess = new Process(function ($process) use ($swooleBinFile, $wsHost, $wsPort, $tcpHost, $tcpPort) {
+                $process->exec($swooleBinFile, [
+                    BASE_DIR . '/src/ws-server.php',
+                    '--tcp-host=' . $tcpHost,
+                    '--tcp-port=' . $tcpPort,
+                    '--ws-host=' . $wsHost,
+                    '--ws-port=' . $wsPort,
+                ]);
+            });
+
+            $this->websocketServerProcess->start();
+            sleep(1);
+            $this->websocketClient = new Coroutine\Client(SWOOLE_SOCK_TCP);
+        }
+    }
+
+    public function stopWebSocketServer(): void
+    {
+        $this->websocketClient?->close();
+        if ($this->websocketServerProcess) {
+            $this->output->addNotice("Stopping WebSocket server...");
+            $this->websocketServerProcess->kill($this->websocketServerProcess->pid, SIGKILL);
+            $this->websocketServerProcess->wait();
+        }
+    }
+
+    public function sendWebSocketMessage(string $message): void
+    {
+        static $connected = false;
+        if (!$connected && $this->websocketClient && !$this->websocketClient->isConnected()) {
+            $connected = true;
+            list($wsHost, $wsPort) = explode(':', $this->options->websocketServer);
+            $wsPort = intval($wsPort);
+            $tcpPort = $wsPort + 1;
+            $wsHost = $wsHost === '0.0.0.0' ? '127.0.0.1' : $wsHost;
+            $this->websocketClient->connect($wsHost, $tcpPort, 1);
+            $this->output->addNotice("WebSocket client connected to {$wsHost}:{$tcpPort}");
+        }
+        $this->websocketClient?->send($message);
     }
 
     /**
@@ -295,142 +360,163 @@ class Crawler
             return;
         }
 
-        // take first URL from queue, remove it from queue and add it to visited
-        $url = null;
-        $sourceUqId = null;
-        foreach ($this->queue as $urlKey => $queuedUrl) {
-            $url = $queuedUrl['url'];
-            $sourceUqId = $queuedUrl['sourceUqId'];
-            $this->addUrlToVisited(ParsedUrl::parse($url), $queuedUrl['uqId'], $sourceUqId);
-            $this->queue->del($urlKey);
-            break;
-        }
-
-        // end if queue is empty
-        if (!$url) {
-            return;
-        }
-
-        // increment workers count
-        $this->statusTable->incr('1', 'workers');
-
-        $parsedUrl = ParsedUrl::parse($url);
-        $parsedUrlUqId = $this->getUrlUqId($parsedUrl);
-        $isAssetUrl = $parsedUrl->extension && !in_array($parsedUrl->extension, HtmlProcessor::$htmlPagesExtensions);
-
-        $scheme = $parsedUrl->scheme ?: $this->initialParsedUrl->scheme;
-        if (!$parsedUrl->host || $parsedUrl->host === $this->initialParsedUrl->host) {
-            $hostAndPort = $this->initialParsedUrl->host . ($this->initialParsedUrl->port !== 80 && $this->initialParsedUrl->port !== 443 ? ':' . $this->initialParsedUrl->port : '');
-        } else {
-            $hostAndPort = $parsedUrl->host . ($parsedUrl->port && $parsedUrl->port !== 80 && $parsedUrl->port !== 443 ? ':' . $parsedUrl->port : '');
-        }
-
-        if (!$parsedUrl->host) {
-            $this->output->addError("Invalid/unsupported URL found: " . print_r($parsedUrl, true));
-            return;
-        }
-
-        $absoluteUrl = $scheme . '://' . $hostAndPort . $parsedUrl->path . ($parsedUrl->query ? '?' . $parsedUrl->query : '');
-        $finalUrlForHttpClient = $this->options->addRandomQueryParams ? Utils::addRandomQueryParams($parsedUrl->path) : ($parsedUrl->path . ($parsedUrl->query ? '?' . $parsedUrl->query : ''));
-        $origin = $sourceUqId ? $this->status->getOriginHeaderValueBySourceUqId($sourceUqId) : null;
-
-        // setup HTTP client, send request and get response
-        $httpResponse = $this->httpClient->request(
-            $parsedUrl->host,
-            $parsedUrl->port ?: ($scheme === 'https' ? 443 : 80),
-            $scheme,
-            $finalUrlForHttpClient,
-            'GET',
-            $this->options->timeout,
-            $this->finalUserAgent,
-            $this->acceptHeader,
-            $this->options->acceptEncoding,
-            $origin
-        );
-
-        // when the crawler has been terminated in the meantime, do not process response, otherwise output
-        // will be corrupted because request table-row will be somewhere in the middle of output of the analyzers
-        if ($this->terminated) {
-            return;
-        }
-
-        $body = $httpResponse->body;
-        $status = $httpResponse->statusCode;
-        $elapsedTime = $httpResponse->execTime;
-
-        if ($isAssetUrl && isset($httpResponse->headers['content-length'])) {
-            $bodySize = (int)$httpResponse->headers['content-length'];
-        } else {
-            $bodySize = $body ? strlen($body) : 0;
-        }
-
-        // decrement workers count after request is done
-        $this->statusTable->decr('1', 'workers');
-
-        // parse HTML body and fill queue with new URLs
-        $isHtmlBody = isset($httpResponse->headers['content-type']) && stripos($httpResponse->headers['content-type'], 'text/html') !== false;
-        $isCssBody = isset($httpResponse->headers['content-type']) && stripos($httpResponse->headers['content-type'], 'text/css') !== false;
-        $isJsBody = isset($httpResponse->headers['content-type']) && (stripos($httpResponse->headers['content-type'], 'application/javascript') !== false || stripos($httpResponse->headers['content-type'], 'text/javascript') !== false);
-        $isAllowedForCrawling = $this->isUrlAllowedByRegexes($parsedUrl) && $this->isExternalDomainAllowedForCrawling($parsedUrl->host);
-        $extraParsedContent = [];
-
-        // get type self::URL_TYPE_* based on content-type header
-        $contentTypeHeader = $httpResponse->headers['content-type'] ?? '';
-        if (isset($httpResponse->headers['location']) && $httpResponse->headers['location']) {
-            $contentType = self::CONTENT_TYPE_ID_REDIRECT;
-        } else {
-            $contentType = $this->getContentTypeIdByContentTypeHeader($contentTypeHeader);
-        }
-
-        $this->contentProcessorManager->applyContentChangesBeforeUrlParsing($body, $contentType, $parsedUrl);
-
-        if ($body && $isHtmlBody && $isAllowedForCrawling) {
-            $extraParsedContent = $this->parseHtmlBodyAndFillQueue($body, $contentType, $parsedUrl);
-        } elseif ($body && ($isJsBody || $isCssBody)) {
-            $this->parseContentAndFillUrlQueue($body, $contentType, $parsedUrl, $parsedUrlUqId);
-        }
-
-        // handle redirect
-        if ($status >= 301 && $status <= 308 && isset($httpResponse->headers['location'])) {
-            $redirectLocation = $httpResponse->headers['location'];
-            if ($redirectLocation) {
-                $extraParsedContent['Location'] = $redirectLocation;
-                $this->addRedirectLocationToQueueIfSuitable($redirectLocation, $parsedUrlUqId, $scheme, $hostAndPort, $parsedUrl);
+        try {
+            // take first URL from queue, remove it from queue and add it to visited
+            $url = null;
+            $sourceUqId = null;
+            foreach ($this->queue as $urlKey => $queuedUrl) {
+                $url = $queuedUrl['url'];
+                $sourceUqId = $queuedUrl['sourceUqId'];
+                $this->addUrlToVisited(ParsedUrl::parse($url), $queuedUrl['uqId'], $sourceUqId);
+                $this->queue->del($urlKey);
+                break;
             }
-        }
 
-        // update info about visited URL
-        $isExternal = $parsedUrl->host && $parsedUrl->host !== $this->initialParsedUrl->host;
-        $visitedUrl = $this->updateVisitedUrl($parsedUrl, $elapsedTime, $status, $bodySize, $contentType, $body, $httpResponse->headers, $extraParsedContent, $isExternal, $isAllowedForCrawling);
+            // end if queue is empty
+            if (!$url) {
+                return;
+            }
 
-        // call visited URL callback (it runs analyzers)
-        $extraColumnsFromAnalysis = call_user_func($this->visitedUrlCallback, $visitedUrl, $body, $httpResponse->headers);
-        if ($extraColumnsFromAnalysis) {
-            $extraParsedContent = array_merge($extraParsedContent, $extraColumnsFromAnalysis);
-        }
+            // increment workers count
+            $this->statusTable->incr('1', 'workers');
 
-        // print table row to output
-        $progressStatus = $this->statusTable->get('1', 'doneUrls') . '/' . ($this->queue->count() + $this->visited->count());
-        $this->output->addTableRow($httpResponse, $absoluteUrl, $status, $elapsedTime, $bodySize, $contentType, $extraParsedContent, $progressStatus);
+            $parsedUrl = ParsedUrl::parse($url);
+            $parsedUrlUqId = $this->getUrlUqId($parsedUrl);
+            $isAssetUrl = $parsedUrl->extension && !in_array($parsedUrl->extension, HtmlProcessor::$htmlPagesExtensions);
 
-        // check if crawler is done and exit or start new coroutine to process the next URL
-        if ($this->queue->count() === 0 && $this->getActiveWorkersNumber() === 0) {
-            call_user_func($this->doneCallback);
-            Coroutine::cancel(Coroutine::getCid());
-        } else {
-            while ($this->getActiveWorkersNumber() < $this->options->workers && $this->queue->count() > 0) {
-                // rate limiting
-                $currentTimestamp = microtime(true);
-                if (!$httpResponse->isLoadedFromCache() && ($currentTimestamp - $this->lastRequestTime) < $this->optimalDelayBetweenRequests) {
-                    $sleep = $this->optimalDelayBetweenRequests - ($currentTimestamp - $this->lastRequestTime);
-                    Coroutine::sleep(max($sleep, 0.001));
-                    continue;
-                } else {
-                    $this->lastRequestTime = $currentTimestamp;
+            $scheme = $parsedUrl->scheme ?: $this->initialParsedUrl->scheme;
+            if (!$parsedUrl->host || $parsedUrl->host === $this->initialParsedUrl->host) {
+                $hostAndPort = $this->initialParsedUrl->host . ($this->initialParsedUrl->port !== 80 && $this->initialParsedUrl->port !== 443 ? ':' . $this->initialParsedUrl->port : '');
+            } else {
+                $hostAndPort = $parsedUrl->host . ($parsedUrl->port && $parsedUrl->port !== 80 && $parsedUrl->port !== 443 ? ':' . $parsedUrl->port : '');
+            }
+
+            if (!$parsedUrl->host) {
+                $this->output->addError("Invalid/unsupported URL found: " . print_r($parsedUrl, true));
+                return;
+            }
+
+            $absoluteUrl = $scheme . '://' . $hostAndPort . $parsedUrl->path . ($parsedUrl->query ? '?' . $parsedUrl->query : '');
+            $finalUrlForHttpClient = $this->options->addRandomQueryParams ? Utils::addRandomQueryParams($parsedUrl->path) : ($parsedUrl->path . ($parsedUrl->query ? '?' . $parsedUrl->query : ''));
+            $origin = $sourceUqId ? $this->status->getOriginHeaderValueBySourceUqId($sourceUqId) : null;
+
+            // setup HTTP client, send request and get response
+            $httpResponse = $this->httpClient->request(
+                $parsedUrl->host,
+                $parsedUrl->port ?: ($scheme === 'https' ? 443 : 80),
+                $scheme,
+                $finalUrlForHttpClient,
+                'GET',
+                $this->options->timeout,
+                $this->finalUserAgent,
+                $this->acceptHeader,
+                $this->options->acceptEncoding,
+                $origin
+            );
+
+            // when the crawler has been terminated in the meantime, do not process response, otherwise output
+            // will be corrupted because request table-row will be somewhere in the middle of output of the analyzers
+            if ($this->terminated) {
+                return;
+            }
+
+            $body = $httpResponse->body;
+            $status = $httpResponse->statusCode;
+            $elapsedTime = $httpResponse->execTime;
+
+            if ($isAssetUrl && isset($httpResponse->headers['content-length'])) {
+                $bodySize = (int)$httpResponse->headers['content-length'];
+            } else {
+                $bodySize = $body ? strlen($body) : 0;
+            }
+
+            // decrement workers count after request is done
+            $this->statusTable->decr('1', 'workers');
+
+            // parse HTML body and fill queue with new URLs
+            $isHtmlBody = isset($httpResponse->headers['content-type']) && stripos($httpResponse->headers['content-type'], 'text/html') !== false;
+            $isCssBody = isset($httpResponse->headers['content-type']) && stripos($httpResponse->headers['content-type'], 'text/css') !== false;
+            $isJsBody = isset($httpResponse->headers['content-type']) && (stripos($httpResponse->headers['content-type'], 'application/javascript') !== false || stripos($httpResponse->headers['content-type'], 'text/javascript') !== false);
+            $isAllowedForCrawling = $this->isUrlAllowedByRegexes($parsedUrl) && $this->isExternalDomainAllowedForCrawling($parsedUrl->host);
+            $extraParsedContent = [];
+
+            // get type self::URL_TYPE_* based on content-type header
+            $contentTypeHeader = $httpResponse->headers['content-type'] ?? '';
+            if (isset($httpResponse->headers['location']) && $httpResponse->headers['location']) {
+                $contentType = self::CONTENT_TYPE_ID_REDIRECT;
+            } else {
+                $contentType = $this->getContentTypeIdByContentTypeHeader($contentTypeHeader);
+            }
+
+            $this->contentProcessorManager->applyContentChangesBeforeUrlParsing($body, $contentType, $parsedUrl);
+
+            if ($body && $isHtmlBody && $isAllowedForCrawling) {
+                $extraParsedContent = $this->parseHtmlBodyAndFillQueue($body, $contentType, $parsedUrl);
+            } elseif ($body && ($isJsBody || $isCssBody)) {
+                $this->parseContentAndFillUrlQueue($body, $contentType, $parsedUrl, $parsedUrlUqId);
+            }
+
+            // handle redirect
+            if ($status >= 301 && $status <= 308 && isset($httpResponse->headers['location'])) {
+                $redirectLocation = $httpResponse->headers['location'];
+                if ($redirectLocation) {
+                    $extraParsedContent['Location'] = $redirectLocation;
+                    $this->addRedirectLocationToQueueIfSuitable($redirectLocation, $parsedUrlUqId, $scheme, $hostAndPort, $parsedUrl);
                 }
-
-                Coroutine::create([$this, 'processNextUrl']);
             }
+
+            // update info about visited URL
+            $isExternal = $parsedUrl->host && $parsedUrl->host !== $this->initialParsedUrl->host;
+            $visitedUrl = $this->updateVisitedUrl($parsedUrl, $elapsedTime, $status, $bodySize, $contentType, $body, $httpResponse->headers, $extraParsedContent, $isExternal, $isAllowedForCrawling);
+
+            // send message to websocket clients
+            if ($this->websocketServerProcess && !$visitedUrl->isExternal && !$visitedUrl->isStaticFile() && !$visitedUrl->looksLikeStaticFileByUrl()) {
+                $this->sendWebSocketMessage(json_encode([
+                    'type' => 'urlResult',
+                    'url' => $absoluteUrl,
+                    'statusCode' => $status,
+                    'size' => $bodySize,
+                    'execTime' => $elapsedTime,
+                ], JSON_UNESCAPED_UNICODE));
+            }
+
+            // call visited URL callback (it runs analyzers)
+            $extraColumnsFromAnalysis = call_user_func($this->visitedUrlCallback, $visitedUrl, $body, $httpResponse->headers);
+            if ($extraColumnsFromAnalysis) {
+                $extraParsedContent = array_merge($extraParsedContent, $extraColumnsFromAnalysis);
+            }
+
+            // print table row to output
+            $progressStatus = $this->statusTable->get('1', 'doneUrls') . '/' . ($this->queue->count() + $this->visited->count());
+            $this->output->addTableRow($httpResponse, $absoluteUrl, $status, $elapsedTime, $bodySize, $contentType, $extraParsedContent, $progressStatus);
+
+            // check if crawler is done and exit or start new coroutine to process the next URL
+            if ($this->queue->count() === 0 && $this->getActiveWorkersNumber() === 0) {
+                $this->stopWebSocketServer();
+                call_user_func($this->doneCallback);
+                Coroutine::cancel(Coroutine::getCid());
+            } else {
+                while ($this->getActiveWorkersNumber() < $this->options->workers && $this->queue->count() > 0) {
+                    // rate limiting
+                    $currentTimestamp = microtime(true);
+                    if (!$httpResponse->isLoadedFromCache() && ($currentTimestamp - $this->lastRequestTime) < $this->optimalDelayBetweenRequests) {
+                        $sleep = $this->optimalDelayBetweenRequests - ($currentTimestamp - $this->lastRequestTime);
+                        Coroutine::sleep(max($sleep, 0.001));
+                        continue;
+                    } else {
+                        $this->lastRequestTime = $currentTimestamp;
+                    }
+
+                    if (Coroutine::create([$this, 'processNextUrl']) === false) {
+                        $message = "ERROR: Unable to create coroutine for next URL.";
+                        $this->output->addError($message);
+                        throw new \Exception($message);
+                    }
+                }
+            }
+        } catch(\Exception $e) {
+            $this->stopWebSocketServer();
+            throw $e;
         }
     }
 
@@ -933,7 +1019,7 @@ class Crawler
     {
         $options = [
             'max_concurrency' => $this->options->workers,
-            'max_coroutine' => 4096,
+            'max_coroutine' => 8192,
             'stack_size' => 2 * 1024 * 1024,
             'socket_connect_timeout' => $this->options->timeout + 1,
             'socket_timeout' => $this->options->timeout + 2,

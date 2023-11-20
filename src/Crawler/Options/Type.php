@@ -22,5 +22,5 @@ enum Type
     case REGEX;
     case FILE;
     case DIR;
-    case PROXY;
+    case HOST_AND_PORT;
 }

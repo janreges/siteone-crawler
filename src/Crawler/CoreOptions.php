@@ -66,6 +66,7 @@ class CoreOptions
     public int $workers = 3;
     public float $maxReqsPerSec = 10;
     public string $memoryLimit = '2048M';
+    public ?string $websocketServer = null;
 
     /**
      * Domains that are allowed for static files (e.g. CDN) but not for crawling.
@@ -162,7 +163,7 @@ class CoreOptions
             new Option('--device', null, 'device', Type::STRING, false, 'Device type for User-Agent selection. Values `desktop`, `tablet`, `mobile`. Ignored with `--user-agent`.', 'desktop', false),
             new Option('--user-agent', null, 'userAgent', Type::STRING, false, 'Override User-Agent selected by --device.', null, true),
             new Option('--timeout', null, 'timeout', Type::INT, false, 'Request timeout (in sec).', 5, false),
-            new Option('--proxy', null, 'proxy', Type::PROXY, false, 'HTTP proxy in `host:port` format.', null),
+            new Option('--proxy', null, 'proxy', Type::HOST_AND_PORT, false, 'HTTP proxy in `host:port` format.', null),
             new Option('--http-auth', null, 'httpAuth', Type::STRING, false, 'Basic HTTP authentication in `username:password` format.', null),
             new Option('--help', '-h', 'showHelpOnly', Type::BOOL, false, 'Show help and exit.', false, false),
             new Option('--version', '-v', 'showVersionOnly', Type::BOOL, false, 'Show crawler version and exit.', false, false),
@@ -224,6 +225,7 @@ class CoreOptions
             new Option('--result-storage-compression', null, 'resultStorageCompression', Type::BOOL, false, 'Enable compression for results storage. Saves disk space, but uses more CPU.', false, false),
             new Option('--http-cache-dir', null, 'httpCacheDir', Type::DIR, false, "Cache dir for HTTP responses. You can disable cache by --http-cache-dir=''", 'tmp/http-client-cache', true),
             new Option('--http-cache-compression', null, 'httpCacheCompression', Type::BOOL, false, "Enable compression for HTTP cache storage. Saves disk space, but uses more CPU.", false, true),
+            new Option('--websocket-server', '-ws', 'websocketServer', Type::HOST_AND_PORT, false, "Start crawler with websocket server on given host:port, typically `0.0.0.0:8000`.", null, true),
         ]));
 
         return $options;

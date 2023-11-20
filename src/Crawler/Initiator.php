@@ -207,9 +207,9 @@ class Initiator
         $showHelp = false;
 
         foreach ($this->argv as $arg) {
-            if ($arg === '--version') {
+            if ($arg === '--version' || $arg === '-v') {
                 $showVersion = true;
-            } elseif ($arg === '--help') {
+            } elseif ($arg === '--help' || $arg === '-h') {
                 $showHelp = true;
             }
         }
@@ -310,7 +310,7 @@ class Initiator
                     $nameAndValue .= '=<file>';
                 } elseif ($option->type === Type::DIR) {
                     $nameAndValue .= '=<dir>';
-                } elseif ($option->type === Type::PROXY) {
+                } elseif ($option->type === Type::HOST_AND_PORT) {
                     $nameAndValue .= '=<host:port>';
                 }
 
