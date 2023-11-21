@@ -90,6 +90,7 @@ class CoreOptions
     public int $maxUrlLength = 2083; // https://stackoverflow.com/a/417184/1118709
     public array $includeRegex = [];
     public array $ignoreRegex = [];
+    public bool $regexFilteringOnlyForPages = false;
     public ?string $analyzerFilterRegex = null;
     public bool $addRandomQueryParams = false;
     public bool $removeQueryParams = false;
@@ -205,6 +206,7 @@ class CoreOptions
             new Option('--allowed-domain-for-crawling', null, 'allowedDomainsForCrawling', Type::STRING, true, "This option will allow you to crawl all content from other listed domains - typically in the case of language mutations on other domains. Can be specified multiple times. Use can use domains with wildcard '*'.", [], true, true),
             new Option('--include-regex', '--include-regexp', 'includeRegex', Type::REGEX, true, 'Include only URLs matching at least one PCRE regex. Can be specified multiple times.', [], false, true),
             new Option('--ignore-regex', '--ignore-regexp', 'ignoreRegex', Type::REGEX, true, 'Ignore URLs matching any PCRE regex. Can be specified multiple times.', [], false, true),
+            new Option('--regex-filtering-only-for-pages', null, 'regexFilteringOnlyForPages', Type::BOOL, false, 'Set if you want filtering by `*-regex` rules apply only to page URLs, but static assets are loaded regardless of filtering.', false, false),
             new Option('--analyzer-filter-regex', '--analyzer-filter-regexp', 'analyzerFilterRegex', Type::REGEX, false, 'Use only analyzers that match the specified regexp.', null, true, false),
             new Option('--accept-encoding', null, 'acceptEncoding', Type::STRING, false, 'Set `Accept-Encoding` request header.', 'gzip, deflate, br', false),
             new Option('--remove-query-params', null, 'removeQueryParams', Type::BOOL, false, 'Remove URL query parameters from crawled URLs.', false, false),

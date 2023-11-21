@@ -75,7 +75,7 @@ class ParsedUrl
     }
 
     /**
-     * Is static file with an extension and probably not the HTML page?
+     * Is probably static file/asset and probably not the HTML page?
      *
      * @return bool
      */
@@ -89,17 +89,27 @@ class ParsedUrl
             ]);
         }
 
-        // has an extension but is not evident HTML
         if (preg_match('/\.([a-z0-9]{1,10})$/i', $this->path) === 1 && preg_match('/\.(' . $htmlExtensionsRegex . ')$/i', $this->path) === 0) {
+            // has an extension but is not evident HTML page
+            return true;
+        } elseif ($this->isImage()) {
             return true;
         }
 
         return false;
     }
 
+    /**
+     * Is probably image? Has an image extension or is dynamic image (has query with image manipulation parameters)
+     * It is not 100% accurate, but it is good enough for our purposes
+     *
+     * @return bool
+     */
     public function isImage(): bool
     {
-        if (preg_match('/\.(png|gif|jpg|jpeg|ico|webp|avif|tif|bmp|svg)/i', $this->path) === 1) {
+        $hasImageExtension = preg_match('/\.(png|gif|jpg|jpeg|ico|webp|avif|tif|bmp|svg)/i', $this->path) === 1;
+        $isDynamicImage = $this->query && preg_match('/(png|gif|jpg|jpeg|ico|webp|avif|tif|bmp|svg|crop|size|landscape)/i', $this->query) === 1;
+        if ($hasImageExtension || $isDynamicImage) {
             return true;
         }
         return false;

@@ -580,6 +580,11 @@ class Crawler
 
     private function isUrlAllowedByRegexes(ParsedUrl $url): bool
     {
+        // bypass regex filtering for static files if --regex-filtering-only-for-pages is set
+        if ($this->options->regexFilteringOnlyForPages && $url->isStaticFile()) {
+            return true;
+        }
+
         $isAllowed = $this->options->includeRegex === [];
         foreach ($this->options->includeRegex as $includeRegex) {
             if (preg_match($includeRegex, $url->getFullUrl()) === 1) {

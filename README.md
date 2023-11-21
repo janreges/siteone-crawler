@@ -321,6 +321,9 @@ through the file:// protocol.
   Argument can be specified multiple times. Example: `--include-regex='/^\/public\//'`
 * `--ignore-regex=<regex>`         Regular expression compatible with PHP preg_match() for URLs that should be ignored.
   Argument can be specified multiple times. Example: `--ignore-regex='/^.*\/downloads\/.*\.pdf$/i'`
+* `--regex-filtering-only-for-pages` Set if you want filtering by `*-regex` rules apply only to page URLs,
+  but static assets (JS, CSS, images, fonts, documents) have to be loaded regardless of filtering. Useful where you want
+  to filter only /sub-pages/ by `--include-regex='/\/sub-pages\//'`, but assets have to be loaded from any URLs.
 * `--analyzer-filter-regex`        Regular expression compatible with PHP preg_match() applied to Analyzer class names 
  for analyzers filtering. Example: `/(content|accessibility)/i` or `/^(?:(?!best|access).)*$/i` for all analyzers except
  `BestPracticesAnalyzer` and `AccessibilityAnalyzer`.
