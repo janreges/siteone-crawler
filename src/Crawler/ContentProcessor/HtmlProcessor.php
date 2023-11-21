@@ -153,7 +153,7 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
             }
 
             if (in_array(strtolower($attribute), ['srcset', 'imagesrcset'])) {
-                $sources = preg_split('/\s*,\s*/', $value);
+                $sources = preg_split('/,\s/', $value);
                 foreach ($sources as &$source) {
                     if (!str_contains($source, ' ')) {
                         // URL in srcset without a defined size by "url 2x", "url 100w", etc.
@@ -271,7 +271,8 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
 
         if ($tmpMatches) {
             foreach ($tmpMatches as $srcset) {
-                $sources = preg_split('/\s*,\s*/', $srcset);
+                // srcset can contain multiple sources separated by comma and whitespaces, not only comma because comma can be a valid part of the URL
+                $sources = preg_split('/,\s/', $srcset);
                 foreach ($sources as $source) {
                     list($url,) = preg_split('/\s+/', trim($source), 2);
                     if (!in_array($url, $urls)) {
