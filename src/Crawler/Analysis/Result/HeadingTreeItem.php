@@ -93,14 +93,14 @@ class HeadingTreeItem
         for ($i = 2; $i <= $maxLevels; $i++) {
             $xPathAppend .= " or self::h{$i}";
         }
-        $nodes = $xpath->query('//*[self::h1' . $xPathAppend . ']');
+        $nodes = @$xpath->query('//*[self::h1' . $xPathAppend . ']');
 
         $root = new HeadingTreeItem(0, '', null);
         $currentNode = $root;
 
         $h1References = [];
 
-        foreach ($nodes as $node) {
+        foreach ($nodes ?: [] as $node) {
             /* @var $node DOMNode */
             $level = (int)substr($node->nodeName, 1);
 

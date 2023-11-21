@@ -180,9 +180,9 @@ class AccessibilityAnalyzer extends BaseAnalyzer implements Analyzer
         $inputsWithoutLabels = [];
 
         // Find all input elements that are not of type 'hidden'
-        $inputs = $xpath->query("//input[not(@type='hidden')]");
+        $inputs = @$xpath->query("//input[not(@type='hidden')]");
 
-        foreach ($inputs as $input) {
+        foreach ($inputs ?: [] as $input) {
             /** @var DOMNode $input */
             $id = $input->attributes->getNamedItem('id');
             $inputHtml = $dom->saveHTML($input);
@@ -192,9 +192,9 @@ class AccessibilityAnalyzer extends BaseAnalyzer implements Analyzer
 
             // If the input has an id, check for a label with a 'for' attribute that matches the id
             if ($id) {
-                $label = $xpath->query("//label[@for='{$id->nodeValue}']");
+                $label = @$xpath->query("//label[@for='{$id->nodeValue}']");
 
-                if ($label->length == 0) {
+                if (!$label || $label->length == 0) {
                     $inputsWithoutLabels[] = $inputHtml;
                     $this->stats->addWarning(self::ANALYSIS_MISSING_FORM_LABELS, $inputHtml);
                 }
@@ -226,9 +226,9 @@ class AccessibilityAnalyzer extends BaseAnalyzer implements Analyzer
         $criticalElementsWithoutAriaLabels = [];
         $criticalElements = ['input', 'select', 'textarea'];
         foreach ($criticalElements as $elementName) {
-            $elements = $xpath->query("//{$elementName}");
+            $elements = @$xpath->query("//{$elementName}");
 
-            foreach ($elements as $element) {
+            foreach ($elements ?: [] as $element) {
                 /* @var $element DOMElement */
                 $elementHtml = $dom->saveHTML($element);
 
@@ -246,9 +246,9 @@ class AccessibilityAnalyzer extends BaseAnalyzer implements Analyzer
         $warningElementsWithoutAriaLabels = [];
         $warningElements = ['a', 'button'];
         foreach ($warningElements as $elementName) {
-            $elements = $xpath->query("//{$elementName}");
+            $elements = @$xpath->query("//{$elementName}");
 
-            foreach ($elements as $element) {
+            foreach ($elements ?: [] as $element) {
                 /* @var $element DOMElement */
                 $elementHtml = $dom->saveHTML($element);
 
@@ -295,9 +295,9 @@ class AccessibilityAnalyzer extends BaseAnalyzer implements Analyzer
         $elementsToCheck = ['nav', 'main', 'aside', 'header', 'footer'];
 
         foreach ($elementsToCheck as $elementName) {
-            $elements = $xpath->query("//{$elementName}[not(@role)]");
+            $elements = @$xpath->query("//{$elementName}[not(@role)]");
 
-            foreach ($elements as $element) {
+            foreach ($elements ?: [] as $element) {
                 $elementHtml = $dom->saveHTML($element);
 
                 // remove all content after the first opening tag (it is not needed for the analysis)

@@ -520,9 +520,9 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
         libxml_use_internal_errors(false);
 
         $xpath = new DOMXPath($dom);
-        $headings = $xpath->query('//h1 | //h2 | //h3 | //h4 | //h5 | //h6');
+        $headings = @$xpath->query('//h1 | //h2 | //h3 | //h4 | //h5 | //h6');
 
-        if ($headings->length === 0) {
+        if ($headings && $headings->length === 0) {
             $result->addNotice('No headings found in the HTML content.', self::ANALYSIS_HEADING_STRUCTURE, ['No headings found in the HTML content.']);
             $this->stats->addNotice(self::ANALYSIS_HEADING_STRUCTURE, $html);
             return;
