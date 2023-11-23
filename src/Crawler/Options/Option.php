@@ -229,8 +229,11 @@ class Option
             throw new Exception("Option {$this->name} ({$value}) must be string with M/G suffix (for example 512M or 1.5G)");
         } else if ($this->type === Type::REGEX && @preg_match($value, '') === false) {
             throw new Exception("Option {$this->name} ({$value}) must be valid PCRE regular expression");
-        } else if ($this->type === Type::URL && !filter_var($value, FILTER_VALIDATE_URL)) {
-            throw new Exception("Option {$this->name} ({$value}) must be valid URL");
+        } else if ($this->type === Type::URL) {
+            $value = $this->correctUrl($value);
+            if (!filter_var($value, FILTER_VALIDATE_URL)) {
+                throw new Exception("Option {$this->name} ({$value}) must be valid URL");
+            }
         } else if ($this->type === Type::EMAIL && !filter_var($value, FILTER_VALIDATE_EMAIL)) {
             throw new Exception("Option {$this->name} ({$value}) must be valid email '{$value}'");
         } else if ($this->type === Type::FILE && !is_writable(dirname($value)) && !is_writable($value)) {
@@ -275,7 +278,7 @@ class Option
         } else if ($this->type === Type::REGEX) {
             return (string)$value;
         } else if ($this->type === Type::URL) {
-            return (string)$value;
+            return $this->correctUrl($value);
         } else if ($this->type === Type::EMAIL) {
             return (string)$value;
         } else if ($this->type === Type::FILE) {
@@ -324,6 +327,22 @@ class Option
             [self::$extrasDomain, $date, $datetime],
             $value
         );
+    }
+
+    /**
+     * Correct URL to valid URL, e.g. crawler.siteone.io => https://crawler.siteone.io, or localhost to http://localhost)
+     * @param string $url
+     * @return string
+     */
+    private function correctUrl(string $url): string
+    {
+        if (!str_starts_with($url, 'http') && preg_match('/^[a-z0-9\-.:]{1,100}$/i', $url) === 1) {
+            // if contains dot, use https, otherwise http (e.g. localhost)
+            $defaultProtocol = str_contains($url, '.') ? 'https' : 'http';
+            $url = $defaultProtocol . '://' . ltrim($url, '/');
+        }
+
+        return $url;
     }
 
     public static function setExtrasDomain(?string $extrasDomain): void
