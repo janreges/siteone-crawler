@@ -357,11 +357,30 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
         if (!$this->fontsEnabled) {
             $html = Utils::stripFonts($html);
         }
-        if (!$this->imagesEnabled) {
+        if (!$this->imagesEnabled && stripos($html, '<img') !== false) {
             $html = Utils::stripImages($html);
+            $html = $this->setCustomCssForTileImages($html);
+            $html = Utils::addClassToHtmlImages($html, 'siteone-crawler-bg');
         }
 
         return $html;
+    }
+
+    private function setCustomCssForTileImages(string $html): string
+    {
+        // background is 64x36px with diagonal lines with transparent spaces between them and Crawler logo as a watermark
+        $backgroundBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAEAAAAAkCAMAAAAO0sygAAAAAXNSR0IB2cksfwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAMlQTFRFFxcXwMDA////1NTU5+fnpaWl0tLSIyMj5ubmlJSUxcXF29vbz8/P9PT01tbWxMTE8fHxaWlp39/f9fX1yMjI3NzciYmJeXl5Gxsb2dnZNTU18/PzXFxc5eXlJycnysrKZGRk6enp3d3dW1tbsrKyWFhYIiIi19fXvLy8w8PDuLi47e3tzMzM0dHRx8fH09PTHR0dzs7OLy8vwcHB0NDQSEhIqamp4uLiHh4eOzs74ODg3t7ewsLCISEhJCQkaGhoy8vLzc3N2NjYEPdgjAAAAaRJREFUeJzdlWlTgzAQhiGlWlsCCHgg9vAWpalavK3X//9RJptACoEwTp1x9MPOht19k+VJCIZhIvNXzVh1DmPVHowfe5cOsrpr5dh6D1kb/VJs0LWQ3cAAO7gyp0tjXinGavBmPQOf5gaVvgIaC5eet5jeceoZbNPcjhjvcu9GGHl7sjYGfbXP3HyaG/Dx/pD7UYDwOFT0ThuDSYwOahgcCn0rgyNWZykMQNtpYXBM9+wkhtreKZ8zZ8D52RoGEeT6E9EntTPmzxP5/mEIXscAX8SF/hL6TSEHc6VTRGbNDMyrYaElRPRxncr1bVpzEzczyHugNjeIGHO9ydbNMjomGgbUUq5PlDMzp3p5FpoYmLei77sERUJ//yBy0wy8lkFf8s/XV/rVMXjk9VahnYF/KvWrY/AMuZdFrvdQCHtPSnVt52BOfa/YP6LcBzoGfj73K1s/q70PtAzYt/DGx8P3Dx6r3Ad6Br6ce2GLmLwPknGAgigAPfNBFDffB6WzKRiMvGJfK/urMlgyycBV9FjDoLAlBl5V/9nwPXzb/tO/8e8y+AJh0S3ETlwQiAAAAABJRU5ErkJggg==';
+        return preg_replace(
+            '/<\s*\/\s*head\s*>/i',
+            '<style>
+                .siteone-crawler-bg {
+                    background-image: url("data:image/png;base64,' . $backgroundBase64 . '");
+                    background-repeat: repeat;
+                    opacity: 0.15;
+                }
+            </style></head>',
+            $html
+        );
     }
 
     /**

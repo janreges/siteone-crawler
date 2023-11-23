@@ -14,6 +14,8 @@ class Utils
 {
     private static bool $colorsEnabled = true;
 
+    public const IMG_SRC_TRANSPARENT_1X1_GIF = 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==';
+
     public static function disableColors(): void
     {
         self::$colorsEnabled = false;
@@ -651,25 +653,33 @@ class Utils
     }
 
     /**
+     * Strip all images and replace them with placeholderImage (by default with transparent 1x1 GIF)
+     *
      * @param string $htmlOrCss
+     * @param string|null $placeholderImage
      * @return string
      */
-    public static function stripImages(string $htmlOrCss): string
+    public static function stripImages(string $htmlOrCss, ?string $placeholderImage = null): string
     {
-        $placeholderImage = '/placeholder.png';
+        if (!$placeholderImage) {
+            $placeholderImage = self::IMG_SRC_TRANSPARENT_1X1_GIF;
+        }
+
         $patterns = [
-            '/(<img[^>]+)src=[\'"][^\'"]*[\'"]([^>]*>)/im',
-            '/(<img[^>]+)srcset=[\'"][^\'"]*[\'"]([^>]*>)/im',
-            '/(<source[^>]+)srcset=[\'"][^\'"]*[\'"]([^>]*>)/im',
-            '/(<source[^>]+)src=[\'"][^\'"]*[\'"]([^>]*>)/im',
-            '/url\(\s*[\'"]?(?![data:])([^\'")]*\.(?:png|jpe?g|gif|webp|svg|bmp))[\'"]?\s*\)/i',
+            '/(<img[^>]+)src=[\'"][^\'"]*[\'"]([^>]*>)/is',
+            '/(<img[^>]+)srcset=[\'"][^\'"]*[\'"]([^>]*>)/is',
+            '/(<source[^>]+)srcset=[\'"][^\'"]*[\'"]([^>]*>)/is',
+            '/(<source[^>]+)src=[\'"][^\'"]*[\'"]([^>]*>)/is',
+            '/url\(\s*[\'"]?(?![data:])([^\'")]*\.(?:png|jpe?g|gif|webp|svg|bmp))[\'"]?\s*\)/is',
+            '/<svg[^>]*>(.*?)<\/svg>/is'
         ];
         $replacements = [
             '$1src="' . $placeholderImage . '"$2',
             '$1srcset="' . $placeholderImage . '"$2',
             '$1srcset="' . $placeholderImage . '"$2',
             '$1src="' . $placeholderImage . '"$2',
-            'url("' . $placeholderImage . '")'
+            'url("' . $placeholderImage . '")',
+            '',
         ];
 
         foreach ($patterns as $index => $pattern) {
@@ -682,6 +692,31 @@ class Utils
         }, $htmlOrCss);
 
         return $htmlOrCss;
+    }
+
+    /**
+     * @param string $html
+     * @param string $className
+     * @return string
+     */
+    public static function addClassToHtmlImages(string $html, string $className): string
+    {
+        return preg_replace_callback(
+            '/<img\s+(.*?)>/is',
+            function ($matches) use ($className) {
+                $imgTag = $matches[0];
+                $attributesPart = $matches[1];
+
+                if (strpos($attributesPart, 'class=') !== false) {
+                    $newImgTag = preg_replace('/(class=["\'])([^"\']*)(["\'])/', "$1$2 $className$3", $imgTag);
+                } else {
+                    $newImgTag = str_replace('<img', '<img class="' . $className . '"', $imgTag);
+                }
+
+                return $newImgTag;
+            },
+            $html
+        );
     }
 
     /**
