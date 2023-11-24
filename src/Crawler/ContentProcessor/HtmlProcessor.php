@@ -243,7 +243,7 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
 
         // <input src="..."
         preg_match_all('/<input\s+[^>]*?src=["\']([^"\'>]+\.[a-z0-9]{1,10})["\'][^>]*>/is', $html, $matches);
-        $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrl->getFullUrl(true, false), FoundUrl::SOURCE_IMG_SRC);
+        $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrl->getFullUrl(true, false), FoundUrl::SOURCE_INPUT_SRC);
 
         // <link href="...(png|gif|jpg|jpeg|webp|avif|tif|bmp|svg)"
         preg_match_all('/<link\s+[^>]*?href=["\']([^"\'>]+\.(png|gif|jpg|jpeg|webp|avif|tif|bmp|svg|ico)(|\?[^"\']))["\'][^>]*>/is', $html, $matches);
@@ -251,7 +251,7 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
 
         // <source src="..."
         preg_match_all('/<source\s+[^>]*?src=["\']([^"\'>]+)["\'][^>]*>/is', $html, $matches);
-        $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrl->getFullUrl(true, false), FoundUrl::SOURCE_IMG_SRC);
+        $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrl->getFullUrl(true, false), FoundUrl::SOURCE_SOURCE_SRC);
 
         // CSS url()
         preg_match_all("/url\s*\(\s*['\"]?([^'\")]+\.(jpg|jpeg|png|gif|bmp|tif|webp|avif))/is", $html, $matches);
@@ -281,7 +281,7 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
                 }
             }
         }
-        $foundUrls->addUrlsFromTextArray(array_unique($urls), $sourceUrl->getFullUrl(true, false), FoundUrl::SOURCE_IMG_SRC);
+        $foundUrls->addUrlsFromTextArray(array_unique($urls), $sourceUrl->getFullUrl(true, false), FoundUrl::SOURCE_IMG_SRCSET);
     }
 
     /**

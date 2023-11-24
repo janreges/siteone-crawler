@@ -12,13 +12,18 @@ namespace Crawler;
 
 class FoundUrl
 {
+    const SOURCE_INIT_URL = 5;
     const SOURCE_A_HREF = 10;
     const SOURCE_IMG_SRC = 20;
+    const SOURCE_IMG_SRCSET = 21;
+    const SOURCE_INPUT_SRC = 22;
+    const SOURCE_SOURCE_SRC = 23;
     const SOURCE_SCRIPT_SRC = 30;
     const SOURCE_INLINE_SCRIPT_SRC = 40;
     const SOURCE_LINK_HREF = 50;
     const SOURCE_CSS_URL = 60;
     const SOURCE_JS_URL = 70;
+    const SOURCE_REDIRECT = 80;
 
     /**
      * Founded URL, parsed from $this->sourceUrl
