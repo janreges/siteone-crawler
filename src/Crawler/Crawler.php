@@ -249,14 +249,14 @@ class Crawler
         // add extra parsed content to result (Title, Keywords, Description) if needed
         // title & descriptions are needed by BestPracticeAnalyzer so they are parsed even if not needed for output
         preg_match_all('/<title[^>]*>([^<]*)<\/title>/i', $body, $matches);
-        $result['Title'] = trim($matches[1][0] ?? '');
+        $result['Title'] = $this->decodeEncodedHtmlEntities(trim($matches[1][0] ?? ''));
 
         preg_match_all('/<meta\s+[^>]*name=["\']description["\']\s+[^>]*content=["\']([^"\']+)["\'][^>]*>/i', $body, $matches);
-        $result['Description'] = trim($matches[1][0] ?? '');
+        $result['Description'] = $this->decodeEncodedHtmlEntities(trim($matches[1][0] ?? ''));
 
         if ($this->options->hasHeaderToTable('Keywords')) {
             preg_match_all('/<meta\s+[^>]*name=["\']keywords["\']\s+[^>]*content=["\']([^"\']+)["\'][^>]*>/i', $body, $matches);
-            $result['Keywords'] = trim($matches[1][0] ?? '');
+            $result['Keywords'] = $this->decodeEncodedHtmlEntities(trim($matches[1][0] ?? ''));
         }
 
         if ($this->options->hasHeaderToTable('DOM')) {
@@ -284,6 +284,23 @@ class Crawler
         foreach ($foundUrlsList as $foundUrls) {
             $this->addSuitableUrlsToQueue($foundUrls, $url, $urlUqId);
         }
+    }
+
+    /**
+     * @param string|null $text
+     * @return string|null
+     */
+    private function decodeEncodedHtmlEntities(?string $text): ?string
+    {
+        if ($text === null) {
+            return null;
+        }
+
+        if (str_contains($text, '&#x') || str_contains($text, '&amp;') || str_contains($text, '&ndash;')) {
+            $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        }
+
+        return $text;
     }
 
     /**
