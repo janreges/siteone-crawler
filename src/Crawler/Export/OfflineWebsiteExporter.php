@@ -248,7 +248,7 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
         $options->addGroup(new Group(
             self::GROUP_OFFLINE_WEBSITE_EXPORTER,
             'Offline exporter options', [
-            new Option('--offline-export-directory', null, 'offlineExportDirectory', Type::DIR, false, 'Path to directory where to save the offline version of the website.', null, true),
+            new Option('--offline-export-directory', '-oed', 'offlineExportDirectory', Type::DIR, false, 'Path to directory where to save the offline version of the website.', null, true),
             new Option('--offline-export-store-only-url-regex', null, 'offlineExportStoreOnlyUrlRegex', Type::REGEX, true, 'For debug - when filled it will activate debug mode and store only URLs which match one of these PCRE regexes. Can be specified multiple times.', null, true),
         ]));
         return $options;
