@@ -88,7 +88,7 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
         });
 
         $imagesUrls = array_filter($this->status->getVisitedUrls(), function ($visitedUrl) {
-            return !$visitedUrl->isExternal && $visitedUrl->statusCode === 200 && $visitedUrl->contentType === Crawler::CONTENT_TYPE_ID_IMAGE;
+            return $visitedUrl->statusCode === 200 && $visitedUrl->contentType === Crawler::CONTENT_TYPE_ID_IMAGE;
         });
 
         $superTable = new SuperTable(
