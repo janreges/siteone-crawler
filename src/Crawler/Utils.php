@@ -128,6 +128,7 @@ class Utils
             }
 
             $style = trim($style, ';');
+
             if ($style) {
                 return '<span style="' . $style . '">' . $matches[2] . '</span>';
             } else {
@@ -202,7 +203,14 @@ class Utils
         return $baseUrl . '?' . $newQuery;
     }
 
-    public static function truncateInTwoThirds(string $text, int $maxLength, string $placeholder = '…'): string
+    /**
+     * @param string $text
+     * @param int $maxLength
+     * @param string $placeholder
+     * @param bool|null $forcedColoring If TRUE/FALSE, will force coloring ON/OFF
+     * @return string
+     */
+    public static function truncateInTwoThirds(string $text, int $maxLength, string $placeholder = '…', ?bool $forcedColoring = null): string
     {
         if (mb_strlen($text) <= $maxLength) {
             return $text;
@@ -214,17 +222,30 @@ class Utils
         $firstPart = mb_substr($text, 0, intval($firstPartLength));
         $secondPart = mb_substr($text, -1 * intval($secondPartLength));
 
-        return trim($firstPart) . self::getColorText($placeholder, 'red') . trim($secondPart);
+        $finalText = $forcedColoring === true || $forcedColoring === null ? self::getColorText($placeholder, 'red') : $placeholder;
+
+        return trim($firstPart) . $finalText . trim($secondPart);
     }
 
-    public static function truncateUrl(string $url, int $maxLength, string $placeholder = '…', ?string $stripHostname = null): string
+    /**
+     * @param string $url
+     * @param int $maxLength
+     * @param string $placeholder
+     * @param string|null $stripHostname
+     * @param string|null $schemeOfHostnameToStrip
+     * @param bool|null $forcedColoring If TRUE/FALSE, will force coloring ON/OFF
+     * @return string
+     */
+    public static function truncateUrl(string $url, int $maxLength, string $placeholder = '…', ?string $stripHostname = null, ?string $schemeOfHostnameToStrip = null, ?bool $forcedColoring = null): string
     {
-        if ($stripHostname) {
+        if ($stripHostname && !$schemeOfHostnameToStrip) {
             $url = str_ireplace(['http://' . $stripHostname, 'https://' . $stripHostname], ['', ''], $url);
+        } else if ($stripHostname) {
+            $url = str_ireplace($schemeOfHostnameToStrip . '://' . $stripHostname, '', $url);
         }
 
         if (mb_strlen($url) > $maxLength) {
-            $url = self::truncateInTwoThirds($url, $maxLength, $placeholder);
+            $url = self::truncateInTwoThirds($url, $maxLength, $placeholder, $forcedColoring);
         }
 
         return $url;
@@ -285,14 +306,20 @@ class Utils
 
     /**
      * Get URL without a scheme and host. If $onlyWhenHost is defined and URL does not contain this host, return original URL.
+     * Also if $initialScheme is defined and URL does not start with this scheme, return original URL.
      *
      * @param string $url
      * @param string|null $onlyWhenHost
+     * @param string|null $initialScheme
      * @return string
      */
-    public static function getUrlWithoutSchemeAndHost(string $url, ?string $onlyWhenHost = null): string
+    public static function getUrlWithoutSchemeAndHost(string $url, ?string $onlyWhenHost = null, ?string $initialScheme = null): string
     {
         if ($onlyWhenHost && stripos($url, $onlyWhenHost) === false) {
+            return $url;
+        }
+
+        if ($initialScheme && !str_starts_with($url, $initialScheme . '://')) {
             return $url;
         }
 

@@ -43,6 +43,7 @@ class SuperTable
     private string $currentOrderDirection = 'ASC';
     private string $uniqueId;
     private ?string $hostToStripFromUrls = null;
+    private ?string $schemeOfHostToStripFromUrls = null;
     private ?string $initialUrl = null;
     private bool $fulltextEnabled = true;
     private int $minRowsForFulltext = 10;
@@ -184,14 +185,14 @@ class SuperTable
 
                 // full URL in value
                 if (is_string($formattedValue) && is_string($value) && str_starts_with($value, 'http')) {
-                    $formattedValue = "<a href='" . htmlspecialchars($value) . "' target='_blank'>" . Utils::truncateUrl($value, 100, '…', $this->hostToStripFromUrls) . "</a>";
+                    $formattedValue = "<a href='" . htmlspecialchars($value) . "' target='_blank'>" . Utils::truncateUrl($value, 100, '…', $this->hostToStripFromUrls, $this->schemeOfHostToStripFromUrls, false) . "</a>";
                 } // full URL in formatted value
                 else if (is_string($formattedValue) && is_string($value) && str_starts_with($formattedValue, 'http')) {
-                    $formattedValue = "<a href='" . htmlspecialchars($formattedValue) . "' target='_blank'>" . Utils::truncateUrl($formattedValue, 100, '…', $this->hostToStripFromUrls) . "</a>";
+                    $formattedValue = "<a href='" . htmlspecialchars($formattedValue) . "' target='_blank'>" . Utils::truncateUrl($formattedValue, 100, '…', $this->hostToStripFromUrls, $this->schemeOfHostToStripFromUrls, false) . "</a>";
                 } // relative URL
                 elseif ($initialRootUrl && is_string($formattedValue) && str_starts_with($formattedValue, '/') && preg_match('/^\/[a-z0-9\-_.\/?&#+=%@()|]+$/i', $formattedValue)) {
                     $finalUrl = $initialRootUrl . $formattedValue;
-                    $formattedValue = "<a href='" . htmlspecialchars($finalUrl) . "' target='_blank'>" . Utils::truncateUrl($formattedValue, 100, '…', $this->hostToStripFromUrls) . "</a>";
+                    $formattedValue = "<a href='" . htmlspecialchars($finalUrl) . "' target='_blank'>" . Utils::truncateUrl($formattedValue, 100, '…', $this->hostToStripFromUrls, $this->schemeOfHostToStripFromUrls, false) . "</a>";
                 }
 
                 $dataValue = is_scalar($value) && strlen(strval($value)) < 200 ? strval($value) : (strlen(strval($formattedValue)) < 50 ? strval($formattedValue) : 'complex-data');
@@ -322,9 +323,10 @@ class SuperTable
         return count($this->data);
     }
 
-    public function setHostToStripFromUrls(?string $hostToStripFromUrls): void
+    public function setHostToStripFromUrls(?string $hostToStripFromUrls, ?string $schemeOfHostToStripFromUrls): void
     {
         $this->hostToStripFromUrls = $hostToStripFromUrls;
+        $this->schemeOfHostToStripFromUrls = $schemeOfHostToStripFromUrls;
     }
 
     public function setInitialUrl(?string $initialUrl): void
