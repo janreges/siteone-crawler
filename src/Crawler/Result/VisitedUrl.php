@@ -11,6 +11,7 @@ declare(strict_types=1);
 namespace Crawler\Result;
 
 use Crawler\Crawler;
+use Crawler\FoundUrl;
 use Crawler\Utils;
 
 class VisitedUrl
@@ -29,6 +30,11 @@ class VisitedUrl
      * @var string Unique ID hash of the source URL where this URL was found
      */
     public readonly string $sourceUqId;
+
+    /**
+     * @var int Source attribute where this URL was found. See FoundUrl::SOURCE_* constants
+     */
+    public readonly int $sourceAttr;
 
     /**
      * Full URL with scheme, domain, path and query
@@ -107,6 +113,7 @@ class VisitedUrl
     /**
      * @param string $uqId
      * @param string $sourceUqId
+     * @param int $sourceAttr
      * @param string $url
      * @param int $statusCode
      * @param float $requestTime
@@ -118,10 +125,11 @@ class VisitedUrl
      * @param bool $isExternal
      * @param bool $isAllowedForCrawling
      */
-    public function __construct(string $uqId, string $sourceUqId, string $url, int $statusCode, float $requestTime, ?int $size, int $contentType, ?string $contentTypeHeader, ?string $contentEncoding, ?array $extras, bool $isExternal, bool $isAllowedForCrawling)
+    public function __construct(string $uqId, string $sourceUqId, int $sourceAttr, string $url, int $statusCode, float $requestTime, ?int $size, int $contentType, ?string $contentTypeHeader, ?string $contentEncoding, ?array $extras, bool $isExternal, bool $isAllowedForCrawling)
     {
         $this->uqId = $uqId;
         $this->sourceUqId = $sourceUqId;
+        $this->sourceAttr = $sourceAttr;
         $this->url = $url;
         $this->statusCode = $statusCode;
         $this->requestTime = $requestTime;
@@ -156,6 +164,56 @@ class VisitedUrl
         ];
 
         return in_array($this->contentType, $staticTypes);
+    }
+
+    public function isImage(): bool
+    {
+        return $this->contentType === Crawler::CONTENT_TYPE_ID_IMAGE;
+    }
+
+    /**
+     * @param string|null $sourceUrl
+     * @return string
+     */
+    public function getSourceDescription(?string $sourceUrl): string
+    {
+        return match ($this->sourceAttr) {
+            FoundUrl::SOURCE_INIT_URL => 'Initial URL',
+            FoundUrl::SOURCE_A_HREF => "<a href> on $sourceUrl",
+            FoundUrl::SOURCE_IMG_SRC => "<img src> on $sourceUrl",
+            FoundUrl::SOURCE_IMG_SRCSET => "<img srcset> on $sourceUrl",
+            FoundUrl::SOURCE_INPUT_SRC => "<input src> on $sourceUrl",
+            FoundUrl::SOURCE_SOURCE_SRC => "<source src> on $sourceUrl",
+            FoundUrl::SOURCE_SCRIPT_SRC => "<script src> on $sourceUrl",
+            FoundUrl::SOURCE_INLINE_SCRIPT_SRC => "<script> on $sourceUrl",
+            FoundUrl::SOURCE_LINK_HREF => "<link href> on $sourceUrl",
+            FoundUrl::SOURCE_CSS_URL => "CSS url() on $sourceUrl",
+            FoundUrl::SOURCE_JS_URL => "JS url on $sourceUrl",
+            FoundUrl::SOURCE_REDIRECT => "Redirect from $sourceUrl",
+            default => 'Unknown source',
+        };
+    }
+
+    /**
+     * @return string
+     */
+    public function getSourceShortName(): string
+    {
+        return match ($this->sourceAttr) {
+            FoundUrl::SOURCE_INIT_URL => 'Initial URL',
+            FoundUrl::SOURCE_A_HREF => '<a href>',
+            FoundUrl::SOURCE_IMG_SRC => '<img src>',
+            FoundUrl::SOURCE_IMG_SRCSET => '<img srcset>',
+            FoundUrl::SOURCE_INPUT_SRC => '<input src>',
+            FoundUrl::SOURCE_SOURCE_SRC => '<source src>',
+            FoundUrl::SOURCE_SCRIPT_SRC => '<script src>',
+            FoundUrl::SOURCE_INLINE_SCRIPT_SRC => 'inline <script src>',
+            FoundUrl::SOURCE_LINK_HREF => '<link href>',
+            FoundUrl::SOURCE_CSS_URL => 'css url()',
+            FoundUrl::SOURCE_JS_URL => 'js url',
+            FoundUrl::SOURCE_REDIRECT => 'redirect',
+            default => 'unknown',
+        };
     }
 
     public function looksLikeStaticFileByUrl(): bool
