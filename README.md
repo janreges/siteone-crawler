@@ -92,9 +92,9 @@ The following features are summarized in greater detail:
   HTML files (without HTTP server) including all document, images, styles, scripts, fonts, etc.
 - you can **limit what assets** you want to download and export (see `--disable-*` directives) .. for some types of
   websites the best result is with the `--disable-javascript` option.
-- you can specify by `--allowed-domain-for-external-files` from which **external domains** it is possible to **download
+- you can specify by `--allowed-domain-for-external-files` (short `-adf`) from which **external domains** it is possible to **download
   ** assets (JS, CSS, fonts, images, documents) including `*` option for all domains.
-- you can specify by `--allowed-domain-for-crawling` which **other domains** should be included in the **crawling** if
+- you can specify by `--allowed-domain-for-crawling` (short `-adc`) which **other domains** should be included in the **crawling** if
   there are any links pointing to them. You can enable e.g. `mysite.*` to export all language mutations that have a
   different TLD or `*.mysite.tld` to export all subdomains.
 - you can try `---disable-styles` and `---disable-fonts` and see how well you handle **accessibility** and **semantics**
