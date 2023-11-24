@@ -20,7 +20,10 @@ class FoundUrls
 
     public function addUrl(FoundUrl $foundUrl): void
     {
-        $this->foundUrls[md5($foundUrl->url)] = $foundUrl;
+        $key = md5($foundUrl->url);
+        if (!isset($this->foundUrls[$key])) {
+            $this->foundUrls[$key] = $foundUrl;
+        }
     }
 
     public function addUrlsFromTextArray(array $urls, string $sourceUrl, int $source): void
