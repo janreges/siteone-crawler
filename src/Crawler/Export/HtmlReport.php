@@ -392,7 +392,7 @@ class HtmlReport
 
         // igc & igcf containers are used for variable styling (controlled by radio buttons)
         $html = $this->getImageGalleryFormHtml();
-        $html .= '<div id="igc" class="small"><div id="igcf" class="cover"><div id="image-gallery" class="image-gallery">';
+        $html .= '<div id="igc" class="small"><div id="igcf" class="scaleDown"><div id="image-gallery" class="image-gallery">';
         foreach ($images as $image) {
             $imageDescription = Utils::getFormattedSize($image->size) . ' (' . $image->contentTypeHeader . ')';
             $imageDescription .= ', found as ' . $image->getSourceDescription($this->status->getUrlByUqId($image->sourceUqId));
