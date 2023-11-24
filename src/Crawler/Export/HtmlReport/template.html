@@ -546,6 +546,97 @@
             cursor: help;
         }
 
+        .form-group {
+            flex-grow: 0;
+            flex-basis: auto;
+        }
+
+        .btn-group {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-start;
+            gap: 1px;
+            border: 0;
+        }
+
+        .btn-group label {
+            padding: 3px 6px;
+            cursor: pointer;
+            background-color: var(--background-color-neutral);
+            color: var(--text-color-default);
+            transition: background-color 0.3s, color 0.3s;
+            white-space: nowrap;
+            z-index: 1000;
+        }
+
+        .btn-group label:hover,
+        .btn-group input[type="radio"]:checked + label {
+            background-color: var(--color-blue-600);
+            color: var(--color-white);
+        }
+
+        .btn-group input[type="radio"] {
+            display: none;
+        }
+
+        .btn-group label:first-of-type {
+            border-radius: 4px 0 0 4px;
+        }
+
+        .btn-group label:last-of-type {
+            border-radius: 0 4px 4px 0;
+        }
+
+        .image-gallery {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .image-gallery img {
+            object-fit: contain;
+            transition: transform 0.3s ease;
+            cursor: help;
+        }
+
+        .small .image-gallery img {
+            max-width: 140px;
+            max-height: 140px;
+        }
+
+        .medium .image-gallery img {
+            max-width: 200px;
+            max-height: 200px;
+        }
+
+        .large .image-gallery img {
+            max-width: 360px;
+            max-height: 360px;
+        }
+
+        .cover .image-gallery img {
+            object-fit: cover;
+        }
+
+        .contain .image-gallery img {
+            object-fit: contain;
+        }
+
+        .scaleDown .image-gallery img {
+            object-fit: scale-down;
+        }
+
+        .image-gallery img:hover {
+            transform: scale(1.3);
+            z-index: -1000;
+        }
+
+        .image-gallery .highlighted {
+            border: 2px solid red;
+            padding: 4px;
+            box-sizing: border-box;
+        }
+
         {$tabsCss}
 
     </style>
@@ -612,7 +703,7 @@
         The report was generated <strong>{$executedAt}</strong> using the <span style="color: red;">♥</span>
         <a href="https://github.com/janreges/siteone-website-crawler" aria-label="Link to SiteOne Crawler Github repository"><strong>SiteOne Website Crawler</strong></a>
         by Ján Regeš from <a
-            href="https://www.siteone.io/?utm_source=siteone_crawler&utm_medium=email&utm_campaign=crawler_report&utm_content=v{$version}" aria-label="Link to SiteOne.cz - the author of this crawler"><strong>SiteOne</strong></a>
+            href="https://www.siteone.io/?utm_source=siteone_crawler&utm_medium=email&utm_campaign=crawler_report&utm_content=v{$version}" aria-label="Link to SiteOne.cz - main author of this crawler"><strong>SiteOne</strong></a>
         (Czech Republic).<br/>
         <br/>
     </footer>

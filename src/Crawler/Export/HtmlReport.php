@@ -31,6 +31,7 @@ use Crawler\Components\SuperTableColumn;
 use Crawler\ContentProcessor\Manager as ContentProcessorManager;
 use Crawler\Export\HtmlReport\Badge;
 use Crawler\Export\HtmlReport\Tab;
+use Crawler\FoundUrl;
 use Crawler\Result\Status;
 use Crawler\Result\Summary\ItemStatus;
 use Crawler\Utils;
@@ -166,12 +167,14 @@ class HtmlReport
         $tabs = [];
         $tabs[] = $this->getSummaryTab();
         $tabs[] = $this->getSeoAndOpenGraphTab();
+        $tabs[] = $this->getImageGalleryTab();
         $tabs[] = $this->getVisitedUrlsTab();
         $tabs[] = $this->getDnsAndSslTlsTab();
         $tabs[] = $this->getCrawlerStatsTab();
         $tabs[] = $this->getCrawlerInfo();
 
         $hostToStripFromUrls = $this->getInitialHost();
+        $schemeOfHostToStripFromUrls = $this->status->getOptions()->getInitialScheme();
         $initialUrl = $this->status->getOptions()->url;
 
         $superTables = array_merge($this->status->getSuperTablesAtBeginning(), $this->status->getSuperTablesAtEnd());
@@ -181,7 +184,7 @@ class HtmlReport
             }
 
             // set props used for clickable URLs building
-            $superTable->setHostToStripFromUrls($hostToStripFromUrls);
+            $superTable->setHostToStripFromUrls($hostToStripFromUrls, $schemeOfHostToStripFromUrls);
             $superTable->setInitialUrl($initialUrl);
 
             $badges = $this->getSuperTableBadgesByAplCode($superTable);
@@ -368,6 +371,298 @@ class HtmlReport
         return new Tab('SEO and OpenGraph', null, $html, false, $badges, $order);
     }
 
+    private function getImageGalleryTab(): ?Tab
+    {
+        $summary = $this->status->getSummary();
+        if (!$summary->getItems()) {
+            return null;
+        }
+
+        $images = [];
+        foreach ($this->status->getVisitedUrls() as $visitedUrl) {
+            // only images from img:src (not from srcset)
+            if ($visitedUrl->isImage() && $visitedUrl->statusCode === 200 && (in_array($visitedUrl->sourceAttr, [FoundUrl::SOURCE_IMG_SRC, FoundUrl::SOURCE_INPUT_SRC, FoundUrl::SOURCE_CSS_URL]))) {
+                $images[] = $visitedUrl;
+            }
+        }
+
+        if (!$images) {
+            return null;
+        }
+
+        // igc & igcf containers are used for variable styling (controlled by radio buttons)
+        $html = $this->getImageGalleryFormHtml();
+        $html .= '<div id="igc" class="small"><div id="igcf" class="cover"><div id="image-gallery" class="image-gallery">';
+        foreach ($images as $image) {
+            $imageDescription = Utils::getFormattedSize($image->size) . ' (' . $image->contentTypeHeader . ')';
+            $imageDescription .= ', found as ' . $image->getSourceDescription($this->status->getUrlByUqId($image->sourceUqId));
+
+            $html .= sprintf(
+                '<a href="%s" target="_blank" data-size="%s" data-source="%s" data-type="%s" data-sizematch="1" data-typematch="1" data-sourcematch="1">',
+                htmlspecialchars($image->url),
+                $image->size,
+                $image->getSourceShortName(),
+                htmlspecialchars(str_replace('image/', '', $image->contentTypeHeader)
+                ));
+            $html .= '<img loading="lazy" width="140" height="140" src="' . htmlspecialchars($image->url) . '" alt="' . htmlspecialchars($imageDescription) . '" title="' . htmlspecialchars($imageDescription) . '">';
+            $html .= '</a>' . "\n";
+        }
+        $html .= '</div></div></div>';
+
+        $badges = [new Badge(strval(count($images)), Badge::COLOR_NEUTRAL, 'Found images')];
+        return new Tab('Image Gallery', null, $html, true, $badges, 6);
+    }
+
+    private function getImageGalleryFormHtml(): string
+    {
+        $html = '
+            <style>
+            #imageDisplayForm {
+                display: flex;
+                gap: 12px;
+                flex-wrap: wrap;
+                margin-bottom: 20px;
+            }
+            </style>';
+
+        $html .= '<script>
+                function updateClassName(elementId, className) {
+                    document.getElementById(elementId).className = className;
+                    if (elementId === "igc") {
+                        var images = document.getElementById(elementId).getElementsByTagName("img");
+                        for (var i = 0; i < images.length; i++) {
+                            var image = images[i];
+                            image.width = className === "small" ? 140 : (className === "medium" ? 200 : 360);
+                            image.height = className === "small" ? 140 : (className === "medium" ? 200 : 360);
+                        }
+                    }
+                }
+            </script>';
+
+        $html .= "<script> function initializeFilters() {
+                const links = document.querySelectorAll('#image-gallery a');
+                const types = new Set();
+                const sources = new Set();
+                const sizeCategories = [
+                    { label: 'any', filter: () => true },
+                    { label: '> 5 MB', filter: size => size > 5 * 1024 * 1024 },
+                    { label: '> 1MB', filter: size => size > 1 * 1024 * 1024 },
+                    { label: '> 500kB', filter: size => size > 500 * 1024 },
+                    { label: '> 100kB', filter: size => size > 100 * 1024 },
+                    { label: '> 10kB', filter: size => size > 10 * 1024 },
+                    { label: '< 10kB', filter: size => size < 10 * 1024 }
+                ];
+            
+                links.forEach(link => {
+                    types.add(link.dataset.type);
+                    sources.add(link.dataset.source);
+                });
+            
+                addSizeFilters('sizeFilters', sizeCategories, links, filterImagesBySize);
+                addToggleButtonsToFilter('typeFilters', ['any'].concat(Array.from(types).sort((a, b) => countLinksOfType(b, links) - countLinksOfType(a, links))), filterImagesByType, links);
+                addToggleButtonsToFilter('sourceFilters', ['any'].concat(Array.from(sources).sort((a, b) => countLinksOfSource(b, links) - countLinksOfSource(a, links))), filterImagesBySource, links);
+            }
+            
+            function addToggleButtonsToFilter(filterId, categories, filterFunction, links) {
+                const filterDiv = document.getElementById(filterId);
+                categories.forEach((category, index) => {
+                    const radioId = filterId + category;
+                    const radioInput = document.createElement('input');
+                    radioInput.setAttribute('type', 'radio');
+                    radioInput.setAttribute('id', radioId);
+                    radioInput.setAttribute('name', filterId);
+                    radioInput.setAttribute('value', category);
+                    if (category === 'any') {
+                        radioInput.setAttribute('checked', 'checked');
+                    }
+                    radioInput.onchange = () => filterFunction(category);
+            
+                    const label = document.createElement('label');
+                    label.setAttribute('for', radioId);
+                    
+                    let labelCountText = category;
+                    if (category !== 'any') {
+                        const count = filterId === 'typeFilters' ? countLinksOfType(category, links) : countLinksOfSource(category, links);
+                        labelCountText += ` (\${count})`;
+                    } else {
+                        labelCountText += ' (' + links.length + ')';
+                    }
+                    label.textContent = labelCountText;
+            
+                    filterDiv.appendChild(radioInput);
+                    filterDiv.appendChild(label);
+                });
+            }
+            
+            function addToggleButton(filterDiv, filterId, value, labelText, filterFunction) {
+                const radioId = filterId + '-' + value.replace(/\s/g, '-');
+            
+                const radioInput = document.createElement('input');
+                radioInput.setAttribute('type', 'radio');
+                radioInput.setAttribute('id', radioId);
+                radioInput.setAttribute('name', filterId);
+                radioInput.setAttribute('value', value);
+                radioInput.addEventListener('change', () => filterFunction(value));
+                
+                if (labelText === 'any') {
+                    radioInput.setAttribute('checked', 'checked');
+                }
+            
+                const label = document.createElement('label');
+                label.setAttribute('for', radioId);
+                label.textContent = labelText;
+            
+                filterDiv.appendChild(radioInput);
+                filterDiv.appendChild(label);
+            }
+
+            function countLinksOfType(type, links) {
+                return Array.from(links).filter(link => link.dataset.type === type).length;
+            }
+            
+            function countLinksOfSource(source, links) {
+                return Array.from(links).filter(link => link.dataset.source === source).length;
+            }
+            
+            function doesSizeMatchCategory(size, category) {
+                const sizeInKB = size / 1024;
+            
+                switch (category) {
+                    case 'any':
+                        return true;
+                    case '> 5 MB':
+                        return sizeInKB > 5120;
+                    case '> 1MB':
+                        return sizeInKB > 1024;
+                    case '> 500kB':
+                        return sizeInKB > 500;
+                    case '> 100kB':
+                        return sizeInKB > 100;
+                    case '> 10kB':
+                        return sizeInKB > 10;
+                    case '< 10kB':
+                        return sizeInKB < 10;
+                    default:
+                        return false;
+                }
+            }
+            
+            function filterImagesByType(selectedType) {
+                const links = document.querySelectorAll('#image-gallery a');
+                links.forEach(link => {
+                    if (selectedType === 'any' || link.dataset.type === selectedType) {
+                        link.dataset.typematch = '1';
+                    } else {
+                        link.dataset.typematch = '0';
+                    }
+                });
+                filterByMatched();
+            }
+            
+            function filterImagesBySource(selectedSource) {
+                const links = document.querySelectorAll('#image-gallery a');
+                links.forEach(link => {
+                    if (selectedSource === 'any' || link.dataset.source === selectedSource) {
+                        link.dataset.sourcematch = '1';
+                    } else {
+                        link.dataset.sourcematch = '0';
+                    }
+                });
+                filterByMatched();
+            }
+            
+            function filterImagesBySize(selectedSizeCategory) {
+                const links = document.querySelectorAll('#image-gallery a');
+                links.forEach(link => {
+                    const imageSize = parseInt(link.dataset.size, 10);
+            
+                    if (doesSizeMatchCategory(imageSize, selectedSizeCategory)) {
+                        link.dataset.sizematch = '1';
+                    } else {
+                        link.dataset.sizematch = '0';
+                    }
+                });
+                filterByMatched();
+            }
+            
+            function addSizeFilters(filterId, categories, links, filterFunction) {
+                const filterDiv = document.getElementById(filterId);
+                categories.forEach(category => {
+                    const count = Array.from(links).filter(link => category.filter(parseInt(link.dataset.size, 10))).length;
+                    const labelWithCount = `\${category.label} (\${count})`;
+                    if (count > 0) {
+                        addToggleButton(filterDiv, filterId, category.label, labelWithCount, filterFunction);
+                    }
+                });
+            }
+            
+            function filterByMatched() {
+                const links = document.querySelectorAll('#image-gallery a');
+                links.forEach(link => {
+                    if (link.dataset.sizematch === '1' && link.dataset.typematch === '1' && link.dataset.sourcematch === '1') {
+                        link.style.display = 'inline-block'
+                    } else {
+                        link.style.display = 'none';
+                    }
+                });
+            }
+            
+            document.addEventListener('DOMContentLoaded', function() {
+                initializeFilters();
+            });
+            
+            </script>";
+
+        $html .= '<form id="imageDisplayForm">
+                <div class="form-group">
+                    <div class="btn-group">
+                        <input type="radio" id="sizeSmall" name="thumbnailSize" value="small" checked onchange="updateClassName(\'igc\', this.value)">
+                        <label for="sizeSmall">small</label>
+        
+                        <input type="radio" id="sizeMedium" name="thumbnailSize" value="medium" onchange="updateClassName(\'igc\', this.value)">
+                        <label for="sizeMedium">medium</label>
+        
+                        <input type="radio" id="sizeLarge" name="thumbnailSize" value="large" onchange="updateClassName(\'igc\', this.value)">
+                        <label for="sizeLarge">large</label>
+                    </div>
+                </div>
+        
+                <div class="form-group">
+                    <div class="btn-group">
+                        <input type="radio" id="modeScaleDown" name="thumbnailMode" value="scaleDown" onchange="updateClassName(\'igcf\', this.value)" checked>
+                        <label for="modeScaleDown">scale-down</label>
+                        
+                        <input type="radio" id="modeContain" name="thumbnailMode" value="contain" onchange="updateClassName(\'igcf\', this.value)">
+                        <label for="modeContain">contain</label>
+                        
+                        <input type="radio" id="modeCover" name="thumbnailMode" value="cover" onchange="updateClassName(\'igcf\', this.value)">
+                        <label for="modeCover">cover</label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <div class="btn-group" id="typeFilters">
+                        <!-- will be inserted by initializeFilters() -->
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <div class="btn-group" id="sourceFilters">
+                        <!-- will be inserted by initializeFilters() -->
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <div class="btn-group" id="sizeFilters">
+                        <!-- will be inserted by initializeFilters() -->
+                    </div>
+                </div>
+                
+            </form>';
+
+        return $html;
+    }
+
     private function getDnsAndSslTlsTab(): ?Tab
     {
         $html = '';
@@ -492,7 +787,7 @@ class HtmlReport
     private function getVisitedUrlsTab(): Tab
     {
         $visitedUrlsTable = $this->getVisitedUrlsTable();
-        $visitedUrlsTable->setHostToStripFromUrls($this->getInitialHost());
+        $visitedUrlsTable->setHostToStripFromUrls($this->getInitialHost(), $this->status->getOptions()->getInitialScheme());
         $badges = $this->getSuperTableBadgesByAplCode($visitedUrlsTable);
         return new Tab($visitedUrlsTable->title, $visitedUrlsTable->description, $visitedUrlsTable->getHtmlOutput(), false, $badges, $this->getSuperTableOrder($visitedUrlsTable));
     }
@@ -500,11 +795,12 @@ class HtmlReport
     private function getVisitedUrlsTable(): SuperTable
     {
         $initialHost = $this->getInitialHost();
+        $schemeOfInitialHost = $this->status->getOptions()->getInitialScheme();
 
         // setup columns
         $columns = [
-            new SuperTableColumn('url', 'URL', SuperTableColumn::AUTO_WIDTH, null, function ($row) use ($initialHost) {
-                return '<a href="' . htmlspecialchars($row['url']) . '" target="_blank">' . Utils::truncateUrl($row['url'], 80, '…', $initialHost) . '</a>';
+            new SuperTableColumn('url', 'URL', SuperTableColumn::AUTO_WIDTH, null, function ($row) use ($initialHost, $schemeOfInitialHost) {
+                return '<a href="' . htmlspecialchars($row['url']) . '" target="_blank">' . Utils::truncateUrl($row['url'], 80, '…', $initialHost, $schemeOfInitialHost) . '</a>';
             }),
             new SuperTableColumn('status', 'Status', 6, function ($value) {
                 return Utils::getColoredStatusCode($value);
@@ -792,6 +1088,7 @@ class HtmlReport
         }
 
         $initialHost = $this->getInitialHost();
+        $schemeOfInitialHost = $this->status->getOptions()->getInitialScheme();
         $data = $details[$analysisName] ?? [];
 
         $analysisAplCode = strtolower(str_replace(' ', '-', $analysisName));
@@ -827,11 +1124,11 @@ class HtmlReport
                     return '';
                 }
             }, null, false, true, false, false),
-            new SuperTableColumn('exampleUrls', 'Affected URLs (max ' . $this->maxExampleUrls . ')', 60, null, function ($row) use ($initialHost) {
+            new SuperTableColumn('exampleUrls', 'Affected URLs (max ' . $this->maxExampleUrls . ')', 60, null, function ($row) use ($initialHost, $schemeOfInitialHost) {
                 $result = '';
                 if (isset($row['exampleUrls']) && $row['exampleUrls'] && count($row['exampleUrls']) === 1) {
                     foreach ($row['exampleUrls'] as $exampleUrl) {
-                        $result .= '<a href="' . htmlspecialchars($exampleUrl) . '" target="_blank">' . htmlspecialchars(Utils::truncateUrl($exampleUrl, 60, '…', $initialHost)) . '</a><br />';
+                        $result .= '<a href="' . htmlspecialchars($exampleUrl) . '" target="_blank">' . htmlspecialchars(Utils::truncateUrl($exampleUrl, 60, '…', $initialHost, $schemeOfInitialHost)) . '</a><br />';
                     }
                 } elseif (isset($row['exampleUrls']) && $row['exampleUrls']) {
                     $counter = 1;
