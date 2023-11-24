@@ -108,12 +108,14 @@ class Crawler
         $this->queue->column('url', Table::TYPE_STRING, $this->options->maxUrlLength);
         $this->queue->column('uqId', Table::TYPE_STRING, 8);
         $this->queue->column('sourceUqId', Table::TYPE_STRING, 8);
+        $this->queue->column('sourceAttr', Table::TYPE_INT, 2);
         $this->queue->create();
 
         $this->visited = new Table(intval($this->options->maxVisitedUrls * 1.33));
         $this->visited->column('url', Table::TYPE_STRING, $this->options->maxUrlLength);
         $this->visited->column('uqId', Table::TYPE_STRING, 8);
         $this->visited->column('sourceUqId', Table::TYPE_STRING, 8);
+        $this->visited->column('sourceAttr', Table::TYPE_INT, 2);
         $this->visited->column('time', Table::TYPE_FLOAT, 8);
         $this->visited->column('status', Table::TYPE_INT, 8);
         $this->visited->column('size', Table::TYPE_INT, 8);
@@ -134,7 +136,7 @@ class Crawler
         $this->optimalDelayBetweenRequests = max(1 / ($this->options->maxReqsPerSec), 0.001);
 
         // add initial URL to queue
-        $this->addUrlToQueue($this->initialParsedUrl);
+        $this->addUrlToQueue($this->initialParsedUrl, null, FoundUrl::SOURCE_INIT_URL);
 
         // print table header
         $this->output->addTableHeader();
@@ -367,7 +369,7 @@ class Crawler
             foreach ($this->queue as $urlKey => $queuedUrl) {
                 $url = $queuedUrl['url'];
                 $sourceUqId = $queuedUrl['sourceUqId'];
-                $this->addUrlToVisited(ParsedUrl::parse($url), $queuedUrl['uqId'], $sourceUqId);
+                $this->addUrlToVisited(ParsedUrl::parse($url), $queuedUrl['uqId'], $sourceUqId, $queuedUrl['sourceAttr']);
                 $this->queue->del($urlKey);
                 break;
             }
@@ -514,7 +516,7 @@ class Crawler
                     }
                 }
             }
-        } catch(\Exception $e) {
+        } catch (\Exception $e) {
             $this->stopWebSocketServer();
             throw $e;
         }
@@ -574,7 +576,7 @@ class Crawler
         $parsedRedirectUrl = ParsedUrl::parse($redirectUrlToQueue, $sourceUrl);
 
         if ($this->isUrlSuitableForQueue($parsedRedirectUrl)) {
-            $this->addUrlToQueue($parsedRedirectUrl, $sourceUqId);
+            $this->addUrlToQueue($parsedRedirectUrl, $sourceUqId, FoundUrl::SOURCE_REDIRECT);
         }
     }
 
@@ -604,16 +606,18 @@ class Crawler
     /**
      * @param ParsedUrl $url
      * @param string|null $sourceUqId
+     * @param int|null $sourceAttr
      * @return void
      * @throws Exception
      */
-    private function addUrlToQueue(ParsedUrl $url, ?string $sourceUqId = null): void
+    private function addUrlToQueue(ParsedUrl $url, ?string $sourceUqId = null, ?int $sourceAttr = null): void
     {
         $urlStr = $url->getFullUrl(true, false);
         if (!$this->queue->set($this->getUrlKeyForSwooleTable($url), [
             'url' => $urlStr,
             'uqId' => $this->getUrlUqId($url),
             'sourceUqId' => $sourceUqId,
+            'sourceAttr' => $sourceAttr
         ])) {
             $error = "ERROR: Unable to queue URL '{$urlStr}'. Set higher --max-queue-length.";
             $this->output->addError($error);
@@ -625,13 +629,19 @@ class Crawler
      * @param ParsedUrl $url
      * @param string $uqId
      * @param string $sourceUqId
+     * @param int|null $sourceAttr
      * @return void
      * @throws Exception
      */
-    private function addUrlToVisited(ParsedUrl $url, string $uqId, string $sourceUqId): void
+    private function addUrlToVisited(ParsedUrl $url, string $uqId, string $sourceUqId, ?int $sourceAttr): void
     {
         $urlStr = $url->getFullUrl(true, false);
-        if (!$this->visited->set($this->getUrlKeyForSwooleTable($url), ['url' => $urlStr, 'uqId' => $uqId, 'sourceUqId' => $sourceUqId])) {
+        if (!$this->visited->set($this->getUrlKeyForSwooleTable($url), [
+            'url' => $urlStr,
+            'uqId' => $uqId,
+            'sourceUqId' => $sourceUqId,
+            'sourceAttr' => $sourceAttr,
+        ])) {
             $error = "ERROR: Unable to add visited URL '{$urlStr}'. Set higher --max-visited-urls or --max-url-length.";
             $this->output->addError($error);
             throw new Exception($error);
@@ -655,26 +665,27 @@ class Crawler
     private function updateVisitedUrl(ParsedUrl $url, float $elapsedTime, int $status, int $size, int $type, ?string $body, ?array $headers, ?array $extras, bool $isExternal, bool $isAllowedForCrawling): VisitedUrl
     {
         $urlKey = $this->getUrlKeyForSwooleTable($url);
-        $visitedUrl = $this->visited->get($urlKey);
-        if (!$visitedUrl) {
+        $visitedUrlInTable = $this->visited->get($urlKey);
+        if (!$visitedUrlInTable) {
             throw new Exception("ERROR: Unable to handle visited URL '{$url->getFullUrl(true, false)}'. Set higher --max-visited-urls or --max-url-length.");
         }
-        $visitedUrl['time'] = $elapsedTime;
-        $visitedUrl['status'] = $status;
-        $visitedUrl['size'] = $size;
-        $visitedUrl['type'] = $type;
-        $this->visited->set($urlKey, $visitedUrl);
+        $visitedUrlInTable['time'] = $elapsedTime;
+        $visitedUrlInTable['status'] = $status;
+        $visitedUrlInTable['size'] = $size;
+        $visitedUrlInTable['type'] = $type;
+        $this->visited->set($urlKey, $visitedUrlInTable);
 
         $this->statusTable->incr('1', 'doneUrls');
 
         $visitedUrl = new VisitedUrl(
-            $visitedUrl['uqId'],
-            $visitedUrl['sourceUqId'],
-            $visitedUrl['url'],
-            $visitedUrl['status'],
-            $visitedUrl['time'],
-            $visitedUrl['size'],
-            $visitedUrl['type'],
+            $visitedUrlInTable['uqId'],
+            $visitedUrlInTable['sourceUqId'],
+            $visitedUrlInTable['sourceAttr'],
+            $visitedUrlInTable['url'],
+            $visitedUrlInTable['status'],
+            $visitedUrlInTable['time'],
+            $visitedUrlInTable['size'],
+            $visitedUrlInTable['type'],
             $headers['content-type'] ?? null,
             $headers['content-encoding'] ?? null,
             $extras,
@@ -868,7 +879,7 @@ class Crawler
             // add URL to queue if it's not already there
             $parsedUrlForQueue = ParsedUrl::parse($urlForQueue, $sourceUrl);
             if ($this->isUrlSuitableForQueue($parsedUrlForQueue)) {
-                $this->addUrlToQueue($parsedUrlForQueue, $sourceUrlUqId);
+                $this->addUrlToQueue($parsedUrlForQueue, $sourceUrlUqId, $foundUrl->source);
             }
         }
     }
@@ -918,6 +929,7 @@ class Crawler
         if (array_key_exists($cacheKey, $disallowedPathsPerDomain)) {
             $disallowedPaths = $disallowedPathsPerDomain[$cacheKey];
         } else {
+            $disallowedPathsPerDomain[$cacheKey] = []; // prevent multiple parallel requests to robots.txt for same domain
             $ports = $extraPort ? [$extraPort] : [443, 80];
             foreach ($ports as $port) {
                 $httpClient = new HttpClient($proxy, $httpAuth, null);
