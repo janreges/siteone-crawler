@@ -66,12 +66,10 @@ class Utils
     public static function getColorText(string $text, string $color, ?bool $setBackground = false): string
     {
         if (self::$forcedColorSetup === false) {
+            // colors are disabled
             return $text;
-        }
-
-        // if output is not visible (non-interactive mode), do not colorize text
-        $isOutputVisible = self::$forcedColorSetup === null && posix_isatty(STDOUT);
-        if (!$isOutputVisible) {
+        } elseif (self::$forcedColorSetup === null && !posix_isatty(STDOUT)) {
+            // colors are not forced and STDOUT is not a TTY = colors are disabled
             return $text;
         }
 
