@@ -49,6 +49,8 @@ try {
 $options = $initiator->getCoreOptions();
 if ($options->noColor) {
     Utils::disableColors();
+} elseif ($options->forceColor === true) {
+    Utils::forceEnabledColors();
 }
 
 // run crawler

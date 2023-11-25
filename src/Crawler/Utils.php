@@ -12,13 +12,18 @@ namespace Crawler;
 
 class Utils
 {
-    private static bool $colorsEnabled = true;
+    private static ?bool $forcedColorSetup = null;
 
     public const IMG_SRC_TRANSPARENT_1X1_GIF = 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==';
 
     public static function disableColors(): void
     {
-        self::$colorsEnabled = false;
+        self::$forcedColorSetup = false;
+    }
+
+    public static function forceEnabledColors(): void
+    {
+        self::$forcedColorSetup = true;
     }
 
     public static function getFormattedSize(int $bytes, int $precision = 0): string
@@ -60,12 +65,12 @@ class Utils
 
     public static function getColorText(string $text, string $color, ?bool $setBackground = false): string
     {
-        if (!self::$colorsEnabled) {
+        if (self::$forcedColorSetup === false) {
             return $text;
         }
 
         // if output is not visible (non-interactive mode), do not colorize text
-        $isOutputVisible = posix_isatty(STDOUT);
+        $isOutputVisible = self::$forcedColorSetup === null && posix_isatty(STDOUT);
         if (!$isOutputVisible) {
             return $text;
         }

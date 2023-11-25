@@ -52,6 +52,7 @@ class CoreOptions
     public bool $doNotTruncateUrl = false;
     public bool $hideProgressBar = false;
     public bool $noColor = false;
+    public bool $forceColor = false;
 
     // resource filtering
     public bool $disableJavascript = false;
@@ -182,6 +183,7 @@ class CoreOptions
             new Option('--show-scheme-and-host', '-ssah', 'showSchemeAndHost', Type::BOOL, false, 'Show the schema://host also of the original domain URL as well. By default, only path+query is displayed for original domain.', false, false),
             new Option('--hide-progress-bar', '-hpb', 'hideProgressBar', Type::BOOL, false, 'Suppress progress bar in output.', false, false),
             new Option('--no-color', '-nc', 'noColor', Type::BOOL, false, 'Disable colored output.', false, false),
+            new Option('--force-color', '-fc', 'forceColor', Type::BOOL, false, 'Force colored output regardless of support detection.', false, false),
         ]));
 
         $options->addGroup(new Group(
