@@ -1,7 +1,7 @@
 <?php
 
 /*
- * This file is part of the SiteOne Website Crawler.
+ * This file is part of the SiteOne Crawler.
  *
  * (c) Ján Regeš <jan.reges@siteone.cz>
  */
@@ -103,11 +103,11 @@ We are pleased to deliver the attached report detailing a thorough crawling and 
 <br>
 The report is in HTML format and for full functionality, it should be opened in a JavaScript-enabled browser. This will allow you to access advanced features such as searching and sorting data within tables. Some mobile email clients may not support all interactive elements.<br>
 <br>
-In case you have any suggestions for improvements and other useful features, feel free to send them as Feature requests to <a href="https://github.com/janreges/siteone-website-crawler/issues/">our project\'s GitHub</a>.<br>
+In case you have any suggestions for improvements and other useful features, feel free to send them as Feature requests to <a href="https://github.com/janreges/siteone-crawler/issues/">our project\'s GitHub</a>.<br>
 <br>
 Best regards,<br>
 <br>
-<a href="https://crawler.siteone.io/?utm_source=siteone_crawler&utm_medium=email-report&utm_campaign=crawler_report&utm_content=v{$version}">SiteOne Website Crawler</a> Team';
+<a href="https://crawler.siteone.io/?utm_source=siteone_crawler&utm_medium=email-report&utm_campaign=crawler_report&utm_content=v{$version}">SiteOne Crawler</a> Team';
 
         $body = str_replace(
             [
@@ -295,7 +295,7 @@ Best regards,<br>
             self::GROUP_MAILER,
             'Mailer options', [
             new Option('--mail-to', null, 'mailTo', Type::EMAIL, true, 'E-mail report recipient address(es). Can be specified multiple times.', [], true, true),
-            new Option('--mail-from', null, 'mailFrom', Type::EMAIL, false, 'E-mail sender address.', 'siteone-website-crawler@your-hostname.com', false),
+            new Option('--mail-from', null, 'mailFrom', Type::EMAIL, false, 'E-mail sender address.', 'siteone-crawler@your-hostname.com', false),
             new Option('--mail-from-name', null, 'mailFromName', Type::STRING, false, 'E-mail sender name', 'SiteOne Crawler', false),
             new Option('--mail-subject-template', null, 'mailSubjectTemplate', Type::STRING, false, 'E-mail subject template. You can use dynamic variables %domain% and %datetime%', 'Crawler Report for %domain% (%date%)', true),
             new Option('--mail-smtp-host', null, 'mailSmtpHost', Type::STRING, false, 'SMTP host.', 'localhost', true),

@@ -1,7 +1,7 @@
 <?php
 
 /*
- * This file is part of the SiteOne Website Crawler.
+ * This file is part of the SiteOne Crawler.
  *
  * (c) Ján Regeš <jan.reges@siteone.cz>
  */
@@ -88,7 +88,7 @@ class TextOutput implements Output
         $banner .= str_repeat('=', 50) . "\n";
 
         $texts = [
-            'SiteOne Website Crawler, v' . $this->version,
+            'SiteOne Crawler, v' . $this->version,
             'Author: jan.reges@siteone.cz'
         ];
 

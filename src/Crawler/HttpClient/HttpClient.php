@@ -1,7 +1,7 @@
 <?php
 
 /*
- * This file is part of the SiteOne Website Crawler.
+ * This file is part of the SiteOne Crawler.
  *
  * (c) Ján Regeš <jan.reges@siteone.cz>
  */
@@ -81,7 +81,7 @@ class HttpClient
         }
 
         $requestHeaders = [
-            'X-Crawler-Info' => 'siteone-website-crawler/' . Version::CODE,
+            'X-Crawler-Info' => 'siteone-crawler/' . Version::CODE,
             'User-Agent' => $userAgent,
             'Accept' => $accept,
             'Accept-Encoding' => $acceptEncoding,

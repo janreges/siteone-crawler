@@ -1,7 +1,7 @@
 <?php
 
 /*
- * This file is part of the SiteOne Website Crawler.
+ * This file is part of the SiteOne Crawler.
  *
  * (c) Ján Regeš <jan.reges@siteone.cz>
  */

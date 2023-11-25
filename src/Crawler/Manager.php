@@ -1,7 +1,7 @@
 <?php
 
 /*
- * This file is part of the SiteOne Website Crawler.
+ * This file is part of the SiteOne Crawler.
  *
  * (c) Ján Regeš <jan.reges@siteone.cz>
  */
@@ -67,7 +67,7 @@ class Manager
         $this->exporters = $exporters;
 
         $crawlerInfo = new Info(
-            'SiteOne Website Crawler',
+            'SiteOne Crawler',
             $this->version,
             date('Y-m-d H:i:s'),
             Utils::getSafeCommand($this->command),

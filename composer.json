@@ -1,6 +1,6 @@
 {
-    "name": "janreges/siteone-website-crawler",
-    "description": "The best and easy-to-use command-line website crawler, analyzer, sitemap and offline-website generator for Linux/Windows/macOS you've ever seen.",
+    "name": "janreges/siteone-crawler",
+    "description": "A very useful and easy-to-use tool you will ♥ as a Dev/DevOps, website owner or consultant. Works on all popular platforms - Windows, macOS and Linux (x64 and arm64 too)",
     "version": "1.0.3.20231110",
     "type": "project",
     "require-dev": {

@@ -1,9 +1,9 @@
-# SiteOne Website Crawler
+# SiteOne Crawler
 
-SiteOne Website Crawler is **the best, easy-to-use, most powerful and functional assistant you will love ♥**.
+SiteOne Crawler is a **very useful and easy-to-use tool you will ♥ as a Dev/DevOps, website owner or consultant**. Works on all popular platforms - **Windows**, **macOS** and **Linux** (**x64** and **arm64** too).
 
-It will crawl your entire website in detail, report problems, generate an offline version of the website, generate
-sitemaps or send reports via email.
+It will crawl your entire website in depth, analyze and report problems, show useful statistics and reports, generate an offline
+version of the website, generate sitemaps or send reports via email.
 
 ## Table of contents
 
@@ -144,7 +144,7 @@ great, and his son is doing great too! ♥
 
 ###  Ready-to-use releases
 
-You can download ready-to-use releases from [GitHub releases](https://github.com/janreges/siteone-website-crawler/releases) for all major platforms (Linux, Windows, macOS, arm64).
+You can download ready-to-use releases from [GitHub releases](https://github.com/janreges/siteone-crawler/releases) for all major platforms (Linux, Windows, macOS, arm64).
 
 Unpack the downloaded archive, and you will find the `crawler` or `crawler.bat` (Windows) executable binary and run crawler by `./crawler --url=https://my.domain.tld`.
 
@@ -157,8 +157,8 @@ Unpack the downloaded archive, and you will find the `crawler` or `crawler.bat` 
 Most easily installation is on most Linux (x64) distributions.
 
 ```bash
-git clone https://github.com/janreges/siteone-website-crawler.git
-cd siteone-website-crawler
+git clone https://github.com/janreges/siteone-crawler.git
+cd siteone-crawler
 
 # run crawler with basic options
 ./crawler --url=https://my.domain.tld
@@ -178,7 +178,7 @@ Cygwin-based `bin/swoole-cli.exe`.
 A really functional and tested Windows command looks like this (modify path to your `swoole-cli.exe` and `src\crawler.php`):
 
 ```bash
-c:\Work\swoole-cli-v4.8.13-cygwin-x64\bin\swoole-cli.exe C:\Work\siteone-website-crawler\src\crawler.php --url=https://www.siteone.io/
+c:\Tools\swoole-cli-v4.8.13-cygwin-x64\bin\swoole-cli.exe C:\Tools\siteone-crawler\src\crawler.php --url=https://www.siteone.io/
 ```
 
 **NOTICE**: Cygwin does not support STDERR with rewritable lines in the console. Therefore, the output is not as
@@ -355,7 +355,7 @@ through the file:// protocol.
 
 * `--mail-to=<email>`              Recipients of HTML e-mail reports. Optional but required for mailer activation. You
   can specify multiple emails separated by comma.
-* `--mail-from=<email>`            E-mail sender address. Default values is `siteone-website-crawler@your-hostname.com`.
+* `--mail-from=<email>`            E-mail sender address. Default values is `siteone-crawler@your-hostname.com`.
 * `--mail-from-name=<val>`         E-mail sender name. Default values is `SiteOne Crawler`.
 * `--mail-subject-template=<val>`  E-mail subject template. You can use dynamic variables %domain%, %date% and
   %datetime%. Default values is `Crawler Report for %domain% (%date%)`.
@@ -428,7 +428,7 @@ This work is licensed under a
 
 ### Text output
 
-![SiteOne Website Crawler](./docs/siteone-website-crawler.gif)
+![SiteOne Crawler](./docs/siteone-crawler.gif)
 
 ### JSON output
 
@@ -437,7 +437,7 @@ Output is truncated (only 3 URLs in results) for better readability.
 ```json
 {
   "crawler": {
-    "name": "SiteOne Website Crawler",
+    "name": "SiteOne Crawler",
     "version": "2023.10.2",
     "executedAt": "2023-10-05 16:50:27",
     "command": "--url=https:\/\/www.siteone.io\/ --extra-columns=Title --workers=2 --output=json"

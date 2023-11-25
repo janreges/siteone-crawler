@@ -1,7 +1,7 @@
 <?php
 
 /*
- * This file is part of the SiteOne Website Crawler.
+ * This file is part of the SiteOne Crawler.
  *
  * Script ws-server.php is used for re-sending messages from crawler.php to connected websocket clients (e.g. Electron app).
  * It is hard to start websocket server directly from crawler.php because our Swoole's eventLoop is used primary for crawler coroutines

@@ -1,7 +1,7 @@
 <?php
 
 /*
- * This file is part of the SiteOne Website Crawler.
+ * This file is part of the SiteOne Crawler.
  *
  * (c) Ján Regeš <jan.reges@siteone.cz>
  */
@@ -1042,7 +1042,7 @@ class Crawler
         // WARNING: Please do not change or remove this signature, it's used to detect crawler
         // in logs and also for possibility to block our crawler by website owner
 
-        return 'siteone-website-crawler/' . Version::CODE;
+        return 'siteone-crawler/' . Version::CODE;
     }
 
     /**
