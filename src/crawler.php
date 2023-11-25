@@ -17,7 +17,7 @@ use Crawler\Version;
 $startTime = microtime(true);
 
 // class loader
-define('BASE_DIR', dirname(platformCompatiblePath($_SERVER['PHP_SELF']), 2));
+define('BASE_DIR', getBaseDir());
 spl_autoload_register(function ($class) {
     $classFile = BASE_DIR . '/src/' . str_replace('\\', '/', $class) . '.php';
     require_once($classFile);
@@ -78,6 +78,19 @@ try {
     exit(1);
 }
 
+function getBaseDir(): string
+{
+    if (stripos(PHP_OS, 'CYGWIN') !== false) {
+        if (is_file('/src/siteone-crawler/src/crawler.php')) {
+            // Cygwin version build in GUI (Electron-based) app
+            return '/src/siteone-crawler';
+        } else {
+            return dirname(platformCompatiblePath($_SERVER['PHP_SELF']), 2);
+        }
+    } else {
+        return dirname(platformCompatiblePath($_SERVER['PHP_SELF']), 2);
+    }
+}
 
 function platformCompatiblePath(string $path): string
 {
