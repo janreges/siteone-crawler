@@ -53,6 +53,7 @@ class CoreOptions
     public bool $hideProgressBar = false;
     public bool $noColor = false;
     public bool $forceColor = false;
+    public ?int $consoleWidth = null;
 
     // resource filtering
     public bool $disableJavascript = false;
@@ -230,6 +231,7 @@ class CoreOptions
             new Option('--http-cache-dir', '-hcd', 'httpCacheDir', Type::DIR, false, "Cache dir for HTTP responses. You can disable cache by --http-cache-dir=''", 'tmp/http-client-cache', true),
             new Option('--http-cache-compression', '-hcc', 'httpCacheCompression', Type::BOOL, false, "Enable compression for HTTP cache storage. Saves disk space, but uses more CPU.", false, true),
             new Option('--websocket-server', '-ws', 'websocketServer', Type::HOST_AND_PORT, false, "Start crawler with websocket server on given host:port, typically `0.0.0.0:8000`.", null, true),
+            new Option('--console-width', '-cw', 'consoleWidth', Type::INT, false, "Enforce the definition of the console width and disable automatic detection.", null, true),
         ]));
 
         return $options;

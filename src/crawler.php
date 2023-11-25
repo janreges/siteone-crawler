@@ -53,6 +53,11 @@ if ($options->noColor) {
     Utils::forceEnabledColors();
 }
 
+// set forced console width if specified (used by Electron GUI app)
+if ($options->consoleWidth && $options->consoleWidth > 0) {
+    Utils::setForcedConsoleWidth($options->consoleWidth);
+}
+
 // run crawler
 try {
     $manager = new Manager(

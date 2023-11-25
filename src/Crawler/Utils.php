@@ -13,6 +13,7 @@ namespace Crawler;
 class Utils
 {
     private static ?bool $forcedColorSetup = null;
+    private static ?int $forcedConsoleWidth = null;
 
     public const IMG_SRC_TRANSPARENT_1X1_GIF = 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==';
 
@@ -24,6 +25,11 @@ class Utils
     public static function forceEnabledColors(): void
     {
         self::$forcedColorSetup = true;
+    }
+
+    public static function setForcedConsoleWidth(int $width): void
+    {
+        self::$forcedConsoleWidth = $width;
     }
 
     public static function getFormattedSize(int $bytes, int $precision = 0): string
@@ -286,9 +292,15 @@ class Utils
     public static function getConsoleWidth(): int
     {
         static $width = null;
-        if ($width) {
+        if ($width !== null) {
             return $width;
         }
+
+        if (self::$forcedConsoleWidth !== null) {
+            $width = self::$forcedConsoleWidth;
+            return $width;
+        }
+
         if (stripos(PHP_OS, 'WIN') === 0) {
             $output = [];
             exec('mode con', $output);
