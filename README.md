@@ -332,7 +332,7 @@ through the file:// protocol.
   made to the same pages, only with different irrelevant query parameters.
 * `--add-random-query-params`      Adds several random query parameters to each URL. With this, it is possible to bypass
   certain forms of server and CDN caches.
-* `--http-cache-dir=<dir>`         Cache dir for HTTP responses. You can disable cache by `--http-cache-dir=''`. Default 
+* `--http-cache-dir=<dir>`         Cache dir for HTTP responses. You can disable cache by `--http-cache-dir='off'`. Default 
   is `tmp/http-client-cache`.
 * `--http-cache-compression`       Enable compression for HTTP cache storage. Saves disk space, but uses more CPU.
 * `--max-queue-length=<num>`       The maximum length of the waiting URL queue. Increase in case of large websites, but
@@ -382,7 +382,7 @@ through the file:// protocol.
 `--result-storage=<val>`           Result storage type for content and headers. Values: `memory` or `file`. Use `file` for large websites. Default values is `memory`.
 `--result-storage-dir=<dir>`       Directory for `--result-storage=file`. Default values is `tmp/result-storage`.
 `--result-storage-compression`     Enable compression for results storage. Saves disk space, but uses more CPU.
-`--http-cache-dir=<dir>`           Cache dir for HTTP responses. You can disable cache by `--http-cache-dir=''`. Default values is `tmp/http-client-cache`.
+`--http-cache-dir=<dir>`           Cache dir for HTTP responses. You can disable cache by `--http-cache-dir='off'`. Default values is `tmp/http-client-cache`.
 `--http-cache-compression`         Enable compression for HTTP cache storage. Saves disk space, but uses more CPU.
 
 **NOTICE**: For now, only SMTP without encryption is supported, typically running on port 25. If you are interested in

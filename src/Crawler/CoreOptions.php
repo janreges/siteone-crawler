@@ -228,7 +228,7 @@ class CoreOptions
             new Option('--result-storage', '-rs', 'resultStorage', Type::STRING, false, 'Result storage type for content and headers. Values: `memory` or `file`. Use `file` for large websites.', 'memory', false),
             new Option('--result-storage-dir', '-rsd', 'resultStorageDir', Type::DIR, false, 'Directory for --result-storage=file.', 'tmp/result-storage', false),
             new Option('--result-storage-compression', '-rsc', 'resultStorageCompression', Type::BOOL, false, 'Enable compression for results storage. Saves disk space, but uses more CPU.', false, false),
-            new Option('--http-cache-dir', '-hcd', 'httpCacheDir', Type::DIR, false, "Cache dir for HTTP responses. You can disable cache by --http-cache-dir=''", 'tmp/http-client-cache', true),
+            new Option('--http-cache-dir', '-hcd', 'httpCacheDir', Type::DIR, false, "Cache dir for HTTP responses. You can disable cache by --http-cache-dir='off'", 'tmp/http-client-cache', false),
             new Option('--http-cache-compression', '-hcc', 'httpCacheCompression', Type::BOOL, false, "Enable compression for HTTP cache storage. Saves disk space, but uses more CPU.", false, true),
             new Option('--websocket-server', '-ws', 'websocketServer', Type::HOST_AND_PORT, false, "Start crawler with websocket server on given host:port, typically `0.0.0.0:8000`.", null, true),
             new Option('--console-width', '-cw', 'consoleWidth', Type::INT, false, "Enforce the definition of the console width and disable automatic detection.", null, true),
