@@ -311,6 +311,11 @@ class Option
     {
         $result = $value;
         foreach ($result as $key => $value2) {
+            // ignore empty values
+            if (trim($value2) === '') {
+                unset($result[$key]);
+                continue;
+            }
             $result[$key] = $this->correctValueType($value2);
         }
         return $result;
