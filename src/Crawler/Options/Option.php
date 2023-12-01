@@ -236,13 +236,17 @@ class Option
             }
         } else if ($this->type === Type::EMAIL && !filter_var($value, FILTER_VALIDATE_EMAIL)) {
             throw new Exception("Option {$this->name} ({$value}) must be valid email '{$value}'");
-        } else if ($this->type === Type::FILE && !is_writable(dirname($value)) && !is_writable($value)) {
-            throw new Exception("Option {$this->name} ({$value}) must be valid writable file. Check permissions.");
+        } else if ($this->type === Type::FILE) {
+            $value = Utils::getAbsolutePath($value);
+            if (!is_writable(dirname($value)) && !is_writable($value)) {
+                throw new Exception("Option {$this->name} ({$value}) must be valid writable file. Check permissions.");
+            }
         } else if ($this->type === Type::DIR && $value !== 'off') {
+            $value =  Utils::getAbsolutePath($value);
             if (!is_string($value) || trim($value) === '') {
                 throw new Exception("Option {$this->name} ({$value}) must be string");
             }
-            if ((!is_dir($value) || !is_writable(dirname($value)) && mkdir($value, 0777, true) === false)) {
+            if ((!is_dir($value) || !is_writable(dirname($value))) && mkdir($value, 0777, true) === false) {
                 throw new Exception("Option {$this->name} ({$value}) must be valid and writable directory. Check permissions.");
             }
         } else if ($this->type === Type::HOST_AND_PORT && (!is_string($value) || !preg_match('/^[a-z0-9\-.:]{1,100}:[0-9]{1,5}$/i', $value))) {
