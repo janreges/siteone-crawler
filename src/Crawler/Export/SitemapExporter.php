@@ -16,6 +16,7 @@ use Crawler\Options\Options;
 use Crawler\Options\Option;
 use Crawler\Options\Type;
 use Crawler\Result\VisitedUrl;
+use Crawler\Utils;
 use Exception;
 use SimpleXMLElement;
 
@@ -44,7 +45,8 @@ class SitemapExporter extends BaseExporter implements Exporter
         if ($this->outputSitemapXml) {
             try {
                 $sitemapFile = $this->generateXmlSitemap($this->outputSitemapXml, $urls);
-                $this->status->addInfoToSummary('sitemap-xml', "XML sitemap generated to '{$sitemapFile}'");
+                $outputSitemapFile = Utils::getOutputFormattedPath($sitemapFile);
+                $this->status->addInfoToSummary('sitemap-xml', "XML sitemap generated to '{$outputSitemapFile}'");
             } catch (Exception $e) {
                 $this->status->addCriticalToSummary('sitemap-xml', "Sitemap XML ERROR: {$e->getMessage()}");
             }
@@ -53,7 +55,8 @@ class SitemapExporter extends BaseExporter implements Exporter
         if ($this->outputSitemapTxt) {
             try {
                 $sitemapFile = $this->generateTxtSitemap($this->outputSitemapTxt, $urls);
-                $this->status->addInfoToSummary('sitemap-txt', "TXT sitemap generated to '{$sitemapFile}'");
+                $outputSitemapFile = Utils::getOutputFormattedPath($sitemapFile);
+                $this->status->addInfoToSummary('sitemap-txt', "TXT sitemap generated to '{$outputSitemapFile}'");
             } catch (Exception $e) {
                 $this->status->addCriticalToSummary('sitemap-txt', "Sitemap TXT ERROR: {$e->getMessage()}");
             }
