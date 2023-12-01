@@ -970,15 +970,52 @@ class Utils
      * Check if $path is relative (does not start with '/') and prefix it with BASE_DIR
      *
      * @param string $path
+     * @param string|null $forcedPhpOs
+     * @param string|null $forcedBaseDir
      * @return string
      */
-    public static function getAbsolutePath(string $path): string
+    public static function getAbsolutePath(string $path, ?string $forcedPhpOs = null, ?string $forcedBaseDir = null): string
     {
-        if (str_starts_with($path, '/')) {
+        $os = $forcedPhpOs !== null ? $forcedPhpOs : PHP_OS;
+        $baseDir = $forcedBaseDir !== null ? $forcedBaseDir : BASE_DIR;
+        if (stripos($os, 'CYGWIN') !== false) {
+            if (preg_match('/^([a-z]+):\\\(.*)$/i', $path, $matches) === 1) {
+                $driveLetter = strtolower($matches[1]);
+                return '/cygdrive/' . $driveLetter . '/' . str_replace('\\', '/', $matches[2]);
+            } elseif (str_starts_with($path, '/')) {
+                return $path;
+            } else {
+                return $baseDir . '/' . str_replace('\\', '/', $path);
+            }
+        } else {
+            if (str_starts_with($path, '/')) {
+                return $path;
+            }
+
+            return $baseDir . '/' . $path;
+        }
+    }
+
+    /**
+     * Method with inverted logic getAbsolutePath() due to Cygwin
+     *
+     * @param string $path
+     * @param string|null $forcedPhpOs
+     * @return string
+     */
+    public static function getOutputFormattedPath(string $path, ?string $forcedPhpOs = null): string
+    {
+        $os = $forcedPhpOs !== null ? $forcedPhpOs : PHP_OS;
+        if (stripos($os, 'CYGWIN') !== false) {
+            if (preg_match('/^\/cygdrive\/([a-z]+)\/(.*)$/i', $path, $matches) === 1) {
+                $driveLetter = strtoupper($matches[1]);
+                return $driveLetter . ':\\' . str_replace('/', '\\', $matches[2]);
+            } else {
+                return $path;
+            }
+        } else {
             return $path;
         }
-
-        return BASE_DIR . '/' . $path;
     }
 
     public static function mb_str_pad($input, $pad_length, $pad_string = ' ', $pad_type = STR_PAD_RIGHT, $encoding = 'UTF-8'): string
