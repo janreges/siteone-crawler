@@ -364,6 +364,11 @@ through the file:// protocol.
 * `--mail-smtp-user=<user>`        SMTP user, if your SMTP server requires authentication.
 * `--mail-smtp-pass=<pass>`        SMTP password, if your SMTP server requires authentication.
 
+#### Offline exporter options
+
+* `--offline-export-dir=<dir>`     Path to directory where to save the offline version of the website. If target directory does not exist, crawler will try to create it (requires sufficient rights).
+* `--offline-export-store-only-url-regex=<regex>` For debug - when filled it will activate debug mode and store only URLs which match one of these PCRE regexes. Can be specified multiple times.
+
 #### Sitemap options
 
 * `--sitemap-xml-file=<file>`      File path where generated XML Sitemap will be saved. Extension `.xml` is
