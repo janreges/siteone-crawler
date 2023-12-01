@@ -86,21 +86,21 @@ try {
 function getBaseDir(): string
 {
     if (stripos(PHP_OS, 'CYGWIN') !== false) {
-        if (is_file('/src/siteone-crawler/src/crawler.php')) {
-            // Cygwin version build in GUI (Electron-based) app
-            return '/src/siteone-crawler';
-        } else {
-            return dirname(platformCompatiblePath($_SERVER['PHP_SELF']), 2);
-        }
+        return rtrim(platformCompatiblePath($_SERVER['SCRIPT_DIR'], '/'), '/ ');
     } else {
-        return dirname(platformCompatiblePath($_SERVER['PHP_SELF']), 2);
+        $scriptRealPath = str_starts_with($_SERVER['SCRIPT_FILENAME'], '/') ? $_SERVER['SCRIPT_FILENAME'] : realpath($_SERVER['SCRIPT_FILENAME']);
+        return dirname(platformCompatiblePath($scriptRealPath), 2);
     }
 }
 
 function platformCompatiblePath(string $path): string
 {
     if (stripos(PHP_OS, 'CYGWIN') !== false) {
-        $path = preg_replace('/^([A-Z]):/i', '/cygdrive/\1', $path);
+        // convert drive letter to lowercase - C:/ -> c:/
+        if (preg_match('/^([a-z]+):$/i', $path) === 1) {
+            $path = lcfirst($path);
+        }
+        $path = preg_replace('/^([a-z]):/i', '/cygdrive/\1', $path);
         $path = str_replace('\\', '/', $path);
     }
     return $path;
