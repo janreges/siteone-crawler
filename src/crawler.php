@@ -86,7 +86,11 @@ try {
 function getBaseDir(): string
 {
     if (stripos(PHP_OS, 'CYGWIN') !== false) {
-        return rtrim(platformCompatiblePath($_SERVER['SCRIPT_DIR'], '/'), '/ ');
+        if (isset($_SERVER['SCRIPT_DIR']) && $_SERVER['SCRIPT_DIR'] && preg_match(':\/', $_SERVER['SCRIPT_DIR']) === 1) {
+            return rtrim(platformCompatiblePath($_SERVER['SCRIPT_DIR']), '/ ');
+        } else {
+            return dirname(platformCompatiblePath($_SERVER['SCRIPT_FILENAME']), 2);
+        }
     } else {
         $scriptRealPath = str_starts_with($_SERVER['SCRIPT_FILENAME'], '/') ? $_SERVER['SCRIPT_FILENAME'] : realpath($_SERVER['SCRIPT_FILENAME']);
         return dirname(platformCompatiblePath($scriptRealPath), 2);
