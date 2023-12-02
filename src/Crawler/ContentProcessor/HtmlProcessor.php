@@ -20,6 +20,7 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
 {
     protected array $relevantContentTypes = [
         Crawler::CONTENT_TYPE_ID_HTML,
+        Crawler::CONTENT_TYPE_ID_REDIRECT,
     ];
 
     public const JS_VARIABLE_NAME_URL_DEPTH = '_SiteOneUrlDepth';
