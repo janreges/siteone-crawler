@@ -1,7 +1,7 @@
 {
     "name": "janreges/siteone-crawler",
     "description": "A very useful and easy-to-use tool you will ♥ as a Dev/DevOps, website owner or consultant. Works on all popular platforms - Windows, macOS and Linux (x64 and arm64 too)",
-    "version": "1.0.4.20231201",
+    "version": "1.0.5.20231204",
     "type": "project",
     "require-dev": {
         "phpunit/phpunit": "^10.4",

@@ -2,9 +2,24 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
-#### [v1.0.4.20231201](https://github.com/janreges/siteone-crawler/compare/v1.0.3...v1.0.4.20231201)
+#### [v1.0.5.20231204](https://github.com/janreges/siteone-crawler/compare/v1.0.4...v1.0.5.20231204)
+
+- option: replace placeholders like a '%domain' also in validateValue() method because there is also check if path is writable with attempt to mkdir [`329143f`](https://github.com/janreges/siteone-crawler/commit/329143fa23925ea523504735b3f724c026fe5ac6)
+- swoole in cygwin: improved getBaseDir() to work better even with the version of Swoole that does not have SCRIPT_DIR [`94cc5af`](https://github.com/janreges/siteone-crawler/commit/94cc5af4411a8c7427ee136a937ac629b8637668)
+- html processor: it must also process the page with the redirect, because is needed to replace the URL in the meta redirect tag [`9ce0eee`](https://github.com/janreges/siteone-crawler/commit/9ce0eeeebe1e524b9d46d91dd4cecb2e796db8c3)
+- sitemap: use formatted output path (primary for better output in Cygwin environment with needed C:/foo &lt;-&gt; /cygwin/c/foo conversion) [`6297a7f`](https://github.com/janreges/siteone-crawler/commit/6297a7f4069f9e09c013268e0df896db2fa91dec)
+- file exporter: use formatted output path (primary for better output in Cygwin environment with needed C:/foo &lt;-&gt; /cygwin/c/foo conversion) [`426cfb2`](https://github.com/janreges/siteone-crawler/commit/426cfb2b32f854d65abfce841e4e4f4badf04fef)
+- options: in the case of dir/file validation, we want to work with absolute paths for more precise error messages [`6df228b`](https://github.com/janreges/siteone-crawler/commit/6df228bdfc87a2c9fb6eee611fdc87d976b7f721)
+- crawler.php: improved baseDir detection - we want to work with absolute path in all scenarios [`9d1b2ce`](https://github.com/janreges/siteone-crawler/commit/9d1b2ce9bedb15ede90bcee9641e1cfc62b9c3cc)
+- utils: improved getAbsolutePath() for cygwin and added getOutputFormattedPath() with reverse logic for cygwin (C:/foo/bar &lt;-&gt; /cygdrive/c/foo/bar) [`161cfc5`](https://github.com/janreges/siteone-crawler/commit/161cfc5c4fd3fa3675cade409d7d5e11db2da0c6)
+- offline export: renamed --offline-export-directory to --offline-export-dir for consistency with --http-cache-dir or --result-storage-dir [`26ef45d`](https://github.com/janreges/siteone-crawler/commit/26ef45d145a1a02a5313067e6298571e26d9618b)
+
+#### [v1.0.4](https://github.com/janreges/siteone-crawler/compare/v1.0.3...v1.0.4)
+
+> 30 November 2023
 
 - dom parsing: handling warnings in case of impossibility to parse some DOM elements correctly, fixes #3 [`#3`](https://github.com/janreges/siteone-crawler/issues/3)
+- version: 1.0.4.20231201 + changelog [`8e15781`](https://github.com/janreges/siteone-crawler/commit/8e15781265cdd9cce10d9dcde57d46b57b50e1cf)
 - options: ignore empty values in the case of directives with the possibility of repeated definition [`5e30c2f`](https://github.com/janreges/siteone-crawler/commit/5e30c2f8ad6cf00ad819ba1d7d6ec4e6c95a7113)
 - http-cache: now the http cache is turned off using the 'off' value (it's more understandable) [`9508409`](https://github.com/janreges/siteone-crawler/commit/9508409fbba2d96dc92cd73bed5abe462d5cea15)
 - core options: added --console-width to enforce the definition of the console width and disable automatic detection via 'tput cols' on macOS/Linux or 'mode con' on Windows (used by Electron GUI) [`8cf44b0`](https://github.com/janreges/siteone-crawler/commit/8cf44b06616e15301c486146a7c6b1003ce5137f)
