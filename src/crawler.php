@@ -86,7 +86,7 @@ try {
 function getBaseDir(): string
 {
     if (stripos(PHP_OS, 'CYGWIN') !== false) {
-        if (isset($_SERVER['SCRIPT_DIR']) && $_SERVER['SCRIPT_DIR'] && preg_match(':\/', $_SERVER['SCRIPT_DIR']) === 1) {
+        if (isset($_SERVER['SCRIPT_DIR']) && $_SERVER['SCRIPT_DIR'] && (str_contains($_SERVER['SCRIPT_DIR'], ':/') || str_contains($_SERVER['SCRIPT_DIR'], ':\\'))) {
             return rtrim(platformCompatiblePath($_SERVER['SCRIPT_DIR']), '/ ');
         } else {
             return dirname(platformCompatiblePath($_SERVER['SCRIPT_FILENAME']), 2);
