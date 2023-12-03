@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file. Dates are d
 
 #### [v1.0.5.20231204](https://github.com/janreges/siteone-crawler/compare/v1.0.4...v1.0.5.20231204)
 
+- utils tests: fixed tests of methods getAbsolutePath() and getOutputFormattedPath() [`d4f4576`](https://github.com/janreges/siteone-crawler/commit/d4f4576ff566eb48495c9fb55a898b0989ef42c3)
+- crawler.php: replaced preg_match to str_contains [`5b28952`](https://github.com/janreges/siteone-crawler/commit/5b289521cdbb90b6571a29cb9c880e065b852129)
+- version: 1.0.5.20231204 + changelog [`7f2e974`](https://github.com/janreges/siteone-crawler/commit/7f2e9741fab25e9369151bc2d79a38b8827e2463)
 - option: replace placeholders like a '%domain' also in validateValue() method because there is also check if path is writable with attempt to mkdir [`329143f`](https://github.com/janreges/siteone-crawler/commit/329143fa23925ea523504735b3f724c026fe5ac6)
 - swoole in cygwin: improved getBaseDir() to work better even with the version of Swoole that does not have SCRIPT_DIR [`94cc5af`](https://github.com/janreges/siteone-crawler/commit/94cc5af4411a8c7427ee136a937ac629b8637668)
 - html processor: it must also process the page with the redirect, because is needed to replace the URL in the meta redirect tag [`9ce0eee`](https://github.com/janreges/siteone-crawler/commit/9ce0eeeebe1e524b9d46d91dd4cecb2e796db8c3)
