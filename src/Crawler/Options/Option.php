@@ -237,11 +237,13 @@ class Option
         } else if ($this->type === Type::EMAIL && !filter_var($value, FILTER_VALIDATE_EMAIL)) {
             throw new Exception("Option {$this->name} ({$value}) must be valid email '{$value}'");
         } else if ($this->type === Type::FILE) {
+            $this->replacePlaceholders($value);
             $value = Utils::getAbsolutePath($value);
             if (!is_writable(dirname($value)) && !is_writable($value)) {
                 throw new Exception("Option {$this->name} ({$value}) must be valid writable file. Check permissions.");
             }
         } else if ($this->type === Type::DIR && $value !== 'off') {
+            $this->replacePlaceholders($value);
             $value =  Utils::getAbsolutePath($value);
             if (!is_string($value) || trim($value) === '') {
                 throw new Exception("Option {$this->name} ({$value}) must be string");
