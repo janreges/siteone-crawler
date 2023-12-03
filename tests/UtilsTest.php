@@ -73,7 +73,7 @@ class UtilsTest extends TestCase
     {
         $tests = $this->getTestsForPathMethods();
         foreach ($tests as $test) {
-            $this->assertEquals($test[1], Utils::getAbsolutePath($test[0], $test[2] ?? null));
+            $this->assertEquals($test[1], Utils::getAbsolutePath($test[0], $test[2] ?? null, $test[3] ?? null));
         }
     }
 
@@ -81,16 +81,16 @@ class UtilsTest extends TestCase
     {
         $tests = $this->getTestsForPathMethods();
         foreach ($tests as $test) {
-            $this->assertEquals($test[0], Utils::getOutputFormattedPath($test[1], $test[2] ?? null));
+            $this->assertEquals($test[4] ?? $test[0], Utils::getOutputFormattedPath($test[1], $test[2] ?? null));
         }
     }
 
     private function getTestsForPathMethods(): array
     {
         return [
-            ['foo/bar/baz', '/opt/crawler/foo/bar/baz', null, '/opt/crawler'],
+            ['foo/bar/baz', '/opt/crawler/foo/bar/baz', null, '/opt/crawler', '/opt/crawler/foo/bar/baz'],
             ['/foo/bar/baz', '/foo/bar/baz', null, '/opt/crawler'],
-            ['D:\foo\bar\baz\\', '/cygdrive/d/foo/bar/baz/', 'CYGWIN', '/', '/srv/'],
+            ['D:\foo\bar\baz\\', '/cygdrive/d/foo/bar/baz/', 'CYGWIN'],
             ['C:\foo', '/cygdrive/c/foo', 'CYGWIN'],
         ];
     }
