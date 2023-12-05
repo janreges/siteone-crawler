@@ -20,6 +20,7 @@ class ParsedUrl
     public ?string $query;
     public ?string $fragment;
     public ?string $extension = null;
+    public ?string $domain2ndLevel = null;
 
     /**
      * Cache used in getFullUrl() method
@@ -38,8 +39,9 @@ class ParsedUrl
      * @param string|null $query
      * @param string|null $fragment
      * @param string|null $extension
+     * @param string|null $domain2ndLevel
      */
-    public function __construct(string $url, ?string $scheme, ?string $host, ?int $port, string $path, ?string $query, ?string $fragment, ?string $extension)
+    public function __construct(string $url, ?string $scheme, ?string $host, ?int $port, string $path, ?string $query, ?string $fragment, ?string $extension, ?string $domain2ndLevel = null)
     {
         $this->url = $url;
         $this->scheme = $scheme;
@@ -49,6 +51,7 @@ class ParsedUrl
         $this->query = $query;
         $this->fragment = $fragment === '' ? null : $fragment;
         $this->extension = $extension;
+        $this->domain2ndLevel = $domain2ndLevel;
     }
 
     public function getFullUrl(bool $includeSchemeAndHost = true, bool $includeFragment = true): string
@@ -286,8 +289,12 @@ class ParsedUrl
         $query = $parsedUrl['query'] ?? null;
         $fragment = $parsedUrl['fragment'] ?? null;
         $extension = ($path && str_contains($path, '.')) ? pathinfo($path, PATHINFO_EXTENSION) : null;
+        $domain2ndLevel = null;
+        if (preg_match('/([a-z0-9\-]+\.[a-z][a-z0-9]{0,10})$/i', $host, $matches) === 1) {
+            $domain2ndLevel = $matches[1];
+        };
 
-        return new self($url, $scheme, $host, $port, $path, $query, $fragment, $extension);
+        return new self($url, $scheme, $host, $port, $path, $query, $fragment, $extension, $domain2ndLevel);
     }
 
     public function isHttps(): bool

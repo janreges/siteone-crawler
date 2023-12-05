@@ -419,6 +419,12 @@ class Crawler
             $finalUrlForHttpClient = $this->options->addRandomQueryParams ? Utils::addRandomQueryParams($parsedUrl->path) : ($parsedUrl->path . ($parsedUrl->query ? '?' . $parsedUrl->query : ''));
             $origin = $sourceUqId ? $this->status->getOriginHeaderValueBySourceUqId($sourceUqId) : null;
 
+            // for security reasons, we only send auth data to the same 2nd tier domain (and possibly subdomains). With HTTP basic auth, the name
+            // and password are only base64 encoded and we would send them to foreign domains (which are referred to from the crawled website).
+            $useHttpAuthIfConfigured = $this->initialParsedUrl->domain2ndLevel
+                ? ($parsedUrl->domain2ndLevel === $this->initialParsedUrl->domain2ndLevel)
+                : ($parsedUrl->host === $this->initialParsedUrl->host);
+
             // setup HTTP client, send request and get response
             $httpResponse = $this->httpClient->request(
                 $parsedUrl->host,
@@ -430,7 +436,8 @@ class Crawler
                 $this->finalUserAgent,
                 $this->acceptHeader,
                 $this->options->acceptEncoding,
-                $origin
+                $origin,
+                $useHttpAuthIfConfigured
             );
 
             // when the crawler has been terminated in the meantime, do not process response, otherwise output
@@ -943,6 +950,13 @@ class Crawler
         $disallowedPaths = null;
 
         $cacheKey = $domain . ($extraPort ? ':' . $extraPort : '');
+
+        // if we are crawling the same domain of 2nd level (regardless of subdomains) or exactly the same domain/IP,
+        // we can use HTTP auth if configured
+        $useHttpAuthIfConfigured = $crawler->getInitialParsedUrl()->domain2ndLevel
+            ? str_ends_with($domain,  $crawler->getInitialParsedUrl()->domain2ndLevel)
+            : ($domain === $crawler->getInitialParsedUrl()->host);
+
         if (array_key_exists($cacheKey, $disallowedPathsPerDomain)) {
             $disallowedPaths = $disallowedPathsPerDomain[$cacheKey];
         } else {
@@ -959,7 +973,9 @@ class Crawler
                     1,
                     self::getCrawlerUserAgentSignature(),
                     'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-                    'gzip, deflate, br'
+                    'gzip, deflate, br',
+                    null,
+                    $useHttpAuthIfConfigured
                 );
                 self::$loadedRobotsTxtCount++;
 

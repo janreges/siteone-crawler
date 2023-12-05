@@ -66,14 +66,17 @@ class HttpClient
      * @param string $accept
      * @param string $acceptEncoding
      * @param ?string $origin
+     * @param bool $useHttpAuthIfConfigured
      * @return HttpResponse
      * @throws Exception
      */
-    public function request(string $host, int $port, string $scheme, string $url, string $httpMethod, int $timeout, string $userAgent, string $accept, string $acceptEncoding, ?string $origin = null): HttpResponse
+    public function request(string $host, int $port, string $scheme, string $url, string $httpMethod, int $timeout, string $userAgent, string $accept, string $acceptEncoding, ?string $origin = null, bool $useHttpAuthIfConfigured = false): HttpResponse
     {
         $path = @parse_url($url, PHP_URL_PATH);
         $extension = is_string($path) ? @pathinfo($path, PATHINFO_EXTENSION) : null;
-        $cacheKey = $this->getCacheKey($host, $port, func_get_args(), $extension);
+
+        $argsForCacheKey = [$host, $port, $scheme, $url, $httpMethod, $userAgent, $accept, $acceptEncoding, $origin];
+        $cacheKey = $this->getCacheKey($host, $port, $argsForCacheKey, $extension);
         $cachedResult = $this->getFromCache($cacheKey);
         if ($cachedResult !== null && str_contains($url, ' ') === false) {
             $cachedResult->setLoadedFromCache(true);
@@ -101,7 +104,7 @@ class HttpClient
             ]);
         }
 
-        if ($this->httpAuth) {
+        if ($useHttpAuthIfConfigured && $this->httpAuth) {
             list($username, $password) = explode(':', $this->httpAuth);
             $client->setBasicAuth($username, $password);
         }
