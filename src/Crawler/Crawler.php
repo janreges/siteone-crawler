@@ -99,7 +99,7 @@ class Crawler
     public function init(): void
     {
         $this->statusTable = new Table(1);
-        $this->statusTable->column('workers', Table::TYPE_INT, 2);
+        $this->statusTable->column('workers', Table::TYPE_INT, 4);
         $this->statusTable->column('doneUrls', Table::TYPE_INT, 8);
         $this->statusTable->create();
         $this->statusTable->set('1', ['workers' => 0, 'doneUrls' => 0]);
@@ -449,9 +449,6 @@ class Crawler
                 $bodySize = $body ? strlen($body) : 0;
             }
 
-            // decrement workers count after request is done
-            $this->statusTable->decr('1', 'workers');
-
             // parse HTML body and fill queue with new URLs
             $isHtmlBody = isset($httpResponse->headers['content-type']) && stripos($httpResponse->headers['content-type'], 'text/html') !== false;
             $isCssBody = isset($httpResponse->headers['content-type']) && stripos($httpResponse->headers['content-type'], 'text/css') !== false;
@@ -508,6 +505,9 @@ class Crawler
             // print table row to output
             $progressStatus = $this->statusTable->get('1', 'doneUrls') . '/' . ($this->queue->count() + $this->visited->count());
             $this->output->addTableRow($httpResponse, $absoluteUrl, $status, $elapsedTime, $bodySize, $contentType, $extraParsedContent, $progressStatus);
+
+            // decrement workers count after request is done
+            $this->statusTable->decr('1', 'workers');
 
             // check if crawler is done and exit or start new coroutine to process the next URL
             if ($this->queue->count() === 0 && $this->getActiveWorkersNumber() === 0) {
