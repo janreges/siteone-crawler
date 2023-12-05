@@ -140,7 +140,7 @@ class Manager
         $result = [];
 
         $dom = null;
-        if ($visitedUrl->contentType === Crawler::CONTENT_TYPE_ID_HTML) {
+        if ($visitedUrl->contentType === Crawler::CONTENT_TYPE_ID_HTML && $body !== null && trim($body) !== '') {
             $s = microtime(true);
             $encodedBody = mb_convert_encoding($body, 'HTML-ENTITIES', 'UTF-8');
             if (!$encodedBody) {

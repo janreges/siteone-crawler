@@ -128,7 +128,10 @@ class SecurityAnalyzer extends BaseAnalyzer implements Analyzer
         $result = new UrlAnalysisResult();
 
         $this->checkHeaders($headers, $visitedUrl->isHttps(), $result);
-        $this->checkHtmlSecurity($body, $visitedUrl->isHttps(), $result);
+
+        if ($body !== null && trim($body) !== '') {
+            $this->checkHtmlSecurity($body, $visitedUrl->isHttps(), $result);
+        }
 
         return $result;
     }
