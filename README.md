@@ -1,9 +1,17 @@
 # SiteOne Crawler
 
-SiteOne Crawler is a **very useful and easy-to-use tool you will ♥ as a Dev/DevOps, website owner or consultant**. Works on all popular platforms - **Windows**, **macOS** and **Linux** (**x64** and **arm64** too).
+SiteOne Crawler is a **very useful and easy-to-use tool you'll ♥ as a Dev/DevOps, website owner or consultant**. Works on all popular platforms - **Windows**, **macOS** and **Linux** (**x64** and **arm64** too).
 
 It will crawl your entire website in depth, analyze and report problems, show useful statistics and reports, generate an offline
-version of the website, generate sitemaps or send reports via email.
+version of the website, generate sitemaps or send reports via email. Watch a detailed [**video with a sample report**](https://www.youtube.com/watch?v=PHIFSOmk0gk) for the [astro.build](https://astro.build/?utm_source=siteone-crawler-github) website.
+
+This crawler can be used as a command-line tool (see [**releases**](https://github.com/janreges/siteone-crawler/releases) and [**video**](https://www.youtube.com/watch?v=25T_yx13naA&list=PL9mElgTe-s1Csfg0jXWmDS0MHFN7Cpjwp)), or you can use a [**multi-platform desktop application**](https://github.com/janreges/siteone-crawler-gui) with graphical interface (see [**video about SiteOne Crawler app**](https://www.youtube.com/watch?v=rFW8LNEVNdw)).
+
+I also recommend looking at the project website [**crawler.siteone.io**](https://crawler.siteone.io/).
+
+GIF animation of the crawler in action (also available as a [video](https://www.youtube.com/watch?v=25T_yx13naA&list=PL9mElgTe-s1Csfg0jXWmDS0MHFN7Cpjwp)):
+
+![SiteOne Crawler](docs/siteone-crawler-command-line.gif)
 
 ## Table of contents
 
@@ -15,7 +23,6 @@ version of the website, generate sitemaps or send reports via email.
     * [Offline website generator](#offline-website-generator)
     * [Sitemap generator](#sitemap-generator)
     * [For active contributors](#for-active-contributors)
-- [Motivation to create this tool](#motivation-to-create-this-tool)
 - [Installation](#installation)
     * [Ready-to-use releases](#ready-to-use-releases)
     * [Linux (x64)](#linux-x64)
@@ -32,6 +39,7 @@ version of the website, generate sitemaps or send reports via email.
         + [Export settings](#export-settings)
         + [Mailer options](#mailer-options)
 - [Roadmap](#roadmap)
+- [Motivation to create this tool](#motivation-to-create-this-tool)
 - [Disclaimer](#disclaimer)
 - [License](#license)
 - [Output examples](#output-examples)
@@ -42,7 +50,7 @@ version of the website, generate sitemaps or send reports via email.
 
 In short, the main benefits can be summarized in these points:
 
-- **Crawler** - very powerful crawler of the whole website reporting useful information about each URL (status code,
+- **Crawler** - very powerful crawler of the entire website reporting useful information about each URL (status code,
   response time, size, custom headers, titles, etc.)
 - **Dev/DevOps assistant** - offers a set of very useful and often necessary features for developers and devops (stress
   test, warm up cache, localhost testing, etc.)
@@ -119,26 +127,6 @@ Don't hesitate and try it. You will love it as we do! ♥
 
 - the crawler code provides some useful functionality that facilitates further **development** and **extensibility** of
   the project
--
-
-## Motivation to create this tool
-
-At [SiteOne](https://www.siteone.io/) we have been creating web applications and web presentations for our clients for
-more than 20 years. We have implemented hundreds of projects, and we have one need all around.
-
-We need to check that the whole website is working great. Check that all pages respond quickly, that the title and other
-SEO criteria are well-designed, that there are no non-existent pages (invalid links or missing files), that the cache or
-security headers are set correctly, that we do not have unnecessary redirects. Last but not least, we need to perform
-stress tests or test protections against DoS/DDoS attacks on our infrastructure.
-
-There are GUI tools like [Xenu's Link Sleuth](https://home.snafu.de/tilman/xenulink.html)
-or [Screaming Frog SEO Spider](https://www.screamingfrog.co.uk/seo-spider/), or some poor quality CLI tools. None of
-these tools covered all our needs. That's why we decided to create our own tool.
-
-Ehmmmm... Enough of the marketing bullshit! What was really the most real reason? The author, head of development and
-infrastructure at [SiteOne](https://www.siteone.io/), wanted to prove that he could develop a great tool in dozens hours of
-pure working time and take a break from caring for his extremely prematurely born son. And he did it! :-) The tool is
-great, and his son is doing great too! ♥
 
 ## Installation
 
@@ -257,6 +245,8 @@ required arguments:
 ```
 
 ### Arguments
+
+For a clearer list, I recommend going to the documentation: https://crawler.siteone.io/configuration/command-line-options/
 
 #### Basic settings
 
@@ -407,6 +397,10 @@ If you have any suggestions or feature requests, please open an issue on GitHub.
 
 Your contributions with realized improvements, bug fixes, and new features are welcome. Please open a pull request :-)
 
+## Motivation to create this tool
+
+If you are interested in the author's motivation for creating this tool, read it on [the project website](https://crawler.siteone.io/introduction/motivation/).
+
 ## Disclaimer
 
 Please use responsibly and ensure that you have the necessary permissions when crawling websites. Some sites may have
@@ -428,87 +422,3 @@ This work is licensed under a
 [cc-by-image]: https://i.creativecommons.org/l/by/4.0/88x31.png
 
 [cc-by-shield]: https://img.shields.io/badge/License-CC%20BY%204.0-lightgrey.svg
-
-## Output examples
-
-### Text output
-
-![SiteOne Crawler](./docs/siteone-crawler.gif)
-
-### JSON output
-
-Output is truncated (only 3 URLs in results) for better readability.
-
-```json
-{
-  "crawler": {
-    "name": "SiteOne Crawler",
-    "version": "2023.10.2",
-    "executedAt": "2023-10-05 16:50:27",
-    "command": "--url=https:\/\/www.siteone.io\/ --extra-columns=Title --workers=2 --output=json"
-  },
-  "options": {
-    "url": "https:\/\/www.siteone.io\/",
-    "device": "desktop",
-    "outputType": "json",
-    "workers": 2,
-    "timeout": 10,
-    "urlColumnSize": 72,
-    "acceptEncoding": "gzip, deflate, br",
-    "userAgent": null,
-    "extraColumns": [
-      "Title"
-    ],
-    "maxQueueLength": 1000,
-    "maxVisitedUrls": 5000,
-    "maxUrlLength": 2000,
-    "crawlAssets": [],
-    "addRandomQueryParams": false,
-    "removeQueryParams": false,
-    "showSchemeAndHost": true,
-    "doNotTruncateUrl": true
-  },
-  "results": [
-    {
-      "url": "https:\/\/www.siteone.io\/",
-      "status": 200,
-      "elapsedTime": 0.086,
-      "size": 159815,
-      "extras": {
-        "Title": "SiteOne | Design. Development. Digital Transformation."
-      }
-    },
-    {
-      "url": "https:\/\/www.siteone.io\/our-projects",
-      "status": 200,
-      "elapsedTime": 0.099,
-      "size": 132439,
-      "extras": {
-        "Title": "SiteOne | Our Projects &amp; Successful Solutions"
-      }
-    },
-    {
-      "url": "https:\/\/www.siteone.io\/case-study\/new-webdesign-for-e.on-energy",
-      "status": 200,
-      "elapsedTime": 0.099,
-      "size": 156471,
-      "extras": {
-        "Title": "SiteOne | E.ON: Security and Stability in the Energy Market"
-      }
-    }
-  ],
-  "stats": {
-    "totalExecutionTime": 0.464,
-    "totalUrls": 9,
-    "totalSize": 1358863,
-    "totalSizeFormatted": "1.3 MB",
-    "totalRequestsTimes": 0.826,
-    "totalRequestsTimesAvg": 0.092,
-    "totalRequestsTimesMin": 0.074,
-    "totalRequestsTimesMax": 0.099,
-    "countByStatus": {
-      "200": 9
-    }
-  }
-}
-```
