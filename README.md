@@ -3,11 +3,11 @@
 SiteOne Crawler is a **very useful and easy-to-use tool you'll ♥ as a Dev/DevOps, website owner or consultant**. Works on all popular platforms - **Windows**, **macOS** and **Linux** (**x64** and **arm64** too).
 
 It will crawl your entire website in depth, analyze and report problems, show useful statistics and reports, generate an offline
-version of the website, generate sitemaps or send reports via email. Watch a detailed [**video with a sample report**](https://www.youtube.com/watch?v=PHIFSOmk0gk) for the [astro.build](https://astro.build/?utm_source=siteone-crawler-github) website.
+version of the website, generate sitemaps or send reports via email. Watch a detailed [video with a sample report](https://www.youtube.com/watch?v=PHIFSOmk0gk) for the [astro.build](https://astro.build/?utm_source=siteone-crawler-github) website.
 
-This crawler can be used as a command-line tool (see [**releases**](https://github.com/janreges/siteone-crawler/releases) and [**video**](https://www.youtube.com/watch?v=25T_yx13naA&list=PL9mElgTe-s1Csfg0jXWmDS0MHFN7Cpjwp)), or you can use a [**multi-platform desktop application**](https://github.com/janreges/siteone-crawler-gui) with graphical interface (see [**video about SiteOne Crawler app**](https://www.youtube.com/watch?v=rFW8LNEVNdw)).
+This crawler can be used as a command-line tool (see [releases](https://github.com/janreges/siteone-crawler/releases) and [video](https://www.youtube.com/watch?v=25T_yx13naA&list=PL9mElgTe-s1Csfg0jXWmDS0MHFN7Cpjwp)), or you can use a [multi-platform desktop application](https://github.com/janreges/siteone-crawler-gui) with graphical interface (see [video](https://www.youtube.com/watch?v=rFW8LNEVNdw) about app).
 
-I also recommend looking at the project website [**crawler.siteone.io**](https://crawler.siteone.io/).
+I also recommend looking at the project website [crawler.siteone.io](https://crawler.siteone.io/).
 
 GIF animation of the crawler in action (also available as a [video](https://www.youtube.com/watch?v=25T_yx13naA&list=PL9mElgTe-s1Csfg0jXWmDS0MHFN7Cpjwp)):
 
