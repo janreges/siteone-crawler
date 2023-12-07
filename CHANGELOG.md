@@ -2,8 +2,23 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
-#### [v1.0.5.20231204](https://github.com/janreges/siteone-crawler/compare/v1.0.4...v1.0.5.20231204)
+#### [v1.0.6](https://github.com/janreges/siteone-crawler/compare/v1.0.5...v1.0.6)
 
+> 8 December 2023
+
+- readme: removed bold links from the intro (it didn't look as good on github as it did in the IDE) [`b675873`](https://github.com/janreges/siteone-crawler/commit/b6758733cde67f11322a2f82573b19ec1a0edc9d)
+- readme: improved intro and gif animation with the real output [`fd9e2d6`](https://github.com/janreges/siteone-crawler/commit/fd9e2d69c8f940cfaa81ad7bab86f1a74f01b0da)
+- http auth: for security reasons, we only send auth data to the same 2nd level domain (and possibly subdomains). With HTTP basic auth, the name and password are only base64 encoded and we would send them to foreign domains (which are referred to from the crawled website) [`4bc8a7f`](https://github.com/janreges/siteone-crawler/commit/4bc8a7f9871064aa1c88c374aa299904409d2817)
+- html report: increased specificity of the .header class for the header, because this class were also used by the generic class at &lt;td class='header'&gt; in security tab [`9d270e8`](https://github.com/janreges/siteone-crawler/commit/9d270e884545d6459f20348db71404e513ae8928)
+- html report: improved readability of badge colors in light mode [`76c5680`](https://github.com/janreges/siteone-crawler/commit/76c5680397446b84f3b13800590d914b7a9b0533)
+- crawler: moving the decrement of active workers after parsing URLs from the content, where further filling of the queue could occur (for this reason, queue processing could sometimes get stuck in the final stages) [`f8f82ab`](https://github.com/janreges/siteone-crawler/commit/f8f82ab61c1969952bb70f1b598ed3d97938a84e)
+- analysis: do not parse/check empty HTML (it produced unnecessary warning) - it is valid to have content-type: text/html but with connect-lengt: 0 (for example case for 'gtm.js?id=') [`436d81b`](https://github.com/janreges/siteone-crawler/commit/436d81b81f905178fb972f8b5cd0236bac244bc4)
+
+#### [v1.0.5](https://github.com/janreges/siteone-crawler/compare/v1.0.4...v1.0.5)
+
+> 3 December 2023
+
+- changelog: updated changelog after 3 added commits to still untagged draft release 1.0.5 [`f42fe18`](https://github.com/janreges/siteone-crawler/commit/f42fe18de89676dc0dea4dc033207c934282d04b)
 - utils tests: fixed tests of methods getAbsolutePath() and getOutputFormattedPath() [`d4f4576`](https://github.com/janreges/siteone-crawler/commit/d4f4576ff566eb48495c9fb55a898b0989ef42c3)
 - crawler.php: replaced preg_match to str_contains [`5b28952`](https://github.com/janreges/siteone-crawler/commit/5b289521cdbb90b6571a29cb9c880e065b852129)
 - version: 1.0.5.20231204 + changelog [`7f2e974`](https://github.com/janreges/siteone-crawler/commit/7f2e9741fab25e9369151bc2d79a38b8827e2463)
