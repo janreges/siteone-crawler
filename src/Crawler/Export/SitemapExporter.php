@@ -42,6 +42,17 @@ class SitemapExporter extends BaseExporter implements Exporter
                 $urls[] = $visitedUrl->url;
             }
         }
+
+        // sort $urls primary by number of dashes ASC, secondary alphabetically ASC
+        usort($urls, function ($a, $b) {
+            $aDashes = substr_count(rtrim($a, '/'), '/');
+            $bDashes = substr_count(rtrim($b, '/'), '/');
+            if ($aDashes === $bDashes) {
+                return strcmp($a, $b);
+            }
+            return $aDashes - $bDashes;
+        });
+
         if ($this->outputSitemapXml) {
             try {
                 $sitemapFile = $this->generateXmlSitemap($this->outputSitemapXml, $urls);
