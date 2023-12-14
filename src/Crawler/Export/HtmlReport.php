@@ -1108,7 +1108,11 @@ class HtmlReport
                             $detail = str_replace(' display="block', '', $detail);
                             // add SVG size to the detail if detail contains only SVG
                             if (str_starts_with($detail, '<')) {
-                                return Utils::getFormattedSize(strlen($detail)) . ' ' . $detail;
+                                $isSvgIconSet = str_contains($detail, '<symbol') || str_contains($detail, '<g');
+                                $finalDetailHtml = $isSvgIconSet
+                                    ? (Utils::svgSetFillCurrentColor($detail) . ' ' . Utils::svgSetToPreview($detail))
+                                    : Utils::svgSetFillCurrentColor($detail);
+                                return Utils::getFormattedSize(strlen($detail)) . ' ' . $finalDetailHtml;
                             } else {
                                 return $detail;
                             }

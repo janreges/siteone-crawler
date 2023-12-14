@@ -1028,4 +1028,65 @@ class Utils
         return str_pad($input, $pad_length + $diff, $pad_string, $pad_type);
     }
 
+    /**
+     * Convert SVG set with multiple symbols to HTML preview of all symbols
+     * @param string $svgSet
+     * @return string|null
+     */
+    public static function svgSetToPreview(string $svgSet): ?string
+    {
+        if (!str_contains($svgSet, '<svg')) {
+            return null;
+        }
+
+        $dom = new \DOMDocument();
+        @$dom->loadXML($svgSet);
+        $xpath = new \DOMXPath($dom);
+        $xpath->registerNamespace('svg', 'http://www.w3.org/2000/svg');
+
+        $iconsInSet = [];
+        $symbols = @$xpath->query('//svg/symbol');
+        $defsG = @$xpath->query('//svg:g');
+        if ($symbols && count($symbols) > 1) {
+            foreach($symbols as $symbol) {
+                $iconsInSet[] = $symbol;
+            }
+        }
+        if ($defsG && count($defsG) > 1) {
+            foreach($defsG as $g) {
+                $iconsInSet[] = $g;
+            }
+        }
+
+        if (!$iconsInSet) {
+            return null;
+        }
+
+        $html = 'Icon set: <div class="iconset-preview">';
+        foreach ($iconsInSet as $iconInSet) {
+            $id = $iconInSet->getAttribute('id');
+            if ($id) {
+                $html .= '<svg class="iconset-icon icon--' . htmlspecialchars($id) . '">';
+                $html .= '<use xlink:href="#' . htmlspecialchars($id) . '" />';
+                $html .= "</svg>\n";
+            }
+        }
+        $html .= '</div>';
+
+        return $html;
+    }
+
+    /**
+     * @param string $svg
+     * @return string
+     */
+    public static function svgSetFillCurrentColor(string $svg): string
+    {
+        return str_replace(
+            ['<svg ', '<symbol ', '<g '],
+            ['<svg fill="currentColor" ', '<symbol fill="currentColor" ', '<g fill="currentColor" '],
+            $svg
+        );
+    }
+
 }
