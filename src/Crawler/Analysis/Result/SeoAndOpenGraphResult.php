@@ -223,7 +223,7 @@ class SeoAndOpenGraphResult
             $line = trim($line);
             if (str_starts_with($line, 'Disallow:')) {
                 $disallowedPath = trim(substr($line, strlen('Disallow:')));
-                if (str_starts_with($urlPath, $disallowedPath)) {
+                if ($disallowedPath !== '' && str_starts_with($urlPath, $disallowedPath)) {
                     return true;
                 }
             }
