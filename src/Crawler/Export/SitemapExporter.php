@@ -38,7 +38,7 @@ class SitemapExporter extends BaseExporter implements Exporter
     {
         $urls = [];
         foreach ($this->status->getVisitedUrls() as $visitedUrl) {
-            if ($visitedUrl->contentType === Crawler::CONTENT_TYPE_ID_HTML && $visitedUrl->statusCode === 200) {
+            if (!$visitedUrl->isExternal && $visitedUrl->contentType === Crawler::CONTENT_TYPE_ID_HTML && $visitedUrl->statusCode === 200) {
                 $urls[] = $visitedUrl->url;
             }
         }
