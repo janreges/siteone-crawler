@@ -38,6 +38,7 @@ GIF animation of the crawler in action (also available as a [video](https://www.
         + [Advanced crawler settings](#advanced-crawler-settings)
         + [Export settings](#export-settings)
         + [Mailer options](#mailer-options)
+        + [Upload options](#upload-options)
 - [Roadmap](#roadmap)
 - [Motivation to create this tool](#motivation-to-create-this-tool)
 - [Disclaimer](#disclaimer)
@@ -353,6 +354,18 @@ through the file:// protocol.
 * `--mail-smtp-port=<port>`        SMTP port for sending emails. Default is `25`.
 * `--mail-smtp-user=<user>`        SMTP user, if your SMTP server requires authentication.
 * `--mail-smtp-pass=<pass>`        SMTP password, if your SMTP server requires authentication.
+
+#### Upload options
+
+`--upload`                         Enable HTML report upload to `--upload-to`.
+`--upload-to=<url>`                URL of the endpoint where to send the HTML report. Default value is `https://crawler.siteone.io/up`.
+`--upload-retention=<val>`         How long should the HTML report be kept in the online version? Values: 1h / 4h / 12h / 24h / 3d / 7d / 30d / 365d / forever. Default value is `30d`.
+`--upload-password=<val>`          Optional password, which must be entered (the user will be 'crawler') to display the online HTML report.
+`--upload-timeout=<int>`           Upload timeout in seconds. Default value is `3600`.
+
+If necessary, you can also use your own endpoint `--upload-to` for saving the HTML report.
+
+Your own endpoint need to accept a POST request, where `htmlBody` is the gzipped HTML body of the report, `retention` is the retention value, and `password` is an optional password to encrypt access to the HTML.
 
 #### Offline exporter options
 
