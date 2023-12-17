@@ -290,7 +290,7 @@ class ParsedUrl
         $fragment = $parsedUrl['fragment'] ?? null;
         $extension = ($path && str_contains($path, '.')) ? pathinfo($path, PATHINFO_EXTENSION) : null;
         $domain2ndLevel = null;
-        if (preg_match('/([a-z0-9\-]+\.[a-z][a-z0-9]{0,10})$/i', $host, $matches) === 1) {
+        if ($host && preg_match('/([a-z0-9\-]+\.[a-z][a-z0-9]{0,10})$/i', $host, $matches) === 1) {
             $domain2ndLevel = $matches[1];
         };
 
