@@ -357,11 +357,11 @@ through the file:// protocol.
 
 #### Upload options
 
-`--upload`                         Enable HTML report upload to `--upload-to`.
-`--upload-to=<url>`                URL of the endpoint where to send the HTML report. Default value is `https://crawler.siteone.io/up`.
-`--upload-retention=<val>`         How long should the HTML report be kept in the online version? Values: 1h / 4h / 12h / 24h / 3d / 7d / 30d / 365d / forever. Default value is `30d`.
-`--upload-password=<val>`          Optional password, which must be entered (the user will be 'crawler') to display the online HTML report.
-`--upload-timeout=<int>`           Upload timeout in seconds. Default value is `3600`.
+* `--upload`                         Enable HTML report upload to `--upload-to`.
+* `--upload-to=<url>`                URL of the endpoint where to send the HTML report. Default value is `https://crawler.siteone.io/up`.
+* `--upload-retention=<val>`         How long should the HTML report be kept in the online version? Values: 1h / 4h / 12h / 24h / 3d / 7d / 30d / 365d / forever. Default value is `30d`.
+* `--upload-password=<val>`          Optional password, which must be entered (the user will be 'crawler') to display the online HTML report.
+* `--upload-timeout=<int>`           Upload timeout in seconds. Default value is `3600`.
 
 If necessary, you can also use your own endpoint `--upload-to` for saving the HTML report.
 
@@ -384,14 +384,14 @@ Your own endpoint need to accept a POST request, where `htmlBody` is the gzipped
 
 #### Expert options
 
-`--debug`                          Activate debug mode.
-`--debug-log-file=<file>`          Log file where to save debug messages. When `--debug` is not set and `--debug-log-file` is set, logging will be active without visible output.
-`--debug-url-regex=<regex>`        Regex for URL(s) to debug. When crawled URL is matched, parsing, URL replacing, and other actions are printed to output. Can be specified multiple times.
-`--result-storage=<val>`           Result storage type for content and headers. Values: `memory` or `file`. Use `file` for large websites. Default values is `memory`.
-`--result-storage-dir=<dir>`       Directory for `--result-storage=file`. Default values is `tmp/result-storage`.
-`--result-storage-compression`     Enable compression for results storage. Saves disk space, but uses more CPU.
-`--http-cache-dir=<dir>`           Cache dir for HTTP responses. You can disable cache by `--http-cache-dir='off'`. Default values is `tmp/http-client-cache`.
-`--http-cache-compression`         Enable compression for HTTP cache storage. Saves disk space, but uses more CPU.
+* `--debug`                          Activate debug mode.
+* `--debug-log-file=<file>`          Log file where to save debug messages. When `--debug` is not set and `--debug-log-file` is set, logging will be active without visible output.
+* `--debug-url-regex=<regex>`        Regex for URL(s) to debug. When crawled URL is matched, parsing, URL replacing, and other actions are printed to output. Can be specified multiple times.
+* `--result-storage=<val>`           Result storage type for content and headers. Values: `memory` or `file`. Use `file` for large websites. Default values is `memory`.
+* `--result-storage-dir=<dir>`       Directory for `--result-storage=file`. Default values is `tmp/result-storage`.
+* `--result-storage-compression`     Enable compression for results storage. Saves disk space, but uses more CPU.
+* `--http-cache-dir=<dir>`           Cache dir for HTTP responses. You can disable cache by `--http-cache-dir='off'`. Default values is `tmp/http-client-cache`.
+* `--http-cache-compression`         Enable compression for HTTP cache storage. Saves disk space, but uses more CPU.
 
 **NOTICE**: For now, only SMTP without encryption is supported, typically running on port 25. If you are interested in
 this tool, we can also implement secure SMTP support, or simply send me a pull request with lightweight implementation.
