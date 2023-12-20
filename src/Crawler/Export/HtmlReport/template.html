@@ -826,6 +826,43 @@
             debounce(tableFulltext, 250)(tableId, searchTerm);
         }
 
+        document.addEventListener('DOMContentLoaded', function () {
+            /* add event listeners to fulltext inputs above super tables */
+            function onFulltextKeyup(event) {
+                const dataUqId = event.target.getAttribute('data-uq-id');
+                const inputValue = event.target.value;
+                debouncedTableFulltext(dataUqId, inputValue);
+            }
+
+            const inputs = document.querySelectorAll('input.fulltext[data-uq-id]');
+            inputs.forEach(input => {
+                input.addEventListener('keyup', onFulltextKeyup);
+            });
+
+            /* add event listeners to sortable table headers */
+            function onTableHeaderClick(event) {
+                const dataUqId = event.target.getAttribute('data-uq-id');
+                const dataKey = event.target.getAttribute('data-key');
+                sortTable(dataUqId, dataKey);
+            }
+
+            const tableHeaders = document.querySelectorAll('th.sortable-th[data-uq-id]');
+            tableHeaders.forEach(th => {
+                th.addEventListener('click', onTableHeaderClick);
+            });
+
+            /* add event listeners to image gallery filters */
+            function onImageFilterClick(event) {
+                const dataKey = event.target.getAttribute('data-key');
+                updateClassName(dataKey, event.target.value);
+            }
+
+            const imgFilters = document.querySelectorAll('input.idf[data-key]');
+            imgFilters.forEach(f => {
+                f.addEventListener('change', onImageFilterClick);
+            });
+        });
+
     </script>
 </div>
 </body>

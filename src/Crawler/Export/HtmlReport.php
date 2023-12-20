@@ -616,26 +616,26 @@ class HtmlReport
         $html .= '<form id="imageDisplayForm">
                 <div class="form-group">
                     <div class="btn-group">
-                        <input type="radio" id="sizeSmall" name="thumbnailSize" value="small" checked onchange="updateClassName(\'igc\', this.value)">
+                        <input class="idf" type="radio" id="sizeSmall" name="thumbnailSize" value="small" data-key="igc" checked>
                         <label for="sizeSmall">small</label>
         
-                        <input type="radio" id="sizeMedium" name="thumbnailSize" value="medium" onchange="updateClassName(\'igc\', this.value)">
+                        <input class="idf" type="radio" id="sizeMedium" name="thumbnailSize" value="medium" data-key="igc">
                         <label for="sizeMedium">medium</label>
         
-                        <input type="radio" id="sizeLarge" name="thumbnailSize" value="large" onchange="updateClassName(\'igc\', this.value)">
+                        <input class="idf" type="radio" id="sizeLarge" name="thumbnailSize" value="large" data-key="igc">
                         <label for="sizeLarge">large</label>
                     </div>
                 </div>
         
                 <div class="form-group">
                     <div class="btn-group">
-                        <input type="radio" id="modeScaleDown" name="thumbnailMode" value="scaleDown" onchange="updateClassName(\'igcf\', this.value)" checked>
+                        <input class="idf" type="radio" id="modeScaleDown" name="thumbnailMode" value="scaleDown" data-key="igcf" checked>
                         <label for="modeScaleDown">scale-down</label>
                         
-                        <input type="radio" id="modeContain" name="thumbnailMode" value="contain" onchange="updateClassName(\'igcf\', this.value)">
+                        <input class="idf" type="radio" id="modeContain" name="thumbnailMode" value="contain" data-key="igcf">
                         <label for="modeContain">contain</label>
                         
-                        <input type="radio" id="modeCover" name="thumbnailMode" value="cover" onchange="updateClassName(\'igcf\', this.value)">
+                        <input class="idf" type="radio" id="modeCover" name="thumbnailMode" value="cover" data-key="igcf">
                         <label for="modeCover">cover</label>
                     </div>
                 </div>

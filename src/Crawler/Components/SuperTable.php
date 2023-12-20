@@ -115,7 +115,7 @@ class SuperTable
 
         if ($this->isFulltextEnabled()) {
             $output .= '<div class="fulltext-container">';
-            $output .= '    <input type="text" class="fulltext" onkeyup="debouncedTableFulltext(\'' . htmlspecialchars($this->uniqueId) . '\', this.value)" style="width: 300px;" placeholder="Fulltext search">';
+            $output .= '    <input type="text" class="fulltext" data-uq-id="' . htmlspecialchars($this->uniqueId) . '" style="width: 300px;" placeholder="Fulltext search">';
             $output .= '    <span id="foundRows_' . htmlspecialchars($this->uniqueId) . '" class="found-rows">Found ' . count($this->data) . ' row(s).</span>';
             $output .= '</div>';
         }
@@ -145,7 +145,7 @@ class SuperTable
             } else {
                 $dataType = isset($this->data[0]) && isset($this->data[0]->$key) && is_numeric($this->data[0]->$key) ? 'number' : 'string';
             }
-            $output .= "<th data-key='{$key}' data-type='{$dataType}' data-direction='" . $direction . "' data-label='" . htmlspecialchars($column->name) . "' onclick='sortTable(\"" . htmlspecialchars($this->uniqueId) . "\", \"" . htmlspecialchars($key) . "\")'>" . htmlspecialchars($column->name) . "{$arrow}</th>";
+            $output .= "<th class='sortable-th' data-key='{$key}' data-type='{$dataType}' data-direction='" . $direction . "' data-label='" . htmlspecialchars($column->name) . "' data-uq-id='" . htmlspecialchars($this->uniqueId) . "'>" . htmlspecialchars($column->name) . "{$arrow}</th>";
         }
 
         $initialRootUrl = $this->initialUrl ? preg_replace('/^(https?:\/\/[^\/]+).*$/', '$1', $this->initialUrl) : null;
