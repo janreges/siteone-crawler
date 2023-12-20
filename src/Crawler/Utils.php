@@ -345,8 +345,8 @@ class Utils
     public static function getSafeCommand(string $command): string
     {
         return preg_replace(
-            ['/(pass[a-z]{0,5})=\S+/i', '/(keys?)=\S+/i', '/(secrets?)=\S+/i'],
-            ['$1=***', '$1=***', '$1=***'],
+            ['/(pass[a-z]{0,5})=\S+/i', '/(keys?)=\S+/i', '/(secrets?)=\S+/i', '/(auth)=\S+/i'],
+            ['$1=***', '$1=***', '$1=***', '$1=***'],
             $command
         );
     }
