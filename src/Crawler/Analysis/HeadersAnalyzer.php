@@ -24,7 +24,7 @@ class HeadersAnalyzer extends BaseAnalyzer implements Analyzer
     const SUPER_TABLE_HEADERS = 'headers';
     const SUPER_TABLE_HEADERS_VALUES = 'headers-values';
 
-    const ANALYSIS_HEADERS = 'Headers';
+    const ANALYSIS_HEADERS = 'HTTP headers';
 
     /**
      * @var HeaderStats[]
@@ -43,8 +43,8 @@ class HeadersAnalyzer extends BaseAnalyzer implements Analyzer
         // basic info
         $superTable = new SuperTable(
             self::SUPER_TABLE_HEADERS,
-            'Headers',
-            'No headers found.',
+            'HTTP headers',
+            'No HTTP headers found.',
             [
                 new SuperTableColumn('header', 'Header', SuperTableColumn::AUTO_WIDTH, null, function (HeaderStats $header) {
                     return $header->getFormattedHeaderName();
@@ -116,8 +116,8 @@ class HeadersAnalyzer extends BaseAnalyzer implements Analyzer
 
         $superTable = new SuperTable(
             self::SUPER_TABLE_HEADERS_VALUES,
-            'Header values',
-            'No headers found.',
+            'HTTP header values',
+            'No HTTP headers found.',
             [
                 new SuperTableColumn('header', 'Header'),
                 new SuperTableColumn('occurrences', 'Occurs', 6),
