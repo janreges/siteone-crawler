@@ -87,7 +87,7 @@ class SitemapExporter extends BaseExporter implements Exporter
             throw new Exception("Output file {$outputFile} is not writable. Check permissions.");
         }
 
-        $xml = new SimpleXMLElement('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="https://www.sitemaps.org/schemas/sitemap/0.9"></urlset>');
+        $xml = new SimpleXMLElement('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="https://www.sitemaps.org/schemas/sitemap/0.9"><!-- Sitemap generated using SiteOne Crawler - https://crawler.siteone.io/features/sitemap-generator/ --></urlset>');
         foreach ($urls as $url) {
             $urlElement = $xml->addChild('url');
             $urlElement->addChild('loc', htmlspecialchars($url));
