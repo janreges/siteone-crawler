@@ -355,6 +355,9 @@ through the file:// protocol.
 * `--mail-smtp-user=<user>`        SMTP user, if your SMTP server requires authentication.
 * `--mail-smtp-pass=<pass>`        SMTP password, if your SMTP server requires authentication.
 
+**NOTICE**: For now, only SMTP without encryption is supported, typically running on port 25. If you are interested in
+this tool, we can also implement secure SMTP support, or simply send me a pull request with lightweight implementation.
+
 #### Upload options
 
 * `--upload`                         Enable HTML report upload to `--upload-to`.
@@ -365,7 +368,7 @@ through the file:// protocol.
 
 If necessary, you can also use your own endpoint `--upload-to` for saving the HTML report.
 
-Your own endpoint need to accept a POST request, where `htmlBody` is the gzipped HTML body of the report, `retention` is the retention value, and `password` is an optional password to encrypt access to the HTML.
+**How to implement own endpoint**: Your own endpoint need to accept a POST request, where in `htmlBody` is the gzipped HTML body of the report, `retention` is the retention value, and `password` is an optional password to encrypt access to the HTML. The response must be JSON with `url` key with the URL where the report is available.
 
 #### Offline exporter options
 
@@ -393,9 +396,6 @@ Your own endpoint need to accept a POST request, where `htmlBody` is the gzipped
 * `--http-cache-dir=<dir>`           Cache dir for HTTP responses. You can disable cache by `--http-cache-dir='off'`. Default values is `tmp/http-client-cache`.
 * `--http-cache-compression`         Enable compression for HTTP cache storage. Saves disk space, but uses more CPU.
 
-**NOTICE**: For now, only SMTP without encryption is supported, typically running on port 25. If you are interested in
-this tool, we can also implement secure SMTP support, or simply send me a pull request with lightweight implementation.
-
 ## Roadmap
 
 * Well tested Docker images for easy usage in CI/CD pipelines on hub.docker.com (for all platforms).
@@ -404,7 +404,6 @@ this tool, we can also implement secure SMTP support, or simply send me a pull r
   visualization in the output.
 * Support for configurable thresholds for response times, status codes, etc. to exit with a non-zero code.
 * Support for secure SMTP.
-* Support for HTTP authentication.
 
 If you have any suggestions or feature requests, please open an issue on GitHub. We'd love to hear from you!
 
