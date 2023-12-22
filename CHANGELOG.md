@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v1.0.7](https://github.com/janreges/siteone-crawler/compare/v1.0.6...v1.0.7)
+
+- html report template: updated logo link to crawler.siteone.io [`9892cfe`](https://github.com/janreges/siteone-crawler/commit/9892cfe5708a3da2f5fc355246dd50b2a0c5cb4f)
+- http headers analysis: renamed 'Headers' to 'HTTP headers' [`436e6ea`](https://github.com/janreges/siteone-crawler/commit/436e6ea5a9914c8615bb03b444ac0aad15e31c49)
+- sitemap generator: added info about crawler to generated sitemap.xml [`7cb7005`](https://github.com/janreges/siteone-crawler/commit/7cb7005bf50b8f93b421c94c57ff51eb99b45912)
+- html report: refactor of all inline on* event listeners to data attributes and event listeners added from static JS inside &lt;script&gt;, so that we can disable all inline JS in the online HTML report and allow only our JS signed with hashes by Content-Security-Policy [`b576eef`](https://github.com/janreges/siteone-crawler/commit/b576eef55a5678a67928970fc51aaaefd7abd1a8)
+- readme: removed HTTP auth from roadmap (it's already done), improved guide how to implement own upload endpoint and message about SMTP moved under mailer options [`e1567ae`](https://github.com/janreges/siteone-crawler/commit/e1567aee52f9d09c1cef1ad35babaf9eea388175)
+- utils: hide passwords/authentication specified in cli parameters as *auth=xyz (e.g. --http-auth=abc:xyz)" in html report [`c8bb88f`](https://github.com/janreges/siteone-crawler/commit/c8bb88fc1a65ecdfd53db23fc5d972b841830837)
+- readme: fixed formatting of the upload and expert options [`2d14bd5`](https://github.com/janreges/siteone-crawler/commit/2d14bd5972496989624f91617de2689601e1c027)
+- readme: added Upload Options [`d8352c5`](https://github.com/janreges/siteone-crawler/commit/d8352c5acfddbeef1c1ae6498556dc296d944e0b)
+- upload exporter: added possibility via --upload to upload HTML report to offline URL, by default crawler.siteone.io/html/* [`2a027c3`](https://github.com/janreges/siteone-crawler/commit/2a027c38bfdb8e6e416b9a79ebe81e809c9326d9)
+- parsed-url: fixed warning in the case of url without host [`284e844`](https://github.com/janreges/siteone-crawler/commit/284e844f3f94cdb02032ddb76e51caa9a584c120)
+- seo and opengraph: fixed false positives 'DENY (robots.txt)' in some cases [`658b649`](https://github.com/janreges/siteone-crawler/commit/658b6494130fa282505ec38f12aa058acf7709b9)
+- best practices and inline-svgs: detection and display of the entire icon set in the HTML report in the case of &lt;svg&gt; with more &lt;symbol&gt; or &lt;g&gt; [`3b2772c`](https://github.com/janreges/siteone-crawler/commit/3b2772c59f822b7b4a6f91e15b616815b5ff92c4)
+- sitemap generator: sort urls primary by number of dashes and secondary alphabetically (thanks to this, urls of the main levels will be at the beginning) [`bbc47e6`](https://github.com/janreges/siteone-crawler/commit/bbc47e6239f9693c621016a50e624698dc3d242d)
+- sitemap generator: only include URLs from the same domain as the initial URL [`9969254`](https://github.com/janreges/siteone-crawler/commit/9969254e35cd8c134f85a7817de8722091f0377c)
+- changelog: updated by 'composer changelog' [`0c67fd4`](https://github.com/janreges/siteone-crawler/commit/0c67fd4f8d308d8d51d5b912d9b82cc96fb6e4fb)
+- package.json: used by auto-changelog generator [`6ad8789`](https://github.com/janreges/siteone-crawler/commit/6ad87895e5a8ab8bbce3d9cbf92ee5e8b8218cc0)
+
 #### [v1.0.6](https://github.com/janreges/siteone-crawler/compare/v1.0.5...v1.0.6)
 
 > 8 December 2023
