@@ -45,6 +45,7 @@ class Crawler
     private string $finalUserAgent;
     private ?array $doneCallback = null;
     private ?array $visitedUrlCallback = null;
+    private bool $initialExistingUrlFound = false;
     private bool $terminated = false;
 
     // rate limiting
@@ -463,6 +464,11 @@ class Crawler
             $isAllowedForCrawling = $this->isUrlAllowedByRegexes($parsedUrl) && $this->isExternalDomainAllowedForCrawling($parsedUrl->host);
             $extraParsedContent = [];
 
+            // mark initial URL as found if it is HTML and not redirected
+            if (!$this->initialExistingUrlFound && $isHtmlBody && $status === 200 && $bodySize > 0) {
+                $this->initialExistingUrlFound = true;
+            }
+
             // get type self::URL_TYPE_* based on content-type header
             $contentTypeHeader = $httpResponse->headers['content-type'] ?? '';
             if (isset($httpResponse->headers['location']) && $httpResponse->headers['location']) {
@@ -484,7 +490,13 @@ class Crawler
                 $redirectLocation = $httpResponse->headers['location'];
                 if ($redirectLocation) {
                     $extraParsedContent['Location'] = $redirectLocation;
-                    $this->addRedirectLocationToQueueIfSuitable($redirectLocation, $parsedUrlUqId, $scheme, $hostAndPort, $parsedUrl);
+                    $parsedRedirectUrl = $this->addRedirectLocationToQueueIfSuitable($redirectLocation, $parsedUrlUqId, $scheme, $hostAndPort, $parsedUrl);
+
+                    // if the initial URL is redirected to another domain but within the same 2nd level
+                    // domain (typically mydomain.tld -> www.mydomain.tld), update the initial url
+                    if ($parsedRedirectUrl && !$this->initialExistingUrlFound && $this->initialParsedUrl->domain2ndLevel === $parsedRedirectUrl->domain2ndLevel) {
+                        $this->initialParsedUrl = $parsedRedirectUrl;
+                    }
                 }
             }
 
@@ -582,10 +594,10 @@ class Crawler
      * @param string $scheme
      * @param string $hostAndPort
      * @param ParsedUrl $sourceUrl
-     * @return void
+     * @return ParsedUrl|null
      * @throws Exception
      */
-    private function addRedirectLocationToQueueIfSuitable(string $redirectLocation, ?string $sourceUqId, string $scheme, string $hostAndPort, ParsedUrl $sourceUrl): void
+    private function addRedirectLocationToQueueIfSuitable(string $redirectLocation, ?string $sourceUqId, string $scheme, string $hostAndPort, ParsedUrl $sourceUrl): ?ParsedUrl
     {
         if (str_starts_with($redirectLocation, '//')) {
             $redirectUrlToQueue = $scheme . ':' . $redirectLocation;
@@ -601,7 +613,10 @@ class Crawler
 
         if ($this->isUrlSuitableForQueue($parsedRedirectUrl)) {
             $this->addUrlToQueue($parsedRedirectUrl, $sourceUqId, FoundUrl::SOURCE_REDIRECT);
+            return $parsedRedirectUrl;
         }
+
+        return null;
     }
 
     private function isUrlAllowedByRegexes(ParsedUrl $url): bool
@@ -954,7 +969,7 @@ class Crawler
         // if we are crawling the same domain of 2nd level (regardless of subdomains) or exactly the same domain/IP,
         // we can use HTTP auth if configured
         $useHttpAuthIfConfigured = $crawler->getInitialParsedUrl()->domain2ndLevel
-            ? str_ends_with($domain,  $crawler->getInitialParsedUrl()->domain2ndLevel)
+            ? str_ends_with($domain, $crawler->getInitialParsedUrl()->domain2ndLevel)
             : ($domain === $crawler->getInitialParsedUrl()->host);
 
         if (array_key_exists($cacheKey, $disallowedPathsPerDomain)) {
