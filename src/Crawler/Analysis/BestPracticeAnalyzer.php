@@ -544,8 +544,8 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
             }
 
             if ($currentHeadingLevel > $previousHeadingLevel + 1) {
-                $warningIssues[] = "Heading structure is skipping levels: found an <{$heading->tagName}> after an <h{$previousHeadingLevel}>.";
-                $this->stats->addWarning(self::ANALYSIS_HEADING_STRUCTURE, $html . " - skipped levels {$heading->tagName} after <h{$previousHeadingLevel}>");
+                $warningIssues[] = "Heading structure is skipping levels: found an <{$heading->tagName}> " . ($previousHeadingLevel > 0 ? "after an <h{$previousHeadingLevel}>." : 'without a previous higher heading.');
+                $this->stats->addWarning(self::ANALYSIS_HEADING_STRUCTURE, $html . " - found <{$heading->tagName}> " . ($previousHeadingLevel > 0 ? "after an <h{$previousHeadingLevel}>." : 'without a previous higher heading.'));
             }
 
             $previousHeadingLevel = $currentHeadingLevel;
