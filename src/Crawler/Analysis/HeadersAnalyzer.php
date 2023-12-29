@@ -60,7 +60,7 @@ class HeadersAnalyzer extends BaseAnalyzer implements Analyzer
                         return $count;
                     }
                 }, false),
-                new SuperTableColumn('valuesPreview', 'Values preview', $consoleWidth - 90, function($value, $renderInto) {
+                new SuperTableColumn('valuesPreview', 'Values preview', $consoleWidth - 90, function ($value, $renderInto) {
                     if (is_string($value) && $renderInto === SuperTable::RENDER_INTO_HTML) {
                         return preg_replace('/\[[^\]]+\]/', '<span class="text-muted">$0</span>', $value);
                     }
@@ -150,7 +150,7 @@ class HeadersAnalyzer extends BaseAnalyzer implements Analyzer
      */
     public function analyzeVisitedUrl(VisitedUrl $visitedUrl, ?string $body, ?DOMDocument $dom, ?array $headers): ?UrlAnalysisResult
     {
-        if (!$headers || $visitedUrl->isExternal) {
+        if (!$headers || !$visitedUrl->isAllowedForCrawling) {
             return null;
         }
 

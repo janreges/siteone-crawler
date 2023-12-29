@@ -35,7 +35,7 @@ class FastestAnalyzer extends BaseAnalyzer implements Analyzer
     public function analyze(): void
     {
         $fastUrls = array_filter($this->status->getVisitedUrls(), function ($visitedUrl) {
-            return $visitedUrl->statusCode === 200 && $visitedUrl->contentType === Crawler::CONTENT_TYPE_ID_HTML && $visitedUrl->requestTime <= $this->fastestMaxTime;
+            return $visitedUrl->statusCode === 200 && $visitedUrl->isAllowedForCrawling && $visitedUrl->contentType === Crawler::CONTENT_TYPE_ID_HTML && $visitedUrl->requestTime <= $this->fastestMaxTime;
         });
         usort($fastUrls, function ($a, $b) {
             return $a->requestTime <=> $b->requestTime;

@@ -121,7 +121,7 @@ class SecurityAnalyzer extends BaseAnalyzer implements Analyzer
      */
     public function analyzeVisitedUrl(VisitedUrl $visitedUrl, ?string $body, ?DOMDocument $dom, ?array $headers): ?UrlAnalysisResult
     {
-        if ($visitedUrl->contentType !== Crawler::CONTENT_TYPE_ID_HTML || $visitedUrl->looksLikeStaticFileByUrl()) {
+        if (!$visitedUrl->isAllowedForCrawling || $visitedUrl->contentType !== Crawler::CONTENT_TYPE_ID_HTML || $visitedUrl->looksLikeStaticFileByUrl()) {
             return null;
         }
 

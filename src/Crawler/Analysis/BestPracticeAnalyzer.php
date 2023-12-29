@@ -84,7 +84,7 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
     public function analyze(): void
     {
         $htmlUrls = array_filter($this->status->getVisitedUrls(), function ($visitedUrl) {
-            return !$visitedUrl->isExternal && $visitedUrl->statusCode === 200 && $visitedUrl->contentType === Crawler::CONTENT_TYPE_ID_HTML;
+            return $visitedUrl->isAllowedForCrawling && $visitedUrl->statusCode === 200 && $visitedUrl->contentType === Crawler::CONTENT_TYPE_ID_HTML;
         });
 
         $imagesUrls = array_filter($this->status->getVisitedUrls(), function ($visitedUrl) {

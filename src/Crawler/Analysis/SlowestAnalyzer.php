@@ -36,7 +36,7 @@ class SlowestAnalyzer extends BaseAnalyzer implements Analyzer
     public function analyze(): void
     {
         $slowUrls = array_filter($this->status->getVisitedUrls(), function ($visitedUrl) {
-            return $visitedUrl->contentType === Crawler::CONTENT_TYPE_ID_HTML && $visitedUrl->requestTime >= $this->slowestMinTime;
+            return $visitedUrl->isAllowedForCrawling && $visitedUrl->contentType === Crawler::CONTENT_TYPE_ID_HTML && $visitedUrl->requestTime >= $this->slowestMinTime;
         });
         usort($slowUrls, function ($a, $b) {
             return $b->requestTime <=> $a->requestTime;

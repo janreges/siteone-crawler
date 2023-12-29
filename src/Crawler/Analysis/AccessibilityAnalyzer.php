@@ -100,7 +100,7 @@ class AccessibilityAnalyzer extends BaseAnalyzer implements Analyzer
         $result = null;
         $isHtml = $visitedUrl->contentType === Crawler::CONTENT_TYPE_ID_HTML && $visitedUrl->statusCode === 200;
 
-        if ($isHtml && $body && $dom) {
+        if ($isHtml && $body && $dom && $visitedUrl->isAllowedForCrawling) {
             $result = new UrlAnalysisResult();
 
             $s = microtime(true);

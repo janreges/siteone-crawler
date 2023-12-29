@@ -45,7 +45,7 @@ class SeoAndOpenGraphAnalyzer extends BaseAnalyzer implements Analyzer
     public function analyze(): void
     {
         $htmlUrls = array_filter($this->status->getVisitedUrls(), function ($visitedUrl) {
-            return $visitedUrl->statusCode === 200 && !$visitedUrl->isExternal && $visitedUrl->contentType === Crawler::CONTENT_TYPE_ID_HTML;
+            return $visitedUrl->statusCode === 200 && $visitedUrl->isAllowedForCrawling && $visitedUrl->contentType === Crawler::CONTENT_TYPE_ID_HTML;
         });
 
         $urlResults = $this->getSeoAndOpenGraphResults($htmlUrls);
