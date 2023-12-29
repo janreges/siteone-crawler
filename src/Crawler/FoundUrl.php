@@ -18,6 +18,8 @@ class FoundUrl
     const SOURCE_IMG_SRCSET = 21;
     const SOURCE_INPUT_SRC = 22;
     const SOURCE_SOURCE_SRC = 23;
+    const SOURCE_VIDEO_SRC = 24;
+    const SOURCE_AUDIO_SRC = 25;
     const SOURCE_SCRIPT_SRC = 30;
     const SOURCE_INLINE_SCRIPT_SRC = 40;
     const SOURCE_LINK_HREF = 50;

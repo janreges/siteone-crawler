@@ -68,6 +68,11 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
             $this->findImages($content, $sourceUrl, $foundUrls);
         }
 
+        if ($this->filesEnabled) {
+            $this->findAudio($content, $sourceUrl, $foundUrls);
+            $this->findVideo($content, $sourceUrl, $foundUrls);
+        }
+
         if ($this->scriptsEnabled) {
             $this->findScripts($content, $sourceUrl, $foundUrls);
         }
@@ -283,6 +288,32 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
             }
         }
         $foundUrls->addUrlsFromTextArray(array_unique($urls), $sourceUrl->getFullUrl(true, false), FoundUrl::SOURCE_IMG_SRCSET);
+    }
+
+    /**
+     * @param string $html
+     * @param ParsedUrl $sourceUrl
+     * @param FoundUrls $foundUrls
+     * @return void
+     */
+    private function findAudio(string $html, ParsedUrl $sourceUrl, FoundUrls $foundUrls): void
+    {
+        // <audio src="..."
+        preg_match_all('/<audio\s+[^>]*?src=["\']([^"\'>]+)["\'][^>]*>/is', $html, $matches);
+        $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrl->getFullUrl(true, false), FoundUrl::SOURCE_AUDIO_SRC);
+    }
+
+    /**
+     * @param string $html
+     * @param ParsedUrl $sourceUrl
+     * @param FoundUrls $foundUrls
+     * @return void
+     */
+    private function findVideo(string $html, ParsedUrl $sourceUrl, FoundUrls $foundUrls): void
+    {
+        // <video src="..."
+        preg_match_all('/<video\s+[^>]*?src=["\']([^"\'>]+)["\'][^>]*>/is', $html, $matches);
+        $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrl->getFullUrl(true, false), FoundUrl::SOURCE_VIDEO_SRC);
     }
 
     /**
