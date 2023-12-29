@@ -34,6 +34,7 @@ use Crawler\Export\HtmlReport\Tab;
 use Crawler\FoundUrl;
 use Crawler\Result\Status;
 use Crawler\Result\Summary\ItemStatus;
+use Crawler\Result\VisitedUrl;
 use Crawler\Utils;
 use Crawler\Version;
 
@@ -828,6 +829,9 @@ class HtmlReport
         // set data
         $data = [];
         foreach ($this->status->getVisitedUrls() as $visitedUrl) {
+            if ($visitedUrl->statusCode === VisitedUrl::ERROR_SKIPPED) {
+                continue;
+            }
             $row = [
                 'url' => $visitedUrl->url,
                 'status' => $visitedUrl->statusCode,

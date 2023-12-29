@@ -279,7 +279,8 @@ class Utils
             -1 => ['short' => '-1:CON', 'long' => '-1:CONN-FAIL'],
             -2 => ['short' => '-2:TIM', 'long' => '-2:TIMEOUT'],
             -3 => ['short' => '-3:RST', 'long' => '-3:SRV-RESET'],
-            -4 => ['short' => '-4:SND', 'long' => '-4:SEND-ERROR']
+            -4 => ['short' => '-4:SND', 'long' => '-4:SEND-ERROR'],
+            -6 => ['short' => '-6:SKP', 'long' => '-6:SKIPPED'],
         ];
 
         if (isset($errors[$httpCode])) {

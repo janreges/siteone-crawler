@@ -20,6 +20,7 @@ class VisitedUrl
     const ERROR_TIMEOUT = -2;
     const ERROR_SERVER_RESET = -3;
     const ERROR_SEND_ERROR = -4;
+    const ERROR_SKIPPED = -6;
 
     /**
      * @var string Unique ID hash of this URL

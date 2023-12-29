@@ -302,4 +302,29 @@ class ParsedUrl
         return $this->scheme === 'https';
     }
 
+    /**
+     * Get base name (last path part) of the URL
+     * Examples:
+     *  - "bar" for "https://mydomain.tld/foo/bar"
+     *  - "foo" for "https://mydomain.tld/foo/?abc=def"
+     *  - "my-img.jpg" for "https://mydomain.tld/foo/my-img.jpg"
+     *  - null for "https://mydomain.tld/"
+     *
+     * @return string|null
+     */
+    public function getBaseName(): ?string
+    {
+        if (!$this->path || $this->path === '/') {
+            return null;
+        }
+
+        $path = $this->path;
+        if (str_ends_with($path, '/')) {
+            $path = substr($path, 0, -1);
+        }
+
+        $pathParts = explode('/', $path);
+        return end($pathParts) ?: null;
+    }
+
 }

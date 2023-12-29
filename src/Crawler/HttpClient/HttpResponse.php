@@ -19,6 +19,7 @@ class HttpResponse
     public readonly ?string $body;
     public readonly array $headers;
     public readonly float $execTime;
+    public ?string $skippedReason = null;
     private bool $loadedFromCache = false;
 
     /**
@@ -77,6 +78,18 @@ class HttpResponse
     public function isLoadedFromCache(): bool
     {
         return $this->loadedFromCache;
+    }
+
+    public function isSkipped(): bool
+    {
+        return $this->skippedReason !== null;
+    }
+
+    public static function createSkipped(string $url, string $reason): self
+    {
+        $result = new self($url, -6, '', [], 0);
+        $result->skippedReason = $reason;
+        return $result;
     }
 
 }
