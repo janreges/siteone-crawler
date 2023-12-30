@@ -226,13 +226,15 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
      */
     private function findFonts(string $html, ParsedUrl $sourceUrl, FoundUrls $foundUrls): void
     {
+        $sourceUrlWithoutFragment = $sourceUrl->getFullUrl(true, false);
+
         // CSS @font-face
         preg_match_all("/url\s*\(\s*['\"]?([^'\"\s>]+\.(eot|ttf|woff2|woff|otf))/is", $html, $matches);
-        $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrl->getFullUrl(true, false), FoundUrl::SOURCE_CSS_URL);
+        $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrlWithoutFragment, FoundUrl::SOURCE_CSS_URL);
 
         // <link href="...(eot|ttf|woff2|woff|otf)
         preg_match_all('/<link\s+[^>]*href=["\']([^"\']+\.(eot|ttf|woff2|woff|otf)[^"\']*)["\'][^>]*>/is', $html, $matches);
-        $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrl->getFullUrl(true, false), FoundUrl::SOURCE_LINK_HREF);
+        $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrlWithoutFragment, FoundUrl::SOURCE_LINK_HREF);
     }
 
     /**
@@ -243,25 +245,27 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
      */
     private function findImages(string $html, ParsedUrl $sourceUrl, FoundUrls $foundUrls): void
     {
+        $sourceUrlWithoutFragment = $sourceUrl->getFullUrl(true, false);
+
         // <img src="..."
         preg_match_all('/<img\s+[^>]*?src=["\']([^"\'>]+)["\'][^>]*>/is', $html, $matches);
-        $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrl->getFullUrl(true, false), FoundUrl::SOURCE_IMG_SRC);
+        $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrlWithoutFragment, FoundUrl::SOURCE_IMG_SRC);
 
         // <input src="..."
         preg_match_all('/<input\s+[^>]*?src=["\']([^"\'>]+\.[a-z0-9]{1,10})["\'][^>]*>/is', $html, $matches);
-        $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrl->getFullUrl(true, false), FoundUrl::SOURCE_INPUT_SRC);
+        $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrlWithoutFragment, FoundUrl::SOURCE_INPUT_SRC);
 
         // <link href="...(png|gif|jpg|jpeg|webp|avif|tif|bmp|svg)"
         preg_match_all('/<link\s+[^>]*?href=["\']([^"\'>]+\.(png|gif|jpg|jpeg|webp|avif|tif|bmp|svg|ico)(|\?[^"\']))["\'][^>]*>/is', $html, $matches);
-        $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrl->getFullUrl(true, false), FoundUrl::SOURCE_LINK_HREF);
+        $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrlWithoutFragment, FoundUrl::SOURCE_LINK_HREF);
 
         // <source src="..."
         preg_match_all('/<source\s+[^>]*?src=["\']([^"\'>]+)["\'][^>]*>/is', $html, $matches);
-        $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrl->getFullUrl(true, false), FoundUrl::SOURCE_SOURCE_SRC);
+        $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrlWithoutFragment, FoundUrl::SOURCE_SOURCE_SRC);
 
         // CSS url()
         preg_match_all("/url\s*\(\s*['\"]?([^'\")]+\.(jpg|jpeg|png|gif|bmp|tif|webp|avif))/is", $html, $matches);
-        $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrl->getFullUrl(true, false), FoundUrl::SOURCE_CSS_URL);
+        $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrlWithoutFragment, FoundUrl::SOURCE_CSS_URL);
 
         // <picture><source srcset="..."><img src="..."></picture>
         // <img srcset="..."
@@ -287,7 +291,7 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
                 }
             }
         }
-        $foundUrls->addUrlsFromTextArray(array_unique($urls), $sourceUrl->getFullUrl(true, false), FoundUrl::SOURCE_IMG_SRCSET);
+        $foundUrls->addUrlsFromTextArray(array_unique($urls), $sourceUrlWithoutFragment, FoundUrl::SOURCE_IMG_SRCSET);
     }
 
     /**
@@ -324,12 +328,14 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
      */
     private function findScripts(string $html, ParsedUrl $sourceUrl, FoundUrls $foundUrls): void
     {
+        $sourceUrlWithoutFragment = $sourceUrl->getFullUrl(true, false);
+
         preg_match_all('/<script\s+[^>]*?src=["\']([^"\']+)["\'][^>]*>/is', $html, $matches);
-        $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrl->getFullUrl(true, false), FoundUrl::SOURCE_SCRIPT_SRC);
+        $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrlWithoutFragment, FoundUrl::SOURCE_SCRIPT_SRC);
 
         // often used for lazy loading in JS code
         preg_match_all('/\.src\s*=\s*["\']([^"\']+)["\']/is', $html, $matches);
-        $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrl->getFullUrl(true, false), FoundUrl::SOURCE_INLINE_SCRIPT_SRC);
+        $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrlWithoutFragment, FoundUrl::SOURCE_INLINE_SCRIPT_SRC);
 
         // NextJS chunks
         preg_match_all('/:([a-z0-9\/._\-\[\]]+chunks[a-z0-9\/._\-\[\]]+.js)/is', $html, $matches);
@@ -350,7 +356,7 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
 
             $nextJsChunks[] = $chunkUrl;
         }
-        $foundUrls->addUrlsFromTextArray($nextJsChunks, $sourceUrl->getFullUrl(true, false), FoundUrl::SOURCE_INLINE_SCRIPT_SRC);
+        $foundUrls->addUrlsFromTextArray($nextJsChunks, $sourceUrlWithoutFragment, FoundUrl::SOURCE_INLINE_SCRIPT_SRC);
     }
 
     /**
