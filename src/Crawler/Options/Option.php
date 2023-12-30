@@ -148,28 +148,38 @@ class Option
                     if ($value === null) {
                         $value = [];
                     }
+                    if (is_string($argValue)) {
+                        $this->unquoteValue($argValue);
+                    }
                     if (str_contains($argValue, ',')) {
                         $value = preg_split('/\s*,\s*/', $argValue);
                         $value = array_filter($value, fn($item) => trim($item) !== '');
+                        foreach ($value ?: [] as $key => $item) {
+                            if (is_string($item)) {
+                                $this->unquoteValue($value[$key]);
+                            }
+                        }
                     } else {
                         $value[] = $argValue;
                     }
                 } else {
                     $value = $argValue;
+                    if (is_string($value)) {
+                        $this->unquoteValue($value);
+                    }
                 }
             }
         }
 
-        // remove quotes from value
-        if (is_string($value) && str_starts_with($value, '"') && str_ends_with($value, '"')) {
-            $value = substr($value, 1, -1);
-        } else if (is_string($value) && str_starts_with($value, "'") && str_ends_with($value, "'")) {
-            $value = substr($value, 1, -1);
-        }
-
         // convert to array if needed
         if ($this->isArray && is_string($value)) {
+            $this->unquoteValue($value);
             $value = preg_split('/\s*,\s*/', $value);
+            foreach ($value ?: [] as $key => $item) {
+                if (is_string($item)) {
+                    $this->unquoteValue($value[$key]);
+                }
+            }
         } elseif ($this->isArray && !is_array($value)) {
             $value = [];
         }
@@ -244,7 +254,7 @@ class Option
             }
         } else if ($this->type === Type::DIR && $value !== 'off') {
             $this->replacePlaceholders($value);
-            $value =  Utils::getAbsolutePath($value);
+            $value = Utils::getAbsolutePath($value);
             if (!is_string($value) || trim($value) === '') {
                 throw new Exception("Option {$this->name} ({$value}) must be string");
             }
@@ -360,6 +370,23 @@ class Option
         }
 
         return $url;
+    }
+
+    /**
+     * Remove quotes from given string - as an quote we consider chars " ' `
+     *
+     * @param string $value
+     * @return void
+     */
+    private function unquoteValue(string &$value): void
+    {
+        if (str_starts_with($value, '"') && str_ends_with($value, '"')) {
+            $value = substr($value, 1, -1);
+        } else if (str_starts_with($value, "'") && str_ends_with($value, "'")) {
+            $value = substr($value, 1, -1);
+        } else if (str_starts_with($value, "`") && str_ends_with($value, "`")) {
+            $value = substr($value, 1, -1);
+        }
     }
 
     public static function setExtrasDomain(?string $extrasDomain): void
