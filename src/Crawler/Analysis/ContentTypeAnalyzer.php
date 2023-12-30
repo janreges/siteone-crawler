@@ -17,6 +17,7 @@ use Crawler\Options\Group;
 use Crawler\Options\Option;
 use Crawler\Options\Options;
 use Crawler\Options\Type;
+use Crawler\Result\VisitedUrl;
 use Crawler\Utils;
 
 class ContentTypeAnalyzer extends BaseAnalyzer implements Analyzer
@@ -59,6 +60,9 @@ class ContentTypeAnalyzer extends BaseAnalyzer implements Analyzer
         }
 
         foreach ($this->status->getVisitedUrls() as $visitedUrl) {
+            if ($visitedUrl->hasErrorStatusCode()) {
+                continue;
+            }
             $stats[$visitedUrl->contentType]['count']++;
             $stats[$visitedUrl->contentType]['totalSize'] += $visitedUrl->size;
             $stats[$visitedUrl->contentType]['totalTime'] += $visitedUrl->requestTime;
@@ -127,6 +131,9 @@ class ContentTypeAnalyzer extends BaseAnalyzer implements Analyzer
         $stats = [];
 
         foreach ($this->status->getVisitedUrls() as $visitedUrl) {
+            if ($visitedUrl->hasErrorStatusCode()) {
+                continue;
+            }
             $key = $visitedUrl->contentTypeHeader ?: 'unknown';
             if (!isset($stats[$key])) {
                 $stats[$key] = [

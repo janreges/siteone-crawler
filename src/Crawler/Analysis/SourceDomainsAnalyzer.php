@@ -33,6 +33,9 @@ class SourceDomainsAnalyzer extends BaseAnalyzer implements Analyzer
     {
         $stats = [];
         foreach ($this->status->getVisitedUrls() as $visitedUrl) {
+            if ($visitedUrl->hasErrorStatusCode()) {
+                continue;
+            }
             $urlHost = parse_url($visitedUrl->url, PHP_URL_HOST);
 
             // create init stat item for the host
