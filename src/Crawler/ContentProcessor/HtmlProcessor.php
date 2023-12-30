@@ -333,6 +333,10 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
         preg_match_all('/<script\s+[^>]*?src=["\']([^"\']+)["\'][^>]*>/is', $html, $matches);
         $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrlWithoutFragment, FoundUrl::SOURCE_SCRIPT_SRC);
 
+        // <link href="...(js)"
+        preg_match_all('/<link\s+[^>]*?href=["\']([^"\'>]+\.(js)(|\?[^"\']))["\'][^>]*>/is', $html, $matches);
+        $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrlWithoutFragment, FoundUrl::SOURCE_LINK_HREF);
+
         // often used for lazy loading in JS code
         preg_match_all('/\.src\s*=\s*["\']([^"\']+)["\']/is', $html, $matches);
         $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrlWithoutFragment, FoundUrl::SOURCE_INLINE_SCRIPT_SRC);
