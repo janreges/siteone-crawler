@@ -309,6 +309,7 @@ class ParsedUrl
      *  - "foo" for "https://mydomain.tld/foo/?abc=def"
      *  - "my-img.jpg" for "https://mydomain.tld/foo/my-img.jpg"
      *  - null for "https://mydomain.tld/"
+     *  - SPECIAL CASE: 'image?url=path/image.jpg' for "https://mydomain.tld/_next/image?url=path/image.jpg"
      *
      * @return string|null
      */
@@ -324,7 +325,14 @@ class ParsedUrl
         }
 
         $pathParts = explode('/', $path);
-        return end($pathParts) ?: null;
+        $result = end($pathParts) ?: null;
+
+        // if query string contains path (it may be dynamic image), return path with this query
+        if ($this->query && (str_contains($this->query, '/') || str_contains($this->query, '%2F'))) {
+            $result .= '?' . $this->query;
+        }
+
+        return $result;
     }
 
 }
