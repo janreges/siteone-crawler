@@ -48,7 +48,8 @@ class JavaScriptProcessor extends BaseProcessor implements ContentProcessor
      */
     private function findUrlsImportFrom(string $content, ParsedUrl $sourceUrl): ?FoundUrls
     {
-        if (!str_contains($content, 'from')) {
+        $isHtmlFile = stripos($content, '<html') !== false;
+        if ($isHtmlFile || !str_contains($content, 'from')) {
             return null;
         }
 
