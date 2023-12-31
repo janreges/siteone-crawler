@@ -296,7 +296,7 @@ class OfflineUrlConverter
         }
 
         $staticFilesExtensions =
-            'jpg|jpeg|png|gif|webp|svg|ico|js|css|txt|woff|woff2|ttf|eot|mp4|webm|ogg|mp3|wav|flac|pdf|doc' .
+            'jpg|jpeg|png|gif|webp|svg|ico|js|css|txt|woff2|woff|ttf|eot|mp4|webm|ogg|mp3|wav|flac|pdf|doc' .
             '|docx|xls|xlsx|ppt|pptx|zip|rar|gz|bz2|7z|tar|xml|json|action|asp|aspx|cfm|cfml|cgi|do|gsp|jsp|jspx|lasso|phtml' .
             '|php|php3|php4|php5|php7|php8|php9|pl|py|rb|rbw|rhtml|shtml|srv|vm|vmdk';
 
@@ -306,7 +306,7 @@ class OfflineUrlConverter
         $filePath = preg_replace('/([^.]+)\.(' . $staticFilesExtensions . ')\//i', '$1.$2_/', $filePath);
 
         // replace extensions of typical dynamic pages
-        $filePath = preg_replace('/\.(action|asp|aspx|cfm|cfml|cgi|do|gsp|jsp|jspx|lasso|phtml|php|php3|php4|php5|php7|php8|php9|pl|py|rb|rbw|rhtml|shtml|srv|vm)$/i', '.$1.html', $filePath);
+        $filePath = preg_replace('/\.(action|asp|aspx|cfm|cfml|cgi|do|gsp|jsp|jspx|lasso|phtml|php3|php4|php5|php7|php8|php9|php|pl|py|rb|rbw|rhtml|shtml|srv|vm)$/i', '.$1.html', $filePath);
 
         if (!$keepFragment && str_contains($filePath, '#')) {
             $filePath = preg_replace('/#.+$/', '', $filePath);
