@@ -223,12 +223,31 @@ class VisitedUrl
 
     public function looksLikeStaticFileByUrl(): bool
     {
-        return preg_match('/\.(jpg|jpeg|png|gif|webp|svg|ico|js|css|txt|woff|woff2|ttf|eot|mp4|webm|ogg|mp3|wav|flac|pdf|doc|docx|xls|xlsx|ppt|pptx|zip|rar|gz|bz2|7z|xml|json)/i', $this->url) === 1;
+        return preg_match('/\.(jpg|jpeg|png|gif|webp|svg|ico|js|css|txt|woff2|woff|ttf|eot|mp4|webm|ogg|mp3|wav|flac|pdf|doc|docx|xls|xlsx|ppt|pptx|zip|rar|gz|bz2|7z|xml|json)/i', $this->url) === 1;
     }
 
     public function hasErrorStatusCode(): bool
     {
         return $this->statusCode < 0;
+    }
+
+    public function getScheme(): string
+    {
+        return parse_url($this->url, PHP_URL_SCHEME);
+    }
+
+    public function getHost(): string
+    {
+        return parse_url($this->url, PHP_URL_HOST);
+    }
+
+    public function getPort(): int
+    {
+        $port = parse_url($this->url, PHP_URL_PORT);
+        if ($port === null) {
+            $port = $this->isHttps() ? 443 : 80;
+        }
+        return (int)$port;
     }
 
 }

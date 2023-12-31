@@ -216,7 +216,13 @@ class SeoAndOpenGraphResult
             return false;
         }
 
+        // remove query string from URL
         $urlPath = preg_replace('/\?.*/', '', $urlPathAndQuery);
+
+        // remove scheme and host from URL
+        if (str_contains($urlPath, '://')) {
+            $urlPath = preg_replace('/^https?:\/\/[^\/]+/', '', $urlPath);
+        }
 
         $lines = explode("\n", $robotsTxtContent);
         foreach ($lines as $line) {

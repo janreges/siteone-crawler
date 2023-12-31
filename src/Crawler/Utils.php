@@ -331,7 +331,7 @@ class Utils
      */
     public static function getUrlWithoutSchemeAndHost(string $url, ?string $onlyWhenHost = null, ?string $initialScheme = null): string
     {
-        if ($onlyWhenHost && stripos($url, $onlyWhenHost) === false) {
+        if ($onlyWhenHost && !str_contains($url, '://' . $onlyWhenHost)) {
             return $url;
         }
 
@@ -340,7 +340,7 @@ class Utils
         }
 
         $parsedUrl = parse_url($url);
-        return $parsedUrl['path'] ?? '/';
+        return ($parsedUrl['path'] ?? '/') . (isset($parsedUrl['query']) ? '?' . $parsedUrl['query'] : '');
     }
 
     public static function getSafeCommand(string $command): string
@@ -1049,12 +1049,12 @@ class Utils
         $symbols = @$xpath->query('//svg/symbol');
         $defsG = @$xpath->query('//svg:g');
         if ($symbols && count($symbols) > 1) {
-            foreach($symbols as $symbol) {
+            foreach ($symbols as $symbol) {
                 $iconsInSet[] = $symbol;
             }
         }
         if ($defsG && count($defsG) > 1) {
-            foreach($defsG as $g) {
+            foreach ($defsG as $g) {
                 $iconsInSet[] = $g;
             }
         }

@@ -1072,7 +1072,7 @@ class Crawler
                         }
                     }
 
-                    Status::setRobotsTxtContent($robotsTxt);
+                    Status::setRobotsTxtContent($port === 443 ? 'https' : 'http', $domain, $port, $robotsTxt);
 
                     Debugger::debug(
                         'robots-txt',

@@ -85,16 +85,16 @@ class SeoAndOpenGraphAnalyzer extends BaseAnalyzer implements Analyzer
     private function getSeoAndOpenGraphResults(array $htmlUrls): array
     {
         $results = [];
-        $robotsTxtContent = Status::getRobotsTxtContent();
+        $initialScheme = $this->crawler->getInitialParsedUrl()->scheme;
+        $initialHost = $this->crawler->getInitialParsedUrl()->host;
         foreach ($htmlUrls as $visitedUrl) {
             $htmlBody = $this->status->getStorage()->load($visitedUrl->uqId);
 
             $dom = new DOMDocument();
             @$dom->loadHTML(@mb_convert_encoding($htmlBody, 'HTML-ENTITIES', 'UTF-8'));
 
-            $urlPath = parse_url($visitedUrl->url, PHP_URL_PATH);
-            $urlQuery = parse_url($visitedUrl->url, PHP_URL_QUERY);
-            $urlPathAndQuery = $urlPath . ($urlQuery ? '?' . $urlQuery : '');
+            $urlPathAndQuery = Utils::getUrlWithoutSchemeAndHost($visitedUrl->url, $initialHost, $initialScheme);
+            $robotsTxtContent = Status::getRobotsTxtContent($visitedUrl->getScheme(), $visitedUrl->getHost(), $visitedUrl->getPort());
 
             $urlResult = SeoAndOpenGraphResult::getFromHtml($visitedUrl->uqId, $urlPathAndQuery, $dom, $robotsTxtContent, $this->maxHeadingLevel);
             $results[] = $urlResult;
@@ -146,7 +146,7 @@ class SeoAndOpenGraphAnalyzer extends BaseAnalyzer implements Analyzer
         $superTable->setVisibilityInConsole(true, 10);
 
         // set initial URL (required for urlPath column and active link building)
-        $superTable->setInitialUrl($this->status->getOptions()->url);
+        $superTable->setInitialUrl($this->crawler->getInitialParsedUrl()->url);
 
         $superTable->setData($urlResults);
         $this->status->addSuperTableAtBeginning($superTable);

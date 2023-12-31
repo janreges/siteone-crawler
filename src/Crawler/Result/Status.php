@@ -81,9 +81,10 @@ class Status
     private array $visitedUrlToAnalysisResult = [];
 
     /**
-     * @var string|null
+     * Robots.txt content - key is %scheme%://%host%:%port%
+     * @var array <string, string>
      */
-    private static ?string $robotsTxtContent = null;
+    private static array $robotsTxtContent = [];
 
     /**
      * @param Storage $storage
@@ -294,14 +295,29 @@ class Status
         return $this->visitedUrlToAnalysisResult;
     }
 
-    public static function setRobotsTxtContent(string $robotsTxtContent): void
+    /**
+     * @param string $scheme
+     * @param string $host
+     * @param int $port
+     * @param string $robotsTxtContent
+     * @return void
+     */
+    public static function setRobotsTxtContent(string $scheme, string $host, int $port, string $robotsTxtContent): void
     {
-        self::$robotsTxtContent = $robotsTxtContent;
+        $key = "{$scheme}://{$host}:{$port}";
+        self::$robotsTxtContent[$key] = $robotsTxtContent;
     }
 
-    public static function getRobotsTxtContent(): ?string
+    /**
+     * @param string $scheme
+     * @param string $host
+     * @param int $port
+     * @return string|null
+     */
+    public static function getRobotsTxtContent(string $scheme, string $host, int $port): ?string
     {
-        return self::$robotsTxtContent;
+        $key = "{$scheme}://{$host}:{$port}";
+        return self::$robotsTxtContent[$key] ?? null;
     }
 
 }
