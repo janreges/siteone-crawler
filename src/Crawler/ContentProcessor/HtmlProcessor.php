@@ -233,7 +233,7 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
         $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrlWithoutFragment, FoundUrl::SOURCE_CSS_URL);
 
         // <link href="...(eot|ttf|woff2|woff|otf)
-        preg_match_all('/<link\s+[^>]*href=["\']([^"\']+\.(eot|ttf|woff2|woff|otf)[^"\']*)["\'][^>]*>/is', $html, $matches);
+        preg_match_all('/<link\s+[^>]*href=["\']?([^"\' ]+\.(eot|ttf|woff2|woff|otf)[^"\' ]*)["\']?[^>]*>/is', $html, $matches);
         $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrlWithoutFragment, FoundUrl::SOURCE_LINK_HREF);
     }
 
@@ -248,15 +248,15 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
         $sourceUrlWithoutFragment = $sourceUrl->getFullUrl(true, false);
 
         // <img src="..."
-        preg_match_all('/<img\s+[^>]*?src=["\']([^"\'>]+)["\'][^>]*>/is', $html, $matches);
+        preg_match_all('/<img\s+[^>]*?src=["\']?([^"\'> ]+)["\']?[^>]*>/is', $html, $matches);
         $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrlWithoutFragment, FoundUrl::SOURCE_IMG_SRC);
 
         // <input src="..."
-        preg_match_all('/<input\s+[^>]*?src=["\']([^"\'>]+\.[a-z0-9]{1,10})["\'][^>]*>/is', $html, $matches);
+        preg_match_all('/<input\s+[^>]*?src=["\']?([^"\'> ]+\.[a-z0-9]{1,10})["\']?[^>]*>/is', $html, $matches);
         $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrlWithoutFragment, FoundUrl::SOURCE_INPUT_SRC);
 
         // <link href="...(png|gif|jpg|jpeg|webp|avif|tif|bmp|svg)"
-        preg_match_all('/<link\s+[^>]*?href=["\']([^"\'>]+\.(png|gif|jpg|jpeg|webp|avif|tif|bmp|svg|ico)(|\?[^"\']))["\'][^>]*>/is', $html, $matches);
+        preg_match_all('/<link\s+[^>]*?href=["\']?([^"\'> ]+\.(png|gif|jpg|jpeg|webp|avif|tif|bmp|svg|ico)(|\?[^"\' ]))["\']?[^>]*>/is', $html, $matches);
         $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrlWithoutFragment, FoundUrl::SOURCE_LINK_HREF);
 
         // <source src="..."
@@ -303,7 +303,7 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
     private function findAudio(string $html, ParsedUrl $sourceUrl, FoundUrls $foundUrls): void
     {
         // <audio src="..."
-        preg_match_all('/<audio\s+[^>]*?src=["\']([^"\'>]+)["\'][^>]*>/is', $html, $matches);
+        preg_match_all('/<audio\s+[^>]*?src=["\']?([^"\'> ]+)["\']?[^>]*>/is', $html, $matches);
         $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrl->getFullUrl(true, false), FoundUrl::SOURCE_AUDIO_SRC);
     }
 
@@ -316,7 +316,7 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
     private function findVideo(string $html, ParsedUrl $sourceUrl, FoundUrls $foundUrls): void
     {
         // <video src="..."
-        preg_match_all('/<video\s+[^>]*?src=["\']([^"\'>]+)["\'][^>]*>/is', $html, $matches);
+        preg_match_all('/<video\s+[^>]*?src=["\']?([^"\'> ]+)["\']?[^>]*>/is', $html, $matches);
         $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrl->getFullUrl(true, false), FoundUrl::SOURCE_VIDEO_SRC);
     }
 
@@ -330,11 +330,11 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
     {
         $sourceUrlWithoutFragment = $sourceUrl->getFullUrl(true, false);
 
-        preg_match_all('/<script\s+[^>]*?src=["\']([^"\']+)["\'][^>]*>/is', $html, $matches);
+        preg_match_all('/<script\s+[^>]*?src=["\']?([^"\' ]+)["\']?[^>]*>/is', $html, $matches);
         $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrlWithoutFragment, FoundUrl::SOURCE_SCRIPT_SRC);
 
         // <link href="...(js)"
-        preg_match_all('/<link\s+[^>]*?href=["\']([^"\'>]+\.(js)(|\?[^"\']))["\'][^>]*>/is', $html, $matches);
+        preg_match_all('/<link\s+[^>]*href=["\']?([^"\'> ]+\.(json|js)(|\?[^"\']))["\']?[^>]*>/is', $html, $matches);
         $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrlWithoutFragment, FoundUrl::SOURCE_LINK_HREF);
 
         // often used for lazy loading in JS code
