@@ -88,6 +88,7 @@ class HttpClient
             'User-Agent' => $userAgent,
             'Accept' => $accept,
             'Accept-Encoding' => $acceptEncoding,
+            'Connection' => 'close',
         ];
         if ($origin) {
             $requestHeaders['Origin'] = $origin;
@@ -115,6 +116,7 @@ class HttpClient
 
         $url = str_replace(["\\ ", ' '], ['%20', '%20'], $url); // fix for HTTP 400 Bad Request for URLs with spaces
         $client->execute($url);
+        $client->close();
 
         $headers = $client->headers ?? [];
         if ($client->set_cookie_headers) {
