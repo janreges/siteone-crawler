@@ -323,6 +323,9 @@ through the file:// protocol.
   made to the same pages, only with different irrelevant query parameters.
 * `--add-random-query-params`      Adds several random query parameters to each URL. With this, it is possible to bypass
   certain forms of server and CDN caches.
+* `--ignore-robots-txt`            Should robots.txt content be ignored? Useful for crawling an otherwise
+  internal/private/unindexed site.
+  
 * `--http-cache-dir=<dir>`         Cache dir for HTTP responses. You can disable cache by `--http-cache-dir='off'`. Default 
   is `tmp/http-client-cache`.
 * `--http-cache-compression`       Enable compression for HTTP cache storage. Saves disk space, but uses more CPU.

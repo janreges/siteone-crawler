@@ -63,12 +63,12 @@ class CoreOptions
     public bool $disableFiles = false;
     public bool $removeAllAnchorListeners = false;
 
-
     // advanced crawler settings
     public int $workers = 3;
     public float $maxReqsPerSec = 10;
     public string $memoryLimit = '2048M';
     public ?string $websocketServer = null;
+    public bool $ignoreRobotsTxt = false;
 
     /**
      * Domains that are allowed for static files (e.g. CDN) but not for crawling.
@@ -214,6 +214,7 @@ class CoreOptions
             new Option('--accept-encoding', null, 'acceptEncoding', Type::STRING, false, 'Set `Accept-Encoding` request header.', 'gzip, deflate, br', false),
             new Option('--remove-query-params', '-rqp', 'removeQueryParams', Type::BOOL, false, 'Remove URL query parameters from crawled URLs.', false, false),
             new Option('--add-random-query-params', '-arqp', 'addRandomQueryParams', Type::BOOL, false, 'Add random query parameters to each crawled URL.', false, false),
+            new Option('--ignore-robots-txt', '-irt', 'ignoreRobotsTxt', Type::BOOL, false, 'Should robots.txt content be ignored? Useful for crawling an otherwise private/unindexed site.', false, false),
             new Option('--max-queue-length', '-mql', 'maxQueueLength', Type::INT, false, 'Max URL queue length. It affects memory requirements.', 9000, false),
             new Option('--max-visited-urls', '-mvu', 'maxVisitedUrls', Type::INT, false, 'Max visited URLs. It affects memory requirements.', 10000, false),
             new Option('--max-url-length', '-mul', 'maxUrlLength', Type::INT, false, 'Max URL length in chars. It affects memory requirements.', 2083, false),

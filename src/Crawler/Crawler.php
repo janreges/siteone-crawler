@@ -1005,6 +1005,10 @@ class Crawler
      */
     public static function isUrlAllowedByRobotsTxt(string $domain, string $url, ?string $proxy, ?string $httpAuth, Crawler $crawler, ?int $extraPort = null): bool
     {
+        if ($crawler->getCoreOptions()->ignoreRobotsTxt) {
+            return true;
+        }
+
         // when URL is for frontend asset (internal or external), we can assume that it's allowed
         if (preg_match('/\.(js|css|json|eot|ttf|woff2|woff|otf|png|gif|jpg|jpeg|ico|webp|avif|tif|bmp|svg)/i', $url) === 1) {
             return true;
