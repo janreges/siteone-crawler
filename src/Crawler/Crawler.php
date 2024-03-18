@@ -65,13 +65,13 @@ class Crawler
      * This is used to prevent the queue from being filled with meaningless relative URLs - for example, when website contains
      * a non-existent file <img src="relative/my-image.jpg" /> .. real use-case from the 404 page on the v2.svelte.dev.
      *
-     * When the crawler finds a more than MAX_OCCURENCES_FOR_NOT_FOUND_BASENAME non-existent URLs with the same basename,
+     * When the crawler finds a more than MAX_OCCURRENCES_FOR_NOT_FOUND_BASENAME non-existent URLs with the same basename,
      * it will not add any more URLs with this basename to the queue.
      *
      * @var array <string, int>
      */
-    private array $non200BasenamesToOccurences = [];
-    const MAX_OCCURENCES_FOR_NON_200_BASENAME = 5;
+    private array $non200BasenamesToOccurrences = [];
+    const MAX_OCCURRENCES_FOR_NON_200_BASENAME = 5;
 
     const CONTENT_TYPE_ID_HTML = 1;
     const CONTENT_TYPE_ID_SCRIPT = 2;
@@ -442,8 +442,8 @@ class Crawler
 
             // setup HTTP client, send request and get response
             $urlBaseName = $parsedUrl->getBaseName();
-            if ($urlBaseName && isset($this->non200BasenamesToOccurences[$urlBaseName]) && $this->non200BasenamesToOccurences[$urlBaseName] > self::MAX_OCCURENCES_FOR_NON_200_BASENAME) {
-                $httpResponse = HttpResponse::createSkipped($finalUrlForHttpClient, "URL with basename '{$urlBaseName}' has more than " . self::MAX_OCCURENCES_FOR_NON_200_BASENAME . " non-200 responses (" . $this->non200BasenamesToOccurences[$urlBaseName] . ").");
+            if ($urlBaseName && isset($this->non200BasenamesToOCCURRENCES[$urlBaseName]) && $this->non200BasenamesToOCCURRENCES[$urlBaseName] > self::MAX_OCCURRENCES_FOR_NON_200_BASENAME) {
+                $httpResponse = HttpResponse::createSkipped($finalUrlForHttpClient, "URL with basename '{$urlBaseName}' has more than " . self::MAX_OCCURRENCES_FOR_NON_200_BASENAME . " non-200 responses (" . $this->non200BasenamesToOCCURRENCES[$urlBaseName] . ").");
             } else {
                 $httpResponse = $this->httpClient->request(
                     $parsedUrl->host,
@@ -906,14 +906,14 @@ class Crawler
 
             // skip URLs with basename that exceeded max occurrences in non-200 URLs
             $baseName = $parsedUrlForQueue->getBaseName();
-            if ($baseName && isset($this->non200BasenamesToOccurences[$baseName]) && $this->non200BasenamesToOccurences[$baseName] >= self::MAX_OCCURENCES_FOR_NON_200_BASENAME) {
-                if ($this->non200BasenamesToOccurences[$baseName] === self::MAX_OCCURENCES_FOR_NON_200_BASENAME) {
-                    $msg = "URL '{$urlForQueue}' ignored because there are too many (>= " . self::MAX_OCCURENCES_FOR_NON_200_BASENAME . ") non-200 URLs with same basename.";
+            if ($baseName && isset($this->non200BasenamesToOCCURRENCES[$baseName]) && $this->non200BasenamesToOCCURRENCES[$baseName] >= self::MAX_OCCURRENCES_FOR_NON_200_BASENAME) {
+                if ($this->non200BasenamesToOCCURRENCES[$baseName] === self::MAX_OCCURRENCES_FOR_NON_200_BASENAME) {
+                    $msg = "URL '{$urlForQueue}' ignored because there are too many (>= " . self::MAX_OCCURRENCES_FOR_NON_200_BASENAME . ") non-200 URLs with same basename.";
                     $this->output->addNotice($msg);
-                    $this->status->addNoticeToSummary('non-200-occurences-for-basenames', $msg);
+                    $this->status->addNoticeToSummary('non-200-occurrences-for-basenames', $msg);
                     $isUrlForDebug && Debugger::debug('ignored-url_too-many-non-200-urls-with-same-basename', $msg);
                 }
-                $this->non200BasenamesToOccurences[$baseName]++;
+                $this->non200BasenamesToOCCURRENCES[$baseName]++;
                 continue;
             }
 
@@ -968,7 +968,7 @@ class Crawler
     {
         $baseName = $url->getBaseName();
         if ($baseName && $baseName !== 'index.html' && $baseName !== 'index.htm' && $baseName !== 'index') {
-            $this->non200BasenamesToOccurences[$baseName] = ($this->non200BasenamesToOccurences[$baseName] ?? 0) + 1;
+            $this->non200BasenamesToOCCURRENCES[$baseName] = ($this->non200BasenamesToOCCURRENCES[$baseName] ?? 0) + 1;
         }
     }
 

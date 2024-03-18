@@ -59,7 +59,7 @@ class DnsAnalysisResult
     }
 
     /**
-     * Get text descprition of DNS analysis result in format respecting the hierarchy of resolved domains/CNAMEs and IPs
+     * Get text description of DNS analysis result in format respecting the hierarchy of resolved domains/CNAMEs and IPs
      * Example:
      * www.siteone.io
      *   cname1.siteone.io
