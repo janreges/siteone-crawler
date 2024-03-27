@@ -139,9 +139,9 @@ class FileExporter extends BaseExporter implements Exporter
         $options->addGroup(new Group(
             self::GROUP_FILE_EXPORT_SETTINGS,
             'File export settings', [
-            new Option('--output-html-report', null, 'outputHtmlReport', Type::FILE, false, "Save HTML report into that file. Set to empty '' to disable HTML report.", 'tmp/report.%domain%.%datetime%.html', true),
-            new Option('--output-json-file', null, 'outputJsonFile', Type::FILE, false, "Save report as JSON. Set to empty '' to disable JSON report.", 'tmp/output.%domain%.%datetime%.json', true),
-            new Option('--output-text-file', null, 'outputTextFile', Type::FILE, false, "Save output as TXT. Set to empty '' to disable TXT report.", 'tmp/output.%domain%.%datetime%.txt', true),
+            new Option('--output-html-report', null, 'outputHtmlReport', Type::FILE, false, "Save HTML report into that file. Set to empty '' to disable HTML report.", 'tmp/%domain%.report.%datetime%.html', true),
+            new Option('--output-json-file', null, 'outputJsonFile', Type::FILE, false, "Save report as JSON. Set to empty '' to disable JSON report.", 'tmp/%domain%.output.%datetime%.json', true),
+            new Option('--output-text-file', null, 'outputTextFile', Type::FILE, false, "Save output as TXT. Set to empty '' to disable TXT report.", 'tmp/%domain%.output.%datetime%.txt', true),
             new Option('--add-host-to-output-file', null, 'addHostToOutputFile', Type::BOOL, false, 'Append initial URL host to filename except sitemaps.', false, false),
             new Option('--add-timestamp-to-output-file', null, 'addTimestampToOutputFile', Type::BOOL, false, 'Append timestamp to filename except sitemaps.', false, false),
         ]));

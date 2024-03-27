@@ -339,11 +339,11 @@ through the file:// protocol.
 #### File export settings
 
 * `--output-html-report=<file>`    Save HTML report into that file. Set to empty '' to disable HTML report. By default
-  saved into `tmp/report.%domain%.%datetime%.html`.
+  saved into `tmp/%domain%.report.%datetime%.html`.
 * `--output-json-file=<file>`      File path for JSON output. Set to empty '' to disable JSON file. By default saved
- into `tmp/output.%domain%.%datetime%.json`.
+ into `tmp/%domain%.output.%datetime%.json`.
 * `--output-text-file=<file>`      File path for TXT output. Set to empty '' to disable TXT file. By default saved
-  into `tmp/output.%domain%.%datetime%.txt`.
+  into `tmp/%domain%.output.%datetime%.txt`.
 
 #### Mailer options
 
