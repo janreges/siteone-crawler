@@ -523,6 +523,15 @@ class Crawler
                 }
             }
 
+            // set extras from headers
+            $extraColumns = $this->options->extraColumns;
+            foreach($extraColumns as $extraColumn) {
+                $extraColumnNameLowerCase = strtolower($extraColumn->name);
+                if (isset($httpResponse->headers[$extraColumnNameLowerCase])) {
+                    $extraParsedContent[$extraColumn->name] = $httpResponse->headers[$extraColumnNameLowerCase];
+                }
+            }
+
             // update info about visited URL
             $isExternal = $parsedUrl->host && $parsedUrl->host !== $this->initialParsedUrl->host;
             $visitedUrl = $this->updateVisitedUrl($parsedUrl, $elapsedTime, $status, $bodySize, $contentType, $body, $httpResponse->headers, $extraParsedContent, $isExternal, $isAllowedForCrawling);
