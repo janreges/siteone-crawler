@@ -367,8 +367,8 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
 
         if (preg_match_all($tagPattern, $html, $matches, PREG_SET_ORDER)) {
             foreach ($matches as $match) {
-                // skip attributes without value
-                if (!isset($match[2]) || trim($match[2]) === '') {
+                // skip attributes without value or with very long value
+                if (!isset($match[2]) || trim($match[2]) === '' || strlen($match[0]) > 1000) {
                     continue;
                 }
 
