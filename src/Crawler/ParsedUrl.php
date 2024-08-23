@@ -95,7 +95,7 @@ class ParsedUrl
         if (preg_match('/\.([a-z0-9]{1,10})$/i', $this->path) === 1 && !is_numeric($this->extension) && preg_match('/\.(' . $htmlExtensionsRegex . ')$/i', $this->path) === 0) {
             // has an extension but is not evident HTML page
             return true;
-        } elseif ($this->isImage()) {
+        } elseif ($this->isImage() || $this->isCss()) {
             return true;
         }
 
@@ -124,6 +124,13 @@ class ParsedUrl
             return true;
         }
         return false;
+    }
+
+    public function isCss(): bool
+    {
+        // hardcoded google domains is not ideal, ready to refactor in the future .. we need to work better
+        // with source element and attribute where URL was found to estimate type/extension more accurately
+        return $this->extension === 'css' || stripos($this->url, 'fonts.googleapis.com/css') !== false;
     }
 
     public function isOriginRequired(): bool

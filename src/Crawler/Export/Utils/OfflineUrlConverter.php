@@ -147,7 +147,12 @@ class OfflineUrlConverter
         // if the URL is probably icon, we use SVG extension, otherwise we use JPG (not ideal)
         $imgExtension = stripos($this->relativeTargetUrl->getFullUrl(), 'icon') !== false ? 'svg' : 'jpg';
 
-        $extension = $this->relativeTargetUrl->estimateExtension() ?: ($isImageAttribute ? $imgExtension : 'html');
+        // when the URL is probably font from Google Fonts, we use CSS extension, otherwise we use HTML (not ideal, ready to refactor in the future)
+        $otherFileExtension = ($this->targetUrlSourceAttribute === 'href' && stripos($this->relativeTargetUrl->url, 'fonts.googleapis.com/css') !== false)
+            ? 'css'
+            : 'html';
+
+        $extension = $this->relativeTargetUrl->estimateExtension() ?: ($isImageAttribute ? $imgExtension : $otherFileExtension);
 
         if (str_ends_with($this->relativeTargetUrl->path, '/')) {
             $baseNameWithoutExtension = 'index';
