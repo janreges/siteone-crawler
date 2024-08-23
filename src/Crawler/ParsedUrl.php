@@ -92,7 +92,7 @@ class ParsedUrl
             ]);
         }
 
-        if (preg_match('/\.([a-z0-9]{1,10})$/i', $this->path) === 1 && preg_match('/\.(' . $htmlExtensionsRegex . ')$/i', $this->path) === 0) {
+        if (preg_match('/\.([a-z0-9]{1,10})$/i', $this->path) === 1 && !is_numeric($this->extension) && preg_match('/\.(' . $htmlExtensionsRegex . ')$/i', $this->path) === 0) {
             // has an extension but is not evident HTML page
             return true;
         } elseif ($this->isImage()) {
@@ -136,7 +136,10 @@ class ParsedUrl
      */
     public function estimateExtension(): ?string
     {
-        if ($this->extension) {
+        // if extension is numeric, it is probably not an extension but for example /blog/about-version-3.2
+        if ($this->extension && is_numeric($this->extension)) {
+            return null;
+        } else if ($this->extension) {
             return strtolower($this->extension);
         } else if (preg_match_all('/\.([0-9a-z]{1,5})/i', $this->path . '?' . ($this->query ?? ''), $matches)) {
             if (isset($matches[1])) {
