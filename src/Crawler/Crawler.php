@@ -559,14 +559,17 @@ class Crawler
             }
 
             // print table row to output
-            $progressStatus = $this->statusTable->get('1', 'doneUrls') . '/' . ($this->queue->count() + $this->visited->count());
+            $doneUrlsCount = $this->statusTable->get('1', 'doneUrls');
+            $totalUrlsCount = ($this->queue->count() + $this->visited->count());
+            $progressStatus = $doneUrlsCount . '/' . $totalUrlsCount;
             $this->output->addTableRow($httpResponse, $absoluteUrl, $status, $elapsedTime, $bodySize, $contentType, $extraParsedContent, $progressStatus);
 
             // decrement workers count after request is done
             $this->statusTable->decr('1', 'workers');
 
             // check if crawler is done and exit or start new coroutine to process the next URL
-            if ($this->queue->count() === 0 && $this->getActiveWorkersNumber() === 0) {
+            $isDoneByCounts = $totalUrlsCount >= 2 && $doneUrlsCount >= $totalUrlsCount;
+            if (($this->queue->count() === 0 && $this->getActiveWorkersNumber() === 0) || $isDoneByCounts) {
                 $this->stopWebSocketServer();
                 call_user_func($this->doneCallback);
                 Coroutine::cancel(Coroutine::getCid());
@@ -688,6 +691,12 @@ class Crawler
      */
     private function addUrlToQueue(ParsedUrl $url, ?string $sourceUqId = null, ?int $sourceAttr = null): void
     {
+        // if all URLs are done, do not add new URLs to queue (this is just infinite-loop protection
+        // due to edge-case when last coroutine parsed some new URLs, but queue processing is already stopped)
+        if ($this->isProcessingDoneByCounts()) {
+            return;
+        }
+
         $urlStr = $url->getFullUrl(true, false);
         if (!$this->queue->set($this->getUrlKeyForSwooleTable($url), [
             'url' => $urlStr,
@@ -1174,6 +1183,17 @@ class Crawler
         ];
 
         Coroutine::set($options);
+    }
+
+    /**
+     * Is processing already done by counts of URLs in queues/visited tables?
+     * @return bool
+     */
+    private function isProcessingDoneByCounts(): bool
+    {
+        $doneUrlsCount = $this->statusTable->get('1', 'doneUrls');
+        $totalUrlsCount = ($this->queue->count() + $this->visited->count());
+        return $totalUrlsCount >= 2 && $doneUrlsCount >= $totalUrlsCount;
     }
 
     /**
