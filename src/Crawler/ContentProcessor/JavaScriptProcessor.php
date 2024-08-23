@@ -78,7 +78,6 @@ class JavaScriptProcessor extends BaseProcessor implements ContentProcessor
         preg_match_all('/["\'](https:\/\/[^"\']+\.js)["\']/i', $content, $matches);
         foreach ($matches[1] ?? [] as $match) {
             $foundUrlsTxt[] = trim($match);
-            var_dump($match);
         }
 
         // special webpack case (we need to build all chunks urls), JS example: function(e){return a.p+"assets/js/"+({5:"vendors~docsearch"}[e]||e)+"."+{1:"5152a0bf",2:"f24bc225",3:"be674a14",5:"168e5268",6:"503c0dbb",7:"9db8eec7",8:"636a1276",9:"01fad13a",10:"330d609b",11:"470e17cb",12:"c6446aa6",13:"90299b76",14:"b2dcb0d8",15:"6d589b72",16:"dc8f34ea",17:"4f2d0100",18:"99c55d9f",19:"303e86ef"
