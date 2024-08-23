@@ -162,8 +162,16 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
             }
         }
 
-        if ($saveFile && file_put_contents($storeFilePath, $content) === false) {
-            throw new Exception("Cannot store file '$storeFilePath'");
+        if ($saveFile && @file_put_contents($storeFilePath, $content) === false) {
+            // throw exception only if file has extension (handle edge-cases as <img src="/icon/hash/"> and response is SVG)
+            $exceptionOnError = preg_match('/\.[a-z0-9\-]{1,15}$/i', $storeFilePath) === 1;
+            if ($exceptionOnError) {
+                throw new Exception("Cannot store file '$storeFilePath'.");
+            } else {
+                $message = "Cannot store file '$storeFilePath' (undefined extension). Original URL: {$visitedUrl->url}";
+                $this->output->addNotice($message);
+                $this->status->addNoticeToSummary('offline-exporter-store-file-error', $message);
+            }
         }
     }
 
