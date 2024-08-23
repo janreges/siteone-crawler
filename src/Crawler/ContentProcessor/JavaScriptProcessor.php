@@ -37,12 +37,24 @@ class JavaScriptProcessor extends BaseProcessor implements ContentProcessor
     {
         $content = str_ireplace('crossorigin', '_SiteOne_CO_', $content);
 
+        // $webpackPathPrefix is JS-code which replace first "/" in URL with our prefix (calculated in each HTML file and set to special _SiteOneUrlDepth variable)
+        $webpackPathPrefix = '(' . HtmlProcessor::JS_VARIABLE_NAME_URL_DEPTH . ' > 0 ? "../".repeat(' . HtmlProcessor::JS_VARIABLE_NAME_URL_DEPTH . ') : "./")';
+
         // webpack case - replace a.p="/" with a.p="WITH_OUR_PREFIX/"
         if (stripos($content, 'a.p=') !== false) {
-            $webpackApPrefix = '(' . HtmlProcessor::JS_VARIABLE_NAME_URL_DEPTH . ' > 0 ? "../".repeat(' . HtmlProcessor::JS_VARIABLE_NAME_URL_DEPTH . ') : "./")';
-            $content = preg_replace('/a\.p="\/"/', 'a.p=' . $webpackApPrefix, $content);
+            $content = preg_replace('/a\.p="\/"/', 'a.p=' . $webpackPathPrefix, $content);
         }
 
+        // webpack cases - replace href/path/Path:".." with href/path/Path:"WITH_OUR_PREFIX/.."
+        if (stripos($content, 'href:"/') !== false) {
+            $content = preg_replace('/href:"\//', 'href:' . $webpackPathPrefix . '+"', $content);
+        }
+        if (stripos($content, 'path:"/') !== false) {
+            $content = preg_replace('/path:"\//', 'href:' . $webpackPathPrefix . '+"', $content);
+        }
+        if (stripos($content, 'Path:"/') !== false) {
+            $content = preg_replace('/Path:"\//', 'href:' . $webpackPathPrefix . '+"', $content);
+        }
     }
 
     /**
