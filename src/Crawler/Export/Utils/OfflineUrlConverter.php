@@ -107,6 +107,10 @@ class OfflineUrlConverter
                 return null;
             } else if ($this->targetUrl->isStaticFile() && $this->isDomainAllowedForStaticFiles($this->targetUrl->host)) {
                 return null;
+            } else if (!$this->targetUrl->isStaticFile() && $this->targetUrlSourceAttribute === 'src' && $this->isDomainAllowedForStaticFiles($this->targetUrl->host)) {
+                // if it is not static file but it is src attribute and domain is allowed for static files, do not force URL
+                // example case is this SVG without extension: <img src=""https://netlify-marketing-icons.netlify.app/fa/fal/users/%232e51ed/">
+                return null;
             } else {
                 return $this->targetUrl->getFullUrl(true, true);
             }
@@ -139,7 +143,11 @@ class OfflineUrlConverter
         }
 
         $isImageAttribute = in_array($this->targetUrlSourceAttribute, ['src', 'srcset']);
-        $extension = $this->relativeTargetUrl->estimateExtension() ?: ($isImageAttribute ? 'jpg' : 'html');
+
+        // if the URL is probably icon, we use SVG extension, otherwise we use JPG (not ideal)
+        $imgExtension = stripos($this->relativeTargetUrl->getFullUrl(), 'icon') !== false ? 'svg' : 'jpg';
+
+        $extension = $this->relativeTargetUrl->estimateExtension() ?: ($isImageAttribute ? $imgExtension : 'html');
 
         if (str_ends_with($this->relativeTargetUrl->path, '/')) {
             $baseNameWithoutExtension = 'index';
