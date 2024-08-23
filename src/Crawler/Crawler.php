@@ -434,6 +434,11 @@ class Crawler
             $finalUrlForHttpClient = $this->options->addRandomQueryParams ? Utils::addRandomQueryParams($parsedUrl->path) : ($parsedUrl->path . ($parsedUrl->query ? '?' . $parsedUrl->query : ''));
             $origin = $sourceUqId ? $this->status->getOriginHeaderValueBySourceUqId($sourceUqId) : null;
 
+            $isImage = $parsedUrl->extension && in_array($parsedUrl->extension, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'svg', 'ico']);
+
+            // set Origin header only for non-image URLs (otherwise, e.g. cdn.sanity.io response to *.svg with 403 and JSON error with 'CORS Origin not allowed')
+            $setOrigin = $origin && !$isImage;
+
             // for security reasons, we only send auth data to the same 2nd tier domain (and possibly subdomains). With HTTP basic auth, the name
             // and password are only base64 encoded and we would send them to foreign domains (which are referred to from the crawled website).
             $useHttpAuthIfConfigured = $this->initialParsedUrl->domain2ndLevel
@@ -455,7 +460,7 @@ class Crawler
                     $this->finalUserAgent,
                     $this->acceptHeader,
                     $this->options->acceptEncoding,
-                    $origin,
+                    $setOrigin ? $origin : null,
                     $useHttpAuthIfConfigured
                 );
             }
