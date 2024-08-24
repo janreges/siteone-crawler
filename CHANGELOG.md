@@ -2,8 +2,47 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v1.0.8](https://github.com/janreges/siteone-crawler/compare/v1.0.7...v1.0.8)
+
+- reports: changed file name composition from report.mydomain.com.* to mydomain.com.report.* [`#9`](https://github.com/janreges/siteone-crawler/pull/9)
+- crawler: solved edge-case, which very rarely occurred when the queue processing was already finished, but the last outstanding coroutine still found some new URL [`a85990d`](https://github.com/janreges/siteone-crawler/commit/a85990d662d74af281805cfdf10c0320fee0007a)
+- javascript processor: improvement of webpack JS processing in order to correctly replace paths from VueJS during offline export (as e.g. in case of docs.netlify.com) .. without this, HTML had the correct paths in the left menu, but JS immediately broke them because they started with an absolute path with a slash at the beginning [`9bea99b`](https://github.com/janreges/siteone-crawler/commit/9bea99b9684e6059b8abfad4b382fafdad31c9a9)
+- offline export: detect and process fonts.googleapis.com/css* as CSS even if there is no .css extension [`da33100`](https://github.com/janreges/siteone-crawler/commit/da33100975635be8305e07c2023a22c300b66216)
+- js processor: removed the forgotten var_dump [`5f2c36d`](https://github.com/janreges/siteone-crawler/commit/5f2c36de1666e6987d2c9d88a39e3b6d0a2e1f32)
+- offline export: improved search for external JS in the case of webpack (dynamic composition of URLs from an object with the definition of chunks) - it was debugged on docs.netlify.com [`a61e72e`](https://github.com/janreges/siteone-crawler/commit/a61e72e7f5b773a437b4151432db04a5afd7124a)
+- offline export: in case the URL ends with a dot and a number (so it looks like an extension), we must not recognize it as an extension in some cases [`c382d95`](https://github.com/janreges/siteone-crawler/commit/c382d959f7440ebfcd95566ec0050e771a2f3495)
+- offline url converter: better support for SVG in case the URL does not contain an extension at all, but has e.g. 'icon' in the URL (it's not perfect) [`c9c01a6`](https://github.com/janreges/siteone-crawler/commit/c9c01a69905fefce82f4e8f85e707a0d1abb5e1e)
+- offline exporter: warning instead of exception for some edge-cases, e.g. not saving SVG without an extension does not cause the export to stop [`9d285f4`](https://github.com/janreges/siteone-crawler/commit/9d285f4d599ba8892dd8752e8d831cd3c86af178)
+- cors: do not set Origin request header for images (otherwise error 403 on cdn.sanity.io for svg, etc.) [`2f3b7eb`](https://github.com/janreges/siteone-crawler/commit/2f3b7eb51a03d42d3d2961c84aadcd118b546e05)
+- best practice analyzer: in checking for missing quotes ignore values ​​longer than 1000 characters (fixes, e.g., at skoda-auto.cz the error Compilation failed: regular expression is too large at offset 90936) [`8a009df`](https://github.com/janreges/siteone-crawler/commit/8a009df9734773275fd9805862dc9bfeeccb6079)
+- html report: added loading of extra headers to the visited URL list in the HTML report [`781cf17`](https://github.com/janreges/siteone-crawler/commit/781cf17c18088126db74ebc1ef00fee3d6784979)
+- Frontload the report names [`62d2aae`](https://github.com/janreges/siteone-crawler/commit/62d2aae57e31c7bfa53720446cc8dfbc59e482af)
+- robots.txt: added option --ignore-robots-txt (we often need to view internal or preview domains that are otherwise prohibited from indexing by search engines) [`9017c45`](https://github.com/janreges/siteone-crawler/commit/9017c45a675dd327895b57f14095ad6bd52a02fc)
+- http client: adden an explicit 'Connection: close' header and explicitly calling $client-&gt;close(), even though Swoole was doing it automatically after exiting the coroutine [`86a7346`](https://github.com/janreges/siteone-crawler/commit/86a7346d059452d210b945ca4329e1cc17781dca)
+- javascript processor: parse url addresses to import the JS module only in JS files (otherwise imports from HTML documentation, e.g. on the websites svelte.dev or nextjs.org, were parsed by mistake) [`592b618`](https://github.com/janreges/siteone-crawler/commit/592b618c01e75509e16a812fafab7f21f3c7c64d)
+- html processor: added obtaining urls from HTML attributes that are not wrapped in quotes (but I am aware that current regexps can cause problems in the cases when are used spaces, which are not properly escaped) [`f00abab`](https://github.com/janreges/siteone-crawler/commit/f00ababfa459eca27dce7657fe91c70831f86089)
+- offline url converter: swapping woff2/woff order for regex because in this case their priority is important and because of that woff2 didn't work properly [`3f318d1`](https://github.com/janreges/siteone-crawler/commit/3f318d19fa0a3757546493ac7f47cca21922b1f5)
+- non-200 url basename detection: we no longer consider e.g. image generators that have the same basename and the url to the image in the query parameters as the same basename [`bc15ef1`](https://github.com/janreges/siteone-crawler/commit/bc15ef198bb13fe845fef8cd4946b2cab5c2ea6d)
+- supertable: activation of automatic creation of active links also for homepage '/' [`c2e228e`](https://github.com/janreges/siteone-crawler/commit/c2e228e0d475351431cf9b060487e86ce6d33e52)
+- analysis and robots.txt: improving the display of url addresses for SEO analysis in the case of a multi-domain website, so that it cannot happen that the same url, e.g. '/', is in the overview multiple times without recognizing the domain or scheme + improving the work with robots.txt in SEO detection and displaying urls banned for indexing [`47c7602`](https://github.com/janreges/siteone-crawler/commit/47c7602217e40a4f6d4f3af5c71d6dff72952aab)
+- offline website exporter: we add the suffix '_' to the folder name only in the case of a typical extension of a static file - we don't want this to happen with domain names as well [`d16722a`](https://github.com/janreges/siteone-crawler/commit/d16722a5ad6271270fb0fff11e66a7f02f3b6e9a)
+- javascript processor: extract JS urls also from imports like import {xy} from "./path/foo.js" [`aec6cab`](https://github.com/janreges/siteone-crawler/commit/aec6cab051a46df9d89866f5cfd7e66312dafb92)
+- visited url: added 'txt' extension to looksLikeStaticFileByUrl() [`460c645`](https://github.com/janreges/siteone-crawler/commit/460c6453d91e85c2889ebaa2b2542fd88c5ffa6a)
+- html processor: extract JS urls also from &lt;link href="*.js"&gt;, typically with rel="modulepreload" [`c4a92be`](https://github.com/janreges/siteone-crawler/commit/c4a92bee00d96c530431134370a3ba0d2216a1c1)
+- html processor: extracting repeated calls to getFullUrl() into a variable [`a5e1306`](https://github.com/janreges/siteone-crawler/commit/a5e1306530717d9edd4f95a7989539a172a38f4a)
+- analysis: do not include urls that failed to load (timeout, skipping, etc.) in the analysis of content-types and source-domains - prevention of displaying content type 'unknown' [`b21ecfb`](https://github.com/janreges/siteone-crawler/commit/b21ecfb85f58d07c0a82b93826ad2977ab2cd523)
+- cli options: improved method of removing quotes even for options that can be arrays - also fixes --extra-columns='Title' [`97f2761`](https://github.com/janreges/siteone-crawler/commit/97f27611acf2fc4ed24b1e5574be84711ea3fa12)
+- url skipping: if there are a lot of URLs with the same basename (ending after the last slash), we will allow a maximum of 5 requests for URLs with the same basename - the purpose is to prevent a lot of 404 from being triggered when there is an incorrect relative link to relative/my-img.jpg on all pages (e.g. on 404 page on v2.svelte.dev) [`4fbb917`](https://github.com/janreges/siteone-crawler/commit/4fbb91791f9111cc6f9d98b60732fcca7fad2f1f)
+- analysis: perform most of the analysis only on URLs from domains for which we have crawling enabled [`313adde`](https://github.com/janreges/siteone-crawler/commit/313addede29ac847273b6ab6ed3a8ab878a6fb4a)
+- audio & video: added audio/video file search in &lt;audio&gt; and &lt;video&gt; tags, if file crawling is not disabled [`d72a5a5`](https://github.com/janreges/siteone-crawler/commit/d72a5a51bd6863425a3d8bcffc7a9b5eb831f979)
+- base practices: retexting stupid warning like '&lt;h2&gt; after &lt;h0&gt;' to '&lt;h2&gt; without previous heading [`041b383`](https://github.com/janreges/siteone-crawler/commit/041b3836a8a585158ae1a1a6fb0057b367f3a4f6)
+- initial url redirect: in the case thats is entered url that redirects to another url/domain within the same 2nd-level domain (typically http-&gt;https or mydomain.tld -&gt; www.mydomain.tld redirects), we continue crawling with new url/domain and declare a new url as initial url [`166e617`](https://github.com/janreges/siteone-crawler/commit/166e617fbc893798dc7b340f43de75df2d4cf335)
+
 #### [v1.0.7](https://github.com/janreges/siteone-crawler/compare/v1.0.6...v1.0.7)
 
+> 22 December 2023
+
+- version 1.0.7.20231222 + changelog [`9d2be52`](https://github.com/janreges/siteone-crawler/commit/9d2be52776c081989322953c7a31debfd4947420)
 - html report template: updated logo link to crawler.siteone.io [`9892cfe`](https://github.com/janreges/siteone-crawler/commit/9892cfe5708a3da2f5fc355246dd50b2a0c5cb4f)
 - http headers analysis: renamed 'Headers' to 'HTTP headers' [`436e6ea`](https://github.com/janreges/siteone-crawler/commit/436e6ea5a9914c8615bb03b444ac0aad15e31c49)
 - sitemap generator: added info about crawler to generated sitemap.xml [`7cb7005`](https://github.com/janreges/siteone-crawler/commit/7cb7005bf50b8f93b421c94c57ff51eb99b45912)
