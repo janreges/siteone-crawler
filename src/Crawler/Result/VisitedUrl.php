@@ -172,6 +172,11 @@ class VisitedUrl
         return $this->contentType === Crawler::CONTENT_TYPE_ID_IMAGE;
     }
 
+    public function isVideo(): bool
+    {
+        return $this->contentType === Crawler::CONTENT_TYPE_ID_VIDEO;
+    }
+
     /**
      * @param string|null $sourceUrl
      * @return string

@@ -587,6 +587,17 @@
             border-radius: 0 4px 4px 0;
         }
 
+        .btn {
+            padding: 0.5rem 1rem;
+            border-radius: 1rem;
+            border: 0;
+            background-color: var(--color-blue-600);
+            color: var(--color-white);
+            cursor: pointer;
+            margin-bottom: 1rem;
+
+        }
+
         .image-gallery {
             display: flex;
             flex-wrap: wrap;
@@ -635,6 +646,40 @@
             border: 2px solid red;
             padding: 4px;
             box-sizing: border-box;
+        }
+
+        .video-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .video-card {
+            display: flex;
+            flex-direction: column;
+            border: 1px solid var(--background-color-default);
+            padding: 10px;
+            background-color: var(--background-color-neutral);
+            box-sizing: border-box;
+            min-width: 400px;
+            flex: 1 1 400px;
+        }
+
+        .video-card video {
+            min-width: 100%;
+            min-height: 300px;
+        }
+
+        .video-caption {
+            margin-top: 10px;
+            text-align: center;
+            font-size: 14px;
+            color: var(--text-color-default);
+            flex-grow: 1;
+        }
+
+        .video-container {
+            align-items: stretch;
         }
 
         .iconset-preview {

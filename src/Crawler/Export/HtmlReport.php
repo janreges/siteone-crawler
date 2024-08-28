@@ -169,6 +169,7 @@ class HtmlReport
         $tabs[] = $this->getSummaryTab();
         $tabs[] = $this->getSeoAndOpenGraphTab();
         $tabs[] = $this->getImageGalleryTab();
+        $tabs[] = $this->getVideoGalleryTab();
         $tabs[] = $this->getVisitedUrlsTab();
         $tabs[] = $this->getDnsAndSslTlsTab();
         $tabs[] = $this->getCrawlerStatsTab();
@@ -412,6 +413,96 @@ class HtmlReport
 
         $badges = [new Badge(strval(count($images)), Badge::COLOR_NEUTRAL, 'Found images')];
         return new Tab('Image Gallery', null, $html, true, $badges, 6);
+    }
+
+    private function getVideoGalleryTab(): ?Tab
+    {
+        $summary = $this->status->getSummary();
+        if (!$summary->getItems()) {
+            return null;
+        }
+
+        $videos = [];
+        foreach ($this->status->getVisitedUrls() as $visitedUrl) {
+            if ($visitedUrl->isVideo() && $visitedUrl->statusCode === 200) {
+                $videos[] = $visitedUrl;
+            }
+        }
+
+        if (!$videos) {
+            return null;
+        }
+
+        $html = '<button onclick="playVideos()" class="btn">▶ Play the first 2 seconds of each video</button>';
+        $html .= '<div id="vgc" class="small"><div id="vgcf" class="scaleDown"><div id="video-gallery" class="video-container">';
+        foreach ($videos as $video) {
+            $videoDescription = Utils::getFormattedSize($video->size) . ' (' . $video->contentTypeHeader . ')';
+            $videoDescription .= sprintf(
+                ', <a href="%s" target="_blank">video</a> found on <a href="%s" target="_blank">this page</a>',
+                $video->url,
+                $this->status->getUrlByUqId($video->sourceUqId)
+            );
+
+            $html .= sprintf(
+                    '<div class="video-card">
+                        <video data-src="%s" preload="metadata" controls></video>
+                        <div class="video-caption">%s</div>
+                    </div>',
+                    htmlspecialchars($video->url),
+                    $videoDescription
+                ) . "\n";
+        }
+        $html .= '</div></div></div>';
+
+        $html .= '<script> function playVideos() {
+            const videos = document.querySelectorAll("video");
+    
+            function playVideoSequentially(index) {
+                if (index >= videos.length) return;
+    
+                const video = videos[index];
+                video.load();
+                video.currentTime = 0;
+    
+                video.addEventListener("loadeddata", function() {
+                    video.play();
+    
+                    setTimeout(() => {
+                        video.pause();
+                        setTimeout(() => playVideoSequentially(index + 1), 10);
+                    }, 2000);
+                }, { once: true });
+            }
+    
+            playVideoSequentially(0);
+        }
+        
+        /* init lazy loading */
+        document.addEventListener("DOMContentLoaded", function() {
+            const videos = document.querySelectorAll("video");
+    
+            const observer = new IntersectionObserver(entries => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const video = entry.target;
+                        if (!video.src) {
+                            video.src = video.dataset.src;
+                            video.load();
+                        }
+                        observer.unobserve(video);
+                    }
+                });
+            });
+    
+            videos.forEach(video => {
+                observer.observe(video);
+            });
+        });
+        
+        </script>';
+
+        $badges = [new Badge(strval(count($videos)), Badge::COLOR_NEUTRAL, 'Found videos')];
+        return new Tab('Video Gallery', null, $html, true, $badges, 6);
     }
 
     private function getImageGalleryFormHtml(): string
