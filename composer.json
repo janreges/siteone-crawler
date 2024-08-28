@@ -7,7 +7,7 @@
         "phpunit/phpunit": "^10.4",
         "phpstan/phpstan": "^1.10"
     },
-    "license": "CC BY 4.0",
+    "license": "MIT",
     "autoload": {
         "psr-4": {
             "Crawler\\": "src/Crawler/"
