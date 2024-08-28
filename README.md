@@ -269,6 +269,8 @@ For a clearer list, I recommend going to the documentation: https://crawler.site
   elements found in the HTML. You can set the expected length of the column in parentheses and `>` for do-not-truncate - e.g.
   `DOM(6),X-Cache(10),Title(40>),Description(50>)`.
 * `--url-column-size=<num>`        Basic URL column width. By default, it is calculated from the size of your terminal window.
+* `--rows-limit=<num>`             Max. number of rows to display in tables with analysis results (protection against very 
+  long and slow report). Default is `200`.
 * `--do-not-truncate-url`          In the text output, long URLs are truncated by default to `--url-column-size` so the
   table does not wrap due to long URLs. With this option, you can turn off the truncation.
 * `--show-scheme-and-host`         On text output, show scheme and host also for origin domain URLs.

@@ -916,6 +916,7 @@ class HtmlReport
 
         // setup supertable
         $superTable = new SuperTable(self::SUPER_TABLE_VISITED_URLS, 'Visited URLs', 'No visited URLs.', $columns, false);
+        $superTable->setIgnoreHardRowsLimit(true);
 
         // set data
         $data = [];

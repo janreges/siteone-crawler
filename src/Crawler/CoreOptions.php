@@ -42,6 +42,7 @@ class CoreOptions
     public ?int $urlColumnSize;
     public bool $showInlineCriticals = false;
     public bool $showInlineWarnings = false;
+    public int $rowsLimit = 200;
 
     /**
      * @var ExtraColumn[]
@@ -178,6 +179,7 @@ class CoreOptions
             new Option('--output', '-o', 'outputType', Type::STRING, false, 'Output type `text` or `json`.', 'text', false),
             new Option('--extra-columns', '-ec', 'extraColumns', Type::STRING, true, 'Extra table headers for output table with option to set width and do-not-truncate (>), e.g., `DOM,X-Cache(10),Title(40>)`.', null, true, true),
             new Option('--url-column-size', '-ucs', 'urlColumnSize', Type::INT, false, 'URL column width. By default, it is calculated from the size of your terminal window.', null, true),
+            new Option('--rows-limit', '-rl', 'rowsLimit', Type::INT, false, 'Max. number of rows to display in tables with analysis results (protection against very long and slow report)', 200, false),
             new Option('--show-inline-criticals', '-sic', 'showInlineCriticals', Type::BOOL, false, 'Show criticals from the analyzer directly in the URL table.', false, false),
             new Option('--show-inline-warnings', '-siw', 'showInlineWarnings', Type::BOOL, false, 'Show warnings from the analyzer directly in the URL table.', false, false),
             new Option('--do-not-truncate-url', '-dntu', 'doNotTruncateUrl', Type::BOOL, false, 'Avoid truncating URLs to `--url-column-size`.', false, false),

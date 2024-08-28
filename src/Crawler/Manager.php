@@ -11,6 +11,7 @@ declare(strict_types=1);
 namespace Crawler;
 
 use Crawler\Analysis\Manager as AnalysisManager;
+use Crawler\Components\SuperTable;
 use Crawler\ContentProcessor\Manager as ContentProcessorManager;
 use Crawler\Export\Exporter;
 use Crawler\Export\FileExporter;
@@ -106,6 +107,8 @@ class Manager
 
         $this->analysisManager = $analysisManager;
         $this->analysisManager->init($this->crawler, $this->status, $this->output);
+
+        SuperTable::setHardRowsLimit($options->rowsLimit);
     }
 
     /**

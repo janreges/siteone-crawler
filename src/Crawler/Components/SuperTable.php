@@ -47,6 +47,10 @@ class SuperTable
     private ?string $initialUrl = null;
     private bool $fulltextEnabled = true;
     private int $minRowsForFulltext = 10;
+    private bool $ignoreHardRowsLimit = false;
+    private bool $maxHardRowsLimitReached = false;
+
+    private static int $hardRowsLimit = 200;
 
     /**
      * @param string $aplCode
@@ -93,6 +97,7 @@ class SuperTable
             $this->sortData($this->currentOrderColumn, $this->currentOrderDirection);
         }
 
+        $this->applyHardRowsLimit();
         $this->removeColumnsWithEmptyData();
     }
 
@@ -206,6 +211,8 @@ class SuperTable
             $output .= "<tr><td colspan='" . count($this->columns) . "' class='warning'>" . htmlspecialchars($this->emptyTableMessage) . "</td></tr>";
         } else if ($maxRowsReached) {
             $output .= "<tr><td colspan='" . count($this->columns) . "' class='warning'>You have reached the limit of {$this->maxRows} rows as a protection against very large output or exhausted memory.</td></tr>";
+        } else if ($this->maxHardRowsLimitReached) {
+            $output .= "<tr><td colspan='" . count($this->columns) . "' class='warning'>You have reached the hard limit of " . self::$hardRowsLimit . " rows as a protection against very large output or exhausted memory. You can change this with <code>--rows-limit</code>.</td></tr>";
         }
 
         $output .= "</tbody>";
@@ -422,6 +429,24 @@ class SuperTable
             foreach ($this->data as &$row) {
                 unset($row[$columnToRemove]);
             }
+        }
+    }
+
+    public static function setHardRowsLimit(int $hardRowsLimit): void
+    {
+        self::$hardRowsLimit = $hardRowsLimit;
+    }
+
+    public function setIgnoreHardRowsLimit(bool $ignoreHardRowsLimit): void
+    {
+        $this->ignoreHardRowsLimit = $ignoreHardRowsLimit;
+    }
+
+    private function applyHardRowsLimit(): void
+    {
+        if (self::$hardRowsLimit && !$this->ignoreHardRowsLimit && count($this->data) > self::$hardRowsLimit) {
+            $this->data = array_slice($this->data, 0, self::$hardRowsLimit);
+            $this->maxHardRowsLimitReached = true;
         }
     }
 }
