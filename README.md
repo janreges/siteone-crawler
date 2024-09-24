@@ -379,6 +379,7 @@ If necessary, you can also use your own endpoint `--upload-to` for saving the HT
 
 * `--offline-export-dir=<dir>`     Path to directory where to save the offline version of the website. If target directory does not exist, crawler will try to create it (requires sufficient rights).
 * `--offline-export-store-only-url-regex=<regex>` For debug - when filled it will activate debug mode and store only URLs which match one of these PCRE regexes. Can be specified multiple times.
+* `--ignore-store-file-error` Enable this option to ignore any file storing errors. The export process will continue.
 
 #### Sitemap options
 
