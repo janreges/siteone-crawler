@@ -43,6 +43,8 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
      */
     protected array $offlineExportStoreOnlyUrlRegex = [];
 
+    protected bool $ignoreStoreFileError = false;
+
     /**
      * For debug only - storage of debug messages if debug mode is activated (storeOnlyUrls)
      * @var array|null
@@ -163,9 +165,10 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
         }
 
         if ($saveFile && @file_put_contents($storeFilePath, $content) === false) {
-            // throw exception only if file has extension (handle edge-cases as <img src="/icon/hash/"> and response is SVG)
+            // throw exception if file has extension (handle edge-cases as <img src="/icon/hash/"> and response is SVG)
             $exceptionOnError = preg_match('/\.[a-z0-9\-]{1,15}$/i', $storeFilePath) === 1;
-            if ($exceptionOnError) {
+            // AND if the exception should NOT be ignored
+            if ($exceptionOnError && !$this->ignoreStoreFileError) {
                 throw new Exception("Cannot store file '$storeFilePath'.");
             } else {
                 $message = "Cannot store file '$storeFilePath' (undefined extension). Original URL: {$visitedUrl->url}";
@@ -258,6 +261,7 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
             'Offline exporter options', [
             new Option('--offline-export-dir', '-oed', 'offlineExportDirectory', Type::DIR, false, 'Path to directory where to save the offline version of the website.', null, true),
             new Option('--offline-export-store-only-url-regex', null, 'offlineExportStoreOnlyUrlRegex', Type::REGEX, true, 'For debug - when filled it will activate debug mode and store only URLs which match one of these PCRE regexes. Can be specified multiple times.', null, true),
+            new Option('--ignore-store-file-error', null, 'ignoreStoreFileError', Type::BOOL, false, 'Ignores any file storing errors. The export process will continue.', false, false),
         ]));
         return $options;
     }
