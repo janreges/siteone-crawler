@@ -1090,9 +1090,15 @@ class Crawler
                     $robotsTxt = $robotsTxtResponse->body;
                     $lines = explode("\n", $robotsTxt);
                     $disallowedPaths = [];
+                    $currentUserAgent = null;
+
                     foreach ($lines as $line) {
                         $line = trim(preg_replace('/#.*/', '', $line)); // remove comments
-                        if (preg_match('/^Disallow:\s*(.*)/i', $line, $matches)) {
+
+                        if (preg_match('/^User-agent:\s*(.*)/i', $line, $matches)) {
+                            $currentUserAgent = trim($matches[1]);
+                        } elseif (($currentUserAgent === '*' || $currentUserAgent === 'SiteOne-Crawler') &&
+                            preg_match('/^Disallow:\s*(.*)/i', $line, $matches)) {
                             if (trim($matches[1]) !== '') {
                                 $disallowedPaths[] = trim($matches[1]);
                             }
