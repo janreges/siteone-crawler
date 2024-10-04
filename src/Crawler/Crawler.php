@@ -442,8 +442,8 @@ class Crawler
 
             // setup HTTP client, send request and get response
             $urlBaseName = $parsedUrl->getBaseName();
-            if ($urlBaseName && isset($this->non200BasenamesToOCCURRENCES[$urlBaseName]) && $this->non200BasenamesToOCCURRENCES[$urlBaseName] > self::MAX_OCCURRENCES_FOR_NON_200_BASENAME) {
-                $httpResponse = HttpResponse::createSkipped($finalUrlForHttpClient, "URL with basename '{$urlBaseName}' has more than " . self::MAX_OCCURRENCES_FOR_NON_200_BASENAME . " non-200 responses (" . $this->non200BasenamesToOCCURRENCES[$urlBaseName] . ").");
+            if ($urlBaseName && isset($this->non200BasenamesToOccurrences[$urlBaseName]) && $this->non200BasenamesToOccurrences[$urlBaseName] > self::MAX_OCCURRENCES_FOR_NON_200_BASENAME) {
+                $httpResponse = HttpResponse::createSkipped($finalUrlForHttpClient, "URL with basename '{$urlBaseName}' has more than " . self::MAX_OCCURRENCES_FOR_NON_200_BASENAME . " non-200 responses (" . $this->non200BasenamesToOccurrences[$urlBaseName] . ").");
             } else {
                 $httpResponse = $this->httpClient->request(
                     $parsedUrl->host,
@@ -906,14 +906,14 @@ class Crawler
 
             // skip URLs with basename that exceeded max occurrences in non-200 URLs
             $baseName = $parsedUrlForQueue->getBaseName();
-            if ($baseName && isset($this->non200BasenamesToOCCURRENCES[$baseName]) && $this->non200BasenamesToOCCURRENCES[$baseName] >= self::MAX_OCCURRENCES_FOR_NON_200_BASENAME) {
-                if ($this->non200BasenamesToOCCURRENCES[$baseName] === self::MAX_OCCURRENCES_FOR_NON_200_BASENAME) {
+            if ($baseName && isset($this->non200BasenamesToOccurrences[$baseName]) && $this->non200BasenamesToOccurrences[$baseName] >= self::MAX_OCCURRENCES_FOR_NON_200_BASENAME) {
+                if ($this->non200BasenamesToOccurrences[$baseName] === self::MAX_OCCURRENCES_FOR_NON_200_BASENAME) {
                     $msg = "URL '{$urlForQueue}' ignored because there are too many (>= " . self::MAX_OCCURRENCES_FOR_NON_200_BASENAME . ") non-200 URLs with same basename.";
                     $this->output->addNotice($msg);
                     $this->status->addNoticeToSummary('non-200-occurrences-for-basenames', $msg);
                     $isUrlForDebug && Debugger::debug('ignored-url_too-many-non-200-urls-with-same-basename', $msg);
                 }
-                $this->non200BasenamesToOCCURRENCES[$baseName]++;
+                $this->non200BasenamesToOccurrences[$baseName]++;
                 continue;
             }
 
@@ -968,7 +968,7 @@ class Crawler
     {
         $baseName = $url->getBaseName();
         if ($baseName && $baseName !== 'index.html' && $baseName !== 'index.htm' && $baseName !== 'index') {
-            $this->non200BasenamesToOCCURRENCES[$baseName] = ($this->non200BasenamesToOCCURRENCES[$baseName] ?? 0) + 1;
+            $this->non200BasenamesToOccurrences[$baseName] = ($this->non200BasenamesToOccurrences[$baseName] ?? 0) + 1;
         }
     }
 
