@@ -263,6 +263,18 @@ class Option
             }
         } else if ($this->type === Type::HOST_AND_PORT && (!is_string($value) || !preg_match('/^[a-z0-9\-.:]{1,100}:[0-9]{1,5}$/i', $value))) {
             throw new Exception("Option {$this->name} ({$value}) must be in format host:port");
+        } else if ($this->type === Type::REPLACE_CONTENT) {
+            if (!is_string($value) || !preg_match('/^.+->/i', $value)) {
+                throw new Exception("Option {$this->name} ({$value}) must be in format `foo -> bar` or `/preg-regexp/ -> bar`)");
+            }
+
+            $parts = explode('->', $value);
+            $replaceFrom = trim($parts[0]);
+            $isRegex = preg_match('/^([\/#~%]).*\1[a-z]*$/i', $replaceFrom);
+
+            if ($isRegex && @preg_match($replaceFrom, '') === false) {
+                throw new Exception("Option {$this->name} and its first part ({$replaceFrom}) must be valid PCRE regular expression");
+            }
         }
 
         // extra validations
@@ -312,6 +324,8 @@ class Option
             $this->replacePlaceholders($value);
             return Utils::getAbsolutePath($value);
         } else if ($this->type === Type::HOST_AND_PORT) {
+            return (string)$value;
+        } else if ($this->type === Type::REPLACE_CONTENT) {
             return (string)$value;
         } /* @phpstan-ignore-line */ else {
             throw new Exception("Unknown type {$this->type}");

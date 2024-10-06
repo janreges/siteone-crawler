@@ -46,6 +46,13 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
     protected bool $ignoreStoreFileError = false;
 
     /**
+     * Replace HTML/JS/CSS content with `xxx -> bbb` or regexp in PREG format: `/card[0-9]/ -> card`
+     *
+     * @var string[]
+     */
+    protected array $replaceContent = [];
+
+    /**
      * For debug only - storage of debug messages if debug mode is activated (storeOnlyUrls)
      * @var array|null
      */
@@ -134,6 +141,21 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
                 $visitedUrl->contentType,
                 ParsedUrl::parse($visitedUrl->url)
             );
+
+            // apply custom content replacements
+            if ($content && $this->replaceContent) {
+                foreach ($this->replaceContent as $replace) {
+                    $parts = explode('->', $replace);
+                    $replaceFrom = trim($parts[0]);
+                    $replaceTo = trim($parts[1] ?? '');
+                    $isRegex = preg_match('/^([\/#~%]).*\1[a-z]*$/i', $replaceFrom);
+                    if ($isRegex) {
+                        $content = preg_replace($replaceFrom, $replaceTo, $content);
+                    } else {
+                        $content = str_replace($replaceFrom, $replaceTo, $content);
+                    }
+                }
+            }
         }
 
         // sanitize and replace special chars because they are not allowed in file/dir names on some platforms (e.g. Windows)
@@ -261,6 +283,7 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
             'Offline exporter options', [
             new Option('--offline-export-dir', '-oed', 'offlineExportDirectory', Type::DIR, false, 'Path to directory where to save the offline version of the website.', null, true),
             new Option('--offline-export-store-only-url-regex', null, 'offlineExportStoreOnlyUrlRegex', Type::REGEX, true, 'For debug - when filled it will activate debug mode and store only URLs which match one of these PCRE regexes. Can be specified multiple times.', null, true),
+            new Option('--replace-content', null, 'replaceContent', Type::REPLACE_CONTENT, true, "Replace HTML/JS/CSS content with `foo -> bar` or regexp in PREG format: `/card[0-9]/i -> card`", null, true, true),
             new Option('--ignore-store-file-error', null, 'ignoreStoreFileError', Type::BOOL, false, 'Ignores any file storing errors. The export process will continue.', false, false),
         ]));
         return $options;

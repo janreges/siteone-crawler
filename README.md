@@ -230,6 +230,9 @@ required arguments:
   --output-text-file=/dir/report.txt \
   --add-timestamp-to-output-file \
   --add-host-to-output-file \
+  --offline-export-dir=tmp/mydomain.tld \
+  --replace-content='/<foo[^>]+>/ -> <bar>' \
+  --ignore-store-file-error \
   --sitemap-xml-file==/dir/sitemap.xml \
   --sitemap-txt-file==/dir/sitemap.txt \
   --sitemap-base-priority=0.5 \
@@ -379,7 +382,8 @@ If necessary, you can also use your own endpoint `--upload-to` for saving the HT
 
 * `--offline-export-dir=<dir>`     Path to directory where to save the offline version of the website. If target directory does not exist, crawler will try to create it (requires sufficient rights).
 * `--offline-export-store-only-url-regex=<regex>` For debug - when filled it will activate debug mode and store only URLs which match one of these PCRE regexes. Can be specified multiple times.
-* `--ignore-store-file-error` Enable this option to ignore any file storing errors. The export process will continue.
+* `--replace-content=<val>`        Replace content in HTML/JS/CSS with `foo -> bar` or regexp in PREG format: `/card[0-9]/i -> card`. Can be specified multiple times.
+* `--ignore-store-file-error`      Enable this option to ignore any file storing errors. The export process will continue.
 
 #### Sitemap options
 

@@ -23,4 +23,5 @@ enum Type
     case FILE;
     case DIR;
     case HOST_AND_PORT;
+    case REPLACE_CONTENT;
 }

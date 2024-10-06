@@ -312,6 +312,8 @@ class Initiator
                     $nameAndValue .= '=<dir>';
                 } elseif ($option->type === Type::HOST_AND_PORT) {
                     $nameAndValue .= '=<host:port>';
+                } elseif ($option->type === Type::REPLACE_CONTENT) {
+                    $nameAndValue .= '=<val>';
                 }
 
                 echo str_pad($nameAndValue, 32) . " " . rtrim($option->description, '. ') . '.';
