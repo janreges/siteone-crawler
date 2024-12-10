@@ -86,6 +86,7 @@ class CoreOptions
      * @var string[]
      */
     public array $allowedDomainsForCrawling = [];
+    public bool $singleForeignPage = false;
 
     public StorageType $resultStorage = StorageType::MEMORY;
     public string $resultStorageDir = 'tmp/result-storage';
@@ -224,6 +225,7 @@ class CoreOptions
             new Option('--memory-limit', '-ml', 'memoryLimit', Type::SIZE_M_G, false, 'Memory limit in units M (Megabytes) or G (Gigabytes).', '2048M', false),
             new Option('--allowed-domain-for-external-files', '-adf', 'allowedDomainsForExternalFiles', Type::STRING, true, "Primarily, the crawler crawls only the URL within the domain for initial URL. This allows you to enable loading of file content from another domain as well (e.g. if you want to load assets from a CDN). Can be specified multiple times. Use can use domains with wildcard '*'.", [], true, true),
             new Option('--allowed-domain-for-crawling', '-adc', 'allowedDomainsForCrawling', Type::STRING, true, "This option will allow you to crawl all content from other listed domains - typically in the case of language mutations on other domains. Can be specified multiple times. Use can use domains with wildcard '*'.", [], true, true),
+            new Option('--single-foreign-page', '-sfp', 'singleForeignPage', Type::BOOL, false, "If crawling of other domains is allowed (using `--allowed-domain-for-crawling`), it ensures that when another domain is not on same second-level domain, only that linked page and its assets are crawled from that foreign domain.", false, false),
             new Option('--include-regex', '--include-regexp', 'includeRegex', Type::REGEX, true, 'Include only URLs matching at least one PCRE regex. Can be specified multiple times.', [], false, true),
             new Option('--ignore-regex', '--ignore-regexp', 'ignoreRegex', Type::REGEX, true, 'Ignore URLs matching any PCRE regex. Can be specified multiple times.', [], false, true),
             new Option('--regex-filtering-only-for-pages', null, 'regexFilteringOnlyForPages', Type::BOOL, false, 'Set if you want filtering by `*-regex` rules apply only to page URLs, but static assets are loaded regardless of filtering.', false, false),

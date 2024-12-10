@@ -318,6 +318,9 @@ through the file:// protocol.
   simultaneous requests to the server than this number. Use carefully! A high number of workers can cause a DoS attack.
   Default is `3`.
 * `--memory-limit=<size>`          Memory limit in units `M` (Megabytes) or `G` (Gigabytes). Default is `512M`.
+* `--single-foreign-page`          If crawling of other domains is allowed (using `--allowed-domain-for-crawling`), it
+  ensures that when another domain is not on same second-level domain, only that linked page and its assets are crawled
+  from that foreign domain.
 * `--include-regex=<regex>`        Regular expression compatible with PHP preg_match() for URLs that should be included.
   Argument can be specified multiple times. Example: `--include-regex='/^\/public\//'`
 * `--ignore-regex=<regex>`         Regular expression compatible with PHP preg_match() for URLs that should be ignored.
