@@ -318,6 +318,12 @@ through the file:// protocol.
   simultaneous requests to the server than this number. Use carefully! A high number of workers can cause a DoS attack.
   Default is `3`.
 * `--memory-limit=<size>`          Memory limit in units `M` (Megabytes) or `G` (Gigabytes). Default is `512M`.
+* `--allowed-domain-for-external-files=<domain>`  Primarily, the crawler crawls only the URL within the domain for
+  initial URL. This allows you to enable loading of file content from another domain as well (e.g. if you want to load
+  assets from a CDN). Can be specified multiple times. Use can use domains with wildcard `*`.
+* `--allowed-domain-for-crawling=<domain>`  This option will allow you to crawl all content from other listed
+  domains - typically in the case of language mutations on other domains. Can be specified multiple times. Use can use
+  domains with wildcard `*` including e.g. `*.siteone.*`.
 * `--single-foreign-page`          If crawling of other domains is allowed (using `--allowed-domain-for-crawling`), it
   ensures that when another domain is not on same second-level domain, only that linked page and its assets are crawled
   from that foreign domain.
