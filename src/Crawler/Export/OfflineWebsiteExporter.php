@@ -53,6 +53,14 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
     protected array $replaceContent = [];
 
     /**
+     * Instead of using a short hash instead of a query string in the filename, just replace some characters.
+     * You can use a regular expression. E.g. '/([^&]+)=([^&]*)(&|$)/' -> '$1-$2_'
+     *
+     * @var string[]
+     */
+    protected array $replaceQueryString = [];
+
+    /**
      * For debug only - storage of debug messages if debug mode is activated (storeOnlyUrls)
      * @var array|null
      */
@@ -78,6 +86,9 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
         $startTime = microtime(true);
         $visitedUrls = $this->status->getVisitedUrls();
 
+        // user-defined replaceQueryString will deactivate replacing query string with hash and use custom replacement
+        OfflineUrlConverter::setReplaceQueryString($this->replaceQueryString);
+
         // filter only relevant URLs with OK status codes
         $exportedUrls = array_filter($visitedUrls, function (VisitedUrl $visitedUrl) {
             return in_array($visitedUrl->statusCode, [200, 201, 301, 302, 303, 308]);
@@ -97,7 +108,6 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
                 }
             }
         } catch (Exception $e) {
-            var_dump(__METHOD__ . ": ERROR {$e->getMessage()}");
             throw new Exception(__METHOD__ . ': ' . $e->getMessage());
         }
 
@@ -284,6 +294,7 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
             new Option('--offline-export-dir', '-oed', 'offlineExportDirectory', Type::DIR, false, 'Path to directory where to save the offline version of the website.', null, true),
             new Option('--offline-export-store-only-url-regex', null, 'offlineExportStoreOnlyUrlRegex', Type::REGEX, true, 'For debug - when filled it will activate debug mode and store only URLs which match one of these PCRE regexes. Can be specified multiple times.', null, true),
             new Option('--replace-content', null, 'replaceContent', Type::REPLACE_CONTENT, true, "Replace HTML/JS/CSS content with `foo -> bar` or regexp in PREG format: `/card[0-9]/i -> card`", null, true, true),
+            new Option('--replace-query-string', null, 'replaceQueryString', Type::REPLACE_CONTENT, true, "Instead of using a short hash instead of a query string in the filename, just replace some characters. You can use simple format 'foo -> bar' or regexp in PREG format, e.g. '/([a-z]+)=([^&]*)(&|$)/i -> $1__$2'", null, true, true),
             new Option('--ignore-store-file-error', null, 'ignoreStoreFileError', Type::BOOL, false, 'Ignores any file storing errors. The export process will continue.', false, false),
         ]));
         return $options;

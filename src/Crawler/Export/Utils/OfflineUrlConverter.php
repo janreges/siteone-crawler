@@ -25,6 +25,8 @@ class OfflineUrlConverter
     private readonly array $callbackIsDomainAllowedForStaticFiles;
     private readonly array $callbackIsExternalDomainAllowedForCrawling;
 
+    private static array $replaceQueryString = [];
+
     private TargetDomainRelation $targetDomainRelation;
 
     const DEBUG_URL = null; // example: '/\.\.\/page/i';
@@ -126,7 +128,7 @@ class OfflineUrlConverter
      */
     private function detectAndSetFileNameWithExtension(): void
     {
-        $queryHash = $this->relativeTargetUrl->query ? substr(md5(htmlspecialchars_decode(urldecode($this->relativeTargetUrl->query))), 0, 10) : null;
+        $queryHash = $this->relativeTargetUrl->query ? self::getQueryHashFromQueryString($this->relativeTargetUrl->query) : null;
 
         // when the path is empty or '/'
         if (trim($this->relativeTargetUrl->path, '/ ') === '') {
@@ -271,6 +273,7 @@ class OfflineUrlConverter
     /**
      * Sanitize file path and replace special chars because they are not allowed in file/dir names on some platforms (e.g. Windows)
      * When long filename and potential of OS filepath limit (~256 on Windows), we replace filename with shorter md5 and the same extension
+     * If $replaceQueryString is not empty, query string hashing is deactivated and replaced by the values/regexps from this array
      *
      * @param string $filePath
      * @param bool $keepFragment
@@ -280,14 +283,19 @@ class OfflineUrlConverter
     {
         // transform query string to filename (small hash before extension)
         $parsedFilePath = parse_url($filePath);
-        if (preg_match('/^(.+)\.([a-z0-9]{1,10})/i', $parsedFilePath['path'] ?? '', $matches) === 1) {
+        $pathWithExtension = preg_match('/^(.+)\.([a-z0-9]{1,10})/i', $parsedFilePath['path'] ?? '', $matches) === 1;
+
+        if ($pathWithExtension) {
             $start = $matches[1];
             $extension = $matches[2];
             $queryString = $parsedFilePath['query'] ?? null;
             $fragment = $parsedFilePath['fragment'] ?? null;
 
-            if ($queryString) {
-                $filePath = $start . '.' . mb_substr(md5($queryString), 0, 10) . '.' . $extension;
+            if (is_string($queryString) && trim($queryString) !== '') {
+                $queryHash = self::getQueryHashFromQueryString($queryString);
+                $filePath = $start . '.' . $queryHash . '.' . $extension;
+
+                // add fragment to the end of the file path
                 if ($keepFragment && $fragment) {
                     $filePath .= '#' . $fragment;
                 }
@@ -326,6 +334,41 @@ class OfflineUrlConverter
         }
 
         return $filePath;
+    }
+
+    /**
+     * @param string[] $replaceQueryString
+     * @return void
+     */
+    public static function setReplaceQueryString(array $replaceQueryString): void
+    {
+        self::$replaceQueryString = $replaceQueryString;
+    }
+
+    /**
+     * @param string $queryString
+     * @return string
+     */
+    private static function getQueryHashFromQueryString(string $queryString): string
+    {
+        if (self::$replaceQueryString) {
+            foreach (self::$replaceQueryString as $replace) {
+                $parts = explode('->', $replace);
+                $replaceFrom = trim($parts[0]);
+                $replaceTo = trim($parts[1] ?? '');
+                $isRegex = preg_match('/^([\/#~%]).*\1[a-z]*$/i', $replaceFrom);
+                if ($isRegex) {
+                    $queryString = preg_replace($replaceFrom, $replaceTo, $queryString);
+                } else {
+                    $queryString = str_replace($replaceFrom, $replaceTo, $queryString);
+                }
+            }
+
+            // replace slashes with '~'
+            return str_replace('/', '~', $queryString);
+        } else {
+            return substr(md5(htmlspecialchars_decode(urldecode($queryString))), 0, 10);
+        }
     }
 
 }
