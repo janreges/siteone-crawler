@@ -256,6 +256,9 @@ For a clearer list, I recommend going to the documentation: https://crawler.site
 
 * `--url=<url>`                    Required. HTTP or HTTPS URL address of the website to be crawled.Use quotation marks
   if the URL contains query parameters
+* `--single-page`                  Load only one page to which the URL is given (and its assets), but do not follow other pages.
+* `--max-depth=<int>`              Maximum crawling depth (for pages, not assets). Default is `0` (no limit). `1` means 
+  `/about` or `/about/`, `2` means `/about/contacts` etc.
 * `--device=<val>`                 Device type for choosing a predefined User-Agent. Ignored when `--user-agent` is
   defined. Supported values: `desktop`, `mobile`, `tablet`. Defaults is `desktop`.
 * `--user-agent=<val>`             Custom User-Agent header. Use quotation marks. If specified, it takes precedence over
@@ -295,7 +298,8 @@ It is particularly useful to disable JavaScript in the case of exporting website
 (without HTTP server), where it is almost impossible to get the website to work from any location on the disk only
 through the file:// protocol.
 
-* `--single-page`                  Load only one page to which the URL is given (and its assets), but do not follow other pages.
+* `--disable-all-assets`           Disables crawling of all assets and files and only crawls pages in href attributes.
+  Shortcut for calling all other `--disable-*` flags.
 * `--disable-javascript`           Disables JavaScript downloading and removes all JavaScript code from HTML,
   including `onclick` and other `on*` handlers.
 * `--disable-styles`               Disables CSS file downloading and at the same time removes all style definitions

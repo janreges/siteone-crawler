@@ -29,6 +29,8 @@ class CoreOptions
 
     // basic settings
     public string $url;
+    public bool $singlePage = false;
+    public int $maxDepth = 0;
     public DeviceType $device = DeviceType::DESKTOP;
     public ?string $userAgent = null;
     public int $timeout = 5;
@@ -57,7 +59,6 @@ class CoreOptions
     public ?int $consoleWidth = null;
 
     // resource filtering
-    public bool $singlePage = false;
     public bool $disableJavascript = false;
     public bool $disableStyles = false;
     public bool $disableFonts = false;
@@ -165,6 +166,8 @@ class CoreOptions
             self::GROUP_BASIC_SETTINGS,
             'Basic settings', [
             new Option('--url', '-u', 'url', Type::URL, false, 'Required URL. Enclose in quotes if URL contains query parameters.', null, false),
+            new Option('--single-page', '-sp', 'singlePage', Type::BOOL, false, 'Load only one page to which the URL is given (and its assets), but do not follow other pages.', false, false),
+            new Option('--max-depth', '-md', 'maxDepth', Type::INT, false, 'Maximum crawling depth (for pages, not assets). Default is `0` (no limit). `1` means `/about` or `/about/`, `2` means `/about/contacts` etc.', 0, false),
             new Option('--device', '-d', 'device', Type::STRING, false, 'Device type for User-Agent selection. Values `desktop`, `tablet`, `mobile`. Ignored with `--user-agent`.', 'desktop', false),
             new Option('--user-agent', '-ua', 'userAgent', Type::STRING, false, 'Override User-Agent selected by --device.', null, true),
             new Option('--timeout', '-t', 'timeout', Type::INT, false, 'Request timeout (in sec).', 5, false),
@@ -193,7 +196,6 @@ class CoreOptions
         $options->addGroup(new Group(
             self::GROUP_RESOURCE_FILTERING,
             'Resource filtering', [
-            new Option('--single-page', '-sp', 'singlePage', Type::BOOL, false, 'Load only one page to which the URL is given (and its assets), but do not follow other pages.', false, false),
             new Option('--disable-javascript', '-dj', 'disableJavascript', Type::BOOL, false, 'Disables JavaScript downloading and removes all JavaScript code from HTML, including onclick and other on* handlers.', false, false),
             new Option('--disable-styles', '-ds', 'disableStyles', Type::BOOL, false, 'Disables CSS file downloading and at the same time removes all style definitions by <style> tag or inline by style attributes.', false, false),
             new Option('--disable-fonts', '-dfo', 'disableFonts', Type::BOOL, false, 'Disables font downloading and also removes all font/font-face definitions from CSS.', false, false),

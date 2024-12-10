@@ -27,6 +27,7 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
     public static array $htmlPagesExtensions = ['htm', 'html', 'shtml', 'php', 'phtml', 'ashx', 'xhtml', 'asp', 'aspx', 'jsp', 'jspx', 'do', 'cfm', 'cgi', 'pl'];
 
     private readonly bool $singlePageOnly;
+    private readonly int $maxDepth;
     private readonly bool $filesEnabled;
     private readonly bool $imagesEnabled;
     private readonly bool $scriptsEnabled;
@@ -41,6 +42,7 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
         parent::__construct($crawler);
 
         $this->singlePageOnly = $this->options->singlePage;
+        $this->maxDepth = $this->options->maxDepth;
         $this->filesEnabled = !$this->options->disableFiles;
         $this->imagesEnabled = !$this->options->disableImages;
         $this->scriptsEnabled = !$this->options->disableJavascript;
@@ -212,6 +214,13 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
 
         preg_match_all('/href\\\\["\'][:=]\\\\["\'](https?:\/\/[^"\'\\\\]+)\\\\["\']/i', $html, $matches);
         $foundUrlsTxt = array_merge($foundUrlsTxt, $matches[1] ?? []);
+
+        if ($this->maxDepth > 0) {
+            $foundUrlsTxt = array_filter($foundUrlsTxt, function ($url) use ($sourceUrl) {
+                $parsedUrl = ParsedUrl::parse($url, $sourceUrl);
+                return $parsedUrl->getDepth() <= $this->maxDepth;
+            });
+        }
 
         if (!$this->filesEnabled) {
             $foundUrlsTxt = array_filter($foundUrlsTxt, function ($url) use ($regexForHtmlExtensions) {

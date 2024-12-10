@@ -345,4 +345,24 @@ class ParsedUrl
         return $result;
     }
 
+    /**
+     * Get depth of the URL path. Examples:
+     * / -> 0
+     * /about -> 1
+     * /about/ -> 1
+     * /about/me -> 2
+     * /about/me/ -> 2
+     * /about/me/contact -> 3
+     * /about/me/contact/ -> 3
+     * /about/me/contact/.. -> 2
+     * /about/me/contact/../.. -> 1
+     * ...
+     *
+     * @return int
+     */
+    public function getDepth(): int
+    {
+        return max(substr_count(rtrim($this->path, '/'), '/') - substr_count($this->path, '/..'), 0);
+    }
+
 }
