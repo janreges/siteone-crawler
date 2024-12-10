@@ -104,14 +104,54 @@ class DnsAnalyzer extends BaseAnalyzer implements Analyzer
      */
     private function getDnsInfo(): DnsAnalysisResult
     {
+        $isCygwin = stripos(PHP_OS, 'CYGWIN') !== false;
         $domain = parse_url($this->crawler->getCoreOptions()->url, PHP_URL_HOST);
-        $nslookup = shell_exec("nslookup " . escapeshellarg($domain));
 
-        if (!$nslookup) {
-            throw new Exception(__METHOD__ . ': nslookup command failed.');
+        // if is not cygwin environment, try to use nslookup or dig
+        if (!$isCygwin) {
+            $whichNslookup = trim((string)@shell_exec("which nslookup 2>/dev/null"));
+            if ($whichNslookup !== '') {
+                $nslookupOutput = @shell_exec("nslookup " . escapeshellarg($domain) . ' 2>/dev/null');
+                if ($nslookupOutput) {
+                    return self::parseNslookup($nslookupOutput);
+                }
+            }
+
+            $digOutput = @shell_exec("dig +short " . escapeshellarg($domain) . ' 2>/dev/null');
+            if ($digOutput) {
+                return $this->parseDigOutput($digOutput, $domain);
+            }
         }
 
-        return self::parseNslookup($nslookup);
+        // Fallback na dns_get_record
+        $records = @dns_get_record($domain, DNS_A + DNS_AAAA + DNS_CNAME);
+        if (!$records) {
+            throw new \Exception(__METHOD__ . ': Unable to resolve DNS records for ' . $domain);
+        }
+
+        $ipv4Addresses = [];
+        $ipv6Addresses = [];
+        $resolvedDomains = [$domain];
+
+        foreach ($records as $rec) {
+            if (isset($rec['type'])) {
+                if ($rec['type'] === 'A' && isset($rec['ip'])) {
+                    $ipv4Addresses[] = $rec['ip'];
+                } elseif ($rec['type'] === 'AAAA' && isset($rec['ipv6'])) {
+                    $ipv6Addresses[] = $rec['ipv6'];
+                } elseif ($rec['type'] === 'CNAME' && isset($rec['target'])) {
+                    $resolvedDomains[] = $rec['target'];
+                }
+            }
+        }
+
+        return new DnsAnalysisResult(
+            'unknown-dns-server',
+            '0.0.0.0',
+            array_unique($resolvedDomains),
+            $ipv4Addresses,
+            $ipv6Addresses
+        );
     }
 
     public function getOrder(): int
@@ -199,6 +239,39 @@ class DnsAnalyzer extends BaseAnalyzer implements Analyzer
             $dnsServerName,
             $dnsServerIpAddress,
             array_unique(array_values($resolvedDomains)),
+            $ipv4Addresses,
+            $ipv6Addresses
+        );
+    }
+
+    /**
+     * @param string $digOutput
+     * @param string $domain
+     * @return DnsAnalysisResult
+     */
+    private function parseDigOutput(string $digOutput, string $domain): DnsAnalysisResult
+    {
+        $lines = array_filter(array_map('trim', explode("\n", $digOutput)));
+        $ipv4Addresses = [];
+        $ipv6Addresses = [];
+        $resolvedDomains = [$domain];
+
+        foreach ($lines as $line) {
+            if (filter_var($line, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+                $ipv4Addresses[] = $line;
+            } elseif (filter_var($line, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+                $ipv6Addresses[] = $line;
+            } else {
+                // Potential CNAME or alias (also remove trailing dot from CNAME)
+                $resolvedDomains[] = rtrim($line, '.');
+            }
+        }
+
+        // DNS server info is not easily obtainable from dig +short, so we set placeholders.
+        return new DnsAnalysisResult(
+            'unknown-dns-server',
+            '0.0.0.0',
+            array_unique($resolvedDomains),
             $ipv4Addresses,
             $ipv6Addresses
         );

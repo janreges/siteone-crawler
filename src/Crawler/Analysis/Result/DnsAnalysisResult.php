@@ -86,10 +86,13 @@ class DnsAnalysisResult
             $result .= str_repeat('  ', count($this->resolvedDomains)) . "IPv6: {$ip}\n";
         }
 
-        if ($this->dnsServerName !== $this->dnsServerIpAddress) {
-            $result .= "\nDNS server: {$this->dnsServerName} ({$this->dnsServerIpAddress})\n";
-        } else {
-            $result .= "\nDNS server: {$this->dnsServerName}\n";
+        // Add DNS server info if available (0.0.0.0 means unknown, typical for CYGWIN)
+        if ($this->dnsServerIpAddress !== '0.0.0.0') {
+            if ($this->dnsServerName !== $this->dnsServerIpAddress) {
+                $result .= "\nDNS server: {$this->dnsServerName} ({$this->dnsServerIpAddress})\n";
+            } else {
+                $result .= "\nDNS server: {$this->dnsServerName}\n";
+            }
         }
 
         return trim($result);

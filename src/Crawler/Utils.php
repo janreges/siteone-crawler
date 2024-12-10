@@ -312,8 +312,15 @@ class Utils
                     break;
                 }
             }
+        } elseif (stripos(PHP_OS, "CYGWIN") !== false) {
+            $output = trim((string)@shell_exec('stty size'));
+            if ($output && preg_match('/\d+\s+(\d+)/', $output, $matches)) {
+                $width = (int)$matches[1];
+            } else {
+                $width = 138;
+            }
         } else {
-            $width = intval(shell_exec('tput cols'));
+            $width = intval(@shell_exec('tput cols') ?: 138);
         }
 
         $width = max($width, 100);
