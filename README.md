@@ -295,6 +295,7 @@ It is particularly useful to disable JavaScript in the case of exporting website
 (without HTTP server), where it is almost impossible to get the website to work from any location on the disk only
 through the file:// protocol.
 
+* `--single-page`                  Load only one page to which the URL is given (and its assets), but do not follow other pages.
 * `--disable-javascript`           Disables JavaScript downloading and removes all JavaScript code from HTML,
   including `onclick` and other `on*` handlers.
 * `--disable-styles`               Disables CSS file downloading and at the same time removes all style definitions

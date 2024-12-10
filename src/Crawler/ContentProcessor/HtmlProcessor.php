@@ -26,6 +26,7 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
     public const JS_VARIABLE_NAME_URL_DEPTH = '_SiteOneUrlDepth';
     public static array $htmlPagesExtensions = ['htm', 'html', 'shtml', 'php', 'phtml', 'ashx', 'xhtml', 'asp', 'aspx', 'jsp', 'jspx', 'do', 'cfm', 'cgi', 'pl'];
 
+    private readonly bool $singlePageOnly;
     private readonly bool $filesEnabled;
     private readonly bool $imagesEnabled;
     private readonly bool $scriptsEnabled;
@@ -39,6 +40,7 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
     {
         parent::__construct($crawler);
 
+        $this->singlePageOnly = $this->options->singlePage;
         $this->filesEnabled = !$this->options->disableFiles;
         $this->imagesEnabled = !$this->options->disableImages;
         $this->scriptsEnabled = !$this->options->disableJavascript;
@@ -58,7 +60,9 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
 
         $foundUrls = new FoundUrls();
 
-        $this->findHrefUrls($content, $sourceUrl, $foundUrls, $regexForHtmlExtensions);
+        if (!$this->singlePageOnly) {
+            $this->findHrefUrls($content, $sourceUrl, $foundUrls, $regexForHtmlExtensions);
+        }
 
         if ($this->fontsEnabled) {
             $this->findFonts($content, $sourceUrl, $foundUrls);

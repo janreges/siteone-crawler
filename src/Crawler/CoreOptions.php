@@ -57,6 +57,7 @@ class CoreOptions
     public ?int $consoleWidth = null;
 
     // resource filtering
+    public bool $singlePage = false;
     public bool $disableJavascript = false;
     public bool $disableStyles = false;
     public bool $disableFonts = false;
@@ -192,6 +193,7 @@ class CoreOptions
         $options->addGroup(new Group(
             self::GROUP_RESOURCE_FILTERING,
             'Resource filtering', [
+            new Option('--single-page', '-sp', 'singlePage', Type::BOOL, false, 'Load only one page to which the URL is given (and its assets), but do not follow other pages.', false, false),
             new Option('--disable-javascript', '-dj', 'disableJavascript', Type::BOOL, false, 'Disables JavaScript downloading and removes all JavaScript code from HTML, including onclick and other on* handlers.', false, false),
             new Option('--disable-styles', '-ds', 'disableStyles', Type::BOOL, false, 'Disables CSS file downloading and at the same time removes all style definitions by <style> tag or inline by style attributes.', false, false),
             new Option('--disable-fonts', '-dfo', 'disableFonts', Type::BOOL, false, 'Disables font downloading and also removes all font/font-face definitions from CSS.', false, false),
