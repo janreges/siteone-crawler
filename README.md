@@ -1,13 +1,15 @@
 # SiteOne Crawler
 
-SiteOne Crawler is a **very useful and easy-to-use tool you'll ♥ as a Dev/DevOps, website owner or consultant**. Works on all popular platforms - **Windows**, **macOS** and **Linux** (**x64** and **arm64** too).
+SiteOne Crawler is a very useful and easy-to-use **website analyzer & cloner/exporter** you'll ♥ as a Dev/DevOps, SEO specialist, QA engineer, website owner or consultant. Works on all popular platforms - **Windows**, **macOS** and **Linux** (**x64** and **arm64** too).
+
+The main capability of the crawler is to **generate a detailed HTML report** with lots of useful information about your website (see sample [nextjs.org report](https://crawler.siteone.io/html/2024-08-23/forever/cl8xw4r-fdag8wg-44dd.html)) and at the same time it can clone/export the website offline (see browsable [nextjs.org clone](https://crawler.siteone.io/examples-exports/nextjs.org/)).
 
 It will crawl your entire website in depth, analyze and report problems, show useful statistics and reports, generate an offline
 version of the website, generate sitemaps or send reports via email. Watch a detailed [video with a sample report](https://www.youtube.com/watch?v=PHIFSOmk0gk) for the [astro.build](https://astro.build/?utm_source=siteone-crawler-github) website.
 
 This crawler can be used as a command-line tool (see [releases](https://github.com/janreges/siteone-crawler/releases) and [video](https://www.youtube.com/watch?v=25T_yx13naA&list=PL9mElgTe-s1Csfg0jXWmDS0MHFN7Cpjwp)), or you can use a [multi-platform desktop application](https://github.com/janreges/siteone-crawler-gui) with graphical interface (see [video](https://www.youtube.com/watch?v=rFW8LNEVNdw) about app).
 
-I also recommend looking at the project website [crawler.siteone.io](https://crawler.siteone.io/).
+I also recommend looking at the project website [crawler.siteone.io](https://crawler.siteone.io/) with detailed [documentation](https://crawler.siteone.io/configuration/command-line-options/).
 
 GIF animation of the crawler in action (also available as a [video](https://www.youtube.com/watch?v=25T_yx13naA&list=PL9mElgTe-s1Csfg0jXWmDS0MHFN7Cpjwp)):
 
@@ -56,7 +58,7 @@ In short, the main benefits can be summarized in these points:
 - **Dev/DevOps assistant** - offers a set of very useful and often necessary features for developers and devops (stress
   test, warm up cache, localhost testing, etc.)
 - **Analyzer** - analyzes all webpages and reports strange or error behaviour and useful statistics (404, redirects, bad
-  practices, etc.)
+  practices, SEO and security issues, heading structures, etc.)
 - **Reporter** - sends a HTML report to your email addresses with all the information about the crawled website
 - **Offline website generator** - allows you to export the entire website to offline form, where it is possible to
   browse the site through local HTML files (without HTTP server) including all images, styles, scripts, fonts, etc.
@@ -107,6 +109,15 @@ The following features are summarized in greater detail:
   there are any links pointing to them. You can enable e.g. `mysite.*` to export all language mutations that have a
   different TLD or `*.mysite.tld` to export all subdomains.
 - you can try `---disable-styles` and `---disable-fonts` and see how well you handle **accessibility** and **semantics**
+- you can use `--single-page` to **export only one page** to which the URL is given (and its assets), but do not follow
+  other pages.
+- you can use `--single-foreign-page` to **export only one page** from another domain (if allowed by `--allowed-domain-for-crawling`),
+  but do not follow other pages.
+- you can use `--replace-content` to **replace content** in HTML/JS/CSS with `foo -> bar` or regexp in PREG format, e.g.
+  `/card[0-9]/i -> card`. Can be specified multiple times.
+- you can use `--replace-query-string` to **replace chars in query string** in the filename.
+- you can use `--max-depth` to set the **maximum crawling depth** (for pages, not assets). `1` means `/about` or `/about/`,
+  `2` means `/about/contacts` etc.
 - you can use it to **export your website to a static form** and host it on GitHub Pages, Netlify, Vercel, etc. as a
   static backup and part of your **disaster recovery plan** or **archival/legal needs**
 - works great with **older conventional websites** but also **modern ones**, built on frameworks like Next.js, Nuxt.js,
