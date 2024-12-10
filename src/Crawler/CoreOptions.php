@@ -59,6 +59,7 @@ class CoreOptions
     public ?int $consoleWidth = null;
 
     // resource filtering
+    public bool $disableAllAssets = false;
     public bool $disableJavascript = false;
     public bool $disableStyles = false;
     public bool $disableFonts = false;
@@ -143,6 +144,15 @@ class CoreOptions
             }
         }
 
+        // disable all assets if set
+        if ($this->disableAllAssets) {
+            $this->disableJavascript = true;
+            $this->disableStyles = true;
+            $this->disableFonts = true;
+            $this->disableImages = true;
+            $this->disableFiles = true;
+        }
+
         if (!$this->url) {
             throw new Exception("Invalid or undefined --url parameter.");
         } else if ($this->workers < 1) {
@@ -196,6 +206,7 @@ class CoreOptions
         $options->addGroup(new Group(
             self::GROUP_RESOURCE_FILTERING,
             'Resource filtering', [
+            new Option('--disable-all-assets', '-das', 'disableAllAssets', Type::BOOL, false, 'Disables crawling of all assets and files and only crawls pages in href attributes. Shortcut for calling all other `--disable-*` flags.', false, false),
             new Option('--disable-javascript', '-dj', 'disableJavascript', Type::BOOL, false, 'Disables JavaScript downloading and removes all JavaScript code from HTML, including onclick and other on* handlers.', false, false),
             new Option('--disable-styles', '-ds', 'disableStyles', Type::BOOL, false, 'Disables CSS file downloading and at the same time removes all style definitions by <style> tag or inline by style attributes.', false, false),
             new Option('--disable-fonts', '-dfo', 'disableFonts', Type::BOOL, false, 'Disables font downloading and also removes all font/font-face definitions from CSS.', false, false),
@@ -267,7 +278,7 @@ class CoreOptions
 
     public function crawlOnlyHtmlFiles(): bool
     {
-        return $this->disableJavascript && $this->disableStyles && $this->disableFonts && $this->disableImages && $this->disableFiles;
+        return $this->disableAllAssets || ($this->disableJavascript && $this->disableStyles && $this->disableFonts && $this->disableImages && $this->disableFiles);
     }
 
     /**
