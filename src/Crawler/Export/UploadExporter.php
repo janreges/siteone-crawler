@@ -28,7 +28,7 @@ class UploadExporter extends BaseExporter implements Exporter
     protected ?string $endpoint;
     protected ?string $retention;
     protected ?string $password;
-    protected ?int $timeout;
+    protected ?int $uploadTimeout;
 
     public function shouldBeActivated(): bool
     {
@@ -55,7 +55,7 @@ class UploadExporter extends BaseExporter implements Exporter
      * @return string
      * @throws Exception
      */
-    private function upload(string $html, int $timeout = 3600): string
+    private function upload(string $html): string
     {
         $compressedHtml = gzencode($html);
         $parsedUrl = ParsedUrl::parse($this->endpoint);
@@ -77,7 +77,7 @@ class UploadExporter extends BaseExporter implements Exporter
 
         // send request
         $client = new Client($parsedUrl->host, $parsedUrl->port, $parsedUrl->isHttps());
-        $client->set(['timeout' => $timeout]);
+        $client->set(['timeout' => $this->uploadTimeout]);
         $client->setHeaders([
             'Content-Type' => 'application/x-www-form-urlencoded',
         ]);
@@ -136,7 +136,7 @@ class UploadExporter extends BaseExporter implements Exporter
             new Option('--upload-to', '-upt', 'endpoint', Type::URL, false, 'URL of the endpoint where to send the HTML report.', 'https://crawler.siteone.io/up', false),
             new Option('--upload-retention', '-upr', 'retention', Type::STRING, false, 'How long should the HTML report be kept in the online version? Values: 1h / 4h / 12h / 24h / 3d / 7d / 30d / 365d / forever', '30d', false),
             new Option('--upload-password', '-uppass', 'password', Type::STRING, false, "Optional password, which must be entered (the user will be 'crawler') to display the online HTML report.", null, true),
-            new Option('--upload-timeout', '-upti', 'timeout', Type::INT, false, "Upload timeout in seconds.", 3600, false),
+            new Option('--upload-timeout', '-upti', 'uploadTimeout', Type::INT, false, "Upload timeout in seconds.", 3600, false),
         ]));
         return $options;
     }
