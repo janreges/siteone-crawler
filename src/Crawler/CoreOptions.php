@@ -176,7 +176,7 @@ class CoreOptions
         $options->addGroup(new Group(
             self::GROUP_BASIC_SETTINGS,
             'Basic settings', [
-            new Option('--url', '-u', 'url', Type::URL, false, 'Required URL. Enclose in quotes if URL contains query parameters.', null, false),
+            new Option('--url', '-u', 'url', Type::URL, false, 'Required URL. It can also be the URL to sitemap.xml. Enclose in quotes if URL contains query parameters.', null, false),
             new Option('--single-page', '-sp', 'singlePage', Type::BOOL, false, 'Load only one page to which the URL is given (and its assets), but do not follow other pages.', false, false),
             new Option('--max-depth', '-md', 'maxDepth', Type::INT, false, 'Maximum crawling depth (for pages, not assets). Default is `0` (no limit). `1` means `/about` or `/about/`, `2` means `/about/contacts` etc.', 0, false),
             new Option('--device', '-d', 'device', Type::STRING, false, 'Device type for User-Agent selection. Values `desktop`, `tablet`, `mobile`. Ignored with `--user-agent`.', 'desktop', false),

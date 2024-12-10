@@ -198,6 +198,7 @@ class VisitedUrl
             FoundUrl::SOURCE_CSS_URL => "CSS url() on $sourceUrl",
             FoundUrl::SOURCE_JS_URL => "JS url on $sourceUrl",
             FoundUrl::SOURCE_REDIRECT => "Redirect from $sourceUrl",
+            FoundUrl::SOURCE_SITEMAP => "URL in sitemap $sourceUrl",
             default => 'Unknown source',
         };
     }
@@ -222,6 +223,7 @@ class VisitedUrl
             FoundUrl::SOURCE_CSS_URL => 'css url()',
             FoundUrl::SOURCE_JS_URL => 'js url',
             FoundUrl::SOURCE_REDIRECT => 'redirect',
+            FoundUrl::SOURCE_SITEMAP => 'sitemap',
             default => 'unknown',
         };
     }

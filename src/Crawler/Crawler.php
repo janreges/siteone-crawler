@@ -17,6 +17,7 @@ use Crawler\ContentProcessor\JavaScriptProcessor;
 use Crawler\ContentProcessor\Manager as ContentProcessorManager;
 use Crawler\ContentProcessor\NextJsProcessor;
 use Crawler\ContentProcessor\SvelteProcessor;
+use Crawler\ContentProcessor\XmlProcessor;
 use Crawler\Export\MailerExporter;
 use Crawler\HttpClient\HttpClient;
 use Crawler\HttpClient\HttpResponse;
@@ -489,6 +490,7 @@ class Crawler
             $isHtmlBody = isset($httpResponse->headers['content-type']) && stripos($httpResponse->headers['content-type'], 'text/html') !== false;
             $isCssBody = isset($httpResponse->headers['content-type']) && stripos($httpResponse->headers['content-type'], 'text/css') !== false;
             $isJsBody = isset($httpResponse->headers['content-type']) && (stripos($httpResponse->headers['content-type'], 'application/javascript') !== false || stripos($httpResponse->headers['content-type'], 'text/javascript') !== false);
+            $isXmlBody = isset($httpResponse->headers['content-type']) && (stripos($httpResponse->headers['content-type'], 'application/xml') !== false || stripos($httpResponse->headers['content-type'], 'text/xml') !== false);
             $isAllowedForCrawling = $this->isUrlAllowedByRegexes($parsedUrl) && $this->isExternalDomainAllowedForCrawling($parsedUrl->host);
             $extraParsedContent = [];
 
@@ -509,7 +511,7 @@ class Crawler
 
             if ($body && $isHtmlBody && $isAllowedForCrawling) {
                 $extraParsedContent = $this->parseHtmlBodyAndFillQueue($body, $contentType, $parsedUrl);
-            } elseif ($body && ($isJsBody || $isCssBody)) {
+            } elseif ($body && ($isJsBody || $isCssBody || $isXmlBody)) {
                 $this->parseContentAndFillUrlQueue($body, $contentType, $parsedUrl, $parsedUrlUqId);
             }
 
@@ -530,7 +532,7 @@ class Crawler
 
             // set extras from headers
             $extraColumns = $this->options->extraColumns;
-            foreach($extraColumns as $extraColumn) {
+            foreach ($extraColumns as $extraColumn) {
                 $extraColumnNameLowerCase = strtolower($extraColumn->name);
                 if (isset($httpResponse->headers[$extraColumnNameLowerCase])) {
                     $extraParsedContent[$extraColumn->name] = $httpResponse->headers[$extraColumnNameLowerCase];
@@ -619,10 +621,19 @@ class Crawler
         $isInQueue = $this->queue->exist($urlKey);
         $isAlreadyVisited = $this->visited->exist($urlKey);
         $isUrlWithHtml = !$url->extension || preg_match($regexForHtmlExtensions, $url->path) === 1;
+        $isUrlWithSitemap = stripos($url->path, 'sitemap') !== false && str_ends_with($url->path, '.xml');
         $isUrlTooLong = strlen($fullUrl) > $this->options->maxUrlLength;
         $allowedAreOnlyHtmlFiles = $this->options->crawlOnlyHtmlFiles();
 
-        return !$isInQueue && !$isAlreadyVisited && !$isUrlTooLong && ($isUrlWithHtml || !$allowedAreOnlyHtmlFiles);
+        if (!$isInQueue && !$isAlreadyVisited && !$isUrlTooLong) {
+            if ($isUrlWithHtml || !$allowedAreOnlyHtmlFiles) {
+                return true;
+            } elseif ($isUrlWithSitemap) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
 
@@ -1213,6 +1224,7 @@ class Crawler
         $this->contentProcessorManager->registerProcessor(new HtmlProcessor($this));
         $this->contentProcessorManager->registerProcessor(new JavaScriptProcessor($this));
         $this->contentProcessorManager->registerProcessor(new CssProcessor($this));
+        $this->contentProcessorManager->registerProcessor(new XmlProcessor($this));
         $this->contentProcessorManager->registerProcessor(new NextJsProcessor($this));
         $this->contentProcessorManager->registerProcessor(new SvelteProcessor($this));
     }

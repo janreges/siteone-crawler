@@ -26,6 +26,7 @@ class FoundUrl
     const SOURCE_CSS_URL = 60;
     const SOURCE_JS_URL = 70;
     const SOURCE_REDIRECT = 80;
+    const SOURCE_SITEMAP = 90;
 
     /**
      * Founded URL, parsed from $this->sourceUrl

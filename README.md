@@ -77,6 +77,8 @@ The following features are summarized in greater detail:
 - has a **beautiful interactive** and **colourful output**
 - it will **clearly warn you** of any wrong use of the tool (e.g. input parameters validation or wrong permissions)
 - **captures CTRL+C** and ends with the statistics for at least the current processed URLs
+- as `--url` parameter, you can specify also a `sitemap.xml` file (or [sitemap index](https://www.sitemaps.org/protocol.html#index)),
+  which will be processed as a list of URLs. Note: gzip pre-compressed sitemaps `*.xml.gz` are not supported.
 
 ### Dev/DevOps assistant
 
@@ -265,8 +267,8 @@ For a clearer list, I recommend going to the documentation: https://crawler.site
 
 #### Basic settings
 
-* `--url=<url>`                    Required. HTTP or HTTPS URL address of the website to be crawled.Use quotation marks
-  if the URL contains query parameters
+* `--url=<url>`                    Required. HTTP or HTTPS URL address of the website or sitemap xml to be crawled.
+  Use quotation marks if the URL contains query parameters.
 * `--single-page`                  Load only one page to which the URL is given (and its assets), but do not follow other pages.
 * `--max-depth=<int>`              Maximum crawling depth (for pages, not assets). Default is `0` (no limit). `1` means 
   `/about` or `/about/`, `2` means `/about/contacts` etc.
