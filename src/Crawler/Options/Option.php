@@ -240,7 +240,7 @@ class Option
         } else if ($this->type === Type::REGEX && @preg_match($value, '') === false) {
             throw new Exception("Option {$this->name} ({$value}) must be valid PCRE regular expression");
         } else if ($this->type === Type::URL) {
-            $value = $value !== null ? $this->correctUrl($value) : null;
+            $value = is_string($value) ? $this->correctUrl($value) : null;
             if (!filter_var($value, FILTER_VALIDATE_URL)) {
                 throw new Exception("Option {$this->name} ({$value}) must be valid URL");
             }
@@ -314,7 +314,7 @@ class Option
         } else if ($this->type === Type::REGEX) {
             return (string)$value;
         } else if ($this->type === Type::URL) {
-            return $value !== null ? $this->correctUrl($value) : null;
+            return is_string($value) ? $this->correctUrl($value) : null;
         } else if ($this->type === Type::EMAIL) {
             return (string)$value;
         } else if ($this->type === Type::FILE) {
