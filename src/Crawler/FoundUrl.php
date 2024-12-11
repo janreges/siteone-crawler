@@ -84,9 +84,35 @@ class FoundUrl
         $url = str_replace(
             ['&#38;', '&amp;', "\\ ", ' '],
             ['&', '&', '%20', '%20'], $url);
-        
+
         $url = ltrim($url, "\"'\t ");
         return rtrim($url, "&\"'\t ");
+    }
+
+    /**
+     * @param int $source See self::SOURCE_*
+     * @return string
+     */
+    public static function getShortSourceName(int $source): string
+    {
+        return match ($source) {
+            FoundUrl::SOURCE_INIT_URL => 'Initial URL',
+            FoundUrl::SOURCE_A_HREF => '<a href>',
+            FoundUrl::SOURCE_IMG_SRC => '<img src>',
+            FoundUrl::SOURCE_IMG_SRCSET => '<img srcset>',
+            FoundUrl::SOURCE_INPUT_SRC => '<input src>',
+            FoundUrl::SOURCE_SOURCE_SRC => '<source src>',
+            FoundUrl::SOURCE_VIDEO_SRC => '<video src>',
+            FoundUrl::SOURCE_AUDIO_SRC => '<audio src>',
+            FoundUrl::SOURCE_SCRIPT_SRC => '<script src>',
+            FoundUrl::SOURCE_INLINE_SCRIPT_SRC => 'inline <script src>',
+            FoundUrl::SOURCE_LINK_HREF => '<link href>',
+            FoundUrl::SOURCE_CSS_URL => 'css url()',
+            FoundUrl::SOURCE_JS_URL => 'js url',
+            FoundUrl::SOURCE_REDIRECT => 'redirect',
+            FoundUrl::SOURCE_SITEMAP => 'sitemap',
+            default => 'unknown',
+        };
     }
 
 }

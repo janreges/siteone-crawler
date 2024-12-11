@@ -40,6 +40,7 @@ class Crawler
     private Table $statusTable;
     private Table $queue;
     private Table $visited;
+    private Table $skipped;
 
     private ContentProcessorManager $contentProcessorManager;
 
@@ -87,6 +88,14 @@ class Crawler
     const CONTENT_TYPE_ID_OTHER = 10;
     const CONTENT_TYPE_ID_XML = 12;
 
+    const SKIPPED_REASON_NOT_ALLOWED_HOST = 1;
+    const SKIPPED_REASON_ROBOTS_TXT = 2;
+
+    const SKIPPED_REASONS = [
+        self::SKIPPED_REASON_NOT_ALLOWED_HOST => 'Not allowed host',
+        self::SKIPPED_REASON_ROBOTS_TXT => 'Robots.txt',
+    ];
+
     /**
      * @param CoreOptions $options
      * @param HttpClient $httpClient
@@ -117,8 +126,9 @@ class Crawler
         $this->statusTable = new Table(1);
         $this->statusTable->column('workers', Table::TYPE_INT, 4);
         $this->statusTable->column('doneUrls', Table::TYPE_INT, 8);
+        $this->statusTable->column('skippedUrls', Table::TYPE_INT, 8);
         $this->statusTable->create();
-        $this->statusTable->set('1', ['workers' => 0, 'doneUrls' => 0]);
+        $this->statusTable->set('1', ['workers' => 0, 'doneUrls' => 0, 'skippedUrls' => 0]);
 
         $this->queue = new Table($this->options->maxQueueLength);
         $this->queue->column('url', Table::TYPE_STRING, $this->options->maxUrlLength);
@@ -137,6 +147,13 @@ class Crawler
         $this->visited->column('size', Table::TYPE_INT, 8);
         $this->visited->column('type', Table::TYPE_INT, 1); // @see self::CONTENT_TYPE_ID_*
         $this->visited->create();
+
+        $this->skipped = new Table(intval($this->options->maxSkippedUrls * 1.33));
+        $this->skipped->column('url', Table::TYPE_STRING, $this->options->maxUrlLength);
+        $this->skipped->column('reason', Table::TYPE_INT, 1); // @see self::SKIPPED_REASON_*
+        $this->skipped->column('sourceUqId', Table::TYPE_STRING, 8);
+        $this->skipped->column('sourceAttr', Table::TYPE_INT, 2);
+        $this->skipped->create();
     }
 
     /**
@@ -748,6 +765,42 @@ class Crawler
 
     /**
      * @param ParsedUrl $url
+     * @param int $reason See self::SKIPPED_REASON_*
+     * @param string $sourceUqId
+     * @param int|null $sourceAttr
+     * @return void
+     * @throws Exception
+     */
+    public function addUrlToSkipped(ParsedUrl $url, int $reason, string $sourceUqId, ?int $sourceAttr): void
+    {
+        $urlStr = $url->getFullUrl(true, false);
+        $uqId = $this->getUrlUqId($url);
+
+        $urlKey = $this->getUrlKeyForSwooleTable($url);
+
+        // if URL is already in skipped table, do not add it again (first reason & source is always used)
+        $exists = $this->skipped->get($urlKey);
+        if ($exists) {
+            return;
+        }
+
+        if (!$this->skipped->set($urlKey, [
+            'url' => $urlStr,
+            'reason' => $reason,
+            'uqId' => $uqId,
+            'sourceUqId' => $sourceUqId,
+            'sourceAttr' => $sourceAttr,
+        ])) {
+            $error = "ERROR: Unable to add skipped URL '{$urlStr}'. Set higher --max-skipped-urls or --max-url-length.";
+            $this->output->addError($error);
+            throw new Exception($error);
+        }
+
+        $this->statusTable->incr('1', 'skippedUrls');
+    }
+
+    /**
+     * @param ParsedUrl $url
      * @param float $elapsedTime
      * @param int $status
      * @param int $size
@@ -963,7 +1016,8 @@ class Crawler
                 $isUrlForDebug && Debugger::debug('ignored-url_not-resource', "URL '{$urlForQueue}' ignored because it's not requestable resource.");
                 continue;
             } elseif (!$isUrlOnSameHost && !$isUrlOnAllowedHost) {
-                $isUrlForDebug && Debugger::debug('ignored-url_not-allowed-host', "URL '{$urlForQueue}' ignored because it's not requestable resource.");
+                $isUrlForDebug && Debugger::debug('ignored-url_not-allowed-host', "URL '{$urlForQueue}' ignored because it's not on allowed host.");
+                $this->addUrlToSkipped($parsedUrlForQueue, self::SKIPPED_REASON_NOT_ALLOWED_HOST, $sourceUrlUqId, $foundUrl->source);
                 continue;
             } elseif (!$parsedUrlForQueue->isStaticFile() && !self::isUrlAllowedByRobotsTxt(
                     $parsedUrlForQueue->host ?: $this->initialParsedUrl->host,
@@ -974,6 +1028,7 @@ class Crawler
                     $parsedUrlForQueue->port ?: $this->initialParsedUrl->port)
             ) {
                 $isUrlForDebug && Debugger::debug('ignored-url_blocked-by-robots-txt', "URL '{$urlForQueue}' ignored because is blocked by website's robots.txt.");
+                $this->addUrlToSkipped($parsedUrlForQueue, self::SKIPPED_REASON_ROBOTS_TXT, $sourceUrlUqId, $foundUrl->source);
                 continue;
             }
 
@@ -1280,6 +1335,14 @@ class Crawler
         }
 
         return $domainPortToIpCache[$domain . ':' . $port] ?? null;
+    }
+
+    /**
+     * @return Table
+     */
+    public function getSkippedUrls(): Table
+    {
+        return $this->skipped;
     }
 
 }

@@ -369,6 +369,8 @@ through the file:// protocol.
   expect higher memory requirements. Default is `9000`.
 * `--max-visited-urls=<num>`       The maximum number of the visited URLs. Increase in case of large websites, but
   expect higher memory requirements. Default is `10000`.
+* `--max-skipped-urls=<num>`       The maximum number of the skipped URLs. Increase in case of large websites, but
+  expect higher memory requirements. Default is `10000`.
 * `--max-url-length=<num>`         The maximum supported URL length in chars. Increase in case of very long URLs, but
   expect higher memory requirements. Default is `2083`.
 

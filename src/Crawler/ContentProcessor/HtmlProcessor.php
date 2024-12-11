@@ -208,6 +208,7 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
      * @param FoundUrls $foundUrls
      * @param string $regexForHtmlExtensions
      * @return void
+     * @throws \Exception
      */
     private function findHrefUrls(string $html, ParsedUrl $sourceUrl, FoundUrls $foundUrls, string $regexForHtmlExtensions): void
     {
@@ -225,9 +226,14 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
         }
 
         if ($this->maxDepth > 0) {
-            $foundUrlsTxt = array_filter($foundUrlsTxt, function ($url) use ($sourceUrl) {
+            $crawler = $this->crawler;
+            $foundUrlsTxt = array_filter($foundUrlsTxt, function ($url) use ($sourceUrl, $crawler) {
                 $parsedUrl = ParsedUrl::parse($url, $sourceUrl);
-                return $parsedUrl->getDepth() <= $this->maxDepth;
+                $result = $parsedUrl->getDepth() <= $this->maxDepth;
+                if (!$result) {
+                    $crawler->addUrlToSkipped($parsedUrl, $crawler->getUrlUqId($sourceUrl), FoundUrl::SOURCE_A_HREF);
+                }
+                return $result;
             });
         }
 

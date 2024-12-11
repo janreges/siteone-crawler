@@ -23,6 +23,7 @@ use Crawler\Analysis\Result\SeoAndOpenGraphResult;
 use Crawler\Analysis\Result\UrlAnalysisResult;
 use Crawler\Analysis\SecurityAnalyzer;
 use Crawler\Analysis\SeoAndOpenGraphAnalyzer;
+use Crawler\Analysis\SkippedUrlsAnalyzer;
 use Crawler\Analysis\SlowestAnalyzer;
 use Crawler\Analysis\SourceDomainsAnalyzer;
 use Crawler\Analysis\SslTlsAnalyzer;
@@ -72,6 +73,7 @@ class HtmlReport
             BestPracticeAnalyzer::SUPER_TABLE_NON_UNIQUE_TITLES, // will be in tab SEO and OpenGraph
             BestPracticeAnalyzer::SUPER_TABLE_NON_UNIQUE_DESCRIPTIONS, // will be in tab SEO and OpenGraph
             ContentTypeAnalyzer::SUPER_TABLE_CONTENT_MIME_TYPES, // will be in tab Content Types
+            SkippedUrlsAnalyzer::SUPER_TABLE_SKIPPED, // will be in tab Skipped URLs
             ContentProcessorManager::SUPER_TABLE_CONTENT_PROCESSORS_STATS, // will be in tab Crawler stats
         ];
     }
@@ -193,7 +195,7 @@ class HtmlReport
             if (!$badges) {
                 $badges = $this->getSuperTableGenericBadges($superTable);
             }
-            $tabs[] = new Tab($superTable->title, null, $this->getTabContentBySuperTable($superTable), false, $badges, $this->getSuperTableOrder($superTable));
+            $tabs[] = new Tab($superTable->forcedTabLabel ?: $superTable->title, null, $this->getTabContentBySuperTable($superTable), false, $badges, $this->getSuperTableOrder($superTable));
         }
 
         // unset empty tabs
@@ -944,6 +946,7 @@ class HtmlReport
         return $superTable;
     }
 
+
     /**
      * @param SuperTable $superTable
      * @return Badge[]
@@ -962,6 +965,15 @@ class HtmlReport
                 $notFound = $superTable->getTotalRows();
                 $color = $notFound > 10 ? Badge::COLOR_RED : ($notFound > 0 ? Badge::COLOR_ORANGE : Badge::COLOR_GREEN);
                 $badges[] = new Badge((string)$notFound, $color);
+                break;
+            case SkippedUrlsAnalyzer::SUPER_TABLE_SKIPPED_SUMMARY:
+                $skipped = $superTable->getTotalRows();
+                $color = $skipped > 100 ? Badge::COLOR_ORANGE : ($skipped > 10 ? Badge::COLOR_ORANGE : Badge::COLOR_GREEN);
+                $badges[] = new Badge((string)$skipped, $color, 'Skipped URL domains');
+                $superTableSkippedUrls = $this->status->getSuperTableByAplCode(SkippedUrlsAnalyzer::SUPER_TABLE_SKIPPED);
+                if ($superTableSkippedUrls) {
+                    $badges[] = new Badge((string)$superTableSkippedUrls->getTotalRows(), Badge::COLOR_NEUTRAL, 'Total skipped URLs');
+                }
                 break;
             case SourceDomainsAnalyzer::SUPER_TABLE_SOURCE_DOMAINS:
                 $domains = $superTable->getTotalRows();
@@ -1114,6 +1126,9 @@ class HtmlReport
         $superTables = [];
 
         switch ($superTable->aplCode) {
+            case SkippedUrlsAnalyzer::SUPER_TABLE_SKIPPED_SUMMARY:
+                $superTables[] = $this->status->getSuperTableByAplCode(SkippedUrlsAnalyzer::SUPER_TABLE_SKIPPED);
+                break;
             case BestPracticeAnalyzer::SUPER_TABLE_BEST_PRACTICES:
                 foreach (BestPracticeAnalyzer::getAnalysisNames() as $analysisName) {
                     $superTable = $this->getSuperTableForUrlAnalysis($analysisName);
@@ -1164,6 +1179,7 @@ class HtmlReport
             SeoAndOpenGraphAnalyzer::SUPER_TABLE_SEO_HEADINGS,
             Page404Analyzer::SUPER_TABLE_404,
             RedirectsAnalyzer::SUPER_TABLE_REDIRECTS,
+            SkippedUrlsAnalyzer::SUPER_TABLE_SKIPPED_SUMMARY,
             FastestAnalyzer::SUPER_TABLE_FASTEST_URLS,
             SlowestAnalyzer::SUPER_TABLE_SLOWEST_URLS,
             ContentTypeAnalyzer::SUPER_TABLE_CONTENT_TYPES,

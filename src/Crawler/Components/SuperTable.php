@@ -25,6 +25,7 @@ class SuperTable
     public readonly string $title;
     public readonly ?string $description;
     public readonly ?int $maxRows;
+    public readonly ?string $forcedTabLabel;
 
     private bool $visibleInHtml = true;
     private bool $visibleInJson = true;
@@ -62,8 +63,9 @@ class SuperTable
      * @param string $currentOrderDirection
      * @param string|null $description
      * @param int|null $maxRows
+     * @param string|null $forcedTabLabel
      */
-    public function __construct(string $aplCode, string $title, string $emptyTableMessage, array $columns, bool $positionBeforeUrlTable, ?string $currentOrderColumn = null, string $currentOrderDirection = 'ASC', ?string $description = null, ?int $maxRows = null)
+    public function __construct(string $aplCode, string $title, string $emptyTableMessage, array $columns, bool $positionBeforeUrlTable, ?string $currentOrderColumn = null, string $currentOrderDirection = 'ASC', ?string $description = null, ?int $maxRows = null, ?string $forcedTabLabel = null)
     {
         foreach ($columns as $column) {
             if (!($column instanceof SuperTableColumn)) {
@@ -83,6 +85,7 @@ class SuperTable
         $this->currentOrderDirection = $currentOrderDirection;
         $this->description = $description;
         $this->maxRows = $maxRows;
+        $this->forcedTabLabel = $forcedTabLabel;
         $this->uniqueId = 't' . substr(md5(strval(rand(1000000, 9999999))), 0, 6);
     }
 
