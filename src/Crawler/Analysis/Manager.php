@@ -91,6 +91,14 @@ class Manager
      */
     public function runAnalyzers(): void
     {
+        // check if there are any working URLs
+        if ($this->status->getNumberOfWorkingVisitedUrls() === 0) {
+            $errorMessage = 'The analysis has been suspended because no working URL could be found. Please check the URL/domain.';
+            $this->output->addError($errorMessage);
+            $this->status->addCriticalToSummary('analysis-manager-error', $errorMessage);
+            return;
+        }
+
         // sort analyzers by order for correct output order
         $analyzers = $this->getAnalyzers();
         usort($analyzers, function (Analyzer $a, Analyzer $b) {

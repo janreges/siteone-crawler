@@ -296,6 +296,21 @@ class Status
     }
 
     /**
+     * Get number of visited URLs with HTTP code >= 200
+     * @return int
+     */
+    public function getNumberOfWorkingVisitedUrls(): int
+    {
+        $count = 0;
+        foreach ($this->visitedUrls as $visitedUrl) {
+            if ($visitedUrl->statusCode >= 200) {
+                $count++;
+            }
+        }
+        return $count;
+    }
+
+    /**
      * @param string $scheme
      * @param string $host
      * @param int $port
