@@ -71,6 +71,7 @@ class CoreOptions
     public int $workers = 3;
     public float $maxReqsPerSec = 10;
     public string $memoryLimit = '2048M';
+    public array $resolve = [];
     public ?string $websocketServer = null;
     public bool $ignoreRobotsTxt = false;
 
@@ -223,6 +224,7 @@ class CoreOptions
             new Option('--workers', '-w', 'workers', Type::INT, false, 'Max concurrent workers (threads). Crawler will not make more simultaneous requests to the server than this number.', $defaultWorkers, false),
             new Option('--max-reqs-per-sec', '-rps', 'maxReqsPerSec', Type::FLOAT, false, 'Max requests/s for whole crawler. Be careful not to cause a DoS attack.', 10, false),
             new Option('--memory-limit', '-ml', 'memoryLimit', Type::SIZE_M_G, false, 'Memory limit in units M (Megabytes) or G (Gigabytes).', '2048M', false),
+            new Option('--resolve', '-res', 'resolve', Type::RESOLVE, true, "The ability to force the domain+port to resolve to its own IP address, just like CURL --resolve does. Example: `--resolve='www.mydomain.tld:80:127.0.0.1'`", null, true, true),
             new Option('--allowed-domain-for-external-files', '-adf', 'allowedDomainsForExternalFiles', Type::STRING, true, "Primarily, the crawler crawls only the URL within the domain for initial URL. This allows you to enable loading of file content from another domain as well (e.g. if you want to load assets from a CDN). Can be specified multiple times. Use can use domains with wildcard '*'.", [], true, true),
             new Option('--allowed-domain-for-crawling', '-adc', 'allowedDomainsForCrawling', Type::STRING, true, "This option will allow you to crawl all content from other listed domains - typically in the case of language mutations on other domains. Can be specified multiple times. Use can use domains with wildcard '*'.", [], true, true),
             new Option('--single-foreign-page', '-sfp', 'singleForeignPage', Type::BOOL, false, "If crawling of other domains is allowed (using `--allowed-domain-for-crawling`), it ensures that when another domain is not on same second-level domain, only that linked page and its assets are crawled from that foreign domain.", false, false),

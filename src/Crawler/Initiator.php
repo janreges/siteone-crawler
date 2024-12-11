@@ -314,6 +314,8 @@ class Initiator
                     $nameAndValue .= '=<host:port>';
                 } elseif ($option->type === Type::REPLACE_CONTENT) {
                     $nameAndValue .= '=<val>';
+                } elseif ($option->type === Type::RESOLVE) {
+                    $nameAndValue .= '=<domain:port:ip>';
                 }
 
                 echo str_pad($nameAndValue, 32) . " " . rtrim($option->description, '. ') . '.';

@@ -70,7 +70,7 @@ class HttpClient
      * @return HttpResponse
      * @throws Exception
      */
-    public function request(string $host, int $port, string $scheme, string $url, string $httpMethod, int $timeout, string $userAgent, string $accept, string $acceptEncoding, ?string $origin = null, bool $useHttpAuthIfConfigured = false): HttpResponse
+    public function request(string $host, int $port, string $scheme, string $url, string $httpMethod, int $timeout, string $userAgent, string $accept, string $acceptEncoding, ?string $origin = null, bool $useHttpAuthIfConfigured = false, ?string $forcedIp = null): HttpResponse
     {
         $path = @parse_url($url, PHP_URL_PATH);
         $extension = is_string($path) ? @pathinfo($path, PATHINFO_EXTENSION) : null;
@@ -90,12 +90,17 @@ class HttpClient
             'Accept-Encoding' => $acceptEncoding,
             'Connection' => 'close',
         ];
+
+        if ($forcedIp) {
+            $requestHeaders['Host'] = $host;
+        }
+
         if ($origin) {
             $requestHeaders['Origin'] = $origin;
         }
 
         $startTime = microtime(true);
-        $client = new Client($host, $port, $scheme === 'https');
+        $client = new Client($forcedIp ?: $host, $port, $scheme === 'https');
 
         if ($this->proxy) {
             list($proxyHost, $proxyPort) = explode(':', $this->proxy);
@@ -111,7 +116,13 @@ class HttpClient
         }
 
         $client->setHeaders($requestHeaders);
-        $client->set(['timeout' => $timeout]);
+        $client->set([
+            'timeout' => $timeout,
+            'connect_timeout' => $timeout,
+            'write_timeout' => $timeout,
+            'read_timeout' => $timeout,
+        ]);
+
         $client->setMethod($httpMethod);
 
         $url = str_replace(["\\ ", ' '], ['%20', '%20'], $url); // fix for HTTP 400 Bad Request for URLs with spaces

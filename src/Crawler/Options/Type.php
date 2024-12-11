@@ -24,4 +24,5 @@ enum Type
     case DIR;
     case HOST_AND_PORT;
     case REPLACE_CONTENT;
+    case RESOLVE;
 }

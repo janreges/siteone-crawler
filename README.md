@@ -220,6 +220,7 @@ required arguments:
   --output=text \
   --workers=2 \
   --memory-limit=1024M \
+  --resolve='mydomain.tld:443:127.0.0.1' \
   --timeout=5 \
   --proxy=proxy.mydomain.tld:8080 \
   --http-auth=myuser:secretPassword123 \
@@ -331,6 +332,8 @@ through the file:// protocol.
   simultaneous requests to the server than this number. Use carefully! A high number of workers can cause a DoS attack.
   Default is `3`.
 * `--memory-limit=<size>`          Memory limit in units `M` (Megabytes) or `G` (Gigabytes). Default is `512M`.
+* `--resolve=<host:port:ip>`       Custom DNS resolution in `domain:port:ip` format. Same as [curl --resolve](https://everything.curl.dev/usingcurl/connections/name.html?highlight=resolve#provide-a-custom-ip-address-for-a-name).
+  Can be specified multiple times for multiple domain:port pairs. Example: `--resolve='mydomain.tld:443:127.0.0.1`
 * `--allowed-domain-for-external-files=<domain>`  Primarily, the crawler crawls only the URL within the domain for
   initial URL. This allows you to enable loading of file content from another domain as well (e.g. if you want to load
   assets from a CDN). Can be specified multiple times. Use can use domains with wildcard `*`.

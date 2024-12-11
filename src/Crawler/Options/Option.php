@@ -275,6 +275,11 @@ class Option
             if ($isRegex && @preg_match($replaceFrom, '') === false) {
                 throw new Exception("Option {$this->name} and its first part ({$replaceFrom}) must be valid PCRE regular expression");
             }
+        } else if ($this->type === Type::RESOLVE) {
+            // --resolve is in the same format as curl --resolve (ipv4 and ipv6 supported)
+            if (!is_string($value) || !preg_match('/^[a-z0-9\-.]{1,200}:[0-9]{1,5}:[a-f0-9\-.:]{1,100}$/i', $value)) {
+                throw new Exception("Option {$this->name} ({$value}) must be in format `domain:port:ip`");
+            }
         }
 
         // extra validations
@@ -326,6 +331,8 @@ class Option
         } else if ($this->type === Type::HOST_AND_PORT) {
             return (string)$value;
         } else if ($this->type === Type::REPLACE_CONTENT) {
+            return (string)$value;
+        } else if ($this->type === Type::RESOLVE) {
             return (string)$value;
         } /* @phpstan-ignore-line */ else {
             throw new Exception("Unknown type {$this->type}");

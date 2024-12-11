@@ -451,9 +451,10 @@ class Crawler
             if ($urlBaseName && isset($this->non200BasenamesToOccurrences[$urlBaseName]) && $this->non200BasenamesToOccurrences[$urlBaseName] > self::MAX_OCCURRENCES_FOR_NON_200_BASENAME) {
                 $httpResponse = HttpResponse::createSkipped($finalUrlForHttpClient, "URL with basename '{$urlBaseName}' has more than " . self::MAX_OCCURRENCES_FOR_NON_200_BASENAME . " non-200 responses (" . $this->non200BasenamesToOccurrences[$urlBaseName] . ").");
             } else {
+                $port = $parsedUrl->port ?: ($scheme === 'https' ? 443 : 80);
                 $httpResponse = $this->httpClient->request(
                     $parsedUrl->host,
-                    $parsedUrl->port ?: ($scheme === 'https' ? 443 : 80),
+                    $port,
                     $scheme,
                     $finalUrlForHttpClient,
                     'GET',
@@ -462,7 +463,8 @@ class Crawler
                     $this->acceptHeader,
                     $this->options->acceptEncoding,
                     $setOrigin ? $origin : null,
-                    $useHttpAuthIfConfigured
+                    $useHttpAuthIfConfigured,
+                    $this->getForcedIpForDomainAndPort($parsedUrl->host, $port)
                 );
             }
 
@@ -1072,12 +1074,13 @@ class Crawler
                     $port === 443 ? 'https' : 'http', // warning: this will not work for HTTPS with non-standard port
                     '/robots.txt',
                     'GET',
-                    1,
+                    3,
                     self::getCrawlerUserAgentSignature(),
                     'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
                     'gzip, deflate, br',
                     null,
-                    $useHttpAuthIfConfigured
+                    $useHttpAuthIfConfigured,
+                    $crawler->getForcedIpForDomainAndPort($domain, $port)
                 );
                 self::$loadedRobotsTxtCount++;
 
@@ -1242,6 +1245,35 @@ class Crawler
     public function getStatus(): Status
     {
         return $this->status;
+    }
+
+    /**
+     * Get IP address for domain and port if it's forced by --resolve option
+     *
+     * @param string $domain
+     * @param int $port
+     * @return string|null
+     * @throws Exception
+     */
+    public function getForcedIpForDomainAndPort(string $domain, int $port): ?string
+    {
+        if (!$this->options->resolve) {
+            return null;
+        }
+
+        static $domainPortToIpCache = null;
+        if ($domainPortToIpCache === null) {
+            $domainPortToIpCache = [];
+            foreach ($this->options->resolve as $resolve) {
+                if (preg_match('/^([^:]+):([0-9]+):(.+)$/', $resolve, $matches) === 1) {
+                    $domainPortToIpCache[$matches[1] . ':' . $matches[2]] = $matches[3];
+                } else {
+                    throw new Exception("Invalid --resolve option value: '{$resolve}'. Expected format: 'domain:port:ip'.");
+                }
+            }
+        }
+
+        return $domainPortToIpCache[$domain . ':' . $port] ?? null;
     }
 
 }
