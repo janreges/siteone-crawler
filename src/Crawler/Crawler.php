@@ -866,10 +866,16 @@ class Crawler
             };
         }
 
-        // WARNING: Please do not remove this signature, it's used to detect crawler
-        // in logs and also for possibility to block our crawler by website owner
-
-        return $result . ' ' . self::getCrawlerUserAgentSignature();
+        // add siteone-crawler signature only if user-agent not ends with '!'
+        $addSignature = !str_ends_with($result, '!');
+        if ($addSignature) {
+            // WARNING: Please do not remove this signature, it's used to detect crawler
+            // in logs and also for possibility to block our crawler by website owner
+            return $result . ' ' . self::getCrawlerUserAgentSignature();
+        } else {
+            // remove trailing spaces and '!'
+            return rtrim($result, '! ');
+        }
     }
 
     public function getVisited(): Table

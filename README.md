@@ -276,7 +276,8 @@ For a clearer list, I recommend going to the documentation: https://crawler.site
 * `--device=<val>`                 Device type for choosing a predefined User-Agent. Ignored when `--user-agent` is
   defined. Supported values: `desktop`, `mobile`, `tablet`. Defaults is `desktop`.
 * `--user-agent=<val>`             Custom User-Agent header. Use quotation marks. If specified, it takes precedence over
-  the device parameter.
+  the device parameter. If you add `!` at the end, the siteone-crawler/version will not be added as a signature at the
+  end of the final user-agent.
 * `--timeout=<int>`                Request timeout in seconds. Default is `3`.
 * `--proxy=<host:port>`            HTTP proxy to use in `host:port` format. Host can be hostname, IPv4 or IPv6.
 * `--http-auth=<user:pass>`        Basic HTTP authentication in `username:password` format.

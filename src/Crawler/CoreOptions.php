@@ -181,7 +181,7 @@ class CoreOptions
             new Option('--single-page', '-sp', 'singlePage', Type::BOOL, false, 'Load only one page to which the URL is given (and its assets), but do not follow other pages.', false, false),
             new Option('--max-depth', '-md', 'maxDepth', Type::INT, false, 'Maximum crawling depth (for pages, not assets). Default is `0` (no limit). `1` means `/about` or `/about/`, `2` means `/about/contacts` etc.', 0, false),
             new Option('--device', '-d', 'device', Type::STRING, false, 'Device type for User-Agent selection. Values `desktop`, `tablet`, `mobile`. Ignored with `--user-agent`.', 'desktop', false),
-            new Option('--user-agent', '-ua', 'userAgent', Type::STRING, false, 'Override User-Agent selected by --device.', null, true),
+            new Option('--user-agent', '-ua', 'userAgent', Type::STRING, false, 'Override User-Agent selected by --device. If you add `!` at the end, the siteone-crawler/version will not be added as a signature at the end of the final user-agent.', null, true),
             new Option('--timeout', '-t', 'timeout', Type::INT, false, 'Request timeout (in sec).', 5, false),
             new Option('--proxy', '-p', 'proxy', Type::HOST_AND_PORT, false, 'HTTP proxy in `host:port` format.', null),
             new Option('--http-auth', '-ha', 'httpAuth', Type::STRING, false, 'Basic HTTP authentication in `username:password` format.', null),
