@@ -25,6 +25,7 @@ class CssProcessor extends BaseProcessor implements ContentProcessor
 
     private readonly bool $imagesSupported;
     private readonly bool $fontsSupported;
+    private readonly bool $stylesSupported;
 
     /**
      * @param Crawler $crawler
@@ -35,6 +36,7 @@ class CssProcessor extends BaseProcessor implements ContentProcessor
 
         $this->imagesSupported = !$this->options->disableImages;
         $this->fontsSupported = !$this->options->disableFonts;
+        $this->stylesSupported = !$this->options->disableStyles;
     }
 
     /**
@@ -42,13 +44,15 @@ class CssProcessor extends BaseProcessor implements ContentProcessor
      */
     public function findUrls(string $content, ParsedUrl $sourceUrl): ?FoundUrls
     {
+        // find all URLs in CSS, e.g. '@import url(...)' or 'background-image: url(...)'
         preg_match_all('/url\s*\(\s*["\']?([^"\')]+)["\']?\s*\)/im', $content, $matches);
         $foundUrlsTxt = $matches[1];
 
         $foundUrlsTxt = array_filter($foundUrlsTxt, function ($url) {
             $isImage = preg_match('/\.(jpg|jpeg|png|gif|webp|avif|svg|ico|tif|bmp)(|\?.*)$/i', $url) === 1;
             $isFont = preg_match('/\.(eot|ttf|woff2|woff|otf)(|\?.*)$/i', $url) === 1;
-            return ($this->imagesSupported && $isImage) || ($this->fontsSupported && $isFont);
+            $isCss = preg_match('/\.css(|\?.*)$/i', $url) === 1;
+            return ($this->imagesSupported && $isImage) || ($this->fontsSupported && $isFont) || ($this->stylesSupported && $isCss);
         });
 
         $foundUrls = new FoundUrls();
