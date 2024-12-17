@@ -49,9 +49,9 @@ class CssProcessor extends BaseProcessor implements ContentProcessor
         $foundUrlsTxt = $matches[1];
 
         $foundUrlsTxt = array_filter($foundUrlsTxt, function ($url) {
-            $isImage = preg_match('/\.(jpg|jpeg|png|gif|webp|avif|svg|ico|tif|bmp)(|\?.*)$/i', $url) === 1;
-            $isFont = preg_match('/\.(eot|ttf|woff2|woff|otf)(|\?.*)$/i', $url) === 1;
-            $isCss = preg_match('/\.css(|\?.*)$/i', $url) === 1;
+            $isImage = preg_match('/\.(jpg|jpeg|png|gif|webp|avif|svg|ico|tif|bmp)(|\?.*|#.*)$/i', $url) === 1;
+            $isFont = preg_match('/\.(eot|ttf|woff2|woff|otf)(|\?.*|#.*)$/i', $url) === 1;
+            $isCss = preg_match('/\.css(|\?.*|#.*)$/i', $url) === 1;
             return ($this->imagesSupported && $isImage) || ($this->fontsSupported && $isFont) || ($this->stylesSupported && $isCss);
         });
 
@@ -65,12 +65,12 @@ class CssProcessor extends BaseProcessor implements ContentProcessor
      */
     public function applyContentChangesForOfflineVersion(string &$content, int $contentType, ParsedUrl $url): void
     {
-        $pattern = '/url\((["\']?)([^)]+\.[a-z0-9]{1,10}[^)]*)\1\)/i';
+        $pattern = '/url\(([\'"]?)((?:[^\'"\)]|\([^)]*\))+)\1\)/i';
 
         $content = preg_replace_callback($pattern, function ($matches) use ($url) {
-            // if is data URI, dotted relative path or #anchor, do not convert
+            // if is data URI or #anchor, do not convert
             $foundUrl = $matches[2];
-            if (!Utils::isHrefForRequestableResource($foundUrl) || str_starts_with($foundUrl, '.') || str_starts_with($matches[2], '#')) {
+            if (!Utils::isHrefForRequestableResource($foundUrl) || str_starts_with($matches[2], '#')) {
                 return $matches[0];
             }
             $relativeUrl = $this->convertUrlToRelative($url, $foundUrl);

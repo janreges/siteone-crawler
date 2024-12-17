@@ -257,7 +257,7 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
         $sourceUrlWithoutFragment = $sourceUrl->getFullUrl(true, false);
 
         // CSS @font-face
-        preg_match_all("/url\s*\(\s*['\"]?([^'\"\s>]+\.(eot|ttf|woff2|woff|otf))/is", $html, $matches);
+        preg_match_all("/url\s*\(\s*['\"]?([^'\"\s>]+\.(eot|ttf|woff2|woff|otf)[^'\")]*)['\"]?\s*\)/is", $html, $matches);
         $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrlWithoutFragment, FoundUrl::SOURCE_CSS_URL);
 
         // <link href="...(eot|ttf|woff2|woff|otf)
@@ -292,7 +292,7 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
         $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrlWithoutFragment, FoundUrl::SOURCE_SOURCE_SRC);
 
         // CSS url()
-        preg_match_all("/url\s*\(\s*['\"]?([^'\")]+\.(jpg|jpeg|png|gif|bmp|tif|webp|avif))/is", $html, $matches);
+        preg_match_all("/url\s*\(\s*['\"]?([^'\")]+\.(jpg|jpeg|png|gif|bmp|tif|webp|avif)[^'\")]*)['\"]?\s*\)/is", $html, $matches);
         $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrlWithoutFragment, FoundUrl::SOURCE_CSS_URL);
 
         // <picture><source srcset="..."><img src="..."></picture>
