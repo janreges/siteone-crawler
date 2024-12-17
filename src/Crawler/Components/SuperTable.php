@@ -114,6 +114,8 @@ class SuperTable
         }
 
         $output = "<h2>" . htmlspecialchars($this->title) . "</h2>";
+
+
         if (!$this->data) {
             $output .= "<p>" . htmlspecialchars($this->emptyTableMessage) . "</p>";
             return $output;
@@ -148,7 +150,9 @@ class SuperTable
             $direction = ($this->currentOrderColumn === $key && $this->currentOrderDirection === 'ASC') ? 'DESC' : 'ASC';
             $arrow = ($this->currentOrderColumn === $key) ? ($this->currentOrderDirection === 'ASC' ? '&nbsp;🔼' : '&nbsp;🔽') : '';
 
-            if (isset($this->data[0]) && is_array($this->data[0])) {
+            if ($column->forcedDataType !== null) {
+                $dataType = $column->forcedDataType;
+            } else if (isset($this->data[0]) && is_array($this->data[0])) {
                 $dataType = isset($this->data[0][$key]) && is_numeric($this->data[0][$key]) ? 'number' : 'string';
             } else {
                 $dataType = isset($this->data[0]) && isset($this->data[0]->$key) && is_numeric($this->data[0]->$key) ? 'number' : 'string';
@@ -204,7 +208,11 @@ class SuperTable
                     $formattedValue = "<a href='" . htmlspecialchars($finalUrl) . "' target='_blank'>" . Utils::truncateUrl($formattedValue, 100, '…', $this->hostToStripFromUrls, $this->schemeOfHostToStripFromUrls, false) . "</a>";
                 }
 
-                $dataValue = is_scalar($value) && strlen(strval($value)) < 200 ? strval($value) : (strlen(strval($formattedValue)) < 50 ? strval($formattedValue) : 'complex-data');
+                if ($column->getDataValueCallback !== null) {
+                    $dataValue = strval($column->getDataValue($row));
+                } else {
+                    $dataValue = is_scalar($value) && strlen(strval($value)) < 200 ? strval($value) : (strlen(strval($formattedValue)) < 50 ? strval($formattedValue) : 'complex-data');
+                }
                 $output .= "<td data-value='" . htmlspecialchars($dataValue) . "' class='" . htmlspecialchars($key) . "'>{$formattedValue}</td>";
             }
             $output .= "</tr>";
@@ -433,6 +441,14 @@ class SuperTable
                 unset($row[$columnToRemove]);
             }
         }
+    }
+
+    /**
+     * @return SuperTableColumn[]
+     */
+    public function getColumns(): array
+    {
+        return $this->columns;
     }
 
     public static function setHardRowsLimit(int $hardRowsLimit): void

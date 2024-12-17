@@ -11,6 +11,7 @@ declare(strict_types=1);
 namespace Crawler\Export;
 
 use Crawler\Analysis\AccessibilityAnalyzer;
+use Crawler\Analysis\CachingAnalyzer;
 use Crawler\Analysis\Manager;
 use Crawler\Analysis\BestPracticeAnalyzer;
 use Crawler\Analysis\ContentTypeAnalyzer;
@@ -74,6 +75,8 @@ class HtmlReport
             BestPracticeAnalyzer::SUPER_TABLE_NON_UNIQUE_DESCRIPTIONS, // will be in tab SEO and OpenGraph
             ContentTypeAnalyzer::SUPER_TABLE_CONTENT_MIME_TYPES, // will be in tab Content Types
             SkippedUrlsAnalyzer::SUPER_TABLE_SKIPPED, // will be in tab Skipped URLs
+            CachingAnalyzer::SUPER_TABLE_CACHING_PER_DOMAIN, // will be in tab Caching
+            CachingANalyzer::SUPER_TABLE_CACHING_PER_DOMAIN_AND_CONTENT_TYPE, // will be in tab Caching
             ContentProcessorManager::SUPER_TABLE_CONTENT_PROCESSORS_STATS, // will be in tab Crawler stats
         ];
     }
@@ -891,6 +894,26 @@ class HtmlReport
         $initialHost = $this->getInitialHost();
         $schemeOfInitialHost = $this->status->getOptions()->getInitialScheme();
 
+        $cacheLifetimeDataValueCallback = function ($row) {
+            $cacheLifetime = $row['cacheLifetime'];
+            $cacheTypeFlags = $row['cacheTypeFlags'];
+            if ($cacheLifetime === null) {
+                if ($cacheTypeFlags & VisitedUrl::CACHE_TYPE_HAS_NO_STORE) {
+                    return -2;
+                } else if ($cacheTypeFlags & VisitedUrl::CACHE_TYPE_HAS_NO_CACHE) {
+                    return -1;
+                } else if ($cacheTypeFlags & VisitedUrl::CACHE_TYPE_HAS_ETAG) {
+                    return 0.1;
+                } else if ($cacheTypeFlags & VisitedUrl::CACHE_TYPE_HAS_LAST_MODIFIED) {
+                    return 0.2;
+                } else {
+                    return 0.01; // 0.01 because exact 0 is used by explicit max-age=0 and s-maxage=0 ... and 'None' for this case have to be next to '0s'
+                }
+            } else {
+                return intval($cacheLifetime);
+            }
+        };
+
         // setup columns
         $columns = [
             new SuperTableColumn('url', 'URL', SuperTableColumn::AUTO_WIDTH, null, function ($row) use ($initialHost, $schemeOfInitialHost) {
@@ -910,7 +933,26 @@ class HtmlReport
                     return $row['sizeFormatted'];
                 }
             }),
+            new SuperTableColumn('cacheLifetime', 'Cache', 8, null, function ($row) {
+                $strPadTo = 6;
+                $cacheLifetime = $row['cacheLifetime'];
+                $cacheTypeFlags = $row['cacheTypeFlags'];
+                if ($cacheLifetime !== null) {
+                    return Utils::getColoredCacheLifetime($cacheLifetime, $strPadTo);
+                } else if ($cacheTypeFlags & VisitedUrl::CACHE_TYPE_HAS_NO_STORE) {
+                    return Utils::getColorText(str_pad('0s (no-store)', $strPadTo), 'red', true);
+                } else if ($cacheTypeFlags & VisitedUrl::CACHE_TYPE_HAS_NO_CACHE) {
+                    return Utils::getColorText(str_pad('0s (no-cache)', $strPadTo), 'red');
+                } else if (($cacheTypeFlags & VisitedUrl::CACHE_TYPE_HAS_ETAG)) {
+                    return Utils::getColorText(str_pad('ETag-only', $strPadTo), 'magenta');
+                } else if ($cacheTypeFlags & VisitedUrl::CACHE_TYPE_HAS_LAST_MODIFIED) {
+                    return Utils::getColorText(str_pad('Last-Mod-only', $strPadTo), 'magenta');
+                } else {
+                    return Utils::getColorText(str_pad('None', $strPadTo), 'red');
+                }
+            }, false, true, false, true, $cacheLifetimeDataValueCallback),
         ];
+
 
         foreach ($this->status->getOptions()->extraColumns as $extraColumn) {
             $columns[] = new SuperTableColumn($extraColumn->name, $extraColumn->name, $extraColumn->length ?: SuperTableColumn::AUTO_WIDTH);
@@ -919,6 +961,7 @@ class HtmlReport
         // setup supertable
         $superTable = new SuperTable(self::SUPER_TABLE_VISITED_URLS, 'Visited URLs', 'No visited URLs.', $columns, false);
         $superTable->setIgnoreHardRowsLimit(true);
+        $superTable->getColumns()['cacheLifetime']->forcedDataType = 'number';
 
         // set data
         $data = [];
@@ -933,6 +976,8 @@ class HtmlReport
                 'time' => $visitedUrl->requestTime,
                 'size' => $visitedUrl->size,
                 'sizeFormatted' => $visitedUrl->sizeFormatted,
+                'cacheTypeFlags' => $visitedUrl->cacheTypeFlags,
+                'cacheLifetime' => $visitedUrl->cacheLifetime,
             ];
 
             if ($visitedUrl->extras) {
@@ -1032,6 +1077,36 @@ class HtmlReport
                 $headers = $superTable->getTotalRows();
                 $color = $headers > 50 ? Badge::COLOR_RED : Badge::COLOR_NEUTRAL;
                 $badges[] = new Badge((string)$headers, $color);
+                break;
+            case CachingAnalyzer::SUPER_TABLE_CACHING_PER_CONTENT_TYPE:
+                $minCacheLifetime = null;
+                $maxCacheLifetime = null;
+                foreach ($superTable->getData() as $row) {
+                    if (!in_array($row['contentType'], ['Image', 'CSS', 'JS', 'Font'])) {
+                        continue;
+                    }
+
+                    if ($minCacheLifetime === null && $row['minLifetime'] !== null) {
+                        $minCacheLifetime = $row['minLifetime'];
+                    } elseif ($row['minLifetime'] !== null) {
+                        $minCacheLifetime = min($minCacheLifetime, $row['minLifetime']);
+                    }
+
+                    if ($maxCacheLifetime === null && $row['maxLifetime'] !== null) {
+                        $maxCacheLifetime = $row['maxLifetime'];
+                    } elseif ($row['maxLifetime'] !== null) {
+                        $maxCacheLifetime = max($maxCacheLifetime, $row['maxLifetime']);
+                    }
+                }
+
+                if ($minCacheLifetime !== null) {
+                    $color = $minCacheLifetime < 60 ? Badge::COLOR_RED : ($minCacheLifetime < 3600 ? Badge::COLOR_ORANGE : Badge::COLOR_GREEN);
+                    $badges[] = new Badge(Utils::getFormattedCacheLifetime($minCacheLifetime), $color, 'Minimal cache lifetime for images/css/js/fonts');
+                }
+                if ($maxCacheLifetime !== null) {
+                    $color = $maxCacheLifetime < 60 ? Badge::COLOR_RED : ($maxCacheLifetime < 3600 ? Badge::COLOR_ORANGE : Badge::COLOR_GREEN);
+                    $badges[] = new Badge(Utils::getFormattedCacheLifetime($maxCacheLifetime), $color, 'Maximal cache lifetime for images/css/js/fonts');
+                }
                 break;
             case self::SUPER_TABLE_VISITED_URLS:
                 $red = 0;
@@ -1159,6 +1234,10 @@ class HtmlReport
             case ContentTypeAnalyzer::SUPER_TABLE_CONTENT_TYPES:
                 $superTables[] = $this->status->getSuperTableByAplCode(ContentTypeAnalyzer::SUPER_TABLE_CONTENT_MIME_TYPES);
                 break;
+            case CachingAnalyzer::SUPER_TABLE_CACHING_PER_CONTENT_TYPE:
+                $superTables[] = $this->status->getSuperTableByAplCode(CachingAnalyzer::SUPER_TABLE_CACHING_PER_DOMAIN);
+                $superTables[] = $this->status->getSuperTableByAplCode(CachingAnalyzer::SUPER_TABLE_CACHING_PER_DOMAIN_AND_CONTENT_TYPE);
+                break;
         }
 
         foreach ($superTables as $superTable) {
@@ -1185,6 +1264,7 @@ class HtmlReport
             ContentTypeAnalyzer::SUPER_TABLE_CONTENT_TYPES,
             SourceDomainsAnalyzer::SUPER_TABLE_SOURCE_DOMAINS,
             HeadersAnalyzer::SUPER_TABLE_HEADERS,
+            CachingAnalyzer::SUPER_TABLE_CACHING_PER_CONTENT_TYPE,
             DnsAnalyzer::SUPER_TABLE_DNS,
         ];
 

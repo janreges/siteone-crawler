@@ -22,6 +22,25 @@ class VisitedUrl
     const ERROR_SEND_ERROR = -4;
     const ERROR_SKIPPED = -6;
 
+    // cache type flags for the cacheType property (uses bitwise OR)
+    const CACHE_TYPE_HAS_CACHE_CONTROL = 1;
+    const CACHE_TYPE_HAS_EXPIRES = 2;
+    const CACHE_TYPE_HAS_ETAG = 4;
+    const CACHE_TYPE_HAS_LAST_MODIFIED = 8;
+    const CACHE_TYPE_HAS_MAX_AGE = 16;
+    const CACHE_TYPE_HAS_S_MAX_AGE = 32;
+    const CACHE_TYPE_HAS_STALE_WHILE_REVALIDATE = 64;
+    const CACHE_TYPE_HAS_STALE_IF_ERROR = 128;
+    const CACHE_TYPE_HAS_PUBLIC = 256;
+    const CACHE_TYPE_HAS_PRIVATE = 512;
+    const CACHE_TYPE_HAS_NO_CACHE = 1024;
+    const CACHE_TYPE_HAS_NO_STORE = 2048;
+    const CACHE_TYPE_HAS_MUST_REVALIDATE = 4096;
+    const CACHE_TYPE_HAS_PROXY_REVALIDATE = 8192;
+    const CACHE_TYPE_HAS_IMMUTABLE = 16384;
+    const CACHE_TYPE_NO_CACHE_HEADERS = 32768;
+    const CACHE_TYPE_NOT_AVAILABLE = 65536;
+
     /**
      * @var string Unique ID hash of this URL
      */
@@ -112,6 +131,23 @@ class VisitedUrl
     public readonly bool $isAllowedForCrawling;
 
     /**
+     * Cache type flags of the response (bitwise OR). See self::CACHE_TYPE_* constants
+     * @var int
+     */
+    public readonly int $cacheTypeFlags;
+
+    /**
+     * How long the response is allowed to be cached in seconds (based on max-age in Cache-Control or Expires header)
+     * @var int|null
+     */
+    public readonly int|null $cacheLifetime;
+
+    /**
+     * @var string|null
+     */
+    private ?string $hostCache = null;
+
+    /**
      * @param string $uqId
      * @param string $sourceUqId
      * @param int $sourceAttr
@@ -125,8 +161,10 @@ class VisitedUrl
      * @param array|null $extras
      * @param bool $isExternal
      * @param bool $isAllowedForCrawling
+     * @param int $cacheType
+     * @param int|null $cacheLifetime
      */
-    public function __construct(string $uqId, string $sourceUqId, int $sourceAttr, string $url, int $statusCode, float $requestTime, ?int $size, int $contentType, ?string $contentTypeHeader, ?string $contentEncoding, ?array $extras, bool $isExternal, bool $isAllowedForCrawling)
+    public function __construct(string $uqId, string $sourceUqId, int $sourceAttr, string $url, int $statusCode, float $requestTime, ?int $size, int $contentType, ?string $contentTypeHeader, ?string $contentEncoding, ?array $extras, bool $isExternal, bool $isAllowedForCrawling, int $cacheType, ?int $cacheLifetime)
     {
         $this->uqId = $uqId;
         $this->sourceUqId = $sourceUqId;
@@ -143,6 +181,8 @@ class VisitedUrl
         $this->extras = $extras;
         $this->isExternal = $isExternal;
         $this->isAllowedForCrawling = $isAllowedForCrawling;
+        $this->cacheTypeFlags = $cacheType;
+        $this->cacheLifetime = $cacheLifetime;
     }
 
     public function isHttps(): bool
@@ -245,7 +285,11 @@ class VisitedUrl
 
     public function getHost(): string
     {
-        return parse_url($this->url, PHP_URL_HOST);
+        if ($this->hostCache !== null) {
+            return $this->hostCache;
+        }
+        $this->hostCache = parse_url($this->url, PHP_URL_HOST);
+        return $this->hostCache;
     }
 
     public function getPort(): int
@@ -255,6 +299,28 @@ class VisitedUrl
             $port = $this->isHttps() ? 443 : 80;
         }
         return (int)$port;
+    }
+
+    public function getCacheTypeLabel(): string
+    {
+        $labels = [];
+
+        // Cache-Control or Expires (if Cache-Control is not defined)
+        if ($this->cacheTypeFlags & self::CACHE_TYPE_HAS_CACHE_CONTROL) {
+            $labels[] = 'Cache-Control';
+        } else if ($this->cacheTypeFlags & self::CACHE_TYPE_HAS_EXPIRES) {
+            $labels[] = 'Expires';
+        }
+
+        // ETag and Last-Modified
+        if ($this->cacheTypeFlags & self::CACHE_TYPE_HAS_ETAG) {
+            $labels[] = 'ETag';
+        }
+        if ($this->cacheTypeFlags & self::CACHE_TYPE_HAS_LAST_MODIFIED) {
+            $labels[] = 'Last-Modified';
+        }
+
+        return $labels ? implode(' + ', $labels) : 'No cache headers';
     }
 
 }

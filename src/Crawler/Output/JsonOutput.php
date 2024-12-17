@@ -73,7 +73,7 @@ class JsonOutput implements Output
         $this->json['results'] = [];
     }
 
-    public function addTableRow(HttpResponse $httpResponse, string $url, int $status, float $elapsedTime, int $size, int $type, array $extraParsedContent, string $progressStatus): void
+    public function addTableRow(HttpResponse $httpResponse, string $url, int $status, float $elapsedTime, int $size, int $type, array $extraParsedContent, string $progressStatus, int $cacheTypeFlags, ?int $cacheLifetime): void
     {
         static $maxStdErrLength = 0;
         $row = [
@@ -82,6 +82,8 @@ class JsonOutput implements Output
             'elapsedTime' => round($elapsedTime, 3),
             'size' => $size,
             'type' => $type,
+            'cacheTypeFlags' => $cacheTypeFlags,
+            'cacheLifetime' => $cacheLifetime,
             'extras' => [],
         ];
 

@@ -30,7 +30,7 @@ interface Output
 
     public function addTableHeader(): void;
 
-    public function addTableRow(HttpResponse $httpResponse, string $url, int $status, float $elapsedTime, int $size, int $type, array $extraParsedContent, string $progressStatus): void;
+    public function addTableRow(HttpResponse $httpResponse, string $url, int $status, float $elapsedTime, int $size, int $type, array $extraParsedContent, string $progressStatus, int $cacheTypeFlags, ?int $cacheLifetime): void;
 
     public function addSuperTable(SuperTable $table): void;
 

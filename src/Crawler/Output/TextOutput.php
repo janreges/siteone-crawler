@@ -17,6 +17,7 @@ use Crawler\ExtraColumn;
 use Crawler\HttpClient\HttpResponse;
 use Crawler\Result\Status;
 use Crawler\Result\Summary\Summary;
+use Crawler\Result\VisitedUrl;
 use Crawler\Utils;
 use Swoole\Table;
 
@@ -157,7 +158,7 @@ class TextOutput implements Output
 
     public function addTableHeader(): void
     {
-        $header = str_pad("URL", $this->getUrlColumnSize()) . " |" . " Status " . "|" . " Type     " . "|" . " Time   " . "|" . " Size   ";
+        $header = str_pad("URL", $this->getUrlColumnSize()) . " |" . " Status " . "|" . " Type     " . "|" . " Time   " . "|" . " Size   | Cache ";
         if (!$this->options->hideProgressBar) {
             $header = str_pad(
                     $this->compactMode ? "Progress" : "Progress report",
@@ -176,7 +177,7 @@ class TextOutput implements Output
         $this->addToOutput(Utils::getColorText($header, 'gray') . str_repeat("-", strlen($header)) . "\n");
     }
 
-    public function addTableRow(HttpResponse $httpResponse, string $url, int $status, float $elapsedTime, int $size, int $type, array $extraParsedContent, string $progressStatus): void
+    public function addTableRow(HttpResponse $httpResponse, string $url, int $status, float $elapsedTime, int $size, int $type, array $extraParsedContent, string $progressStatus, int $cacheTypeFlags, ?int $cacheLifetime): void
     {
         $isExternalUrl = !str_contains($url, '://' . $this->originHost);
         $urlForTable = !$this->options->showSchemeAndHost && !$isExternalUrl ? (preg_replace('/^https?:\/\/[^\/]+\//i', '/', $url)) : $url;
@@ -188,6 +189,8 @@ class TextOutput implements Output
             $size > 1024 * 1024
                 ? Utils::getColorText(str_pad(Utils::getFormattedSize($size), 6), 'red')
                 : str_pad(Utils::getFormattedSize($size), 6);
+
+        $coloredCache = Utils::getColoredCacheInfo($cacheTypeFlags, $cacheLifetime, Utils::isAssetByContentType($httpResponse->headers['content-type'] ?? ''));
 
         $extraHeadersContent = '';
         $extraNewLine = '';
@@ -254,13 +257,14 @@ class TextOutput implements Output
         }
 
         $output = sprintf(
-                '%s %s | %s | %s | %s | %s %s',
+                '%s %s | %s | %s | %s | %s | %s %s',
                 $progressContent,
                 str_pad($urlForTable, $this->getUrlColumnSize()),
                 $coloredStatus,
                 $contentType,
                 $coloredElapsedTime,
                 $coloredSize,
+                $coloredCache,
                 $extraHeadersContent
             ) . "\n";
 
@@ -361,14 +365,14 @@ class TextOutput implements Output
                 $urlColumnSize = $this->options->urlColumnSize;
             } else {
                 $progressBarWidth = $this->progressBarWidth;
-                $statusTypeTimeSizeWidth = 40;
+                $statusTypeTimeSizeCacheWidth = 49;
                 $extraColumnsWidth = $this->extraColumnsWidth;
                 $extraColumnsFromAnalysisWidth = $this->extraColumnsFromAnalysisWidth;
                 $freeReserve = 5; // small reserve for unpredictable situations
 
                 $urlColumnSize = $this->terminalWidth
                     - $progressBarWidth
-                    - $statusTypeTimeSizeWidth
+                    - $statusTypeTimeSizeCacheWidth
                     - $extraColumnsWidth
                     - $extraColumnsFromAnalysisWidth
                     - $freeReserve;

@@ -25,6 +25,8 @@ class SuperTableColumn
     public readonly bool $formatterWillChangeValueLength;
     public readonly bool $nonBreakingSpaces;
     public readonly bool $escapeOutputHtml;
+    public readonly ?Closure $getDataValueCallback;
+    public ?string $forcedDataType = null;
 
     /**
      * @param string $aplCode
@@ -36,8 +38,9 @@ class SuperTableColumn
      * @param bool $formatterWillChangeValueLength
      * @param bool $nonBreakingSpaces
      * @param bool $escapeOutputHtml
+     * @param callable|null $getDataValueCallback
      */
-    public function __construct(string $aplCode, string $name, int $width = self::AUTO_WIDTH, ?callable $formatter = null, ?callable $renderer = null, bool $truncateIfLonger = false, bool $formatterWillChangeValueLength = true, bool $nonBreakingSpaces = false, $escapeOutputHtml = true)
+    public function __construct(string $aplCode, string $name, int $width = self::AUTO_WIDTH, ?callable $formatter = null, ?callable $renderer = null, bool $truncateIfLonger = false, bool $formatterWillChangeValueLength = true, bool $nonBreakingSpaces = false, $escapeOutputHtml = true, ?callable $getDataValueCallback = null)
     {
         $this->aplCode = $aplCode;
         $this->name = $name;
@@ -48,6 +51,7 @@ class SuperTableColumn
         $this->formatterWillChangeValueLength = $formatterWillChangeValueLength;
         $this->nonBreakingSpaces = $nonBreakingSpaces;
         $this->escapeOutputHtml = $escapeOutputHtml;
+        $this->getDataValueCallback = $getDataValueCallback;
     }
 
     public function getWidthPx(): int
@@ -72,6 +76,18 @@ class SuperTableColumn
             }
         }
         return min(1000, $maxWidth);
+    }
+
+    /**
+     * @param array|object $row
+     * @return mixed
+     */
+    public function getDataValue(array|object $row)
+    {
+        if ($this->getDataValueCallback && is_callable($this->getDataValueCallback)) {
+            return ($this->getDataValueCallback)($row);
+        }
+        return is_object($row) ? @$row->{$this->aplCode} : @$row[$this->aplCode];
     }
 
 }

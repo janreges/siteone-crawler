@@ -558,9 +558,18 @@ class Crawler
                 }
             }
 
+            // caching
+            if ($httpResponse->statusCode > 0) {
+                $cacheTypeFlags = Utils::getVisitedUrlCacheTypeFlags($httpResponse->headers);
+                $cacheLifetime = Utils::getVisitedUrlCacheLifetime($httpResponse->headers);
+            } else {
+                $cacheTypeFlags = VisitedUrl::CACHE_TYPE_NOT_AVAILABLE;
+                $cacheLifetime = null;
+            }
+
             // update info about visited URL
             $isExternal = $parsedUrl->host && $parsedUrl->host !== $this->initialParsedUrl->host;
-            $visitedUrl = $this->updateVisitedUrl($parsedUrl, $elapsedTime, $status, $bodySize, $contentType, $body, $httpResponse->headers, $extraParsedContent, $isExternal, $isAllowedForCrawling);
+            $visitedUrl = $this->updateVisitedUrl($parsedUrl, $elapsedTime, $status, $bodySize, $contentType, $body, $httpResponse->headers, $extraParsedContent, $isExternal, $isAllowedForCrawling, $cacheTypeFlags, $cacheLifetime);
 
             // send message to websocket clients
             if ($this->websocketServerProcess && !$visitedUrl->isExternal && !$visitedUrl->isStaticFile() && !$visitedUrl->looksLikeStaticFileByUrl()) {
@@ -583,7 +592,7 @@ class Crawler
             $doneUrlsCount = $this->statusTable->get('1', 'doneUrls');
             $totalUrlsCount = ($this->queue->count() + $this->visited->count());
             $progressStatus = $doneUrlsCount . '/' . $totalUrlsCount;
-            $this->output->addTableRow($httpResponse, $absoluteUrl, $status, $elapsedTime, $bodySize, $contentType, $extraParsedContent, $progressStatus);
+            $this->output->addTableRow($httpResponse, $absoluteUrl, $status, $elapsedTime, $bodySize, $contentType, $extraParsedContent, $progressStatus, $cacheTypeFlags, $cacheLifetime);
 
             // decrement workers count after request is done
             $this->statusTable->decr('1', 'workers');
@@ -810,10 +819,12 @@ class Crawler
      * @param array|null $extras
      * @param bool $isExternal
      * @param bool $isAllowedForCrawling
+     * @param int $cacheType
+     * @param int|null $cacheLifetime
      * @return VisitedUrl
      * @throws Exception
      */
-    private function updateVisitedUrl(ParsedUrl $url, float $elapsedTime, int $status, int $size, int $type, ?string $body, ?array $headers, ?array $extras, bool $isExternal, bool $isAllowedForCrawling): VisitedUrl
+    private function updateVisitedUrl(ParsedUrl $url, float $elapsedTime, int $status, int $size, int $type, ?string $body, ?array $headers, ?array $extras, bool $isExternal, bool $isAllowedForCrawling, int $cacheType, ?int $cacheLifetime): VisitedUrl
     {
         $urlKey = $this->getUrlKeyForSwooleTable($url);
         $visitedUrlInTable = $this->visited->get($urlKey);
@@ -824,6 +835,8 @@ class Crawler
         $visitedUrlInTable['status'] = $status;
         $visitedUrlInTable['size'] = $size;
         $visitedUrlInTable['type'] = $type;
+        $visitedUrlInTable['cacheType'] = $cacheType;
+        $visitedUrlInTable['cacheLifetime'] = $cacheLifetime;
         $this->visited->set($urlKey, $visitedUrlInTable);
 
         $this->statusTable->incr('1', 'doneUrls');
@@ -842,6 +855,8 @@ class Crawler
             $extras,
             $isExternal,
             $isAllowedForCrawling,
+            $visitedUrlInTable['cacheType'],
+            $visitedUrlInTable['cacheLifetime']
         );
 
         $this->status->addVisitedUrl($visitedUrl, $body, $headers);

@@ -10,6 +10,8 @@ declare(strict_types=1);
 
 namespace Crawler;
 
+use Crawler\Result\VisitedUrl;
+
 class Utils
 {
     private static ?bool $forcedColorSetup = null;
@@ -66,6 +68,23 @@ class Utils
             return round($age / 3600, 1) . ' hour(s)';
         } else {
             return round($age / 86400, 1) . ' day(s)';
+        }
+    }
+
+    public static function getFormattedCacheLifetime(int $seconds): string
+    {
+        if ($seconds < 60) {
+            return $seconds . ' s';
+        } elseif ($seconds <= 3600) {
+            return floor($seconds / 60) . ' min';
+        } elseif ($seconds <= 86400) {
+            return floor($seconds / 3600) . ' h';
+        } elseif ($seconds <= 86400 * 90) { // 90 days
+            return floor($seconds / 86400) . ' d';
+        } elseif ($seconds <= 86400 * 365 * 2) { // 2 years
+            return round($seconds / 86400 / 30) . ' mon';
+        } else {
+            return number_format($seconds / 31536000, 1, '.') . ' y';
         }
     }
 
@@ -1095,6 +1114,207 @@ class Utils
             ['<svg fill="currentColor" ', '<symbol fill="currentColor" ', '<g fill="currentColor" '],
             $svg
         );
+    }
+
+    /**
+     * @param array $headers
+     * @return int See VisitedUrl->cacheTypeFlags
+     */
+    public static function getVisitedUrlCacheTypeFlags(array $headers): int
+    {
+        $result = 0;
+
+        if (isset($headers['cache-control'])) {
+            $result |= VisitedUrl::CACHE_TYPE_HAS_CACHE_CONTROL;
+            $cacheControl = $headers['cache-control'];
+            if (is_array($cacheControl)) {
+                $cacheControl = implode(', ', $cacheControl);
+            }
+
+            if (stripos($cacheControl, 'max-age') !== false) {
+                $result |= VisitedUrl::CACHE_TYPE_HAS_MAX_AGE;
+            }
+            if (stripos($cacheControl, 's-maxage') !== false) {
+                $result |= VisitedUrl::CACHE_TYPE_HAS_S_MAX_AGE;
+            }
+            if (stripos($cacheControl, 'stale-while-revalidate') !== false) {
+                $result |= VisitedUrl::CACHE_TYPE_HAS_STALE_WHILE_REVALIDATE;
+            }
+            if (stripos($cacheControl, 'stale-if-error') !== false) {
+                $result |= VisitedUrl::CACHE_TYPE_HAS_STALE_IF_ERROR;
+            }
+            if (stripos($cacheControl, 'public') !== false) {
+                $result |= VisitedUrl::CACHE_TYPE_HAS_PUBLIC;
+            }
+            if (stripos($cacheControl, 'private') !== false) {
+                $result |= VisitedUrl::CACHE_TYPE_HAS_PRIVATE;
+            }
+            if (stripos($cacheControl, 'no-cache') !== false) {
+                $result |= VisitedUrl::CACHE_TYPE_HAS_NO_CACHE;
+            }
+            if (stripos($cacheControl, 'no-store') !== false) {
+                $result |= VisitedUrl::CACHE_TYPE_HAS_NO_STORE;
+            }
+            if (stripos($cacheControl, 'must-revalidate') !== false) {
+                $result |= VisitedUrl::CACHE_TYPE_HAS_MUST_REVALIDATE;
+            }
+            if (stripos($cacheControl, 'proxy-revalidate') !== false) {
+                $result |= VisitedUrl::CACHE_TYPE_HAS_PROXY_REVALIDATE;
+            }
+            if (stripos($cacheControl, 'immutable') !== false) {
+                $result |= VisitedUrl::CACHE_TYPE_HAS_IMMUTABLE;
+            }
+        }
+
+        if (isset($headers['expires'])) {
+            $result |= VisitedUrl::CACHE_TYPE_HAS_EXPIRES;
+        }
+
+        if (isset($headers['etag'])) {
+            $result |= VisitedUrl::CACHE_TYPE_HAS_ETAG;
+        }
+
+        if (isset($headers['last-modified'])) {
+            $result |= VisitedUrl::CACHE_TYPE_HAS_LAST_MODIFIED;
+        }
+
+        if ($result === 0) {
+            $result |= VisitedUrl::CACHE_TYPE_NO_CACHE_HEADERS;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Get cache lifetime from headers Cache-Control (max-age) or Expires
+     *
+     * @param array $headers
+     * @return int|null
+     */
+    public static function getVisitedUrlCacheLifetime(array $headers): ?int
+    {
+        $result = null;
+        if (isset($headers['cache-control'])) {
+
+            $cacheControl = $headers['cache-control'];
+            if (is_array($cacheControl)) {
+                $cacheControl = implode(', ', $cacheControl);
+            }
+
+            if (stripos($cacheControl, 'no-cache') !== false) {
+                $result = 0;
+            } elseif (stripos($cacheControl, 'no-store') !== false) {
+                $result = 0;
+            }
+
+            // remove s-max-age if max-age is present
+            if (substr_count($cacheControl, 'max-age') > 1 && stripos($cacheControl, 's-max-age') !== false) {
+                $cacheControl = preg_replace('/s-max-age=[0-9]+/i', '', $cacheControl);
+            }
+
+            if (preg_match('/max-age=([0-9]+)/i', $cacheControl, $matches) === 1) {
+                $result = intval($matches[1]);
+            }
+        } elseif (isset($headers['expires'])) {
+            $expires = $headers['expires'];
+            $currentTimeInGMT = isset($headers['date']) ? $headers['date'] : gmdate('D, d M Y H:i:s T');
+            $result = strtotime($expires) - strtotime($currentTimeInGMT);
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param int $cacheTypeFlags
+     * @param int|null $cacheLifetime
+     * @param bool $isAsset
+     * @return string
+     */
+    public static function getColoredCacheInfo(int $cacheTypeFlags, ?int $cacheLifetime, bool $isAsset): string
+    {
+        $criticalColor = 'red';
+        $warningColor = 'yellow';
+        $noticeColor = 'magenta';
+        $neutralColor = 'gray';
+        $okColor = 'green';
+
+        $strPadTo = 6;
+
+        if ($cacheLifetime !== null) {
+            if ($isAsset) {
+                if ($cacheLifetime <= 0) {
+                    $color = $criticalColor;
+                } elseif ($cacheLifetime < 7200) {
+                    $color = $warningColor;
+                } elseif ($cacheLifetime < 86400) {
+                    $color = $noticeColor;
+                } else {
+                    $color = $okColor;
+                }
+            } else {
+                // for non-assets (e.g. HTML pages) there is no need to show warning for cache lifetime
+                $color = $neutralColor;
+            }
+            $result = Utils::getColorText(str_pad(Utils::getFormattedCacheLifetime($cacheLifetime), $strPadTo), $color);
+        } else if ($cacheTypeFlags & VisitedUrl::CACHE_TYPE_HAS_NO_STORE) {
+            $result = Utils::getColorText(str_pad('0s', $strPadTo), $isAsset ? $criticalColor : $noticeColor);
+        } else if (($cacheTypeFlags & VisitedUrl::CACHE_TYPE_HAS_ETAG)) {
+            $result = Utils::getColorText(str_pad('etag', $strPadTo), $isAsset ? $warningColor : $noticeColor);
+        } else if ($cacheTypeFlags & VisitedUrl::CACHE_TYPE_HAS_LAST_MODIFIED) {
+            $result = Utils::getColorText(str_pad('lm', $strPadTo), $isAsset ? $warningColor : $noticeColor);
+        } else {
+            $result = Utils::getColorText(str_pad('none', $strPadTo), $isAsset ? $criticalColor : $noticeColor);
+        }
+
+        return $result;
+    }
+
+    public static function getColoredCacheLifetime(int $cacheLifetime, int $strPadTo): string
+    {
+        if ($cacheLifetime <= 0) {
+            $color = 'red';
+        } elseif ($cacheLifetime < 60 * 10) {
+            $color = 'magenta';
+        } elseif ($cacheLifetime <= 86400) {
+            $color = 'yellow';
+        } else {
+            $color = 'green';
+        }
+
+        return self::getColorText(str_pad(self::getFormattedCacheLifetime($cacheLifetime), $strPadTo), $color);
+    }
+
+    /**
+     * Is this response an asset (image, css, js, fonts, docs, etc.)
+     * @param string $contentType
+     * @return bool
+     */
+    public static function isAssetByContentType(string $contentType): bool
+    {
+        static $cache = [];
+        if (isset($cache[$contentType])) {
+            return $cache[$contentType];
+        }
+
+        $nonAssetContentTypes = [
+            'text/html',
+            'application/xhtml+xml',
+            'application/xml',
+            'application/json',
+            'application/ld+json',
+            'application/rss+xml'
+        ];
+
+        $result = true;
+        foreach ($nonAssetContentTypes as $nonAssetContentType) {
+            if (stripos($contentType, $nonAssetContentType) !== false) {
+                $result = false;
+                break;
+            }
+        }
+
+        $cache[$contentType] = $result;
+        return $result;
     }
 
 }
