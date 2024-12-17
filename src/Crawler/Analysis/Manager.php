@@ -150,7 +150,7 @@ class Manager
         $dom = null;
         if ($visitedUrl->contentType === Crawler::CONTENT_TYPE_ID_HTML && $body !== null && trim($body) !== '') {
             $s = microtime(true);
-            $encodedBody = mb_convert_encoding($body, 'HTML-ENTITIES', 'UTF-8');
+            $encodedBody = htmlentities($body, ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5, 'UTF-8');
             if (!$encodedBody) {
                 $this->output->addNotice("HTML encoding error for URL {$visitedUrl->url}");
                 return $result;
