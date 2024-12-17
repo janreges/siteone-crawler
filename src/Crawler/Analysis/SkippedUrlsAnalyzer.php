@@ -54,7 +54,7 @@ class SkippedUrlsAnalyzer extends BaseAnalyzer implements Analyzer
         }
 
         $consoleWidth = Utils::getConsoleWidth();
-        $urlColumnWidth = intval(($consoleWidth - 20) / 4);
+        $urlColumnWidth = 60;
         $initialScheme = $this->status->getOptions()->getInitialScheme();
         $initialHost = $this->status->getOptions()->getInitialHost();
 
