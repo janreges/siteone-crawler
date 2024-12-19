@@ -231,6 +231,7 @@ required arguments:
   --max-queue-length=3000 \
   --max-visited-urls=10000 \
   --max-url-length=5000 \
+  --max-non200-responses-per-basename=10 \
   --include-regex="/^.*\/technologies.*/" \
   --include-regex="/^.*\/fashion.*/" \
   --ignore-regex="/^.*\/downloads\/.*\.pdf$/i" \
@@ -373,6 +374,9 @@ through the file:// protocol.
   expect higher memory requirements. Default is `10000`.
 * `--max-url-length=<num>`         The maximum supported URL length in chars. Increase in case of very long URLs, but
   expect higher memory requirements. Default is `2083`.
+* `--max-non200-responses-per-basename=<num>`  Protection against looping with dynamic non-200 URLs. If a basename (the
+  last part of the URL after the last slash) has more non-200 responses than this limit, other URLs with same basename
+  will be ignored/skipped. Default is `5`.
 
 #### File export settings
 

@@ -97,6 +97,7 @@ class CoreOptions
     public int $maxVisitedUrls = 10000;
     public int $maxUrlLength = 2083; // https://stackoverflow.com/a/417184/1118709
     public int $maxSkippedUrls = 10000;
+    public int $maxNon200ResponsesPerBasename = 5;
     public array $includeRegex = [];
     public array $ignoreRegex = [];
     public bool $regexFilteringOnlyForPages = false;
@@ -241,6 +242,7 @@ class CoreOptions
             new Option('--max-visited-urls', '-mvu', 'maxVisitedUrls', Type::INT, false, 'Max visited URLs. It affects memory requirements.', 10000, false),
             new Option('--max-skipped-urls', '-msu', 'maxSkippedUrls', Type::INT, false, 'Max skipped URLs. It affects memory requirements.', 10000, false),
             new Option('--max-url-length', '-mul', 'maxUrlLength', Type::INT, false, 'Max URL length in chars. It affects memory requirements.', 2083, false),
+            new Option('--max-non200-responses-per-basename', '-mnrpb', 'maxNon200ResponsesPerBasename', Type::INT, false, 'Protection against looping with dynamic non-200 URLs. If a basename (the last part of the URL after the last slash) has more non-200 responses than this limit, other URLs with same basename will be ignored/skipped.', 5, false),
         ]));
 
         $options->addGroup(new Group(
