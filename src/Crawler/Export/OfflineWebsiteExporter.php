@@ -28,6 +28,13 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
 
     const GROUP_OFFLINE_WEBSITE_EXPORTER = 'offline-website-exporter';
 
+    const FILENAME_SANITIZATION_SPECIAL_CHARS_TO_UNDERSCORE = 'special-chars-to-underscore';
+    const FILENAME_SANITIZATION_SPECIAL_CHARS_TO_DASH = 'special-chars-to-dash';
+    const FILENAME_SANITIZATION_SPECIAL_CHARS_TO_EMPTY = 'special-chars-to-empty';
+    const FILENAME_SANITIZATION_URLENCODE = 'urlencode';
+    const FILENAME_SANITIZATION_RAWURLENCODE = 'rawurlencode';
+    const FILENAME_SANITIZATION_MD5 = 'md5';
+
     private static $contentTypesThatRequireChanges = [
         Crawler::CONTENT_TYPE_ID_HTML,
         Crawler::CONTENT_TYPE_ID_SCRIPT,
@@ -61,6 +68,23 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
     protected array $replaceQueryString = [];
 
     /**
+     * Limit of the length of the export file path including filename .. it depends on the platform and filesystem
+     *
+     * @see OfflineUrlConverter::sanitizeFilePath()
+     * @see OfflineUrlConverter::convertUrlToRelative()
+     *
+     * @var int
+     */
+    protected int $exportFilePathLengthLimit = 200;
+
+    /**
+     * The way to sanitize the filename when saving to the filesystem
+     *
+     * @var string
+     */
+    protected string $exportFilenameSanitization = self::FILENAME_SANITIZATION_SPECIAL_CHARS_TO_UNDERSCORE;
+
+    /**
      * For debug only - storage of debug messages if debug mode is activated (storeOnlyUrls)
      * @var array|null
      */
@@ -88,6 +112,8 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
 
         // user-defined replaceQueryString will deactivate replacing query string with hash and use custom replacement
         OfflineUrlConverter::setReplaceQueryString($this->replaceQueryString);
+        OfflineUrlConverter::setExportFilePathLengthLimit($this->exportFilePathLengthLimit);
+        OfflineUrlConverter::setFilenameSanitization($this->exportFilenameSanitization);
 
         // filter only relevant URLs with OK status codes
         $exportedUrls = array_filter($visitedUrls, function (VisitedUrl $visitedUrl) {
@@ -172,7 +198,7 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
         // same logic is in method convertUrlToRelative()
         $storeFilePath = sprintf('%s/%s',
             $this->offlineExportDirectory,
-            OfflineUrlConverter::sanitizeFilePath($this->getRelativeFilePathForFileByUrl($visitedUrl), false)
+            preg_replace('/\#.*$/', '', $this->getRelativeFilePathForFileByUrl($visitedUrl))
         );
 
         $directoryPath = dirname($storeFilePath);
@@ -293,6 +319,8 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
             'Offline exporter options', [
             new Option('--offline-export-dir', '-oed', 'offlineExportDirectory', Type::DIR, false, 'Path to directory where to save the offline version of the website.', null, true),
             new Option('--offline-export-store-only-url-regex', null, 'offlineExportStoreOnlyUrlRegex', Type::REGEX, true, 'For debug - when filled it will activate debug mode and store only URLs which match one of these PCRE regexes. Can be specified multiple times.', null, true),
+            new Option('--offline-export-file-path-length-limit', '-oefpll', 'exportFilePathLengthLimit', Type::INT, false, 'The maximum allowed length of the exported file (including the full directory path on the filesystem). If the URL and corresponding path of the exported file was too long, it will be shortened by replacing the filename with a hash.', 240, true),
+            new Option('--offline-export-filename-sanitization', '-oefs', 'exportFilenameSanitization', Type::FILENAME_SANITIZATION, false, 'The way to sanitize the filename when saving to the filesystem.', 'special-chars-to-underscore', false),
             new Option('--replace-content', null, 'replaceContent', Type::REPLACE_CONTENT, true, "Replace HTML/JS/CSS content with `foo -> bar` or regexp in PREG format: `/card[0-9]/i -> card`", null, true, true),
             new Option('--replace-query-string', null, 'replaceQueryString', Type::REPLACE_CONTENT, true, "Instead of using a short hash instead of a query string in the filename, just replace some characters. You can use simple format 'foo -> bar' or regexp in PREG format, e.g. '/([a-z]+)=([^&]*)(&|$)/i -> $1__$2'", null, true, true),
             new Option('--ignore-store-file-error', null, 'ignoreStoreFileError', Type::BOOL, false, 'Ignores any file storing errors. The export process will continue.', false, false),

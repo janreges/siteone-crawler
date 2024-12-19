@@ -10,6 +10,7 @@ declare(strict_types=1);
 
 namespace Crawler\Export\Utils;
 
+use Crawler\Export\OfflineWebsiteExporter;
 use Crawler\ParsedUrl;
 use Crawler\Utils;
 
@@ -25,7 +26,9 @@ class OfflineUrlConverter
     private readonly array $callbackIsDomainAllowedForStaticFiles;
     private readonly array $callbackIsExternalDomainAllowedForCrawling;
 
+    private static int $exportFilePathLengthLimit = 200;
     private static array $replaceQueryString = [];
+    private static string $filenameSanitization = OfflineWebsiteExporter::FILENAME_SANITIZATION_SPECIAL_CHARS_TO_UNDERSCORE;
 
     private TargetDomainRelation $targetDomainRelation;
 
@@ -65,6 +68,11 @@ class OfflineUrlConverter
         $forcedUrl = $this->getForcedUrlIfNeeded();
         if ($forcedUrl) {
             return $forcedUrl;
+        }
+
+        $debug = stripos($this->targetUrl->getFullUrl(), 'windows-light.png') !== false;
+        if ($debug) {
+            echo "JREEE00: {$this->targetUrl->getFullUrl()} | {$this->relativeTargetUrl->getFullUrl()} | {$this->targetDomainRelation}\n";
         }
 
         $this->detectAndSetFileNameWithExtension();
@@ -283,7 +291,12 @@ class OfflineUrlConverter
     {
         // transform query string to filename (small hash before extension)
         $parsedFilePath = parse_url($filePath);
-        $pathWithExtension = preg_match('/^(.+)\.([a-z0-9]{1,10})/i', $parsedFilePath['path'] ?? '', $matches) === 1;
+        $pathWithExtension = preg_match('/^(.+)\.([a-z0-9]{1,10})(\?|#|$)/i', $parsedFilePath['path'] ?? '', $matches) === 1;
+
+        $debug = stripos($filePath, 'windows-light.png') !== false;
+        if ($debug) {
+            echo "JREEE0A: $filePath | {$pathWithExtension}\n ";
+        }
 
         if ($pathWithExtension) {
             $start = $matches[1];
@@ -302,15 +315,14 @@ class OfflineUrlConverter
             }
         }
 
-        $dangerousCharacters = ['\\', ':', '%20', '%', '*', '?', '"', "'", '<', '>', '|', '+', ' '];
-        $filePath = str_replace($dangerousCharacters, '_', $filePath);
-        $filePath = preg_replace('/_{2,}/', '_', $filePath); // remove multiple underscores
+        // sanitize filename based on selected self::$filenameSanitization
+        $filePath = self::sanitizeFilename($filePath);
 
         // when filepath is too long and there is a long filename, we replace filename with shorter md5 and the same extension
         // filepath length is calculated from root of offline website directory for better results
-        // 200 is just a safe limit, because there is also directory path
+        // self::$offlineFilePathLengthLimit default (200) is just a safe universal limit, because there is also directory path
         $filePathLength = strlen(preg_replace('/#.+$/', '', $filePath));
-        if ($filePathLength > 200 && strlen(basename($filePath)) > 40) {
+        if ($filePathLength > self::$exportFilePathLengthLimit && strlen(basename($filePath)) > 40) {
             $basename = basename($filePath);
             $extension = $extension ?? pathinfo($basename, PATHINFO_EXTENSION);
             $filePath = str_replace($basename, substr(md5($basename), 0, 10) . '.' . $extension, $filePath);
@@ -333,6 +345,69 @@ class OfflineUrlConverter
             $filePath = preg_replace('/#.+$/', '', $filePath);
         }
 
+        if ($debug) {
+            echo "JREEE0B: $filePath | {$pathWithExtension}\n ";
+        }
+
+        return $filePath;
+    }
+
+    /**
+     * Sanitize filename in $filePath based on selecated self::$filenameSanitization
+     * @param string $filePath
+     * @return string
+     */
+    private static function sanitizeFilename(string $filePath): string
+    {
+        $debug = stripos($filePath, 'windows-light.png') !== false;
+        if ($debug) {
+            echo "JREEE1: $filePath\n";
+        }
+
+        static $specialCharacters = ['\\', ':', '%20', '%', '*', '?', '"', "'", '<', '>', '|', '+', ' '];
+
+        if (self::$filenameSanitization === OfflineWebsiteExporter::FILENAME_SANITIZATION_SPECIAL_CHARS_TO_UNDERSCORE) {
+            $filePath = str_replace($specialCharacters, '_', $filePath);
+            $filePath = preg_replace('/_{2,}/', '_', $filePath);
+        } else if (self::$filenameSanitization === OfflineWebsiteExporter::FILENAME_SANITIZATION_SPECIAL_CHARS_TO_DASH) {
+            $filePath = str_replace($specialCharacters, '-', $filePath);
+            $filePath = preg_replace('/-{2,}/', '-', $filePath);
+        } else if (self::$filenameSanitization === OfflineWebsiteExporter::FILENAME_SANITIZATION_SPECIAL_CHARS_TO_EMPTY) {
+            $filePath = str_replace($specialCharacters, '', $filePath);
+        } else if (self::$filenameSanitization === OfflineWebsiteExporter::FILENAME_SANITIZATION_URLENCODE) {
+            $filePath = preg_replace_callback('/[^\/]+$/i', function ($matches) {
+                return urlencode($matches[0]);
+            }, $filePath);
+            $filePath = str_replace('%23', '#', $filePath); // replace %23 with '#'
+        } else if (self::$filenameSanitization === OfflineWebsiteExporter::FILENAME_SANITIZATION_RAWURLENCODE) {
+            $filePath = preg_replace_callback('/[^\/]+$/i', function ($matches) {
+                return rawurlencode($matches[0]);
+            }, $filePath);
+            $filePath = str_replace('%23', '#', $filePath); // replace %23 with '#'
+        } else if (self::$filenameSanitization === OfflineWebsiteExporter::FILENAME_SANITIZATION_MD5) {
+            $extension = pathinfo(parse_url($filePath, PHP_URL_PATH), PATHINFO_EXTENSION);
+
+            $fragment = parse_url($filePath, PHP_URL_FRAGMENT);
+            if ($fragment !== null) {
+                $filePath = str_replace('#' . $fragment, '', $filePath);
+            }
+
+            $filePath = preg_replace_callback('/[^\/]+$/i', function ($matches) use ($extension) {
+                return md5($matches[0]) . '.' . $extension;
+            }, $filePath);
+
+
+            if ($fragment !== null) {
+                $filePath .= '#' . $fragment;
+            }
+        } else {
+            throw new \InvalidArgumentException('Unknown filename sanitization method: ' . self::$filenameSanitization);
+        }
+
+        if ($debug) {
+            echo "JREEE2: $filePath\n";
+        }
+
         return $filePath;
     }
 
@@ -343,6 +418,20 @@ class OfflineUrlConverter
     public static function setReplaceQueryString(array $replaceQueryString): void
     {
         self::$replaceQueryString = $replaceQueryString;
+    }
+
+    /**
+     * @param int $exportFilePathLengthLimit
+     * @return void
+     */
+    public static function setExportFilePathLengthLimit(int $exportFilePathLengthLimit): void
+    {
+        self::$exportFilePathLengthLimit = $exportFilePathLengthLimit;
+    }
+
+    public static function setFilenameSanitization(string $filenameSanitization): void
+    {
+        self::$filenameSanitization = $filenameSanitization;
     }
 
     /**

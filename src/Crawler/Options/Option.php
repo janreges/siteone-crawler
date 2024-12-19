@@ -10,6 +10,7 @@ declare(strict_types=1);
 
 namespace Crawler\Options;
 
+use Crawler\Export\OfflineWebsiteExporter;
 use Crawler\Utils;
 use Exception;
 
@@ -280,6 +281,18 @@ class Option
             if (!is_string($value) || !preg_match('/^[a-z0-9\-.]{1,200}:[0-9]{1,5}:[a-f0-9\-.:]{1,100}$/i', $value)) {
                 throw new Exception("Option {$this->name} ({$value}) must be in format `domain:port:ip`");
             }
+        } else if ($this->type === Type::FILENAME_SANITIZATION) {
+            $availableValues = [
+                OfflineWebsiteExporter::FILENAME_SANITIZATION_URLENCODE,
+                OfflineWebsiteExporter::FILENAME_SANITIZATION_RAWURLENCODE,
+                OfflineWebsiteExporter::FILENAME_SANITIZATION_SPECIAL_CHARS_TO_UNDERSCORE,
+                OfflineWebsiteExporter::FILENAME_SANITIZATION_SPECIAL_CHARS_TO_DASH,
+                OfflineWebsiteExporter::FILENAME_SANITIZATION_SPECIAL_CHARS_TO_EMPTY,
+                OfflineWebsiteExporter::FILENAME_SANITIZATION_MD5,
+            ];
+            if (!in_array($value, $availableValues, true)) {
+                throw new Exception("Option {$this->name} ({$value}) must be one of: " . implode(', ', $availableValues));
+            }
         }
 
         // extra validations
@@ -333,6 +346,8 @@ class Option
         } else if ($this->type === Type::REPLACE_CONTENT) {
             return (string)$value;
         } else if ($this->type === Type::RESOLVE) {
+            return (string)$value;
+        } else if ($this->type === Type::FILENAME_SANITIZATION) {
             return (string)$value;
         } /* @phpstan-ignore-line */ else {
             throw new Exception("Unknown type {$this->type}");

@@ -148,7 +148,7 @@ class ParsedUrl
             return null;
         } else if ($this->extension) {
             return strtolower($this->extension);
-        } else if (preg_match_all('/\.([0-9a-z]{1,5})/i', $this->path . '?' . ($this->query ?? ''), $matches)) {
+        } else if (preg_match_all('/\.([0-9a-z]{1,5})(\?|#|$)/i', $this->path . '?' . ($this->query ?? ''), $matches)) {
             if (isset($matches[1])) {
                 return strtolower(end($matches[1]));
             }

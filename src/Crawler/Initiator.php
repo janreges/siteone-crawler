@@ -316,6 +316,8 @@ class Initiator
                     $nameAndValue .= '=<val>';
                 } elseif ($option->type === Type::RESOLVE) {
                     $nameAndValue .= '=<domain:port:ip>';
+                }elseif ($option->type === Type::FILENAME_SANITIZATION) {
+                    $nameAndValue .= '=<val>';
                 }
 
                 echo str_pad($nameAndValue, 32) . " " . rtrim($option->description, '. ') . '.';
