@@ -33,7 +33,7 @@ class JavaScriptProcessor extends BaseProcessor implements ContentProcessor
     /**
      * @inheritDoc
      */
-    public function applyContentChangesForOfflineVersion(string &$content, int $contentType, ParsedUrl $url): void
+    public function applyContentChangesForOfflineVersion(string &$content, int $contentType, ParsedUrl $url, bool $removeUnwantedCode): void
     {
         $content = str_ireplace('crossorigin', '_SiteOne_CO_', $content);
 

@@ -95,7 +95,7 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
     /**
      * @inheritDoc
      */
-    public function applyContentChangesForOfflineVersion(string &$content, int $contentType, ParsedUrl $url): void
+    public function applyContentChangesForOfflineVersion(string &$content, int $contentType, ParsedUrl $url, bool $removeUnwantedCode): void
     {
         $baseUrl = $url->getFullUrl();
 
@@ -118,10 +118,10 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
             $content,
             $url,
             $this->options->disableJavascript,
-            true, // removeCrossOrigins
-            true, // removeAnalytics
-            true, // removeSocnets
-            true  // removeCookiesRelated
+            $removeUnwantedCode, // removeCrossOrigins
+            $removeUnwantedCode, // removeAnalytics
+            $removeUnwantedCode, // removeSocnets
+            $removeUnwantedCode  // removeCookiesRelated
         );
 
         // set JS variable with number of levels before close </head> tag and remove all anchor listeners when needed

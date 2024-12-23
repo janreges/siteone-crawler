@@ -77,14 +77,15 @@ class Manager
      * @param string $content
      * @param int $contentType
      * @param ParsedUrl $url
+     * @param bool $removeUnwantedCode
      * @return void
      */
-    public function applyContentChangesForOfflineVersion(string &$content, int $contentType, ParsedUrl $url): void
+    public function applyContentChangesForOfflineVersion(string &$content, int $contentType, ParsedUrl $url, bool $removeUnwantedCode): void
     {
         foreach ($this->processors as $processor) {
             if ($processor->isContentTypeRelevant($contentType)) {
                 $s = microtime(true);
-                $processor->applyContentChangesForOfflineVersion($content, $contentType, $url);
+                $processor->applyContentChangesForOfflineVersion($content, $contentType, $url, $removeUnwantedCode);
                 $this->stats->measureExecTime($processor::class, 'applyContentChangesForOfflineVersion', $s);
             }
         }

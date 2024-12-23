@@ -43,7 +43,7 @@ abstract class BaseProcessor implements ContentProcessor
     /**
      * @inheritDoc
      */
-    public function applyContentChangesForOfflineVersion(string &$content, int $contentType, ParsedUrl $url): void
+    public function applyContentChangesForOfflineVersion(string &$content, int $contentType, ParsedUrl $url, bool $removeUnwantedCode): void
     {
         // do nothing = optionally implemented in child classes
     }

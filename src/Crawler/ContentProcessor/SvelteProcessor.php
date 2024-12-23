@@ -32,7 +32,7 @@ class SvelteProcessor extends BaseProcessor implements ContentProcessor
     /**
      * @inheritDoc
      */
-    public function applyContentChangesForOfflineVersion(string &$content, int $contentType, ParsedUrl $url): void
+    public function applyContentChangesForOfflineVersion(string &$content, int $contentType, ParsedUrl $url, bool $removeUnwantedCode): void
     {
         if (str_contains($content, '<svelte:')) {
             $content = preg_replace('/<svelte:[^>]+>\s*/i', '', $content);

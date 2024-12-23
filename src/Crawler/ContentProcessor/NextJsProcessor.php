@@ -49,7 +49,7 @@ class NextJsProcessor extends BaseProcessor implements ContentProcessor
     /**
      * @inheritDoc
      */
-    public function applyContentChangesForOfflineVersion(string &$content, int $contentType, ParsedUrl $url): void
+    public function applyContentChangesForOfflineVersion(string &$content, int $contentType, ParsedUrl $url, bool $removeUnwantedCode): void
     {
         // do nothing if html/js does not contain _next (each html/js of NextJS contains _next)
         if (stripos($content, '_next') === false) {

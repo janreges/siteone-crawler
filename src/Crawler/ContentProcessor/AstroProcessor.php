@@ -53,7 +53,7 @@ class AstroProcessor extends BaseProcessor implements ContentProcessor
      * @inheritDoc
      * @throws Exception
      */
-    public function applyContentChangesForOfflineVersion(string &$content, int $contentType, ParsedUrl $url): void
+    public function applyContentChangesForOfflineVersion(string &$content, int $contentType, ParsedUrl $url, bool $removeUnwantedCode): void
     {
         if (!str_contains($content, 'astro')) {
             return;

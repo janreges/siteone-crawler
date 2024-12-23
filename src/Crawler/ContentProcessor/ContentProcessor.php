@@ -44,9 +44,10 @@ interface ContentProcessor
      * @param string $content
      * @param int $contentType See Crawler::CONTENT_TYPE_*
      * @param ParsedUrl $url
+     * @param bool $removeUnwantedCode
      * @return void
      */
-    public function applyContentChangesForOfflineVersion(string &$content, int $contentType, ParsedUrl $url): void;
+    public function applyContentChangesForOfflineVersion(string &$content, int $contentType, ParsedUrl $url, bool $removeUnwantedCode): void;
 
     /**
      * Check if this ContentProcessor is relevant for given content type and will do something with it
