@@ -50,7 +50,7 @@ class SlowestAnalyzer extends BaseAnalyzer implements Analyzer
         $superTable = new SuperTable(
             self::SUPER_TABLE_SLOWEST_URLS,
             "TOP slowest URLs",
-            "No slow URLs slowest than {$this->slowestMinTime} second(s) found.",
+            "No slow URLs slower than {$this->slowestMinTime} second(s) found.",
             [
                 new SuperTableColumn('requestTime', 'Time', 6, function ($value) {
                     return Utils::getColoredRequestTime($value, 6);
@@ -75,9 +75,9 @@ class SlowestAnalyzer extends BaseAnalyzer implements Analyzer
             [[0, 0], [1, 2], [3, 5], [6, PHP_INT_MAX]],
             [
                 "Performance OK - all non-media URLs are faster than {$this->slowestMaxTime} seconds",
-                "Performance NOTICE - %s slow non-media URL(s) found (slowest than {$this->slowestMaxTime} seconds)",
-                "Performance WARNING - %s slow non-media URLs found (slowest than {$this->slowestMaxTime} seconds)",
-                "Performance CRITICAL - %s slow non-media URLs found (slowest than {$this->slowestMaxTime} seconds)"
+                "Performance NOTICE - %s slow non-media URL(s) found (slower than {$this->slowestMaxTime} seconds)",
+                "Performance WARNING - %s slow non-media URLs found (slower than {$this->slowestMaxTime} seconds)",
+                "Performance CRITICAL - %s slow non-media URLs found (slower than {$this->slowestMaxTime} seconds)"
             ]
         );
     }
