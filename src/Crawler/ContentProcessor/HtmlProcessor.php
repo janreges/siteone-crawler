@@ -166,6 +166,13 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
                 return $matches[0];
             }
 
+            // ignore and don't rewrite URLs that match the ignoreRegex
+            foreach ($this->options->ignoreRegex as $ignoreRegex) {
+                if (preg_match($ignoreRegex, $value) === 1) {
+                    return $matches[0];
+                }
+            }
+
             if (in_array(strtolower($attribute), ['srcset', 'imagesrcset'])) {
                 $sources = preg_split('/,\s/', $value);
                 foreach ($sources as &$source) {
@@ -510,32 +517,43 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
     private function removeSchemaAndHostFromFullOriginUrls(ParsedUrl $url, string $content): string
     {
         $baseUrlRoot = preg_replace('/((https?:)?\/\/[^\/]+\/?).*/i', '$1', $url->getFullUrl());
+
+        // normalize any port numbers in URLs
         $content = preg_replace('/((https?:)?\/\/[a-z0-9._-]+):[0-9]+/i', '$1', $content);
-        $content = str_replace(
-            [
-                'href="' . $baseUrlRoot,
-                "href='" . $baseUrlRoot,
-                'src="' . $baseUrlRoot,
-                "src='" . $baseUrlRoot,
-                'url="' . $baseUrlRoot,
-                "url='" . $baseUrlRoot,
-                "url(" . $baseUrlRoot,
-                'url("' . $baseUrlRoot,
-                "url('" . $baseUrlRoot,
-            ],
-            [
-                'href="/',
-                "href='/",
-                'src="/',
-                "src='/",
-                'url="/',
-                "url='/",
-                "url(/",
-                'url("/',
-                "url('/",
-            ],
-            $content
-        );
+
+        // get all URLs from attributes and process them individually
+        $patterns = [
+            '/(href=(["\']))' . preg_quote($baseUrlRoot, '/') . '([^"\']*)(["\'])/i',
+            '/(src=(["\']))' . preg_quote($baseUrlRoot, '/') . '([^"\']*)(["\'])/i',
+            '/(url=(["\']))' . preg_quote($baseUrlRoot, '/') . '([^"\']*)(["\'])/i',
+            '/(url\((["\']?))' . preg_quote($baseUrlRoot, '/') . '([^"\')]*)([\'"]\)|\))/i'
+        ];
+
+        foreach ($patterns as $pattern) {
+            $content = preg_replace_callback($pattern, function ($matches) {
+                $attrStart = $matches[1]; // href=", src=", url=" or url(
+                $quote = $matches[2];     // quote character or empty for url()
+                $path = $matches[3];      // URL path after baseUrlRoot
+                $attrEnd = $matches[4];   // closing quote/bracket
+
+                // full URL to check against ignore patterns
+                $fullUrl = $matches[0];
+
+                // check if URL matches any ignore pattern and if so, do not remove schema/host
+                if ($this->options->ignoreRegex) {
+                    foreach ($this->options->ignoreRegex as $ignorePattern) {
+                        if (preg_match($ignorePattern, $fullUrl)) {
+                            return $matches[0];
+                        }
+                    }
+                }
+
+                // no ignore pattern matched - remove schema/host
+                return $attrStart . '/' . $path . $attrEnd;
+
+            }, $content);
+        }
+
         return $content;
     }
 
