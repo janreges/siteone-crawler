@@ -1,8 +1,8 @@
 # SiteOne Crawler
 
-SiteOne Crawler is a very useful and easy-to-use **website analyzer & cloner/exporter** you'll ♥ as a Dev/DevOps, SEO specialist, QA engineer, website owner or consultant. Works on all popular platforms - **Windows**, **macOS** and **Linux** (**x64** and **arm64** too).
+SiteOne Crawler is a very useful and easy-to-use **website analyzer & cloner/exporter/converter** you'll ♥ as a Dev/DevOps, SEO specialist, QA engineer, website owner or consultant. Works on all popular platforms - **Windows**, **macOS** and **Linux** (**x64** and **arm64** too).
 
-The main capability of the crawler is to **generate a detailed HTML report** with lots of useful information about your website (see sample [nextjs.org report](https://crawler.siteone.io/html/2024-08-23/forever/cl8xw4r-fdag8wg-44dd.html)) and at the same time it can clone/export the website offline (see browsable [nextjs.org clone](https://crawler.siteone.io/examples-exports/nextjs.org/)).
+The main capability of the crawler is to **generate a detailed HTML report** with lots of useful information about your website (see sample [nextjs.org report](https://crawler.siteone.io/html/2024-08-23/forever/cl8xw4r-fdag8wg-44dd.html)) and at the same time it can clone/export/convert the website offline (see browsable [nextjs.org clone](https://crawler.siteone.io/examples-exports/nextjs.org/)) or to **markdown** (see [examples](https://github.com/janreges/siteone-crawler-markdown-examples/)).
 
 It will crawl your entire website in depth, analyze and report problems, show useful statistics and reports, generate an offline
 version of the website, generate sitemaps or send reports via email. Watch a detailed [video with a sample report](https://www.youtube.com/watch?v=PHIFSOmk0gk) for the [astro.build](https://astro.build/?utm_source=siteone-crawler-github) website.
@@ -62,6 +62,9 @@ In short, the main benefits can be summarized in these points:
 - **Reporter** - sends a HTML report to your email addresses with all the information about the crawled website
 - **Offline website generator** - allows you to export the entire website to offline form, where it is possible to
   browse the site through local HTML files (without HTTP server) including all images, styles, scripts, fonts, etc.
+- **Website to markdown converter** - allows you to export/convert the entire website with all subpages to browsable markdown.
+  Optionally with images and other files (PDF, etc.) included. Great for documentation and archiving purposes.
+  See [markdown examples](https://github.com/janreges/siteone-crawler-markdown-examples/).
 - **Sitemap generator** - allows you to generate `sitemap.xml` and `sitemap.txt` files with a list of all pages on your
   website
 
@@ -129,6 +132,23 @@ The following features are summarized in greater detail:
 - **try it** for your website, and you will be very pleasantly surprised :-)
 - roadmap: we are also planning to release a version of the export compatible with **Nginx** that will preserve all
   original URLs for your website and allow you to host it on your own infrastructure.
+
+### Website to markdown converter
+
+- will help you **export/convert the entire website** with all subpages to **browsable markdown**.
+- you can optionally disable export and hide images and other files (PDF, etc.) which are included by default.
+- you can set multiple selectors (CSS like) to **remove unwanted elements** from the exported markdown.
+- to prevent that at the beginning of the markdown of all pages the header, long menu etc. will be repeated, so the
+  first occurrence of the most important heading (typically h1) is searched and all content before this heading is moved
+  to the end of the page below the line `---`.
+- converter has implemented **code block detection** and **syntax highlighting** for the most popular languages
+- html tables are converted to **markdown tables**
+- see all available [markdown exporter options](#markdown-exporter-options).
+- under the hood, it uses great [html-to-markdown](https://github.com/JohannesKaufmann/html-to-markdown) from Johannes
+  Kaufmann with some our improvements (e.g. table support)
+
+Tip: you can push the exported markdown folder to your GitHub repository, where it will be automatically rendered as a browsable
+documentation. You can look at the [examples](https://github.com/janreges/siteone-crawler-markdown-examples/) of converted websites to markdown.
 
 ### Sitemap generator
 
@@ -252,6 +272,11 @@ required arguments:
   --sitemap-txt-file==/dir/sitemap.txt \
   --sitemap-base-priority=0.5 \
   --sitemap-priority-increase=0.1 \
+  --markdown-export-dir=tmp/mydomain.tld.md \
+  --markdown-disable-images \
+  --markdown-disable-files \
+  --markdown-exclude-selector='.exclude-me' \
+  --markdown-replace-content='/<foo[^>]+>/ -> <bar>' \
   --mail-to=your.name@my-mail.tld \
   --mail-to=your.friend.name@my-mail.tld \
   --mail-from=crawler@ymy-mail.tld \
@@ -419,10 +444,21 @@ If necessary, you can also use your own endpoint `--upload-to` for saving the HT
 
 * `--offline-export-dir=<dir>`     Path to directory where to save the offline version of the website. If target directory does not exist, crawler will try to create it (requires sufficient rights).
 * `--offline-export-store-only-url-regex=<regex>` For debug - when filled it will activate debug mode and store only URLs which match one of these PCRE regexes. Can be specified multiple times.
-* `--offline-export-remove-unwanted-code=<1/0>` Remove unwanted code for offline mode? Typically JS of the analytics, social networks, cookie consent, cross origins, etc. Default values is `1`.
+* `--offline-export-remove-unwanted-code=<1/0>` Remove unwanted code for offline mode? Typically, JS of the analytics, social networks, cookie consent, cross origins, etc. Default values is `1`.
 * `--replace-content=<val>`        Replace content in HTML/JS/CSS with `foo -> bar` or regexp in PREG format, e.g. `/card[0-9]/i -> card`. Can be specified multiple times.
 * `--replace-query-string=<val>`   Instead of using a short hash instead of a query string in the filename, just replace some characters. You can use simple format `foo -> bar` or regexp in PREG format, e.g. `/([a-z]+)=([^&]*)(&|$)/i -> $1__$2`. Can be specified multiple times. **Use with caution!** Query string may contain special characters and your OS/filesystem may not support them. The `/` is automatically replaced by `~`. See issue [#30](https://github.com/janreges/siteone-crawler/issues/30) for more info.
 * `--ignore-store-file-error`      Enable this option to ignore any file storing errors. The export process will continue.
+
+#### Markdown exporter options
+
+* `--markdown-export-dir=<dir>`      Path to directory where to save the markdown version of the website.
+* `--markdown-export-store-only-url-regex=<regex>` For debug - when filled it will activate debug mode and store only URLs which match one of these PCRE regexes. Can be specified multiple times.
+* `--markdown-disable-images`        Do not export and show images in markdown files. Images are enabled by default.
+* `--markdown-disable-files`         Do not export and link files other than HTML/CSS/JS/fonts/images - eg. PDF, ZIP, etc. These files are enabled by default.
+* `--markdown-exclude-selector=<val>` Exclude some page content (DOM elements) from markdown export defined by CSS selectors like 'header', '.header', '#header', etc. Can be specified multiple times.
+* `--markdown-replace-content=<val>` Replace text content with `foo -> bar` or regexp in PREG format: `/card[0-9]/i -> card`. Can be specified multiple times.
+* `--markdown-replace-query-string=<val>` Instead of using a short hash instead of a query string in the filename, just replace some characters. You can use simple format 'foo -> bar' or regexp in PREG format, e.g. `'/([a-z]+)=([^&]*)(&|$)/i -> $1__$2'`. Can be specified multiple times.
+* `--markdown-ignore-store-file-error` Ignores any file storing errors. The export process will continue.
 
 #### Sitemap options
 
