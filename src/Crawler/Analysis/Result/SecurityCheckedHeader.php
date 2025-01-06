@@ -46,14 +46,17 @@ class SecurityCheckedHeader
     }
 
     /**
-     * @param string|null $value
+     * @param array|string|null $value
      * @param int $severity
      * @param string|null $recommendation
      * @return void
      */
-    public function setFinding(?string $value, int $severity, ?string $recommendation): void
+    public function setFinding(array|string|null $value, int $severity, ?string $recommendation): void
     {
         if ($value !== null) {
+            if (is_array($value)) {
+                $value = implode(', ', $value);
+            }
             $this->values[$value] = $value;
         }
         if ($recommendation !== null) {
