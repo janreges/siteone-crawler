@@ -302,6 +302,10 @@ class MarkdownExporter extends BaseExporter implements Exporter
         );
 
         if ($this->markdownDisableImages) {
+            // replace image in anchor text, like in [![logo by @foobar](data:image/gif;base64,fooo= "logo by @foobar")](index.html)
+            $mdContent = preg_replace('/\[!\[[^\]]*\]\([^\)]*\)\]\([^\)]*\)/', '', $mdContent);
+
+            // replace standard image
             $mdContent = preg_replace('/!\[.*\]\(.*\)/', '', $mdContent);
         }
 
