@@ -83,6 +83,10 @@ class Manager
     public function applyContentChangesForOfflineVersion(string &$content, int $contentType, ParsedUrl $url, bool $removeUnwantedCode): void
     {
         foreach ($this->processors as $processor) {
+            // break if content is not string (caused by previous processor)
+            if (!is_string($content)) {
+                break;
+            }
             if ($processor->isContentTypeRelevant($contentType)) {
                 $s = microtime(true);
                 $processor->applyContentChangesForOfflineVersion($content, $contentType, $url, $removeUnwantedCode);

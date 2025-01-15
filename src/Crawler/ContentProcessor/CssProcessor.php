@@ -78,8 +78,9 @@ class CssProcessor extends BaseProcessor implements ContentProcessor
             return 'url(' . $matches[1] . $relativeUrl . $matches[1] . ')';
         }, $content);
 
-        $content = $this->removeUnwantedCodeFromCss($content);
-
+        if (is_string($content)) {
+            $content = $this->removeUnwantedCodeFromCss($content);
+        }
     }
 
     /**

@@ -151,13 +151,19 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
         $content = $this->status->getUrlBody($visitedUrl->uqId);
 
         // apply required changes through all content processors
-        if (in_array($visitedUrl->contentType, self::$contentTypesThatRequireChanges)) {
+        if ($content && in_array($visitedUrl->contentType, self::$contentTypesThatRequireChanges)) {
+            $originalContent = $content;
             $this->crawler->getContentProcessorManager()->applyContentChangesForOfflineVersion(
                 $content,
                 $visitedUrl->contentType,
                 ParsedUrl::parse($visitedUrl->url),
                 $this->offlineExportRemoveUnwantedCode
             );
+
+            // check if content is string, otherwise use original content)
+            if (!is_string($content)) {
+                $content = $originalContent;
+            }
 
             // apply custom content replacements
             if ($content && $this->replaceContent) {
