@@ -36,7 +36,7 @@ class HttpResponse
         $this->url = $url;
         $this->statusCode = $statusCode;
         $this->body = $body;
-        $this->headers = $headers;
+        $this->headers = Utils::getFlatResponseHeaders($headers);
         $this->execTime = $execTime;
     }
 

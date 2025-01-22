@@ -1317,4 +1317,21 @@ class Utils
         return $result;
     }
 
+    /**
+     * Get flat response headers (all values are literals, not arrays)
+     * @param array $headers
+     * @return array
+     */
+    public static function getFlatResponseHeaders(array $headers): array
+    {
+        $result = [];
+        foreach ($headers as $key => $value) {
+            if (is_array($value)) {
+                $value = implode(', ', $value);
+            }
+            $result[$key] = $value;
+        }
+        return $result;
+    }
+
 }
