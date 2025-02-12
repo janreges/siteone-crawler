@@ -89,9 +89,17 @@ class SeoAndOpenGraphAnalyzer extends BaseAnalyzer implements Analyzer
         $initialHost = $this->crawler->getInitialParsedUrl()->host;
         foreach ($htmlUrls as $visitedUrl) {
             $htmlBody = $this->status->getStorage()->load($visitedUrl->uqId);
+            $htmlBodyWithDecodedEntities = @mb_convert_encoding($htmlBody, 'HTML-ENTITIES', 'UTF-8');
 
             $dom = new DOMDocument();
-            @$dom->loadHTML(@mb_convert_encoding($htmlBody, 'HTML-ENTITIES', 'UTF-8'));
+
+            if ($htmlBodyWithDecodedEntities) {
+                @$dom->loadHTML($htmlBodyWithDecodedEntities);
+            } elseif ($htmlBody) {
+                @$dom->loadHTML($htmlBody);
+            } else {
+                continue;
+            }
 
             $urlPathAndQuery = Utils::getUrlWithoutSchemeAndHost($visitedUrl->url, $initialHost, $initialScheme);
             $robotsTxtContent = Status::getRobotsTxtContent($visitedUrl->getScheme(), $visitedUrl->getHost(), $visitedUrl->getPort());
