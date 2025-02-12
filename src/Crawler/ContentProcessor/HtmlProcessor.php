@@ -162,7 +162,7 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
             }
 
             // ignore data URI, dotted relative path or #anchor
-            if (str_starts_with($value, '#') || preg_match('/^[a-z]+:[a-z0-9]/i', $value) === 1) {
+            if (str_starts_with($value, '#') || preg_match('/^[a-z]+:[a-z0-9+]/i', $value) === 1) {
                 return $matches[0];
             }
 
