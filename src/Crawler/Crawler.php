@@ -297,6 +297,13 @@ class Crawler
             $result['DOM'] = $dom;
         }
 
+        // Add custom extraction for extra columns defined using xpath or regexp
+        foreach ($this->options->extraColumns as $extraColumn) {
+            if (isset($extraColumn->customMethod)) {
+                $result[$extraColumn->name] = $extraColumn->extractValue($body);
+            }
+        }
+
         return $result;
     }
 

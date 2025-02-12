@@ -184,7 +184,7 @@ cd siteone-crawler
 
 # run crawler with basic options
 ./crawler --url=https://my.domain.tld
-````
+```
 
 ### Windows (x64)
 
@@ -245,7 +245,7 @@ required arguments:
   --proxy=proxy.mydomain.tld:8080 \
   --http-auth=myuser:secretPassword123 \
   --user-agent="My User-Agent String" \
-  --extra-columns="DOM,X-Cache(10),Title(40),Keywords(50),Description(50>)" \
+  --extra-columns="DOM,X-Cache(10),Title(40),Keywords(50),Description(50>),Heading1=xpath://h1/text()(20>),ProductPrice=regexp:/Price:\s*\$?(\d+(?:\.\d{2})?)/i#1(10)" \
   --accept-encoding="gzip, deflate" \
   --url-column-size=100 \
   --max-queue-length=3000 \
@@ -311,10 +311,13 @@ For a clearer list, I recommend going to the documentation: https://crawler.site
 #### Output settings
 
 * `--output=<val>`                 Output type. Supported values: `text`, `json`. Default is `text`.
-* `--extra-columns=<values>`       Comma delimited list of extra columns added to output table. It is possible to
-  specify HTTP header names (e.g. `X-Cache`) or predefined `Title`, `Keywords`, `Description` or `DOM` for the number of DOM
-  elements found in the HTML. You can set the expected length of the column in parentheses and `>` for do-not-truncate - e.g.
-  `DOM(6),X-Cache(10),Title(40>),Description(50>)`.
+* `--extra-columns=<values>`       Comma delimited list of extra columns added to output table. You can specify HTTP headers (e.g. `X-Cache`),
+  predefined values (`Title`, `Keywords`, `Description`, `DOM`), or custom extraction from text files (HTML, JS, CSS, TXT, JSON, XML, etc.)
+  using XPath or regexp. For custom extraction, use the format `Custom_column_name=method:pattern#group(length)`, where `method`
+  is `xpath` or `regexp`, `pattern` is the extraction pattern, an optional `#group` specifies the capturing group (or node index for XPath)
+  to return (defaulting to the entire match or first node), and an optional `(length)` sets the maximum output length (append `>` to disable truncation).
+  For example, use `Heading1=xpath://h1/text()(20>)` to extract the text of the first H1 element from an HTML document, and 
+  `ProductPrice=regexp:/Price:\s*\$?(\d+(?:\.\d{2})?)/i#1(10)` to extract a numeric price (e.g., "29.99") from a string like "Price: $29.99".
 * `--url-column-size=<num>`        Basic URL column width. By default, it is calculated from the size of your terminal window.
 * `--rows-limit=<num>`             Max. number of rows to display in tables with analysis results (protection against very 
   long and slow report). Default is `200`.
