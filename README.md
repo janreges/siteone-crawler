@@ -239,6 +239,7 @@ required arguments:
 ./crawler --url=https://mydomain.tld/ \
   --output=text \
   --workers=2 \
+  --max-reqs-per-sec=10 \
   --memory-limit=1024M \
   --resolve='mydomain.tld:443:127.0.0.1' \
   --timeout=5 \
@@ -326,6 +327,9 @@ For a clearer list, I recommend going to the documentation: https://crawler.site
 * `--show-scheme-and-host`         On text output, show scheme and host also for origin domain URLs.
 * `--hide-progress-bar`            Hide progress bar visible in text and JSON output for more compact view.
 * `--no-color`                     Disable colored output.
+* `--force-color`                  Force colored output regardless of support detection.
+* `--show-inline-criticals`        Show criticals from the analyzer directly in the URL table.
+* `--show-inline-warnings`         Show warnings from the analyzer directly in the URL table.
 
 Resource filtering:
 -------------------
@@ -361,6 +365,7 @@ through the file:// protocol.
 * `--workers=<int>`                Maximum number of concurrent workers (threads). Crawler will not make more 
   simultaneous requests to the server than this number. Use carefully! A high number of workers can cause a DoS attack.
   Default is `3`.
+* `--max-reqs-per-sec=<val>`       Max requests/s for whole crawler. Be careful not to cause a DoS attack. Default value is `10`.
 * `--memory-limit=<size>`          Memory limit in units `M` (Megabytes) or `G` (Gigabytes). Default is `512M`.
 * `--resolve=<host:port:ip>`       Custom DNS resolution in `domain:port:ip` format. Same as [curl --resolve](https://everything.curl.dev/usingcurl/connections/name.html?highlight=resolve#provide-a-custom-ip-address-for-a-name).
   Can be specified multiple times for multiple domain:port pairs. Example: `--resolve='mydomain.tld:443:127.0.0.1`
@@ -484,6 +489,24 @@ If necessary, you can also use your own endpoint `--upload-to` for saving the HT
 * `--result-storage-compression`     Enable compression for results storage. Saves disk space, but uses more CPU.
 * `--http-cache-dir=<dir>`           Cache dir for HTTP responses. You can disable cache by `--http-cache-dir='off'`. Default values is `tmp/http-client-cache`.
 * `--http-cache-compression`         Enable compression for HTTP cache storage. Saves disk space, but uses more CPU.
+* `--websocket-server=<host:port>`   Start crawler with websocket server on given host:port, e.g. `0.0.0.0:8000`.
+  To connected clients will be sent this message after each URL is crawled: `{"type":"urlResult","url":"https://example.com/products/","statusCode":200,"size":45280,"execTime":0.823}`.
+* `--console-width=<int>`            Enforce a fixed console width, disabling automatic detection.
+
+### Fastest URL analyzer
+
+* `--fastest-urls-top-limit=<int>`   Number of URLs in TOP fastest list. Default is `20`.
+* `--fastest-urls-max-time=<val>`    Maximum response time for an URL to be considered fast. Default is `1`.
+
+### SEO and OpenGraph analyzer
+
+* `--max-heading-level=<int>`        Max heading level from 1 to 6 for analysis. Default is `3`.
+
+### Slowest URL analyzer
+
+* `--slowest-urls-top-limit=<int>`   Number of URLs in TOP slowest list. Default is `20`.
+* `--slowest-urls-min-time=<val>`    Minimum response time threshold for slow URLs. Default is `0.01`.
+* `--slowest-urls-max-time=<val>`    Maximum response time for an URL to be considered very slow. Default is `3`.
 
 ## Roadmap
 
