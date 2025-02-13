@@ -37,10 +37,15 @@ GIF animation of the crawler in action (also available as a [video](https://www.
     * [Arguments](#arguments)
         + [Basic settings](#basic-settings)
         + [Output settings](#output-settings)
+        + [Resource filtering](#resource-filtering)
         + [Advanced crawler settings](#advanced-crawler-settings)
-        + [Export settings](#export-settings)
+        + [File export settings](#file-export-settings)
         + [Mailer options](#mailer-options)
         + [Upload options](#upload-options)
+        + [Offline exporter options](#offline-exporter-options)
+        + [Markdown exporter options](#markdown-exporter-options)
+        + [Sitemap options](#sitemap-options)
+        + [Expert options](#expert-options)
 - [Roadmap](#roadmap)
 - [Motivation to create this tool](#motivation-to-create-this-tool)
 - [Disclaimer](#disclaimer)
@@ -289,224 +294,179 @@ required arguments:
   --mail-smtp-pass=secretPassword123
 ```
 
-### Arguments
+## Arguments
 
 For a clearer list, I recommend going to the documentation: https://crawler.siteone.io/configuration/command-line-options/
 
-#### Basic settings
+### Basic settings
 
-* `--url=<url>`                    Required. HTTP or HTTPS URL address of the website or sitemap xml to be crawled.
-  Use quotation marks if the URL contains query parameters.
-* `--single-page`                  Load only one page to which the URL is given (and its assets), but do not follow other pages.
-* `--max-depth=<int>`              Maximum crawling depth (for pages, not assets). Default is `0` (no limit). `1` means 
-  `/about` or `/about/`, `2` means `/about/contacts` etc.
-* `--device=<val>`                 Device type for choosing a predefined User-Agent. Ignored when `--user-agent` is
-  defined. Supported values: `desktop`, `mobile`, `tablet`. Defaults is `desktop`.
-* `--user-agent=<val>`             Custom User-Agent header. Use quotation marks. If specified, it takes precedence over
-  the device parameter. If you add `!` at the end, the siteone-crawler/version will not be added as a signature at the
-  end of the final user-agent.
-* `--timeout=<int>`                Request timeout in seconds. Default is `3`.
-* `--proxy=<host:port>`            HTTP proxy to use in `host:port` format. Host can be hostname, IPv4 or IPv6.
-* `--http-auth=<user:pass>`        Basic HTTP authentication in `username:password` format.
+| Parameter | Description |
+|-----------|-------------|
+| `--url=<url>` | Required. HTTP or HTTPS URL address of the website or sitemap xml to be crawled.<br>Use quotation marks `''` if the URL contains query parameters. |
+| `--single-page` | Load only one page to which the URL is given (and its assets), but do not follow other pages. |
+| `--max-depth=<int>` | Maximum crawling depth (for pages, not assets). Default is `0` (no limit). `1` means `/about`<br>or `/about/`, `2` means `/about/contacts` etc. |
+| `--device=<val>` | Device type for choosing a predefined User-Agent. Ignored when `--user-agent` is defined.<br>Supported values: `desktop`, `mobile`, `tablet`. Defaults is `desktop`. |
+| `--user-agent=<val>` | Custom User-Agent header. Use quotation marks. If specified, it takes precedence over<br>the device parameter. If you add `!` at the end, the siteone-crawler/version will not be<br>added as a signature at the end of the final user-agent. |
+| `--timeout=<int>` | Request timeout in seconds. Default is `3`. |
+| `--proxy=<host:port>` | HTTP proxy to use in `host:port` format. Host can be hostname, IPv4 or IPv6. |
+| `--http-auth=<user:pass>` | Basic HTTP authentication in `username:password` format. |
 
-#### Output settings
+### Output settings
 
-* `--output=<val>`                 Output type. Supported values: `text`, `json`. Default is `text`.
-* `--extra-columns=<values>`       Comma delimited list of extra columns added to output table. You can specify HTTP headers (e.g. `X-Cache`),
-  predefined values (`Title`, `Keywords`, `Description`, `DOM`), or custom extraction from text files (HTML, JS, CSS, TXT, JSON, XML, etc.)
-  using XPath or regexp. For custom extraction, use the format `Custom_column_name=method:pattern#group(length)`, where `method`
-  is `xpath` or `regexp`, `pattern` is the extraction pattern, an optional `#group` specifies the capturing group (or node index for XPath)
-  to return (defaulting to the entire match or first node), and an optional `(length)` sets the maximum output length (append `>` to disable truncation).
-  For example, use `Heading1=xpath://h1/text()(20>)` to extract the text of the first H1 element from an HTML document, and 
-  `ProductPrice=regexp:/Price:\s*\$?(\d+(?:\.\d{2})?)/i#1(10)` to extract a numeric price (e.g., "29.99") from a string like "Price: $29.99".
-* `--url-column-size=<num>`        Basic URL column width. By default, it is calculated from the size of your terminal window.
-* `--rows-limit=<num>`             Max. number of rows to display in tables with analysis results (protection against very 
-  long and slow report). Default is `200`.
-* `--do-not-truncate-url`          In the text output, long URLs are truncated by default to `--url-column-size` so the
-  table does not wrap due to long URLs. With this option, you can turn off the truncation.
-* `--show-scheme-and-host`         On text output, show scheme and host also for origin domain URLs.
-* `--hide-progress-bar`            Hide progress bar visible in text and JSON output for more compact view.
-* `--no-color`                     Disable colored output.
-* `--force-color`                  Force colored output regardless of support detection.
-* `--show-inline-criticals`        Show criticals from the analyzer directly in the URL table.
-* `--show-inline-warnings`         Show warnings from the analyzer directly in the URL table.
+| Parameter | Description |
+|-----------|-------------|
+| `--output=<val>` | Output type. Supported values: `text`, `json`. Default is `text`. |
+| `--extra-columns=<values>` | Comma delimited list of extra columns added to output table. You can specify HTTP headers<br>(e.g. `X-Cache`), predefined values (`Title`, `Keywords`, `Description`, `DOM`), or custom<br>extraction from text files (HTML, JS, CSS, TXT, JSON, XML, etc.) using XPath or regexp.<br>For custom extraction, use the format `Custom_column_name=method:pattern#group(length)`, where<br>`method` is `xpath` or `regexp`, `pattern` is the extraction pattern, an optional `#group` specifies the<br>capturing group (or node index for XPath) to return (defaulting to the entire match or first node), and an<br>optional `(length)` sets the maximum output length (append `>` to disable truncation).<br>For example, use `Heading1=xpath://h1/text()(20>)` to extract the text of the first H1 element<br>from the HTML document, and `ProductPrice=regexp:/Price:\s*\$?(\d+(?:\.\d{2})?)/i#1(10)`<br>to extract a numeric price (e.g., "29.99") from a string like "Price: $29.99". |
+| `--url-column-size=<num>` | Basic URL column width. By default, it is calculated from the size of your terminal window. |
+| `--rows-limit=<num>` | Max. number of rows to display in tables with analysis results (protection against very long and slow report).<br>Default is `200`. |
+| `--do-not-truncate-url` | In the text output, long URLs are truncated by default to `--url-column-size` so the table does not<br>wrap due to long URLs. With this option, you can turn off the truncation. |
+| `--show-scheme-and-host` | On text output, show scheme and host also for origin domain URLs. |
+| `--hide-progress-bar` | Hide progress bar visible in text and JSON output for more compact view. |
+| `--no-color` | Disable colored output. |
+| `--force-color` | Force colored output regardless of support detection. |
+| `--show-inline-criticals` | Show criticals from the analyzer directly in the URL table. |
+| `--show-inline-warnings` | Show warnings from the analyzer directly in the URL table. |
 
-Resource filtering:
--------------------
+### Resource filtering
 
-In the default setting, the crawler crawls and downloads all the content it comes across - HTML pages, images,
-documents,
-javascripts, stylesheets, fonts, just absolutely everything it sees. These options allow you to disable (and remove
-from the HTML) individual types of assets and all related content.
 
-For example, it is very useful to disable JavaScript on modern websites, e.g. on React with NextJS, which have SSR,
-so they work fine without JavaScript from the point of view of content browsing and navigation.
+| Parameter | Description |
+|-----------|-------------|
+| `--disable-all-assets` | Disables crawling of all assets and files and only crawls pages in href attributes.<br>Shortcut for calling all other `--disable-*` flags. |
+| `--disable-javascript` | Disables JavaScript downloading and removes all JavaScript code from HTML,<br>including `onclick` and other `on*` handlers. |
+| `--disable-styles` | Disables CSS file downloading and at the same time removes all style definitions<br>by `<style>` tag or inline by style attributes. |
+| `--disable-fonts` | Disables font downloading and also removes all font/font-face definitions from CSS. |
+| `--disable-images` | Disables downloading of all images and replaces found images in HTML with placeholder image only. |
+| `--disable-files` | Disables downloading of any files (typically downloadable documents) to which various links point. |
+| `--remove-all-anchor-listeners` | On all links on the page remove any event listeners. Useful on some types of sites with modern<br>JS frameworks that would like to compose content dynamically (React, Svelte, Vue, Angular, etc.). |
 
-It is particularly useful to disable JavaScript in the case of exporting websites built e.g. on React to offline form
-(without HTTP server), where it is almost impossible to get the website to work from any location on the disk only
-through the file:// protocol.
+### Advanced crawler settings
 
-* `--disable-all-assets`           Disables crawling of all assets and files and only crawls pages in href attributes.
-  Shortcut for calling all other `--disable-*` flags.
-* `--disable-javascript`           Disables JavaScript downloading and removes all JavaScript code from HTML,
-  including `onclick` and other `on*` handlers.
-* `--disable-styles`               Disables CSS file downloading and at the same time removes all style definitions
-  by `<style>` tag or inline by style attributes.
-* `--disable-fonts`                Disables font downloading and also removes all font/font-face definitions from CSS.
-* `--disable-images`               Disables downloading of all images and replaces found images in HTML with placeholder
-  image only.
-* `--disable-files `               Disables downloading of any files (typically downloadable documents) to which various
-  links point.
-* `--remove-all-anchor-listeners`  On all links on the page remove any event listeners. Useful on some types of sites
-  with modern JS frameworks that would like to compose content dynamically (React, Svelte, Vue, Angular, etc.).
+| Parameter | Description |
+|-----------|-------------|
+| `--workers=<int>` | Maximum number of concurrent workers (threads).<br>Crawler will not make more simultaneous requests to the server than this number.<br>Use carefully! A high number of workers can cause a DoS attack. Default is `3`. |
+| `--max-reqs-per-sec=<val>` | Max requests/s for whole crawler. Be careful not to cause a DoS attack. Default value is `10`. |
+| `--memory-limit=<size>` | Memory limit in units `M` (Megabytes) or `G` (Gigabytes). Default is `2048M`. |
+| `--resolve=<host:port:ip>` | Custom DNS resolution in `domain:port:ip` format. Same as [curl --resolve](https://everything.curl.dev/usingcurl/connections/name.html?highlight=resolve#provide-a-custom-ip-address-for-a-name).<br>Can be specified multiple times for multiple domain:port pairs.<br>Example: `--resolve='mydomain.tld:443:127.0.0.1` |
+| `--allowed-domain-for-external-files=<domain>` | Primarily, the crawler crawls only the URL within the domain for initial URL. This allows<br>you to enable loading of file content from another domain as well (e.g. if you want to<br>load assets from a CDN). Can be specified multiple times. Use can use domains with wildcard `*`. |
+| `--allowed-domain-for-crawling=<domain>` | This option will allow you to crawl all content from other listed domains - typically in the case<br>of language mutations on other domains. Can be specified multiple times.<br>Use can use domains with wildcard `*` including e.g. `*.siteone.*`. |
+| `--single-foreign-page` | If crawling of other domains is allowed (using `--allowed-domain-for-crawling`),<br>it ensures that when another domain is not on same second-level domain, only that linked page<br>and its assets are crawled from that foreign domain. |
+| `--include-regex=<regex>` | Regular expression compatible with PHP preg_match() for URLs that should be included.<br>Argument can be specified multiple times. Example: `--include-regex='/^\/public\//'` |
+| `--ignore-regex=<regex>` | Regular expression compatible with PHP preg_match() for URLs that should be ignored.<br>Argument can be specified multiple times.<br>Example: `--ignore-regex='/^.*\/downloads\/.*\.pdf$/i'` |
+| `--regex-filtering-only-for-pages` | Set if you want filtering by `*-regex` rules apply only to page URLs, but static assets (JS, CSS, images,<br>fonts, documents) have to be loaded regardless of filtering.<br>Useful where you want to filter only /sub-pages/ by `--include-regex='/\/sub-pages\//'`, but<br>assets have to be loaded from any URLs. |
+| `--analyzer-filter-regex` | Regular expression compatible with PHP preg_match() applied to Analyzer class names<br> for analyzers filtering.<br>Example: `/(content\|accessibility)/i` or `/^(?:(?!best\|access).)*$/i` for all<br>analyzers except `BestPracticesAnalyzer` and `AccessibilityAnalyzer`. |
+| `--accept-encoding=<val>` | Custom `Accept-Encoding` request header. Default is `gzip, deflate, br`. |
+| `--remove-query-params` | Remove query parameters from found URLs. Useful on websites where a lot of links<br>are made to the same pages, only with different irrelevant query parameters. |
+| `--add-random-query-params` | Adds several random query parameters to each URL.<br>With this, it is possible to bypass certain forms of server and CDN caches. |
+| `--ignore-robots-txt` | Should robots.txt content be ignored? Useful for crawling an otherwise internal/private/unindexed site. |
+| `--http-cache-dir=<dir>` | Cache dir for HTTP responses. You can disable cache by `--http-cache-dir='off'`.<br>Default values is `tmp/http-client-cache`. |
+| `--http-cache-compression` | Enable compression for HTTP cache storage. Saves disk space, but uses more CPU. |
+| `--max-queue-length=<num>` | The maximum length of the waiting URL queue. Increase in case of large websites,<br>but expect higher memory requirements. Default is `9000`. |
+| `--max-visited-urls=<num>` | The maximum number of the visited URLs. Increase in case of large websites, but expect<br>higher memory requirements. Default is `10000`. |
+| `--max-skipped-urls=<num>` | The maximum number of the skipped URLs. Increase in case of large websites, but expect<br>higher memory requirements. Default is `10000`. |
+| `--max-url-length=<num>` | The maximum supported URL length in chars. Increase in case of very long URLs, but expect<br>higher memory requirements. Default is `2083`. |
+| `--max-non200-responses-per-basename=<num>` | Protection against looping with dynamic non-200 URLs. If a basename (the last part of the URL<br>after the last slash) has more non-200 responses than this limit, other URLs with same basename<br>will be ignored/skipped. Default is `5`. |
 
-#### Advanced crawler settings
+### File export settings
 
-* `--workers=<int>`                Maximum number of concurrent workers (threads). Crawler will not make more 
-  simultaneous requests to the server than this number. Use carefully! A high number of workers can cause a DoS attack.
-  Default is `3`.
-* `--max-reqs-per-sec=<val>`       Max requests/s for whole crawler. Be careful not to cause a DoS attack. Default value is `10`.
-* `--memory-limit=<size>`          Memory limit in units `M` (Megabytes) or `G` (Gigabytes). Default is `512M`.
-* `--resolve=<host:port:ip>`       Custom DNS resolution in `domain:port:ip` format. Same as [curl --resolve](https://everything.curl.dev/usingcurl/connections/name.html?highlight=resolve#provide-a-custom-ip-address-for-a-name).
-  Can be specified multiple times for multiple domain:port pairs. Example: `--resolve='mydomain.tld:443:127.0.0.1`
-* `--allowed-domain-for-external-files=<domain>`  Primarily, the crawler crawls only the URL within the domain for
-  initial URL. This allows you to enable loading of file content from another domain as well (e.g. if you want to load
-  assets from a CDN). Can be specified multiple times. Use can use domains with wildcard `*`.
-* `--allowed-domain-for-crawling=<domain>`  This option will allow you to crawl all content from other listed
-  domains - typically in the case of language mutations on other domains. Can be specified multiple times. Use can use
-  domains with wildcard `*` including e.g. `*.siteone.*`.
-* `--single-foreign-page`          If crawling of other domains is allowed (using `--allowed-domain-for-crawling`), it
-  ensures that when another domain is not on same second-level domain, only that linked page and its assets are crawled
-  from that foreign domain.
-* `--include-regex=<regex>`        Regular expression compatible with PHP preg_match() for URLs that should be included.
-  Argument can be specified multiple times. Example: `--include-regex='/^\/public\//'`
-* `--ignore-regex=<regex>`         Regular expression compatible with PHP preg_match() for URLs that should be ignored.
-  Argument can be specified multiple times. Example: `--ignore-regex='/^.*\/downloads\/.*\.pdf$/i'`
-* `--regex-filtering-only-for-pages` Set if you want filtering by `*-regex` rules apply only to page URLs,
-  but static assets (JS, CSS, images, fonts, documents) have to be loaded regardless of filtering. Useful where you want
-  to filter only /sub-pages/ by `--include-regex='/\/sub-pages\//'`, but assets have to be loaded from any URLs.
-* `--analyzer-filter-regex`        Regular expression compatible with PHP preg_match() applied to Analyzer class names 
- for analyzers filtering. Example: `/(content|accessibility)/i` or `/^(?:(?!best|access).)*$/i` for all analyzers except
- `BestPracticesAnalyzer` and `AccessibilityAnalyzer`.
-* `--accept-encoding=<val>`        Custom `Accept-Encoding` request header. Default is `gzip, deflate, br`.
-* `--remove-query-params`          Remove query parameters from found URLs. Useful on websites where a lot of links are
-  made to the same pages, only with different irrelevant query parameters.
-* `--add-random-query-params`      Adds several random query parameters to each URL. With this, it is possible to bypass
-  certain forms of server and CDN caches.
-* `--ignore-robots-txt`            Should robots.txt content be ignored? Useful for crawling an otherwise
-  internal/private/unindexed site.
-  
-* `--http-cache-dir=<dir>`         Cache dir for HTTP responses. You can disable cache by `--http-cache-dir='off'`. Default 
-  is `tmp/http-client-cache`.
-* `--http-cache-compression`       Enable compression for HTTP cache storage. Saves disk space, but uses more CPU.
-* `--max-queue-length=<num>`       The maximum length of the waiting URL queue. Increase in case of large websites, but
-  expect higher memory requirements. Default is `9000`.
-* `--max-visited-urls=<num>`       The maximum number of the visited URLs. Increase in case of large websites, but
-  expect higher memory requirements. Default is `10000`.
-* `--max-skipped-urls=<num>`       The maximum number of the skipped URLs. Increase in case of large websites, but
-  expect higher memory requirements. Default is `10000`.
-* `--max-url-length=<num>`         The maximum supported URL length in chars. Increase in case of very long URLs, but
-  expect higher memory requirements. Default is `2083`.
-* `--max-non200-responses-per-basename=<num>`  Protection against looping with dynamic non-200 URLs. If a basename (the
-  last part of the URL after the last slash) has more non-200 responses than this limit, other URLs with same basename
-  will be ignored/skipped. Default is `5`.
+| Parameter | Description |
+|-----------|-------------|
+| `--output-html-report=<file>` | Save HTML report into that file. Set to empty '' to disable HTML report.<br>By default saved into `tmp/%domain%.report.%datetime%.html`. |
+| `--output-json-file=<file>` | File path for JSON output. Set to empty '' to disable JSON file.<br>By default saved into `tmp/%domain%.output.%datetime%.json`. |
+| `--output-text-file=<file>` | File path for TXT output. Set to empty '' to disable TXT file.<br>By default saved into `tmp/%domain%.output.%datetime%.txt`. |
 
-#### File export settings
+### Mailer options
 
-* `--output-html-report=<file>`    Save HTML report into that file. Set to empty '' to disable HTML report. By default
-  saved into `tmp/%domain%.report.%datetime%.html`.
-* `--output-json-file=<file>`      File path for JSON output. Set to empty '' to disable JSON file. By default saved
- into `tmp/%domain%.output.%datetime%.json`.
-* `--output-text-file=<file>`      File path for TXT output. Set to empty '' to disable TXT file. By default saved
-  into `tmp/%domain%.output.%datetime%.txt`.
+| Parameter | Description |
+|-----------|-------------|
+| `--mail-to=<email>` | Recipients of HTML e-mail reports. Optional but required for mailer activation.<br>You can specify multiple emails separated by comma. |
+| `--mail-from=<email>` | E-mail sender address. Default values is `siteone-crawler@your-hostname.com`. |
+| `--mail-from-name=<val>` | E-mail sender name. Default values is `SiteOne Crawler`. |
+| `--mail-subject-template=<val>` | E-mail subject template. You can use dynamic variables `%domain%`, `%date%` and `%datetime%`.<br>Default values is `Crawler Report for %domain% (%date%)`. |
+| `--mail-smtp-host=<host>` | SMTP host for sending emails. Default is `localhost`. |
+| `--mail-smtp-port=<port>` | SMTP port for sending emails. Default is `25`. |
+| `--mail-smtp-user=<user>` | SMTP user, if your SMTP server requires authentication. |
+| `--mail-smtp-pass=<pass>` | SMTP password, if your SMTP server requires authentication. |
 
-#### Mailer options
+### Upload options
 
-* `--mail-to=<email>`              Recipients of HTML e-mail reports. Optional but required for mailer activation. You
-  can specify multiple emails separated by comma.
-* `--mail-from=<email>`            E-mail sender address. Default values is `siteone-crawler@your-hostname.com`.
-* `--mail-from-name=<val>`         E-mail sender name. Default values is `SiteOne Crawler`.
-* `--mail-subject-template=<val>`  E-mail subject template. You can use dynamic variables %domain%, %date% and
-  %datetime%. Default values is `Crawler Report for %domain% (%date%)`.
-* `--mail-smtp-host=<host>`        SMTP host for sending emails. Default is `localhost`.
-* `--mail-smtp-port=<port>`        SMTP port for sending emails. Default is `25`.
-* `--mail-smtp-user=<user>`        SMTP user, if your SMTP server requires authentication.
-* `--mail-smtp-pass=<pass>`        SMTP password, if your SMTP server requires authentication.
+| Parameter | Description |
+|-----------|-------------|
+| `--upload` | Enable HTML report upload to `--upload-to`. |
+| `--upload-to=<url>` | URL of the endpoint where to send the HTML report. Default value is `https://crawler.siteone.io/up`. |
+| `--upload-retention=<val>` | How long should the HTML report be kept in the online version?<br>Values: 1h / 4h / 12h / 24h / 3d / 7d / 30d / 365d / forever.<br>Default value is `30d`. |
+| `--upload-password=<val>` | Optional password, which must be entered (the user will be 'crawler')<br>to display the online HTML report. |
+| `--upload-timeout=<int>` | Upload timeout in seconds. Default value is `3600`. |
 
-**NOTICE**: For now, only SMTP without encryption is supported, typically running on port 25. If you are interested in
-this tool, we can also implement secure SMTP support, or simply send me a pull request with lightweight implementation.
+### Offline exporter options
 
-#### Upload options
+| Parameter | Description |
+|-----------|-------------|
+| `--offline-export-dir=<dir>` | Path to directory where to save the offline version of the website. If target directory<br>does not exist, crawler will try to create it (requires sufficient rights). |
+| `--offline-export-store-only-url-regex=<regex>` | For debug - when filled it will activate debug mode and store only URLs<br>which match one of these PCRE regexes. Can be specified multiple times. |
+| `--offline-export-remove-unwanted-code=<1/0>` | Remove unwanted code for offline mode? Typically, JS of the analytics, social networks,<br>cookie consent, cross origins, etc. Default values is `1`. |
+| `--offline-export-no-auto-redirect-html` | Disables the automatic creation of redirect HTML files for each subfolder that contains<br>an `index.html`. This solves situations for URLs where sometimes the URL ends with a slash,<br>sometimes it doesn't. |
+| `--replace-content=<val>` | Replace content in HTML/JS/CSS with `foo -> bar` or regexp in PREG format,<br>e.g. `/card[0-9]/i -> card`. Can be specified multiple times. |
+| `--replace-query-string=<val>` | Instead of using a short hash instead of a query string in the filename, just replace some characters.<br>You can use simple format `foo -> bar` or regexp in PREG format,<br> e.g. `'/([a-z]+)=([^&]*)(&|$)/i -> $1__$2'`. Can be specified multiple times. |
+| `--ignore-store-file-error` | Enable this option to ignore any file storing errors.<br>The export process will continue. |
 
-* `--upload`                         Enable HTML report upload to `--upload-to`.
-* `--upload-to=<url>`                URL of the endpoint where to send the HTML report. Default value is `https://crawler.siteone.io/up`.
-* `--upload-retention=<val>`         How long should the HTML report be kept in the online version? Values: 1h / 4h / 12h / 24h / 3d / 7d / 30d / 365d / forever. Default value is `30d`.
-* `--upload-password=<val>`          Optional password, which must be entered (the user will be 'crawler') to display the online HTML report.
-* `--upload-timeout=<int>`           Upload timeout in seconds. Default value is `3600`.
+### Markdown exporter options
 
-If necessary, you can also use your own endpoint `--upload-to` for saving the HTML report.
+| Parameter | Description |
+|-----------|-------------|
+| `--markdown-export-dir=<dir>` | Path to directory where to save the markdown version of the website.<br>Directory will be created if it doesn't exist. |
+| `--markdown-export-store-only-url-regex=<regex>` | For debug - when filled it will activate debug mode and store only URLs which match one of these<br>PCRE regexes.<br>Can be specified multiple times. |
+| `--markdown-disable-images` | Do not export and show images in markdown files.<br>Images are enabled by default. |
+| `--markdown-disable-files` | Do not export and link files other than HTML/CSS/JS/fonts/images - eg. PDF, ZIP, etc.<br>These files are enabled by default. |
+| `--markdown-exclude-selector=<val>` | Exclude some page content (DOM elements) from markdown export defined by CSS selectors like 'header', '.header', '#header', etc.<br>Can be specified multiple times. |
+| `--markdown-replace-content=<val>` | Replace text content with `foo -> bar` or regexp in PREG format: `/card[0-9]/i -> card`.<br>Can be specified multiple times. |
+| `--markdown-replace-query-string=<val>` | Instead of using a short hash instead of a query string in the filename, just replace some characters.<br>You can use simple format 'foo -> bar' or regexp in PREG format, e.g.<br>`'/([a-z]+)=([^&]*)(&|$)/i -> $1__$2'`. Can be specified multiple times. |
+| `--markdown-ignore-store-file-error` | Ignores any file storing errors. The export process will continue. |
 
-**How to implement own endpoint**: Your own endpoint need to accept a POST request, where in `htmlBody` is the gzipped HTML body of the report, `retention` is the retention value, and `password` is an optional password to encrypt access to the HTML. The response must be JSON with `url` key with the URL where the report is available.
+### Sitemap options
 
-#### Offline exporter options
+| Parameter | Description |
+|-----------|-------------|
+| `--sitemap-xml-file=<file>` | File path where generated XML Sitemap will be saved.<br>Extension `.xml` is automatically added if not specified. |
+| `--sitemap-txt-file=<file>` | File path where generated TXT Sitemap will be saved.<br>Extension `.txt` is automatically added if not specified. |
+| `--sitemap-base-priority=<num>` | Base priority for XML sitemap. Default values is `0.5`. |
+| `--sitemap-priority-increase=<num>` | Priority increase value based on slashes count in the URL. Default values is `0.1`. |
 
-* `--offline-export-dir=<dir>`     Path to directory where to save the offline version of the website. If target directory does not exist, crawler will try to create it (requires sufficient rights).
-* `--offline-export-store-only-url-regex=<regex>` For debug - when filled it will activate debug mode and store only URLs which match one of these PCRE regexes. Can be specified multiple times.
-* `--offline-export-remove-unwanted-code=<1/0>` Remove unwanted code for offline mode? Typically, JS of the analytics, social networks, cookie consent, cross origins, etc. Default values is `1`.
-* `--offline-export-no-auto-redirect-html` Disables the automatic creation of redirect HTML files for each subfolder that contains an `index.html`. This solves situations for URLs where sometimes the URL ends with a slash, sometimes it doesn't.
-* `--replace-content=<val>`        Replace content in HTML/JS/CSS with `foo -> bar` or regexp in PREG format, e.g. `/card[0-9]/i -> card`. Can be specified multiple times.
-* `--replace-query-string=<val>`   Instead of using a short hash instead of a query string in the filename, just replace some characters. You can use simple format `foo -> bar` or regexp in PREG format, e.g. `/([a-z]+)=([^&]*)(&|$)/i -> $1__$2`. Can be specified multiple times. **Use with caution!** Query string may contain special characters and your OS/filesystem may not support them. The `/` is automatically replaced by `~`. See issue [#30](https://github.com/janreges/siteone-crawler/issues/30) for more info.
-* `--ignore-store-file-error`      Enable this option to ignore any file storing errors. The export process will continue.
+### Expert options
 
-#### Markdown exporter options
-
-* `--markdown-export-dir=<dir>`      Path to directory where to save the markdown version of the website.
-* `--markdown-export-store-only-url-regex=<regex>` For debug - when filled it will activate debug mode and store only URLs which match one of these PCRE regexes. Can be specified multiple times.
-* `--markdown-disable-images`        Do not export and show images in markdown files. Images are enabled by default.
-* `--markdown-disable-files`         Do not export and link files other than HTML/CSS/JS/fonts/images - eg. PDF, ZIP, etc. These files are enabled by default.
-* `--markdown-exclude-selector=<val>` Exclude some page content (DOM elements) from markdown export defined by CSS selectors like 'header', '.header', '#header', etc. Can be specified multiple times.
-* `--markdown-replace-content=<val>` Replace text content with `foo -> bar` or regexp in PREG format: `/card[0-9]/i -> card`. Can be specified multiple times.
-* `--markdown-replace-query-string=<val>` Instead of using a short hash instead of a query string in the filename, just replace some characters. You can use simple format 'foo -> bar' or regexp in PREG format, e.g. `'/([a-z]+)=([^&]*)(&|$)/i -> $1__$2'`. Can be specified multiple times.
-* `--markdown-ignore-store-file-error` Ignores any file storing errors. The export process will continue.
-
-#### Sitemap options
-
-* `--sitemap-xml-file=<file>`      File path where generated XML Sitemap will be saved. Extension `.xml` is
-  automatically added if not specified.
-* `--sitemap-txt-file=<file>`      File path where generated TXT Sitemap will be saved. Extension `.txt` is
-  automatically added if not specified.
-* `--sitemap-base-priority=<num>`  Base priority for XML sitemap. Default values is `0.5`.
-* `--sitemap-priority-increase=<num>`  Priority increase value based on slashes count in the URL. Default values
-  is `0.1`.
-
-#### Expert options
-
-* `--debug`                          Activate debug mode.
-* `--debug-log-file=<file>`          Log file where to save debug messages. When `--debug` is not set and `--debug-log-file` is set, logging will be active without visible output.
-* `--debug-url-regex=<regex>`        Regex for URL(s) to debug. When crawled URL is matched, parsing, URL replacing, and other actions are printed to output. Can be specified multiple times.
-* `--result-storage=<val>`           Result storage type for content and headers. Values: `memory` or `file`. Use `file` for large websites. Default values is `memory`.
-* `--result-storage-dir=<dir>`       Directory for `--result-storage=file`. Default values is `tmp/result-storage`.
-* `--result-storage-compression`     Enable compression for results storage. Saves disk space, but uses more CPU.
-* `--http-cache-dir=<dir>`           Cache dir for HTTP responses. You can disable cache by `--http-cache-dir='off'`. Default values is `tmp/http-client-cache`.
-* `--http-cache-compression`         Enable compression for HTTP cache storage. Saves disk space, but uses more CPU.
-* `--websocket-server=<host:port>`   Start crawler with websocket server on given host:port, e.g. `0.0.0.0:8000`.
-  To connected clients will be sent this message after each URL is crawled: `{"type":"urlResult","url":"https://example.com/products/","statusCode":200,"size":45280,"execTime":0.823}`.
-* `--console-width=<int>`            Enforce a fixed console width, disabling automatic detection.
+| Parameter | Description |
+|-----------|-------------|
+| `--debug` | Activate debug mode. |
+| `--debug-log-file=<file>` | Log file where to save debug messages. When `--debug` is not set and `--debug-log-file`<br> is set, logging will be active without visible output. |
+| `--debug-url-regex=<regex>` | Regex for URL(s) to debug. When crawled URL is matched, parsing, URL replacing,<br>and other actions are printed to output. Can be specified multiple times. |
+| `--result-storage=<val>` | Result storage type for content and headers. Values: `memory` or `file`.<br>Use `file` for large websites. Default values is `memory`. |
+| `--result-storage-dir=<dir>` | Directory for `--result-storage=file`. Default values is `tmp/result-storage`. |
+| `--result-storage-compression` | Enable compression for results storage. Saves disk space, but uses more CPU. |
+| `--http-cache-dir=<dir>` | Cache dir for HTTP responses. You can disable cache by `--http-cache-dir='off'`.<br>Default values is `tmp/http-client-cache`. |
+| `--http-cache-compression` | Enable compression for HTTP cache storage.<br>Saves disk space, but uses more CPU. |
+| `--websocket-server=<host:port>` | Start crawler with websocket server on given host:port, e.g. `0.0.0.0:8000`.<br>To connected clients will be sent this message after each URL is crawled:<br>`{"type":"urlResult","url":"...","statusCode":200,"size":4528,"execTime":0.823}`. |
+| `--console-width=<int>` | Enforce a fixed console width, disabling automatic detection. |
 
 ### Fastest URL analyzer
 
-* `--fastest-urls-top-limit=<int>`   Number of URLs in TOP fastest list. Default is `20`.
-* `--fastest-urls-max-time=<val>`    Maximum response time for an URL to be considered fast. Default is `1`.
+| Parameter | Description |
+|-----------|-------------|
+| `--fastest-urls-top-limit=<int>` | Number of URLs in TOP fastest list. Default is `20`. |
+| `--fastest-urls-max-time=<val>` | Maximum response time for an URL to be considered fast. Default is `1`. |
 
 ### SEO and OpenGraph analyzer
 
-* `--max-heading-level=<int>`        Max heading level from 1 to 6 for analysis. Default is `3`.
+| Parameter | Description |
+|-----------|-------------|
+| `--max-heading-level=<int>` | Max heading level from 1 to 6 for analysis. Default is `3`. |
 
 ### Slowest URL analyzer
 
-* `--slowest-urls-top-limit=<int>`   Number of URLs in TOP slowest list. Default is `20`.
-* `--slowest-urls-min-time=<val>`    Minimum response time threshold for slow URLs. Default is `0.01`.
-* `--slowest-urls-max-time=<val>`    Maximum response time for an URL to be considered very slow. Default is `3`.
+| Parameter | Description |
+|-----------|-------------|
+| `--slowest-urls-top-limit=<int>` | Number of URLs in TOP slowest list. Default is `20`. |
+| `--slowest-urls-min-time=<val>` | Minimum response time threshold for slow URLs. Default is `0.01`. |
+| `--slowest-urls-max-time=<val>` | Maximum response time for an URL to be considered very slow.<br>Default is `3`. |
 
 ## Roadmap
 
