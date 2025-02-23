@@ -210,11 +210,25 @@ class HtmlToMarkdownConverter
             return $text;
         }
 
+        // Check if link contains block elements or spans
+        $hasBlockOrSpanElements = false;
+        foreach ($node->childNodes as $child) {
+            if ($child instanceof \DOMElement && in_array(strtolower($child->nodeName), ['div', 'span', 'p'])) {
+                $hasBlockOrSpanElements = true;
+                break;
+            }
+        }
+
         $markdown = "[$text]($href";
         if (!empty($title)) {
             $markdown .= " \"$title\"";
         }
         $markdown .= ")";
+
+        // Add newlines around the link if it contains block elements
+        if ($hasBlockOrSpanElements) {
+            $markdown = "\n{$this->bulletListMarker} " . $markdown . "\n";
+        }
 
         return $markdown;
     }
