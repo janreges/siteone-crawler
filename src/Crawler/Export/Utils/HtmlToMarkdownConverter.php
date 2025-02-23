@@ -219,6 +219,11 @@ class HtmlToMarkdownConverter
             }
         }
 
+        // If link text is empty, use the URL as text
+        if (trim($text) === '') {
+            $text = $href;
+        }
+
         $markdown = "[$text]($href";
         if (!empty($title)) {
             $markdown .= " \"$title\"";
