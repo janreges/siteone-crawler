@@ -238,7 +238,7 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
                 $parsedUrl = ParsedUrl::parse($url, $sourceUrl);
                 $result = $parsedUrl->getDepth() <= $this->maxDepth;
                 if (!$result) {
-                    $crawler->addUrlToSkipped($parsedUrl, $crawler->getUrlUqId($sourceUrl), FoundUrl::SOURCE_A_HREF);
+                    $crawler->addUrlToSkipped($parsedUrl, Crawler::SKIPPED_REASON_EXCEEDS_MAX_DEPTH, $crawler->getUrlUqId($sourceUrl), FoundUrl::SOURCE_A_HREF);
                 }
                 return $result;
             });

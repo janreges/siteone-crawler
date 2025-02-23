@@ -89,10 +89,12 @@ class Crawler
 
     const SKIPPED_REASON_NOT_ALLOWED_HOST = 1;
     const SKIPPED_REASON_ROBOTS_TXT = 2;
+    const SKIPPED_REASON_EXCEEDS_MAX_DEPTH = 3;
 
     const SKIPPED_REASONS = [
         self::SKIPPED_REASON_NOT_ALLOWED_HOST => 'Not allowed host',
         self::SKIPPED_REASON_ROBOTS_TXT => 'Robots.txt',
+        self::SKIPPED_REASON_EXCEEDS_MAX_DEPTH => 'Exceeds max depth',
     ];
 
     /**
