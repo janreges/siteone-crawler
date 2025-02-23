@@ -149,8 +149,6 @@ The following features are summarized in greater detail:
 - converter has implemented **code block detection** and **syntax highlighting** for the most popular languages
 - html tables are converted to **markdown tables**
 - see all available [markdown exporter options](#markdown-exporter-options).
-- under the hood, it uses great [html-to-markdown](https://github.com/JohannesKaufmann/html-to-markdown) from Johannes
-  Kaufmann with some our improvements (e.g. table support)
 
 Tip: you can push the exported markdown folder to your GitHub repository, where it will be automatically rendered as a browsable
 documentation. You can look at the [examples](https://github.com/janreges/siteone-crawler-markdown-examples/) of converted websites to markdown.
@@ -279,6 +277,7 @@ required arguments:
   --sitemap-base-priority=0.5 \
   --sitemap-priority-increase=0.1 \
   --markdown-export-dir=tmp/mydomain.tld.md \
+  --markdown-move-content-before-h1-to-end \
   --markdown-disable-images \
   --markdown-disable-files \
   --markdown-exclude-selector='.exclude-me' \
@@ -415,12 +414,13 @@ For a clearer list, I recommend going to the documentation: https://crawler.site
 | Parameter | Description |
 |-----------|-------------|
 | `--markdown-export-dir=<dir>` | Path to directory where to save the markdown version of the website.<br>Directory will be created if it doesn't exist. |
-| `--markdown-export-store-only-url-regex=<regex>` | For debug - when filled it will activate debug mode and store only URLs which match one of these<br>PCRE regexes.<br>Can be specified multiple times. |
+| `--markdown-move-content-before-h1-to-end` | Move all content before the main H1 heading (typically the header with the menu) to the end of the markdown. |
 | `--markdown-disable-images` | Do not export and show images in markdown files.<br>Images are enabled by default. |
 | `--markdown-disable-files` | Do not export and link files other than HTML/CSS/JS/fonts/images - eg. PDF, ZIP, etc.<br>These files are enabled by default. |
 | `--markdown-exclude-selector=<val>` | Exclude some page content (DOM elements) from markdown export defined by CSS selectors like 'header', '.header', '#header', etc.<br>Can be specified multiple times. |
 | `--markdown-replace-content=<val>` | Replace text content with `foo -> bar` or regexp in PREG format: `/card[0-9]/i -> card`.<br>Can be specified multiple times. |
 | `--markdown-replace-query-string=<val>` | Instead of using a short hash instead of a query string in the filename, just replace some characters.<br>You can use simple format 'foo -> bar' or regexp in PREG format, e.g.<br>`'/([a-z]+)=([^&]*)(&|$)/i -> $1__$2'`. Can be specified multiple times. |
+| `--markdown-export-store-only-url-regex=<regex>` | For debug - when filled it will activate debug mode and store only URLs which match one of these<br>PCRE regexes.<br>Can be specified multiple times. |
 | `--markdown-ignore-store-file-error` | Ignores any file storing errors. The export process will continue. |
 
 ### Sitemap options

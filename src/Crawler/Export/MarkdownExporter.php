@@ -11,6 +11,7 @@ declare(strict_types=1);
 namespace Crawler\Export;
 
 use Crawler\Crawler;
+use Crawler\Export\Utils\HtmlToMarkdownConverter;
 use Crawler\Export\Utils\OfflineUrlConverter;
 use Crawler\Export\Utils\TargetDomainRelation;
 use Crawler\FoundUrl;
@@ -83,6 +84,13 @@ class MarkdownExporter extends BaseExporter implements Exporter
      * @var string[]
      */
     protected array $markdownReplaceQueryString = [];
+
+    /**
+     * Move all content before the main H1 heading (typically the header with the menu) to the end of the markdown
+     *
+     * @var bool
+     */
+    protected bool $markdownMoveContentBeforeH1ToEnd = false;
 
     /**
      * Exporter is activated when --markdown-export-dir is set
@@ -216,9 +224,6 @@ class MarkdownExporter extends BaseExporter implements Exporter
             }
         }
 
-        // replace HTML tables with Markdown tables (html-to-markdown do not support HTML tables yet)
-        $content = $this->replaceHtmlTableToMdTable($content);
-
         if ($saveFile && @file_put_contents($storeFilePath, $content) === false) {
             // throw exception if file has extension (handle edge-cases as <img src="/icon/hash/"> and response is SVG)
             $exceptionOnError = preg_match('/\.[a-z0-9\-]{1,15}$/i', $storeFilePath) === 1;
@@ -237,20 +242,9 @@ class MarkdownExporter extends BaseExporter implements Exporter
         if (str_ends_with($storeFilePath, '.html')) {
             $storeMdFilePath = substr($storeFilePath, 0, -5) . '.md';
 
-            $args = '';
-            if ($this->markdownExcludeSelector) {
-                foreach ($this->markdownExcludeSelector as $selector) {
-                    $args .= ' --exclude-selector ' . escapeshellarg($selector);
-                }
-            }
-
-            $convertCommand = sprintf(
-                'cat %s | %s/html2markdown ' . $args . ' > %s',
-                escapeshellarg($storeFilePath),
-                escapeshellarg(BASE_DIR . '/bin'),
-                escapeshellarg($storeMdFilePath)
-            );
-            @shell_exec($convertCommand);
+            $converter = new HtmlToMarkdownConverter(file_get_contents($storeFilePath), $this->markdownExcludeSelector);
+            $markdown = $converter->getMarkdown();
+            @file_put_contents($storeMdFilePath, $markdown);
             @unlink($storeFilePath);
 
             if (!is_file($storeMdFilePath)) {
@@ -269,6 +263,7 @@ class MarkdownExporter extends BaseExporter implements Exporter
      *  - replace *.html links to *.md in saved *.md file
      *  - remove images if disabled
      *  - remove files if disabled
+     *  - lot of other small fixes
      *
      * @param string $mdFilePath
      * @return void
@@ -363,6 +358,9 @@ class MarkdownExporter extends BaseExporter implements Exporter
 
         // remove 3+ empty lines to 2 empty lines
         $mdContent = preg_replace('/\n{3,}/', "\n\n", $mdContent);
+
+        // trim -#*
+        $mdContent = trim($mdContent, "\n\t -#*");
 
         file_put_contents($mdFilePath, $mdContent);
     }
@@ -511,43 +509,63 @@ class MarkdownExporter extends BaseExporter implements Exporter
      */
     private function moveContentBeforeMainHeadingToTheEnd(string $md): string
     {
-        // find highest level heading that exists in the content (h1, h2 or h3)
-        $headingPattern = '/^(?:# |## |### )/m';
-        preg_match_all($headingPattern, $md, $matches, PREG_OFFSET_CAPTURE);
-
-        if (empty($matches[0])) {
-            return $md; // No headings found
-        }
-
-        // find lowest number of #'s used (highest level heading)
-        $highestLevel = PHP_INT_MAX;
-        foreach ($matches[0] as $match) {
-            $level = strlen(trim($match[0], ' '));
-            if ($level < $highestLevel) {
-                $highestLevel = $level;
-            }
-        }
-
-        // find first occurrence of the highest level heading
-        $mainHeadingPattern = '/^' . str_repeat('#', $highestLevel) . ' /m';
-        preg_match($mainHeadingPattern, $md, $match, PREG_OFFSET_CAPTURE);
-
-        if (empty($match)) {
+        if (!$this->markdownMoveContentBeforeH1ToEnd) {
             return $md;
         }
 
-        $headingPosition = $match[0][1];
+        $headings = [];
 
-        // extract content before the main heading
+        // ATX headings (e.g. "# Title")
+        if (preg_match_all('/^(#{1,6})\s.*$/m', $md, $atxMatches, PREG_OFFSET_CAPTURE)) {
+            foreach ($atxMatches[1] as $key => $match) {
+                $level = strlen($match[0]);
+                $offset = $atxMatches[0][$key][1];
+                $headings[] = ['offset' => $offset, 'level' => $level];
+            }
+        }
+
+        // Setext headings, e.g.:
+        // Title
+        // =====
+        // or
+        // Subtitle
+        // ------
+        if (preg_match_all('/^(?!\s*$)(.+?)\n(=+|-+)\s*$/m', $md, $setextMatches, PREG_OFFSET_CAPTURE)) {
+            foreach ($setextMatches[2] as $key => $match) {
+                $underline = $match[0];
+                $offset = $setextMatches[1][$key][1]; // offset of the text line
+                $level = ($underline[0] === '=') ? 1 : 2;
+                $headings[] = ['offset' => $offset, 'level' => $level];
+            }
+        }
+
+        if (empty($headings)) {
+            return $md; // No headings found
+        }
+
+        // Find the highest level (lowest number) among headings
+        $minLevel = min(array_column($headings, 'level'));
+        $candidates = array_filter($headings, function ($h) use ($minLevel) {
+            return $h['level'] === $minLevel;
+        });
+
+        // Choose the candidate with the smallest offset (first occurrence)
+        $mainHeading = array_reduce($candidates, function ($carry, $item) {
+            return ($carry === null || $item['offset'] < $carry['offset']) ? $item : $carry;
+        });
+
+        if (!$mainHeading) {
+            return $md;
+        }
+
+        $headingPosition = $mainHeading['offset'];
         $contentBefore = substr($md, 0, $headingPosition);
         $contentAfter = substr($md, $headingPosition);
 
-        // if there's no content before heading, return unchanged
         if (trim($contentBefore) === '') {
             return $md;
         }
 
-        // build final content with the content before moved to end
         return trim($contentAfter) . "\n\n---\n\n" . trim($contentBefore);
     }
 
@@ -761,89 +779,6 @@ class MarkdownExporter extends BaseExporter implements Exporter
         return $maxScore > 0 ? $detectedLang : '';
     }
 
-    /**
-     * Finds <table>...</table> in the given HTML, converts them to Markdown tables,
-     * and replaces the original HTML tables with the generated Markdown.
-     *
-     * @param string $html
-     * @return string
-     */
-    function replaceHtmlTableToMdTable(string $html): string
-    {
-        return preg_replace_callback(
-            '/<table\b[^>]*>(.*)<\/table>/isU',
-            function ($matches) {
-                return $this->convertHtmlTableToMarkdown($matches[0]);
-            },
-            $html
-        );
-    }
-
-    /**
-     * Converts a single HTML table to a Markdown table.
-     *
-     * @param string $tableHtml
-     * @return string
-     */
-    function convertHtmlTableToMarkdown(string $tableHtml): string
-    {
-        $doc = new \DOMDocument();
-        libxml_use_internal_errors(true);
-        $doc->loadHTML('<?xml encoding="utf-8" ?><body>' . $tableHtml . '</body>');
-        libxml_clear_errors();
-
-        $table = $doc->getElementsByTagName('table')->item(0);
-        if (!$table) {
-            // if parsing fails, return the original table
-            return $tableHtml;
-        }
-
-        $rows = $table->getElementsByTagName('tr');
-        $tableData = [];
-        $maxCols = 0;
-
-        foreach ($rows as $row) {
-            // attempt to get 'th' cells first; if none, use 'td' cells
-            $cells = $row->getElementsByTagName('th');
-            if ($cells->length === 0) {
-                $cells = $row->getElementsByTagName('td');
-            }
-
-            $rowData = [];
-            foreach ($cells as $cell) {
-                $text = trim($cell->textContent);
-                // basic cleanup (replace multiple whitespaces with single space)
-                $rowData[] = preg_replace('/\s+/', ' ', $text);
-            }
-
-            $maxCols = max($maxCols, count($rowData));
-            $tableData[] = $rowData;
-        }
-
-        // build Markdown table
-        $mdTable = '';
-        if (!empty($tableData)) {
-            // first row is treated as header
-            $header = $tableData[0];
-            $mdTable .= '| ' . implode(' | ', $header) . ' |' . "<br/>\n";
-            $mdTable .= '| ' . implode(' | ', array_fill(0, $maxCols, '---')) . ' |' . "<br/>\n";
-
-            // remaining rows
-            for ($i = 1; $i < count($tableData); $i++) {
-                $row = array_pad($tableData[$i], $maxCols, '');
-                $mdTable .= '| ' . implode(' | ', $row) . ' |' . "<br/>\n";
-            }
-        }
-
-        // in $mdTable replace <script> and <style> with HTML entities versions, otherwise it would be executed in markdown and break the output
-        $mdTable = preg_replace('/<script[^>]*>.*?<\/script>/is', '&lt;script&gt;&lt;/script&gt;', $mdTable);
-        $mdTable = preg_replace('/<style[^>]*>.*?<\/style>/is', '&lt;style&gt;&lt;/style&gt;', $mdTable);
-        $mdTable = preg_replace('/<script[^>]*>/i', '&lt;script&gt;', $mdTable);
-        $mdTable = preg_replace('/<style[^>]*>/i', '&lt;style&gt;', $mdTable);
-
-        return $mdTable;
-    }
-
     public static function getOptions(): Options
     {
         $options = new Options();
@@ -851,12 +786,13 @@ class MarkdownExporter extends BaseExporter implements Exporter
             self::GROUP_MARKDOWN_EXPORTER,
             'Markdown exporter options', [
             new Option('--markdown-export-dir', '-med', 'markdownExportDirectory', Type::DIR, false, 'Path to directory where to save the markdown version of the website.', null, true),
-            new Option('--markdown-export-store-only-url-regex', null, 'markdownExportStoreOnlyUrlRegex', Type::REGEX, true, 'For debug - when filled it will activate debug mode and store only URLs which match one of these PCRE regexes. Can be specified multiple times.', null, true),
+            new Option('--markdown-move-content-before-h1-to-end', null, 'markdownMoveContentBeforeH1ToEnd', Type::BOOL, false, 'Move all content before the main H1 heading (typically the header with the menu) to the end of the markdown.', false, true, false),
             new Option('--markdown-disable-images', '-mdi', 'markdownDisableImages', Type::BOOL, false, 'Do not export and show images in markdown files. Images are enabled by default.', false, true),
             new Option('--markdown-disable-files', '-mdf', 'markdownDisableFiles', Type::BOOL, false, 'Do not export and link files other than HTML/CSS/JS/fonts/images - eg. PDF, ZIP, etc. These files are enabled by default.', false, true),
             new Option('--markdown-exclude-selector', '-mes', 'markdownExcludeSelector', Type::STRING, true, "Exclude some page content (DOM elements) from markdown export defined by CSS selectors like 'header', '.header', '#header', etc.", null, false, true),
             new Option('--markdown-replace-content', null, 'markdownReplaceContent', Type::REPLACE_CONTENT, true, "Replace text content with `foo -> bar` or regexp in PREG format: `/card[0-9]/i -> card`", null, true, true),
             new Option('--markdown-replace-query-string', null, 'markdownReplaceQueryString', Type::REPLACE_CONTENT, true, "Instead of using a short hash instead of a query string in the filename, just replace some characters. You can use simple format 'foo -> bar' or regexp in PREG format, e.g. '/([a-z]+)=([^&]*)(&|$)/i -> $1__$2'", null, true, true),
+            new Option('--markdown-export-store-only-url-regex', null, 'markdownExportStoreOnlyUrlRegex', Type::REGEX, true, 'For debug - when filled it will activate debug mode and store only URLs which match one of these PCRE regexes. Can be specified multiple times.', null, true),
             new Option('--markdown-ignore-store-file-error', null, 'markdownIgnoreStoreFileError', Type::BOOL, false, 'Ignores any file storing errors. The export process will continue.', false, false),
         ]));
         return $options;
