@@ -67,6 +67,15 @@ class Manager
         $this->command = $command;
         $this->exporters = $exporters;
 
+        // Set timezone if specified
+        if ($options->timezone) {
+            try {
+                date_default_timezone_set($options->timezone);
+            } catch (Exception $e) {
+                throw new Exception("Invalid timezone: {$options->timezone}. Please use a valid PHP timezone identifier.");
+            }
+        }
+
         $crawlerInfo = new Info(
             'SiteOne Crawler',
             $this->version,

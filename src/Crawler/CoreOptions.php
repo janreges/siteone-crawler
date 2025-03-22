@@ -36,6 +36,7 @@ class CoreOptions
     public int $timeout = 5;
     public ?string $proxy = null;
     public ?string $httpAuth = null;
+    public ?string $timezone = null;
     public ?bool $showVersionOnly = false;
     public ?bool $showHelpOnly = false;
 
@@ -197,6 +198,7 @@ class CoreOptions
             new Option('--output', '-o', 'outputType', Type::STRING, false, 'Output type `text` or `json`.', 'text', false),
             new Option('--extra-columns', '-ec', 'extraColumns', Type::STRING, true, 'Extra table headers for output table with option to set width and do-not-truncate (>), e.g., `DOM,X-Cache(10),Title(40>)`.', null, true, true),
             new Option('--url-column-size', '-ucs', 'urlColumnSize', Type::INT, false, 'URL column width. By default, it is calculated from the size of your terminal window.', null, true),
+            new Option('--timezone', '-tz', 'timezone', Type::STRING, false, 'Timezone for datetimes in HTML reports and timestamps in output folders/files, e.g., `Europe/Prague`. Default is `UTC`.', null, true),
             new Option('--rows-limit', '-rl', 'rowsLimit', Type::INT, false, 'Max. number of rows to display in tables with analysis results (protection against very long and slow report)', 200, false),
             new Option('--show-inline-criticals', '-sic', 'showInlineCriticals', Type::BOOL, false, 'Show criticals from the analyzer directly in the URL table.', false, false),
             new Option('--show-inline-warnings', '-siw', 'showInlineWarnings', Type::BOOL, false, 'Show warnings from the analyzer directly in the URL table.', false, false),

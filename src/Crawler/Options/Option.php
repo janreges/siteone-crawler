@@ -169,6 +169,11 @@ class Option
                     }
                 }
             }
+
+            // Set timezone if specified
+            if ($this->name === '--timezone' && $argValue !== null) {
+                define('CRAWLER_TIMEZONE', $argValue);
+            }
         }
 
         // convert to array if needed
@@ -362,6 +367,13 @@ class Option
     {
         static $date = null;
         static $datetime = null;
+
+        // Get the timezone setting if available
+        $timezone = null;
+        if (defined('CRAWLER_TIMEZONE') && CRAWLER_TIMEZONE) {
+            $timezone = CRAWLER_TIMEZONE;
+            date_default_timezone_set($timezone);
+        }
 
         if (!$date) {
             $date = date('Y-m-d');
