@@ -1,40 +1,40 @@
 # SiteOne Crawler
 
-SiteOne Crawler is a very useful and easy-to-use **website analyzer & cloner/exporter/converter** you'll ♥ as a Dev/DevOps, SEO specialist, QA engineer, website owner or consultant. Works on all popular platforms - **Windows**, **macOS** and **Linux** (**x64** and **arm64** too).
+SiteOne Crawler is a powerful and easy-to-use **website analyzer, cloner, and converter** designed for developers seeking security and performance insights, SEO specialists identifying optimization opportunities, and website owners needing reliable backups and offline versions.
 
-The main capability of the crawler is to **generate a detailed HTML report** with lots of useful information about your website (see sample [nextjs.org report](https://crawler.siteone.io/html/2024-08-23/forever/cl8xw4r-fdag8wg-44dd.html)) and at the same time it can clone/export/convert the website offline (see browsable [nextjs.org clone](https://crawler.siteone.io/examples-exports/nextjs.org/)) or to **markdown** (see [examples](https://github.com/janreges/siteone-crawler-markdown-examples/)).
+**Discover the SiteOne Crawler advantage:**
 
-It will crawl your entire website in depth, analyze and report problems, show useful statistics and reports, generate an offline
-version of the website, generate sitemaps or send reports via email. Watch a detailed [video with a sample report](https://www.youtube.com/watch?v=PHIFSOmk0gk) for the [astro.build](https://astro.build/?utm_source=siteone-crawler-github) website.
+*   **Run Anywhere:** Native support for **🪟 Windows**, **🍎 macOS**, and **🐧 Linux** (x64 & arm64). No complex setup needed.
+*   **Work Your Way:** Master the extensive **command-line interface** 📟 ([releases](https://github.com/janreges/siteone-crawler/releases), [▶️ video](https://www.youtube.com/watch?v=25T_yx13naA&list=PL9mElgTe-s1Csfg0jXWmDS0MHFN7Cpjwp)) for automation and power, or enjoy the intuitive **desktop GUI application** 💻 ([GUI app](https://github.com/janreges/siteone-crawler-gui), [▶️ video](https://www.youtube.com/watch?v=rFW8LNEVNdw)) for visual control.
+*   **Actionable Insights:** Generate comprehensive **HTML reports** 📊 packed with data on performance, SEO, accessibility, security, and more (see [nextjs.org sample](https://crawler.siteone.io/html/2024-08-23/forever/cl8xw4r-fdag8wg-44dd.html)). Find and fix problems faster.
+*   **Offline & Markdown Power:** Create complete **offline clones** 💾 for browsing without a server ([nextjs.org clone](https://crawler.siteone.io/examples-exports/nextjs.org/)) or convert entire websites into clean **Markdown** 📝 – perfect for backups, documentation, or feeding content to AI models ([examples](https://github.com/janreges/siteone-crawler-markdown-examples/)).
+*   **Deep Crawling & Analysis:** Thoroughly crawl every page and asset, identify errors (404s, redirects), generate **sitemaps** 🗺️, and even get **email summaries** 📧 (watch [▶️ video example](https://www.youtube.com/watch?v=PHIFSOmk0gk)).
+*   **Learn More:** Dive into the 🌐 [Project Website](https://crawler.siteone.io/), explore the detailed [Documentation](https://crawler.siteone.io/configuration/command-line-options/), or check the [JSON](docs/JSON-OUTPUT.md)/[Text](docs/TEXT-OUTPUT.md) output specs.
 
-This crawler can be used as a command-line tool (see [releases](https://github.com/janreges/siteone-crawler/releases) and [video](https://www.youtube.com/watch?v=25T_yx13naA&list=PL9mElgTe-s1Csfg0jXWmDS0MHFN7Cpjwp)), or you can use a [multi-platform desktop application](https://github.com/janreges/siteone-crawler-gui) with graphical interface (see [video](https://www.youtube.com/watch?v=rFW8LNEVNdw) about app).
-
-I also recommend looking at the project website [crawler.siteone.io](https://crawler.siteone.io/) with detailed [documentation](https://crawler.siteone.io/configuration/command-line-options/). Detailed documentation for the [JSON](docs/JSON-OUTPUT.md) and [Text](docs/TEXT-OUTPUT.md) output formats is also available.
-
-GIF animation of the crawler in action (also available as a [video](https://www.youtube.com/watch?v=25T_yx13naA&list=PL9mElgTe-s1Csfg0jXWmDS0MHFN7Cpjwp)):
+GIF animation of the crawler in action (also available as a [▶️ video](https://www.youtube.com/watch?v=25T_yx13naA&list=PL9mElgTe-s1Csfg0jXWmDS0MHFN7Cpjwp)):
 
 ![SiteOne Crawler](docs/siteone-crawler-command-line.gif)
 
 ## Table of contents
 
-- [Features](#features)
-    * [Crawler](#crawler)
-    * [Dev/DevOps assistant](#devdevops-assistant)
-    * [Analyzer](#analyzer)
-    * [Reporter](#reporter)
-    * [Offline website generator](#offline-website-generator)
-    * [Sitemap generator](#sitemap-generator)
-    * [For active contributors](#for-active-contributors)
-- [Installation](#installation)
-    * [Ready-to-use releases](#ready-to-use-releases)
-    * [Linux (x64)](#linux-x64)
-    * [Windows (x64)](#windows-x64)
-    * [macOS (arm64, x64)](#macos-arm64-x64)
-    * [Linux (arm64)](#linux-arm64)
-- [Usage](#usage)
+- [✨ Features](#-features)
+    * [🕷️ Crawler](#️-crawler)
+    * [🛠️ Dev/DevOps assistant](#️-devdevops-assistant)
+    * [📊 Analyzer](#-analyzer)
+    * [📧 Reporter](#-reporter)
+    * [💾 Offline website generator](#-offline-website-generator)
+    * [🗺️ Sitemap generator](#️-sitemap-generator)
+    * [🤝 For active contributors](#-for-active-contributors)
+- [🚀 Installation](#-installation)
+    * [📦 Ready-to-use releases](#-ready-to-use-releases)
+    * [🐧 Linux (x64)](#-linux-x64)
+    * [🪟 Windows (x64)](#-windows-x64)
+    * [🍎 macOS (arm64, x64)](#-macos-arm64-x64)
+    * [🐧 Linux (arm64)](#-linux-arm64)
+- [▶️ Usage](#️-usage)
     * [Basic example](#basic-example)
     * [Fully-featured example](#fully-featured-example)
-    * [Arguments](#arguments)
+    * [Arguments](#️-arguments)
         + [Basic settings](#basic-settings)
         + [Output settings](#output-settings)
         + [Resource filtering](#resource-filtering)
@@ -46,66 +46,66 @@ GIF animation of the crawler in action (also available as a [video](https://www.
         + [Markdown exporter options](#markdown-exporter-options)
         + [Sitemap options](#sitemap-options)
         + [Expert options](#expert-options)
-- [Output Examples](#output-examples)
-- [Roadmap](#roadmap)
-- [Motivation to create this tool](#motivation-to-create-this-tool)
-- [Disclaimer](#disclaimer)
-- [License](#license)
+- [📄 Output Examples](#-output-examples)
+- [🎯 Roadmap](#-roadmap)
+- [🤔 Motivation to create this tool](#-motivation-to-create-this-tool)
+- [⚠️ Disclaimer](#️-disclaimer)
+- [📜 License](#-license)
 
-## Features
+## ✨ Features
 
 In short, the main benefits can be summarized in these points:
 
-- **Crawler** - very powerful crawler of the entire website reporting useful information about each URL (status code,
+- **🕷️ Crawler** - very powerful crawler of the entire website reporting useful information about each URL (status code,
   response time, size, custom headers, titles, etc.)
-- **Dev/DevOps assistant** - offers a set of very useful and often necessary features for developers and devops (stress
+- **🛠️ Dev/DevOps assistant** - offers a set of very useful and often necessary features for developers and devops (stress
   test, warm up cache, localhost testing, etc.)
-- **Analyzer** - analyzes all webpages and reports strange or error behaviour and useful statistics (404, redirects, bad
+- **📊 Analyzer** - analyzes all webpages and reports strange or error behaviour and useful statistics (404, redirects, bad
   practices, SEO and security issues, heading structures, etc.)
-- **Reporter** - sends a HTML report to your email addresses with all the information about the crawled website
-- **Offline website generator** - allows you to export the entire website to offline form, where it is possible to
+- **📧 Reporter** - sends a HTML report to your email addresses with all the information about the crawled website
+- **💾 Offline website generator** - allows you to export the entire website to offline form, where it is possible to
   browse the site through local HTML files (without HTTP server) including all images, styles, scripts, fonts, etc.
-- **Website to markdown converter** - allows you to export/convert the entire website with all subpages to browsable markdown.
-  Optionally with images and other files (PDF, etc.) included. Great for documentation and archiving purposes.
+- **📝 Website to markdown converter** - allows you to export/convert the entire website with all subpages to browsable markdown.
+  Optionally with images and other files (PDF, etc.) included. Great for documentation, archiving, and **feeding content to AI tools** that process markdown better.
   See [markdown examples](https://github.com/janreges/siteone-crawler-markdown-examples/).
-- **Sitemap generator** - allows you to generate `sitemap.xml` and `sitemap.txt` files with a list of all pages on your
+- **🗺️ Sitemap generator** - allows you to generate `sitemap.xml` and `sitemap.txt` files with a list of all pages on your
   website
 
 The following features are summarized in greater detail:
 
-### Crawler
+### 🕷️ Crawler
 
-- **all major platforms** supported without complicated installation or dependencies (Linux, Windows, macOS, arm64)
-- has incredible **C++ performance** (thanks to Swoole's coroutines)
+- **all major platforms** supported without complicated installation or dependencies (🐧 Linux, 🪟 Windows, 🍎 macOS, arm64)
+- has incredible **🚀 C++ performance** (thanks to Swoole's coroutines)
 - provide simulation of **different device types** (desktop/mobile/tablet) thanks to predefined User-Agents
 - will crawl **all files**, styles, scripts, fonts, images, documents, etc. on your website
 - will respect the `robots.txt` file and will not crawl the pages that are not allowed
-- has a **beautiful interactive** and **colourful output**
-- it will **clearly warn you** of any wrong use of the tool (e.g. input parameters validation or wrong permissions)
+- has a **beautiful interactive** and **🎨 colourful output**
+- it will **clearly warn you** ⚠️ of any wrong use of the tool (e.g. input parameters validation or wrong permissions)
 - **captures CTRL+C** and ends with the statistics for at least the current processed URLs
 - as `--url` parameter, you can specify also a `sitemap.xml` file (or [sitemap index](https://www.sitemaps.org/protocol.html#index)),
   which will be processed as a list of URLs. Note: gzip pre-compressed sitemaps `*.xml.gz` are not supported.
 
-### Dev/DevOps assistant
+### 🛠️ Dev/DevOps assistant
 
 - allows testing **public** and **local projects on specific ports** (e.g. `http://localhost:3000/`)
 - will perform a **stress test** and allow you to test the protection of the infrastructure against DoS attacks
 - will help you **warm up the application cache** or the **cache on the reverse proxy** of the entire website
 
-### Analyzer
+### 📊 Analyzer
 
 - will **find the weak points** or **strange behavior** of your website
 - allows you to implement **your own analyzers** by simply adding an analyzer class that implements
   the `Crawler\Analyzer` interface.
 
-### Reporter
+### 📧 Reporter
 
 - will provide you with data for **SEO analysis**, just add the `Title`, `Keywords` and `Description`
 - will send you a **nice HTML report** to your email addresses
 - will **export** the output to JSON, HTML or text for **your integrations**
   will provide useful **summaries and statistics** at the end of the processing
 
-### Offline website generator
+### 💾 Offline website generator
 
 - will help you **export the entire website** to offline form, where it is possible to browse the site through local
   HTML files (without HTTP server) including all document, images, styles, scripts, fonts, etc.
@@ -136,9 +136,9 @@ The following features are summarized in greater detail:
 - roadmap: we are also planning to release a version of the export compatible with **Nginx** that will preserve all
   original URLs for your website and allow you to host it on your own infrastructure.
 
-### Website to markdown converter
+### 📝 Website to markdown converter
 
-- will help you **export/convert the entire website** with all subpages to **browsable markdown**.
+- will help you **export/convert the entire website** with all subpages to **browsable markdown**. This is particularly useful for feeding website content (like documentation) into **AI tools** that often handle markdown more effectively than raw HTML.
 - you can optionally disable export and hide images and other files (PDF, etc.) which are included by default.
 - you can set multiple selectors (CSS like) to **remove unwanted elements** from the exported markdown.
 - to prevent that at the beginning of the markdown of all pages the header, long menu etc. will be repeated, so the
@@ -148,26 +148,26 @@ The following features are summarized in greater detail:
 - html tables are converted to **markdown tables**
 - see all available [markdown exporter options](#markdown-exporter-options).
 
-Tip: you can push the exported markdown folder to your GitHub repository, where it will be automatically rendered as a browsable
+💡 Tip: you can push the exported markdown folder to your GitHub repository, where it will be automatically rendered as a browsable
 documentation. You can look at the [examples](https://github.com/janreges/siteone-crawler-markdown-examples/) of converted websites to markdown.
 
-### Sitemap generator
+### 🗺️ Sitemap generator
 
 - will help you create a `sitemap.xml` and `sitemap.xml` for your website
 - you can set the priority of individual pages based on the number of slashes in the URL
 
-Don't hesitate and try it. You will love it as we do! ♥
+Don't hesitate and try it. You will love it as we do! ❤️
 
-### For active contributors
+### 🤝 For active contributors
 
 - the crawler code provides some useful functionality that facilitates further **development** and **extensibility** of
   the project
 
-## Installation
+## 🚀 Installation
 
-###  Ready-to-use releases
+### 📦 Ready-to-use releases
 
-You can download ready-to-use releases from [GitHub releases](https://github.com/janreges/siteone-crawler/releases) for all major platforms (Linux, Windows, macOS, arm64).
+You can download ready-to-use releases from [🐙 GitHub releases](https://github.com/janreges/siteone-crawler/releases) for all major platforms (🐧 Linux, 🪟 Windows, 🍎 macOS, arm64).
 
 Unpack the downloaded archive, and you will find the `crawler` or `crawler.bat` (Windows) executable binary and run crawler by `./crawler --url=https://my.domain.tld`.
 
@@ -175,7 +175,7 @@ Unpack the downloaded archive, and you will find the `crawler` or `crawler.bat` 
 
 **Note for macOS users**: In case that Mac refuses to start the crawler from your Download folder, move the entire folder with the Crawler **via the terminal** to another location, for example to the homefolder `~`.
 
-### Linux (x64)
+### 🐧 Linux (x64)
 
 Most easily installation is on most Linux (x64) distributions.
 
@@ -187,7 +187,7 @@ cd siteone-crawler
 ./crawler --url=https://my.domain.tld
 ```
 
-### Windows (x64)
+### 🪟 Windows (x64)
 
 If using Windows, the best choice is to use [Ubuntu](https://ubuntu.com/wsl)
 or [Debian](https://www.linuxfordevices.com/tutorials/linux/install-debian-on-windows-wsl)
@@ -207,7 +207,7 @@ c:\Tools\swoole-cli-v4.8.13-cygwin-x64\bin\swoole-cli.exe C:\Tools\siteone-crawl
 **NOTICE**: Cygwin does not support STDERR with rewritable lines in the console. Therefore, the output is not as
 beautiful as on Linux or macOS.
 
-### macOS (arm64, x64)
+### 🍎 macOS (arm64, x64)
 
 If using macOS with latest arm64 M1/M2 CPU, download arm64
 version [swoole-cli-v4.8.13-macos-arm64.tar.xz](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-macos-arm64.tar.xz),
@@ -217,13 +217,13 @@ If using macOS with Intel CPU (x64), download x64
 version  [swoole-cli-v4.8.13-macos-x64.tar.xz](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-macos-x64.tar.xz),
 unpack and use its precompiled `swoole-cli`.
 
-### Linux (arm64)
+### 🐧 Linux (arm64)
 
 If using arm64 Linux, you can
 download [swoole-cli-v4.8.13-linux-arm64.tar.xz](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-linux-arm64.tar.xz)
 and use its precompiled `swoole-cli`.
 
-## Usage
+## ▶️ Usage
 
 To run the crawler, execute the `crawler` executable file from the command line and provide the
 required arguments:
@@ -291,9 +291,9 @@ required arguments:
   --mail-smtp-pass=secretPassword123
 ```
 
-## Arguments
+## ⚙️ Arguments
 
-For a clearer list, I recommend going to the documentation: https://crawler.siteone.io/configuration/command-line-options/
+For a clearer list, I recommend going to the documentation: 🌐 https://crawler.siteone.io/configuration/command-line-options/
 
 ### Basic settings
 
@@ -467,7 +467,7 @@ For a clearer list, I recommend going to the documentation: https://crawler.site
 | `--slowest-urls-min-time=<val>` | Minimum response time threshold for slow URLs. Default is `0.01`. |
 | `--slowest-urls-max-time=<val>` | Maximum response time for an URL to be considered very slow.<br>Default is `3`. |
 
-## Output Examples
+## 📄 Output Examples
 
 To understand the richness of the data provided by the crawler, you can examine real output examples generated from crawling `crawler.siteone.io`:
 
@@ -480,7 +480,7 @@ To understand the richness of the data provided by the crawler, you can examine 
 
 These examples showcase the various tables and metrics generated, demonstrating the tool's capabilities in analyzing website structure, performance, SEO, security, and more.
 
-## Roadmap
+## 🎯 Roadmap
 
 * Well tested Docker images for easy usage in CI/CD pipelines on hub.docker.com (for all platforms).
 * Better static assets processing - now are assets processed immediately, same as other URLs. This can cause
@@ -493,17 +493,17 @@ If you have any suggestions or feature requests, please open an issue on GitHub.
 
 Your contributions with realized improvements, bug fixes, and new features are welcome. Please open a pull request :-)
 
-## Motivation to create this tool
+## 🤔 Motivation to create this tool
 
-If you are interested in the author's motivation for creating this tool, read it on [the project website](https://crawler.siteone.io/introduction/motivation/).
+If you are interested in the author's motivation for creating this tool, read it on [the project website 🌐](https://crawler.siteone.io/introduction/motivation/).
 
-## Disclaimer
+## ⚠️ Disclaimer
 
 Please use responsibly and ensure that you have the necessary permissions when crawling websites. Some sites may have
 rules against automated access detailed in their robots.txt.
 
 **The author is not responsible for any consequences caused by inappropriate use or deliberate misuse of this tool.**
 
-## License
+## 📜 License
 
-This work is licensed under a [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+This work is licensed under a [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) license.
