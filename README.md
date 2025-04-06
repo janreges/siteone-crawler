@@ -9,7 +9,7 @@ version of the website, generate sitemaps or send reports via email. Watch a det
 
 This crawler can be used as a command-line tool (see [releases](https://github.com/janreges/siteone-crawler/releases) and [video](https://www.youtube.com/watch?v=25T_yx13naA&list=PL9mElgTe-s1Csfg0jXWmDS0MHFN7Cpjwp)), or you can use a [multi-platform desktop application](https://github.com/janreges/siteone-crawler-gui) with graphical interface (see [video](https://www.youtube.com/watch?v=rFW8LNEVNdw) about app).
 
-I also recommend looking at the project website [crawler.siteone.io](https://crawler.siteone.io/) with detailed [documentation](https://crawler.siteone.io/configuration/command-line-options/).
+I also recommend looking at the project website [crawler.siteone.io](https://crawler.siteone.io/) with detailed [documentation](https://crawler.siteone.io/configuration/command-line-options/). Detailed documentation for the [JSON](docs/JSON-OUTPUT.md) and [Text](docs/TEXT-OUTPUT.md) output formats is also available.
 
 GIF animation of the crawler in action (also available as a [video](https://www.youtube.com/watch?v=25T_yx13naA&list=PL9mElgTe-s1Csfg0jXWmDS0MHFN7Cpjwp)):
 
@@ -46,13 +46,11 @@ GIF animation of the crawler in action (also available as a [video](https://www.
         + [Markdown exporter options](#markdown-exporter-options)
         + [Sitemap options](#sitemap-options)
         + [Expert options](#expert-options)
+- [Output Examples](#output-examples)
 - [Roadmap](#roadmap)
 - [Motivation to create this tool](#motivation-to-create-this-tool)
 - [Disclaimer](#disclaimer)
 - [License](#license)
-- [Output examples](#output-examples)
-    * [Text output](#text-output)
-    * [JSON output](#json-output)
 
 ## Features
 
@@ -372,8 +370,8 @@ For a clearer list, I recommend going to the documentation: https://crawler.site
 | Parameter | Description |
 |-----------|-------------|
 | `--output-html-report=<file>` | Save HTML report into that file. Set to empty '' to disable HTML report.<br>By default saved into `tmp/%domain%.report.%datetime%.html`. |
-| `--output-json-file=<file>` | File path for JSON output. Set to empty '' to disable JSON file.<br>By default saved into `tmp/%domain%.output.%datetime%.json`. |
-| `--output-text-file=<file>` | File path for TXT output. Set to empty '' to disable TXT file.<br>By default saved into `tmp/%domain%.output.%datetime%.txt`. |
+| `--output-json-file=<file>` | File path for JSON output. Set to empty '' to disable JSON file.<br>By default saved into `tmp/%domain%.output.%datetime%.json`.<br>See [JSON Output Documentation](docs/JSON-OUTPUT.md) for format details. |
+| `--output-text-file=<file>` | File path for TXT output. Set to empty '' to disable TXT file.<br>By default saved into `tmp/%domain%.output.%datetime%.txt`.<br>See [Text Output Documentation](docs/TEXT-OUTPUT.md) for format details. |
 
 ### Mailer options
 
@@ -468,6 +466,19 @@ For a clearer list, I recommend going to the documentation: https://crawler.site
 | `--slowest-urls-top-limit=<int>` | Number of URLs in TOP slowest list. Default is `20`. |
 | `--slowest-urls-min-time=<val>` | Minimum response time threshold for slow URLs. Default is `0.01`. |
 | `--slowest-urls-max-time=<val>` | Maximum response time for an URL to be considered very slow.<br>Default is `3`. |
+
+## Output Examples
+
+To understand the richness of the data provided by the crawler, you can examine real output examples generated from crawling `crawler.siteone.io`:
+
+*   **Text Output Example:** [`docs/OUTPUT-crawler.siteone.io.txt`](docs/OUTPUT-crawler.siteone.io.txt)
+    *   Provides a human-readable summary suitable for quick review.
+    *   See the detailed [Text Output Documentation](docs/TEXT-OUTPUT.md).
+*   **JSON Output Example:** [`docs/OUTPUT-crawler.siteone.io.json`](docs/OUTPUT-crawler.siteone.io.json)
+    *   Provides structured data ideal for programmatic consumption and detailed analysis.
+    *   See the detailed [JSON Output Documentation](docs/JSON-OUTPUT.md).
+
+These examples showcase the various tables and metrics generated, demonstrating the tool's capabilities in analyzing website structure, performance, SEO, security, and more.
 
 ## Roadmap
 
