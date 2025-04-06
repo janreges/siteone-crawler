@@ -315,7 +315,7 @@ class HtmlToMarkdownConverter
         $title = $node->getAttribute('title');
 
         // Build the markdown link
-        $markdown = '[' . $this->escapeMarkdownChars($text) . '](' . $href; // Escape text within []
+        $markdown = '[' . $text . '](' . $href; // Don't escape text, it might contain valid markdown (e.g., images)
         if (!empty($title)) {
             $markdown .= ' "' . $this->escapeMarkdownChars($title) . '"'; // Escape title
         }
@@ -342,8 +342,8 @@ class HtmlToMarkdownConverter
             return ''; // Don't output anything if src is missing
         }
 
-        // Escape alt text and title
-        $alt = $this->escapeMarkdownChars($alt);
+        // Escape title only
+        // $alt = $this->escapeMarkdownChars($alt); // Don't escape alt text, it might contain valid markdown
         $title = $this->escapeMarkdownChars($title);
 
         $markdown = "![$alt]($src";
