@@ -1,0 +1,773 @@
+
+ ####                ####             #####        
+ ####                ####           #######        
+ ####      ###       ####         #########        
+ ####     ######     ####       ###### ####        
+  ######################       #####   ####        
+    #######    #######       #####     ####        
+    #######    #######         #       ####        
+  ######################               ####        
+ ####     ######     ####              ####        
+ ####       ##       ####              ####        
+ ####                ####       ################## 
+ ####                ####       ################## 
+
+==================================================
+# SiteOne Crawler, v1.0.8.20240824               #
+# Author: jan.reges@siteone.cz                   #
+==================================================
+
+
+Progress report           | URL                                                                                                                            | Status | Type     | Time   | Size   | Cache  | Access.  | Best pr.
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+1/43    | 2%   |          | /                                                                                                                              | 200    | HTML     | 34 ms  | 45 kB  | 60 min  | 1/1/2    | 1/5     
+2/64    | 3%   |          | /installation-and-requirements/ready-to-use-packages/                                                                          | 200    | HTML     | 13 ms  | 61 kB  | 60 min  | 1/3      | 1/5     
+3/64    | 4%   |          | /features/ease-of-use/                                                                                                         | 200    | HTML     | 15 ms  | 41 kB  | 60 min  | 1/3      | 1/5     
+4/64    | 6%   |>         | /features/content-type-analysis/                                                                                               | 200    | HTML     | 16 ms  | 41 kB  | 60 min  | 1/3      | 1/5     
+5/64    | 7%   |>         | /advanced-topics/extending/                                                                                                    | 200    | HTML     | 18 ms  | 41 kB  | 60 min  | 1/3      | 1/5     
+6/64    | 9%   |>         | /_astro/Tabs.astro_astro_type_script_index_0_lang.3nBd5krW.js                                                                  | 200    | JS       | 13 ms  | 2 kB   | 12 mon  |          |         
+7/64    | 10%  |>         | /installation-and-requirements/system-requirements/                                                                            | 200    | HTML     | 14 ms  | 51 kB  | 60 min  | 1/3      | 1/5     
+8/64    | 12%  |>         | /_astro/ec.j8ofn.css                                                                                                           | 200    | CSS      | 15 ms  | 18 kB  | 12 mon  |          |         
+9/64    | 14%  |>         | /_astro/siteone-crawler-logo-dark.DA2RebHB.svg                                                                                 | 200    | Image    | 21 ms  | 680 B  | 12 mon  |          |         
+10/64   | 15%  |>>        | /getting-started/basic-usage/                                                                                                  | 200    | HTML     | 24 ms  | 56 kB  | 60 min  | 1/3      | 1/5     
+11/64   | 17%  |>>        | /siteone-crawler-app-demo.avif                                                                                                 | 200    | Image    | 84 ms  | 591 kB | 12 mon  |          |         
+12/64   | 18%  |>>        | /features/seo-and-opengraph-analysis/                                                                                          | 200    | HTML     | 20 ms  | 41 kB  | 60 min  | 1/3      | 1/5     
+13/64   | 20%  |>>        | /introduction/key-features/                                                                                                    | 200    | HTML     | 20 ms  | 50 kB  | 60 min  | 1/3      | 1/5     
+14/64   | 21%  |>>        | /configuration/examples/                                                                                                       | 200    | HTML     | 16 ms  | 70 kB  | 60 min  | 1/3      | 1/5     
+15/64   | 23%  |>>        | /installation-and-requirements/manual-installation/                                                                            | 200    | HTML     | 14 ms  | 66 kB  | 60 min  | 1/3      | 1/5     
+16/66   | 24%  |>>        | /html/2024-08-23/forever/cl8xw4r-fdag8wg-44dd.html                                                                             | 200    | HTML     | 46 ms  | 2 MB   | 60 min  | 1/1/2    | 1/2/1/5 
+17/66   | 25%  |>>>       | /_astro/page.LS5KDvwX.js                                                                                                       | 200    | JS       | 10 ms  | 2 kB   | 12 mon  |          |         
+18/66   | 27%  |>>>       | /features/performance-analysis/                                                                                                | 200    | HTML     | 13 ms  | 41 kB  | 60 min  | 1/3      | 1/5     
+19/66   | 28%  |>>>       | /getting-started/quick-start-guide/                                                                                            | 200    | HTML     | 13 ms  | 48 kB  | 60 min  | 1/3      | 1/5     
+20/66   | 30%  |>>>       | /_astro/siteone-crawler-mascot.CPk15tXh_Z1pCY0w.webp                                                                           | 200    | Image    | 16 ms  | 31 kB  | 12 mon  |          |         
+21/66   | 31%  |>>>       | /features/exports-and-reports/                                                                                                 | 200    | HTML     | 479 ms | 42 kB  | 60 min  | 1/3      | 1/5     
+22/66   | 33%  |>>>       | /features/mailer/                                                                                                              | 200    | HTML     | 15 ms  | 42 kB  | 60 min  | 1/3      | 1/5     
+23/66   | 34%  |>>>       | /siteone-crawler-app-demo.gif                                                                                                  | 200    | Image    | 956 ms | 3 MB   | 12 mon  |          |         
+24/66   | 36%  |>>>>      | /features/online-html-report-upload/                                                                                           | 200    | HTML     | 14 ms  | 53 kB  | 60 min  | 1/3      | 1/5     
+25/66   | 37%  |>>>>      | /favicon.svg                                                                                                                   | 200    | Image    | 17 ms  | 680 B  | 12 mon  |          |         
+26/66   | 39%  |>>>>      | /?utm_source=siteone_crawler&utm_medium=logo&utm_campaign=crawler_report&utm_content=v1.0.7.20231222                           | 200    | HTML     | 16 ms  | 45 kB  | 60 min  | 1/1/2    | 1/5     
+27/66   | 40%  |>>>>      | /introduction/support-us/                                                                                                      | 200    | HTML     | 11 ms  | 40 kB  | 60 min  | 1/3      | 1/5     
+28/66   | 42%  |>>>>      | /features/accessibility-analysis/                                                                                              | 200    | HTML     | 14 ms  | 44 kB  | 60 min  | 1/3      | 1/5     
+29/66   | 43%  |>>>>      | /features/technical-analysis/                                                                                                  | 200    | HTML     | 18 ms  | 44 kB  | 60 min  | 1/3      | 1/5     
+30/66   | 45%  |>>>>>     | /features/sitemap-generator/                                                                                                   | 200    | HTML     | 19 ms  | 42 kB  | 60 min  | 1/3      | 1/5     
+31/66   | 46%  |>>>>>     | /introduction/overview/                                                                                                        | 200    | HTML     | 15 ms  | 50 kB  | 60 min  | 1/3      | 1/5     
+32/66   | 48%  |>>>>>     | /features/stress-testing/                                                                                                      | 200    | HTML     | 18 ms  | 44 kB  | 60 min  | 1/3      | 1/5     
+33/66   | 50%  |>>>>>     | /_astro/ready-to-use-packages.BYCPharn_Z2aYzvp.webp                                                                            | 200    | Image    | 17 ms  | 17 kB  | 12 mon  |          |         
+34/66   | 51%  |>>>>>     | /html/2024-08-23/forever/httpAgentOptions                                                                                      | 404    | JSON     | 14 ms  | 36 B   | none    |          |         
+35/66   | 53%  |>>>>>     | /features/improvement-meter/                                                                                                   | 200    | HTML     | 15 ms  | 42 kB  | 60 min  | 1/3      | 1/5     
+36/66   | 54%  |>>>>>     | /advanced-topics/crawler-behavior/                                                                                             | 200    | HTML     | 16 ms  | 41 kB  | 60 min  | 1/3      | 1/5     
+37/66   | 56%  |>>>>>>    | /robots.txt                                                                                                                    | 200    | Document | 10 ms  | 135 B  | 60 min  |          |         
+38/66   | 57%  |>>>>>>    | /_astro/ec.8zarh.js                                                                                                            | 200    | JS       | 12 ms  | 2 kB   | 12 mon  |          |         
+39/66   | 59%  |>>>>>>    | /html/2024-08-23/forever/x2-vuvb0oi6qxkr-ku79.html                                                                             | 200    | HTML     | 144 ms | 5 MB   | 60 min  | 1/1/2    | 1/1/1/5 
+40/66   | 60%  |>>>>>>    | /features/availability/                                                                                                        | 200    | HTML     | 19 ms  | 41 kB  | 60 min  | 1/3      | 1/5     
+41/66   | 62%  |>>>>>>    | /_astro/siteone-crawler-logo-light.CWY8e6I1.svg                                                                                | 200    | Image    | 17 ms  | 680 B  | 12 mon  |          |         
+42/66   | 63%  |>>>>>>    | /advanced-topics/contribution-and-development/                                                                                 | 200    | HTML     | 11 ms  | 40 kB  | 60 min  | 1/3      | 1/5     
+43/66   | 65%  |>>>>>>>   | /configuration/command-line-options/                                                                                           | 200    | HTML     | 16 ms  | 85 kB  | 60 min  | 1/3      | 1/5     
+44/66   | 66%  |>>>>>>>   | /features/heading-analysis/                                                                                                    | 200    | HTML     | 13 ms  | 40 kB  | 60 min  | 1/3      | 1/5     
+45/66   | 68%  |>>>>>>>   | /features/redirect-and-404-analysis/                                                                                           | 200    | HTML     | 14 ms  | 41 kB  | 60 min  | 1/3      | 1/5     
+46/66   | 69%  |>>>>>>>   | /introduction/thanks/                                                                                                          | 200    | HTML     | 29 ms  | 45 kB  | 60 min  | 1/3      | 1/5     
+47/66   | 71%  |>>>>>>>   | /introduction/contact-and-community/                                                                                           | 200    | HTML     | 12 ms  | 48 kB  | 60 min  | 1/3      | 1/5     
+48/67   | 71%  |>>>>>>>   | /installation-and-requirements/desktop-application/                                                                            | 200    | HTML     | 11 ms  | 47 kB  | 60 min  | 1/3      | 1/5     
+49/67   | 73%  |>>>>>>>   | /_astro/desktop-app-release-assets.DBTr-vv8_1ULchm.webp                                                                        | 200    | Image    | 20 ms  | 39 kB  | 12 mon  |          |         
+50/67   | 74%  |>>>>>>>   | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html                                                                             | 200    | HTML     | 2.7 s  | 2 MB   | 60 min  | 1/1/2    | 1/1/1/5 
+51/67   | 76%  |>>>>>>>>  | /advanced-topics/caching/                                                                                                      | 200    | HTML     | 20 ms  | 41 kB  | 60 min  | 1/3      | 1/5     
+52/67   | 77%  |>>>>>>>>  | /getting-started/advanced-usage/                                                                                               | 200    | HTML     | 13 ms  | 71 kB  | 60 min  | 1/3      | 1/5     
+53/67   | 79%  |>>>>>>>>  | /introduction/faq/                                                                                                             | 200    | HTML     | 12 ms  | 52 kB  | 60 min  | 1/3      | 1/5     
+54/67   | 80%  |>>>>>>>>  | /features/best-practices-analysis/                                                                                             | 200    | HTML     | 12 ms  | 43 kB  | 60 min  | 1/3      | 1/5     
+55/67   | 82%  |>>>>>>>>  | /_astro/index.D71SxaRD.css                                                                                                     | 200    | CSS      | 26 ms  | 59 kB  | 12 mon  |          |         
+56/67   | 83%  |>>>>>>>>  | /advanced-topics/troubleshooting/                                                                                              | 200    | HTML     | 14 ms  | 41 kB  | 60 min  | 1/3      | 1/5     
+57/67   | 85%  |>>>>>>>>> | /features/dev-devops-assistant/                                                                                                | 200    | HTML     | 13 ms  | 42 kB  | 60 min  | 1/3      | 1/5     
+58/67   | 86%  |>>>>>>>>> | /introduction/ideas-and-roadmap/                                                                                               | 200    | HTML     | 14 ms  | 51 kB  | 60 min  | 1/3      | 1/5     
+59/67   | 88%  |>>>>>>>>> | /siteone-crawler-command-line-demo-w960.gif                                                                                    | 200    | Image    | 347 ms | 4 MB   | 12 mon  |          |         
+60/67   | 89%  |>>>>>>>>> | /siteone-crawler-command-line-demo-w960.avif                                                                                   | 200    | Image    | 70 ms  | 1 MB   | 12 mon  |          |         
+61/67   | 91%  |>>>>>>>>> | /features/security-analysis/                                                                                                   | 200    | HTML     | 15 ms  | 44 kB  | 60 min  | 1/3      | 1/5     
+62/67   | 92%  |>>>>>>>>> | /features/deep-website-crawling/                                                                                               | 200    | HTML     | 13 ms  | 42 kB  | 60 min  | 1/3      | 1/5     
+63/67   | 94%  |>>>>>>>>> | /introduction/motivation/                                                                                                      | 200    | HTML     | 14 ms  | 47 kB  | 60 min  | 1/3      | 1/5     
+64/67   | 95%  |>>>>>>>>>>| /features/offline-website-generator/                                                                                           | 200    | HTML     | 14 ms  | 47 kB  | 60 min  | 1/3      | 1/5     
+65/67   | 97%  |>>>>>>>>>>| /_astro/hoisted.CpqBujET.js                                                                                                    | 200    | JS       | 18 ms  | 7 kB   | 12 mon  |          |         
+66/67   | 98%  |>>>>>>>>>>| /features/audit-report/                                                                                                        | 200    | HTML     | 14 ms  | 47 kB  | 60 min  | 1/3      | 1/5     
+67/67   | 100% |>>>>>>>>>>| /siteone-crawler-command-line-demo-full.gif                                                                                    | 200    | Image    | 471 ms | 8 MB   | 12 mon  |          |         
+
+Skipped URLs Summary
+--------------------
+
+Reason             | Domain                                 | Unique URLs
+---------------------------------------------------------------------------
+Not allowed host   | nextjs.org                             | 1294       
+Not allowed host   | astro.build                            | 925        
+Not allowed host   | www.netlify.com                        | 711        
+Not allowed host   | cdn.sanity.io                          | 301        
+Not allowed host   | storage.googleapis.com                 | 142        
+Not allowed host   | netlify-eleventy-api-img.netlify.app   | 77         
+Not allowed host   | avatars.githubusercontent.com          | 55         
+Not allowed host   | github.com                             | 30         
+Not allowed host   | i.ytimg.com                            | 21         
+Not allowed host   | twitter.com                            | 13         
+Not allowed host   | netlify-marketing-icons.netlify.app    | 13         
+Not allowed host   | assets.vercel.com                      | 8          
+Not allowed host   | images.ctfassets.net                   | 7          
+Not allowed host   | vercel.com                             | 5          
+Not allowed host   | fonts.gstatic.com                      | 4          
+Not allowed host   | discord.gg                             | 4          
+Not allowed host   | en.wikipedia.org                       | 4          
+Not allowed host   | res.cloudinary.com                     | 3          
+Robots.txt         | crawler.siteone.io                     | 3          
+Not allowed host   | js.qualified.com                       | 2          
+Not allowed host   | www.siteone.io                         | 2          
+Not allowed host   | learn.microsoft.com                    | 2          
+Not allowed host   | netlify-roi-calculator.netlify.app     | 1          
+Not allowed host   | svelte.dev                             | 1          
+Not allowed host   | starlight.astro.build                  | 1          
+Not allowed host   | nette.org                              | 1          
+Not allowed host   | reactphp.org                           | 1          
+Not allowed host   | adamwathan.me                          | 1          
+Not allowed host   | alternativeto.net                      | 1          
+Not allowed host   | platform.twitter.com                   | 1          
+Not allowed host   | i.imgur.com                            | 1          
+Not allowed host   | ubuntu.com                             | 1          
+Not allowed host   | www.electronjs.org                     | 1          
+Not allowed host   | merj-research-beacon-server.vercel.app | 1          
+Not allowed host   | js.qualified-dev.com                   | 1          
+Not allowed host   | cdn.statuspage.io                      | 1          
+Not allowed host   | www.spse-po.sk                         | 1          
+Not allowed host   | www.michalspacek.cz                    | 1          
+Not allowed host   | chat.openai.com                        | 1          
+Not allowed host   | cz.linkedin.com                        | 1          
+Not allowed host   | www.reddit.com                         | 1          
+Not allowed host   | js.hsforms.net                         | 1          
+Not allowed host   | www.jetbrains.com                      | 1          
+Not allowed host   | www.linkedin.com                       | 1          
+Not allowed host   | https                                  | 1          
+Not allowed host   | tailwindcss.com                        | 1          
+Not allowed host   | discord.com                            | 1          
+Not allowed host   | cdn.jsdelivr.net                       | 1          
+Not allowed host   | assets.codepen.io                      | 1          
+Not allowed host   | www.amd.com                            | 1          
+Not allowed host   | js.hs-scripts.com                      | 1          
+Not allowed host   | www.rust-lang.org                      | 1          
+Not allowed host   | www.lenovo.com                         | 1          
+Not allowed host   | www.vzhurudolu.cz                      | 1          
+Not allowed host   | lexingtonthemes.com                    | 1          
+Not allowed host   | platform-api.sharethis.com             | 1          
+Not allowed host   | daisyui.com                            | 1          
+Not allowed host   | cdn.mydomain.com                       | 1          
+Not allowed host   | x.com                                  | 1          
+Not allowed host   | www.linuxfordevices.com                | 1          
+Not allowed host   | home.snafu.de                          | 1          
+Not allowed host   | www.youtube.com                        | 1          
+Not allowed host   | openswoole.com                         | 1          
+Not allowed host   | phpstan.org                            | 1          
+Not allowed host   | www.swoole.com                         | 1          
+Not allowed host   | www.cdn77.com                          | 1          
+Not allowed host   | cdn.usefathom.com                      | 1          
+Not allowed host   | www.cygwin.com                         | 1          
+Not allowed host   | astroinc.notion.site                   | 1          
+Not allowed host   | www.solidjs.com                        | 1          
+Not allowed host   | www.googletagmanager.com               | 1          
+Not allowed host   | imgur.com                              | 1          
+Not allowed host   | va.vercel-scripts.com                  | 1          
+Not allowed host   | trust.netlify.com                      | 1          
+
+
+Skipped URLs
+------------
+
+Reason             | Skipped URL                                                  | Source              | Found at URL                                                
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Not allowed host   | http://astro.build/                                          | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://adamwathan.me/                                       | <a href>            | /introduction/thanks/                                       
+Not allowed host   | https://alternativeto.net/software/siteo…ite-analyzer/about/ | <a href>            | /introduction/support-us/                                   
+Not allowed host   | https://assets.codepen.io/225363/icon-check-circle.svg       | <a href>            | /html/2024-08-23/forever/x2-vuvb0oi6qxkr-ku79.html          
+Not allowed host   | https://assets.vercel.com/image/upload/f…nf-2023/conf-og.png | <a href>            | /html/2024-08-23/forever/cl8xw4r-fdag8wg-44dd.html          
+Not allowed host   | https://assets.vercel.com/image/upload/f…023/speakers-og.png | <a href>            | /html/2024-08-23/forever/cl8xw4r-fdag8wg-44dd.html          
+Not allowed host   | https://assets.vercel.com/image/upload/f…023/sponsors-og.png | <a href>            | /html/2024-08-23/forever/cl8xw4r-fdag8wg-44dd.html          
+Not allowed host   | https://assets.vercel.com/image/upload/f…extjs-learn/seo.png | <a href>            | /html/2024-08-23/forever/cl8xw4r-fdag8wg-44dd.html          
+Not allowed host   | https://assets.vercel.com/image/upload/f…js/twitter-card.png | <a href>            | /html/2024-08-23/forever/cl8xw4r-fdag8wg-44dd.html          
+Not allowed host   | https://assets.vercel.com/raw/upload/v16…latin-regular.woff2 | <a href>            | /html/2024-08-23/forever/cl8xw4r-fdag8wg-44dd.html          
+Not allowed host   | https://assets.vercel.com/video/upload/v…og/fast-refresh.mp4 | <a href>            | /html/2024-08-23/forever/cl8xw4r-fdag8wg-44dd.html          
+Not allowed host   | https://assets.vercel.com/video/upload/v…/ts-autoinstall.mp4 | <a href>            | /html/2024-08-23/forever/cl8xw4r-fdag8wg-44dd.html          
+Not allowed host   | https://astro.build/                                         | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/HeroBackgroun…0iWl89K_1mX4z9.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/SKNCRE.R_heZtGw_1qO2O7.webp       | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/YouTube.astro…_0_lang.Dkyb9mLy.js | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/_slug_.Cw-sPkwO.css               | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/academic-proj…l.app.Ba5fHwUt.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/accrofury.com.BQ3pPx8K.webp       | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/ai.cloudflare.com.CDRB8uSy.webp   | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/aiaman.web.app.B332bijo.webp      | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/akshaygore.tech.C-Ly2GxL.webp     | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/alee14.me.BTsZlqNg.webp           | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/amelite.Cr4Xa5W-.webp             | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/andka.my.id.D8Erk9Eu.webp         | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/anitaslondont…s.com.DqAAHXSM.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/annahsu.dev.79DeCdte.webp         | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/antoniuk.dev.UNvXJcqP.webp        | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/appstoredesign.com.BDho4sXx.webp  | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/aria.dog.BJuus0qy.webp            | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/armandodev.ve…l.app.g1skJpdf.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/as-next.web.app.BF3kZBxd.webp     | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/astro-benefits.D_QSi3rE.webp      | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/astro-cap.jt5HlOg8_Z1BQ7al.webp   | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/astro-db-header.CjllSiED.jpg      | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/astro-db-social.BNTnEHYw.jpg      | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/astro-design-…26E2C8I_2oBSok.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/astro-mintlif…l.app.DvG7VK9a.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/astro-nano.DpaKlVSa_2vUfV8.webp   | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/astro-netlify…eader.BlbEpnze.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/astro-netlify…ocial.B4H1DgpI.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/astro-shopify.B2cAlq31_shOnD.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/astro-social-…e.com.BjLoEwOg.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/astro-team.FDEV5L0G.webp          | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/astro-zerojs-…pp@2x.CDpxB3V6.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/astrocoderstats.fun.CSf8WTl-.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/astrofy.x0ny8wy6_ZrCtIe.webp      | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/astrolus.ffg8hvUW_ZuzOQO.webp     | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/astroplate.DWGGgLDV_Z1A2WKD.webp  | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/astroship.knBTcZAP_ZXxDEQ.webp    | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/atom.YzcaRLyp_ZO3n2A.webp         | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/avikbanik.com.C6JeiahC.webp       | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/banner-error-…y-old.B6sAqVUo.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/banner-error-…erlay.4d0L0Hqx.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/be-radio.Dvo8QwE8.webp            | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/ben.aw9Dq3Pc.webp                 | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/berliner-schn…e.wtf.DgVDjALV.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/bholmes.dev.CGC0On78.webp         | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/binary-fish.v…l.app.BifbE2C3.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/bjorn.CwykPLsk.webp               | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/blissibizawed…s.com.fSLwuvNB.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/blog.asyncx.top.BStF0eIc.webp     | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/blog.fanindra.xyz.B_vhnFaV.webp   | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/blog.stackblitz.com.cBvyZef6.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/bluescopetech.com.UlygPISi.webp   | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/bobalazek.com.DGMZuSyy.webp       | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/bootstraplogos.com.D3L8-s4A.webp  | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/boutiquestone.co.uk.CBqt9iD5.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/brandingbrand…ub.io.RofU_cVy.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/bruno-alves.9iwdDCHv.webp         | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/brutal.Dj5i2_cI_Z1t3fcS.webp      | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/bryanhogan.com.DIEiwFf3.webp      | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/captainofphb.me.Dl0BTc60.webp     | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/captmichael.dev.DNVylK06.webp     | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/ccsf-cs.club.BZg_Ba8W.webp        | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/charleszw.com.D84ZHOAM.webp       | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/chris.ZOiiyI05.webp               | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/cleanvid.com.D_ugjZBG.webp        | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/codemask-labs…ub.io.EZoVs9jR.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/coding-in-public.Df3iPVJU.webp    | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/coding-tech.BhiTvnBB.webp         | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/confiabogado.com.aLz2Rkzc.webp    | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/contenda.co.Cxg9Q6Bd.webp         | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/corcosoft.com.CVE6ewYE.webp       | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/corvu.dev.CbUI7OVU.webp           | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/cover-image.BVP9wZq_.webp         | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/cover-image.C-_FWhDp.webp         | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/cover.BfVuMgJw.webp               | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/cover.D73lotx0.webp               | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/cover.DwgIe76b.webp               | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/curry-astro.n…y.app.BV5Dk_eB.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/dainwi-blog.v…l.app.BfNzpOjp.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/dante.eaFko76u_Z1fzS3p.webp       | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/dark-mode-ser…-diag.CCPm1I4W.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/dashboard.CUcEY0gH.webp           | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/datadonut.xyz.DQJukCwM.webp       | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/datapackage.org.NEj28Gpd.webp     | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/day-of-the-dead.B8b0J0yq.webp     | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/decriminalize…n.org.BCKutA11.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/designcember.CHkf5yrS.webp        | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/developers.ne…y.com.Dczx-0aU.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/digital-cookie.io.GpaaV_Zp.webp   | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/dilmahtea.me.BjtBD9sX.webp        | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/distresssignal.org.Ce7bH2tG.webp  | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/dizajn-radiator.ru.BXj9aDo_.webp  | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/docs.arcjet.com.DCh3aCq0.webp     | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/docs.astro-st…s.xyz.D_ayFclq.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/docs.dirtroad.dev.Bkm71Zpi.webp   | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/docs.orama.com.CZLddycE.webp      | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/docs.scrumlr.io.CkXi9byZ.webp     | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/docs.typetura.com.TF-O4qOR.webp   | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/dodonut@2x.CkWKb2uF.webp          | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/dracarys.robe…is@2x.hxXZnmIX.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/dtxautosalon.com.Bzq9Syav.webp    | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/earley.info.uQBbK9CR.webp         | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/ec.cmf2d.css                      | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/ec.qopfj.js                       | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/elian-codes.B8siqVFO.webp         | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/elian.Bhl5z-lp.webp               | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/eliotbas.com.BULO6TTi.webp        | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/ema.Cdibg2Q4.webp                 | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/emphasismedia.com.Baiv3ZQ6.webp   | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/eniyihaberyaz…om.tr.CcRJzVed.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/erika.D_h-VfLk.webp               | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/esquelete-cv.…llQl57_Z1xUlNc.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/eva.town.0t_4kgB3.webp            | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/expressjs-doc…l.app.BT95hjky.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/exsuntrasolut…s.com.Dyb_TJgq.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/exylons.com.DTryyKC2.webp         | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/feature.undp.org@2x.BnjBxz1O.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/fernando-herr…a.com.CyI7Ugso.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/final-cta.-VPcghul_Z2avkpu.webp   | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/firebase-blog.BhgE5X4I.webp       | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/flag.london.Cb9DkOO9.webp         | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/fleek.xyz.0rNfUEh0.webp           | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/fluent2.micro…gn@2x.CJFIoXim.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/fluentmoheshw…s.dev.DoscZEA0.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/footer-bg.6MTOEF7H_Z1vnoxx.webp   | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/fred.CuAgzliB.webp                | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/freeworld.org.DvQEkfaU.webp       | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/frenchsimplif…d.com.tCQZpfso.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/frontmatter-i…isense.Cxa6V3Li.png | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/frugalthinker.com.D0aEF5bL.webp   | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/gift-idea.co.9fxaVgdo.webp        | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/gin-cruise.com.Bxn2pkW_.webp      | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/gitcharts.com.DMac_Svy.webp       | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/gitter.im.-EHRRFfS.webp           | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/grupomaca.com.C2igcNBi.webp       | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/gurido.C74fIMwD_Z5LNiP.webp       | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/hackurity.aw1Ejjko.webp           | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/header-astro-4.10.B9x8bVQN.webp   | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/header-astro-4.11.pYwstLqQ.webp   | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/header-astro-…layer.CWVYRy7F.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/header-astro-…-dive.Bcy5Jf2L.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/header-astro-…lands.sfPWYGsg.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/header-astro-…tions.CPhSdJXi.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/header.BoX1u3my.webp              | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/header.D7E9vjMe.webp              | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/header.DEn3tAeR.webp              | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/header.DPpNYWvm.webp              | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/header_astro_4_12.Bh657owW.webp   | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/header_astro_4_13.BEhRjWsy.webp   | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/header_astro_4_14.pG_MJEBR.webp   | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/header_astro_4_8.CzW3T_s9.webp    | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/header_astro_4_9.KmTIq1c5.webp    | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/header_astro_…ation.DtQbR0Up.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/healthconnect…a.com.BhCFB7xY.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/hellostu.xyz.BqrNzvtm.webp        | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/hero-bg.C0GSVyR2_ZpxMG8.webp      | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/hero-bg.C0GSVyR2_ZrDUw6.webp      | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/hideoo.BJXLtTzx.png               | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/hoisted.AIMn-mPT.js               | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/hoisted.BO2YYpqD.js               | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/hoisted.C-iH8dp0.js               | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/hoisted.CM1seN5d.js               | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/hoisted.IVZSmd4y.js               | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/hoisted.MmyfpQeu.js               | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/hoisted.a5p7PvZ7.js               | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/houston-happy.C6RoC4Y9.png        | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/houston_wink.DHoy7Pba.webp        | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/hybrid.BUuwbKmd.webp              | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/idx.dev.Bd5G3sgj.webp             | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/index.B7rcSkU8.css                | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/inspotype.com.Cd10IbW4.webp       | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/invoice123.com.Dfb092uZ.webp      | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/ion.VBQu18If_ZmVuls.webp          | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/ioxua.com.D6lqNSXZ.webp           | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/itsmy.fyi.CsckhnJR.webp           | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/jaanituli.ee.DClLu0E0.webp        | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/jacob-jones.DCElwIwt_11KBle.webp  | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/jameelsocorro.com.D6Ru1qZw.webp   | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/joinfirefish.org.C1xjbVs4.webp    | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/joinvdc.com.C4PlXvzx.webp         | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/jscodeshift.com.-1ku9bu2.webp     | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/keyboardcount…nline.DRbGmedp.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/kievhorst.com.BKFqkCw4.webp       | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/kikocard.com.CKApBZ9v.webp        | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/laravelcan.work.0Z9PKUwF.webp     | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/loooooooooooo…o.ong.DlTZ7eNa.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+Not allowed host   | https://astro.build/_astro/marvin-mckinn…G8HU_7y_1K3Pfr.webp | <a href>            | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html          
+
+
+Redirected URLs
+---------------
+
+No redirects found.
+
+
+404 URLs
+--------
+
+Status | URL 404                                                                                                    | Found at URL                                                                                              
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+404    | https://crawler.siteone.io/html/2024-08-23/forever/httpAgentOptions                                        | https://crawler.siteone.io/html/2024-08-23/forever/cl8xw4r-fdag8wg-44dd.html                              
+
+
+SSL/TLS info
+------------
+
+Info                   | Text                                                                                                                                                                                                  
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Issuer                 | C = BE, O = GlobalSign nv-sa, CN = GlobalSign GCC R6 AlphaSSL CA 2023                                                                                                                                 
+Subject                | CN = *.siteone.io                                                                                                                                                                                     
+Valid from             | Jan 23 09:52:19 2025 GMT (VALID already 73.2 day(s))                                                                                                                                       
+Valid to               | Feb 24 09:52:18 2026 GMT (VALID still for 323.8 day(s))                                                                                                                                    
+Supported protocols    | TLSv1.2                                                                                                                                                                                    
+RAW certificate output | Certificate:
+    Data:
+        Version: 3 (0x2)
+        Serial Number:
+            5d:79:3a:01:2f:d2:24:cd:c1:91:54:4c
+        Signa…0:ca:47:b4:b4:33:4a:ee:18:72:98:47:a3:f4:51:
+        3c:19:31:52
+RAW protocols output   | === ssl2 ===
+s_client: Unknown option: -ssl2
+s_client: Use -help for summary.
+
+=== ssl3 ===
+s_client: Unknown option: -ssl3
+s_clien…egotiated
+Early data was not sent
+Verify return code: 0 (ok)
+---
+
+
+TOP fastest URLs
+----------------
+
+Time   | Status | Fast URL                                                                                                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+11 ms  | 200    | https://crawler.siteone.io/installation-and-requirements/desktop-application/                                                                                                                                   
+11 ms  | 200    | https://crawler.siteone.io/introduction/support-us/                                                                                                                                                             
+11 ms  | 200    | https://crawler.siteone.io/advanced-topics/contribution-and-development/                                                                                                                                        
+12 ms  | 200    | https://crawler.siteone.io/introduction/contact-and-community/                                                                                                                                                  
+12 ms  | 200    | https://crawler.siteone.io/features/best-practices-analysis/                                                                                                                                                    
+12 ms  | 200    | https://crawler.siteone.io/introduction/faq/                                                                                                                                                                    
+13 ms  | 200    | https://crawler.siteone.io/features/performance-analysis/                                                                                                                                                       
+13 ms  | 200    | https://crawler.siteone.io/getting-started/advanced-usage/                                                                                                                                                      
+13 ms  | 200    | https://crawler.siteone.io/getting-started/quick-start-guide/                                                                                                                                                   
+13 ms  | 200    | https://crawler.siteone.io/features/heading-analysis/                                                                                                                                                           
+13 ms  | 200    | https://crawler.siteone.io/installation-and-requirements/ready-to-use-packages/                                                                                                                                 
+13 ms  | 200    | https://crawler.siteone.io/features/deep-website-crawling/                                                                                                                                                      
+13 ms  | 200    | https://crawler.siteone.io/features/dev-devops-assistant/                                                                                                                                                       
+14 ms  | 200    | https://crawler.siteone.io/features/redirect-and-404-analysis/                                                                                                                                                  
+14 ms  | 200    | https://crawler.siteone.io/features/offline-website-generator/                                                                                                                                                  
+14 ms  | 200    | https://crawler.siteone.io/features/online-html-report-upload/                                                                                                                                                  
+14 ms  | 200    | https://crawler.siteone.io/features/accessibility-analysis/                                                                                                                                                     
+14 ms  | 200    | https://crawler.siteone.io/features/audit-report/                                                                                                                                                               
+14 ms  | 200    | https://crawler.siteone.io/installation-and-requirements/system-requirements/                                                                                                                                   
+14 ms  | 200    | https://crawler.siteone.io/installation-and-requirements/manual-installation/                                                                                                                                   
+
+
+TOP slowest URLs
+----------------
+
+Time   | Status | Slow URL                                                                                                                                                                                                   
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+2.7 s  | 200    | https://crawler.siteone.io/html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html                                                                                                                               
+479 ms | 200    | https://crawler.siteone.io/features/exports-and-reports/                                                                                                                                                   
+144 ms | 200    | https://crawler.siteone.io/html/2024-08-23/forever/x2-vuvb0oi6qxkr-ku79.html                                                                                                                               
+46 ms  | 200    | https://crawler.siteone.io/html/2024-08-23/forever/cl8xw4r-fdag8wg-44dd.html                                                                                                                               
+34 ms  | 200    | https://crawler.siteone.io/                                                                                                                                                                                
+29 ms  | 200    | https://crawler.siteone.io/introduction/thanks/                                                                                                                                                            
+24 ms  | 200    | https://crawler.siteone.io/getting-started/basic-usage/                                                                                                                                                    
+20 ms  | 200    | https://crawler.siteone.io/introduction/key-features/                                                                                                                                                      
+20 ms  | 200    | https://crawler.siteone.io/features/seo-and-opengraph-analysis/                                                                                                                                            
+20 ms  | 200    | https://crawler.siteone.io/advanced-topics/caching/                                                                                                                                                        
+19 ms  | 200    | https://crawler.siteone.io/features/sitemap-generator/                                                                                                                                                     
+19 ms  | 200    | https://crawler.siteone.io/features/availability/                                                                                                                                                          
+18 ms  | 200    | https://crawler.siteone.io/features/technical-analysis/                                                                                                                                                    
+18 ms  | 200    | https://crawler.siteone.io/features/stress-testing/                                                                                                                                                        
+18 ms  | 200    | https://crawler.siteone.io/advanced-topics/extending/                                                                                                                                                      
+16 ms  | 200    | https://crawler.siteone.io/?utm_source=siteone_crawler&utm_medium=logo&utm_campaign=crawler_report&utm_content=v1.0.7.20231222                                                                             
+16 ms  | 200    | https://crawler.siteone.io/configuration/examples/                                                                                                                                                         
+16 ms  | 200    | https://crawler.siteone.io/configuration/command-line-options/                                                                                                                                             
+16 ms  | 200    | https://crawler.siteone.io/features/content-type-analysis/                                                                                                                                                 
+16 ms  | 200    | https://crawler.siteone.io/advanced-topics/crawler-behavior/                                                                                                                                               
+
+
+SEO metadata
+------------
+
+This table contains large data and shows max 10 rows. To see them all, use output to HTML using `--output-html-report=tmp/myreport.html`.
+
+URL                                                | Indexing             | Title                               | H1                                  | Description                         | Keywords                           
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+/                                                  | Allowed              | SiteOne Crawler - free w…will love | SiteOne Crawler                     | A very useful and free w…rm64 too). |                                    
+/?utm_source=siteone_crawler&utm_m…v1.0.7.20231222 | Allowed              | SiteOne Crawler - free w…will love | SiteOne Crawler                     | A very useful and free w…rm64 too). |                                    
+/advanced-topics/caching/                          | Allowed              | Caching • SiteOne Crawler           | Caching                             |                                     |                                    
+/advanced-topics/contribution-and-development/     | Allowed              | Contribution and Develop…ne Crawler | Contribution and Development        |                                     |                                    
+/advanced-topics/crawler-behavior/                 | Allowed              | Crawler behavior • SiteOne Crawler  | Crawler behavior                    |                                     |                                    
+/advanced-topics/extending/                        | Allowed              | Extending • SiteOne Crawler         | Extending                           |                                     |                                    
+/advanced-topics/troubleshooting/                  | Allowed              | Troubleshooting • SiteOne Crawler   | Troubleshooting                     |                                     |                                    
+/configuration/command-line-options/               | Allowed              | Command-line options • S…ne Crawler | Command-line options                | This section describes a…wler tool. |                                    
+/configuration/examples/                           | Allowed              | Examples • SiteOne Crawler          | Examples                            | This section describes e…wler tool. |                                    
+/features/accessibility-analysis/                  | Allowed              | Accessibility Analysis •…ne Crawler | Accessibility Analysis              | SiteOne Crawler provides…websites. |                                    
+
+
+OpenGraph metadata
+------------------
+
+This table contains large data and shows max 10 rows. To see them all, use output to HTML using `--output-html-report=tmp/myreport.html`.
+
+URL                                                | OG Title                       | OG Description                 | OG Image           | Twitter Title                  | Twitter Description            | Twitter Image     
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+/                                                  | SiteOne Crawler - fr…(cloner) | A very useful and fr…m64 too). | https://craw…e.png |                                |                                |                   
+/?utm_source=siteone_crawler&utm_m…v1.0.7.20231222 | SiteOne Crawler - fr…(cloner) | A very useful and fr…m64 too). | https://craw…e.png |                                |                                |                   
+/advanced-topics/caching/                          | Caching                        |                                | https://craw…e.png |                                |                                |                   
+/advanced-topics/contribution-and-development/     | Contribution and Development   |                                | https://craw…e.png |                                |                                |                   
+/advanced-topics/crawler-behavior/                 | Crawler behavior               |                                | https://craw…e.png |                                |                                |                   
+/advanced-topics/extending/                        | Extending                      |                                | https://craw…e.png |                                |                                |                   
+/advanced-topics/troubleshooting/                  | Troubleshooting                |                                | https://craw…e.png |                                |                                |                   
+/configuration/command-line-options/               | Command-line options           | This section describ…ler tool. | https://craw…e.png |                                |                                |                   
+/configuration/examples/                           | Examples                       | This section describ…ler tool. | https://craw…e.png |                                |                                |                   
+/features/accessibility-analysis/                  | Accessibility Analysis         | SiteOne Crawler prov…websites. | https://craw…e.png |                                |                                |                   
+
+
+Heading structure
+-----------------
+
+This table contains large data and shows max 10 rows. To see them all, use output to HTML using `--output-html-report=tmp/myreport.html`.
+
+Heading structure                                                                                                                                                              | Count | Errors | URL                           
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+<h2> On this page [#starlight__on-this-page] <h1> Examples [#_top] <h3> Analysis of the entire website with default…all available options [#help-with-all-available-options]   | 13    | 12     | /configuration/examples/      
+<h2> On this page [#starlight__on-this-page] <h1> FAQ [#_top] <h3> Who is this tool for? [#who-is-this-tool-for] <h3…an I contact the author? [#how-can-i-contact-the-author]  | 13    | 12     | /introduction/faq/            
+<h2> On this page [#starlight__on-this-page] <h1> Quick Start Guide [#_top] <h3> How to use Desktop Application [#ho…mand-line Interface [#how-to-use-command-line-interface]  | 4     | 3      | /getting-started/qui…rt-guide/
+<h2> On this page [#starlight__on-this-page] <h1> CLI: Ready-to-use Packages [#_top] <h2> Where to download packages…x64-or-wsl-on-windows] <h2> Linux (arm64) [#linux-arm64]  | 8     | 1      | /installation-and-re…packages/
+<h2> On this page [#starlight__on-this-page] <h1> Ease of Use [#_top] <h2> 💡What would you improve? [#what-would-you-improve]                                                  | 3     | 1      | /features/ease-of-use/        
+<h2> On this page [#starlight__on-this-page] <h1> Content Type Analysis [#_top] <h2> Key Metrics [#key-metrics] <h2> 💡Further development ideas [#further-development-ideas]   | 4     | 1      | /features/content-ty…analysis/
+<h2> On this page [#starlight__on-this-page] <h1> Extending [#_top]                                                                                                            | 2     | 1      | /advanced-topics/extending/   
+<h2> On this page [#starlight__on-this-page] <h1> System Requirements [#_top] <h2> Hardware Requirements [#hardware-…net] <h2> Software Requirements [#software-requirements]  | 8     | 1      | /installation-and-re…irements/
+<h2> On this page [#starlight__on-this-page] <h1> Basic Usage [#_top] <h2> First steps [#first-steps] <h3> Crawl a w…the-website] <h2> Lot of other uses [#lot-of-other-uses]  | 7     | 1      | /getting-started/basic-usage/ 
+<h2> On this page [#starlight__on-this-page] <h1> SEO and OpenGraph Analysis [#_top] <h2> Key Findings [#key-finding…<h2> 💡What would you improve? [#what-would-you-improve]   | 4     | 1      | /features/seo-and-op…analysis/
+
+
+HTTP headers
+------------
+
+Header                    | Occurs | Unique | Values preview                                                                                                                             | Min value  | Max value 
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Accept-Ranges             | 12     | 1      | bytes                                                                                                                                      |            |           
+Cache-Control             | 66     | 2      | max-age=3600 (49) / max-age=31536000 (17)                                                                                                  |            |           
+Connection                | 67     | 1      | close                                                                                                                                      |            |           
+Content-Encoding          | 55     | 2      | gzip (51) / br (4)                                                                                                                         |            |           
+Content-Length            | 16     | -      | [ignored generic values]                                                                                                                   | 40 B       | 8 MB      
+Content-Security-Policy   | 49     | 4      | [see values below]                                                                                                                         |            |           
+Content-Type              | 67     | 10     | [see values below]                                                                                                                         |            |           
+Date                      | 67     | -      | [ignored generic values]                                                                                                                   | 2025-02-12 | 2025-04-06
+Etag                      | 63     | -      | [ignored generic values]                                                                                                                   |            |           
+Expires                   | 66     | -      | [ignored generic values]                                                                                                                   | 2025-02-12 | 2026-04-06
+Feature-Policy            | 67     | 1      | accelerometer 'none'; camera 'none'; geolocation 'self'; gyroscope 'none'; magne…midi 'none'; payment 'none'; usb 'none'        |            |           
+Last-Modified             | 63     | -      | [ignored generic values]                                                                                                                   | 2024-08-24 | 2024-08-29
+Permissions-Policy        | 67     | 1      | accelerometer=(), camera=(), geolocation=(self), gyroscope=(), magnetometer=(),…rophone=(), midi=(), payment=(), usb=()         |            |           
+Referrer-Policy           | 63     | 1      | no-referrer-when-downgrade                                                                                                                 |            |           
+Server                    | 67     | 1      | -                                                                                                                                          |            |           
+Strict-Transport-Security | 63     | 1      | max-age=15552000                                                                                                                           |            |           
+Transfer-Encoding         | 51     | 1      | chunked                                                                                                                                    |            |           
+Vary                      | 51     | 1      | Accept-Encoding                                                                                                                            |            |           
+X-Cache-Status            | 3      | 2      | STALE (2) / HIT (1)                                                                                                                        |            |           
+X-Content-Type-Options    | 63     | 2      | nosniff (46) / nosniff, nosniff (17)                                                                                                       |            |           
+X-Frame-Options           | 63     | 1      | SAMEORIGIN                                                                                                                                 |            |           
+X-XSS-Protection          | 63     | 1      | 1; mode=block                                                                                                                              |            |           
+
+
+HTTP header values
+------------------
+
+Header                    | Occurs | Value                                                                                                                                                                       
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Accept-Ranges             | 12     | bytes                                                                                                                                                                       
+Cache-Control             | 49     | max-age=3600                                                                                                                                                                
+Cache-Control             | 17     | max-age=31536000                                                                                                                                                            
+Connection                | 67     | close                                                                                                                                                                       
+Content-Encoding          | 51     | gzip                                                                                                                                                                        
+Content-Encoding          | 4      | br                                                                                                                                                                          
+Content-Security-Policy   | 46     | default-src 'self' 'unsafe-inline' 'unsafe-eval' data: https://www.youtube.com https://*.ggpht.com https://*.gstati…bleclick.net https://*.sharethis.com https://*.ytimg.com
+Content-Security-Policy   | 1      | default-src 'none'; img-src nextjs.org *.nextjs.org; script-src 'sha256-oC2kddC/fbLH5XXo542YhccAhIb/Me5ajprbf6oB9WM…6nxqO4QjfFy31SKsrBOQzYwCpM='; style-src 'unsafe-inline';
+Content-Security-Policy   | 1      | default-src 'none'; img-src netlify.com *.netlify.com *.cloudinary.com www.netlify.com cdn.sanity.io netlify-eleven…6nxqO4QjfFy31SKsrBOQzYwCpM='; style-src 'unsafe-inline';
+Content-Security-Policy   | 1      | default-src 'none'; img-src astro.build *.astro.build *.imgur.com avatars.githubusercontent.com storage.googleapis.…6nxqO4QjfFy31SKsrBOQzYwCpM='; style-src 'unsafe-inline';
+Content-Type              | 45     | text/html                                                                                                                                                                   
+Content-Type              | 4      | application/javascript                                                                                                                                                      
+Content-Type              | 3      | image/svg+xml                                                                                                                                                               
+Content-Type              | 3      | text/html; charset=utf-8                                                                                                                                                    
+Content-Type              | 3      | image/webp                                                                                                                                                                  
+Content-Type              | 3      | image/gif                                                                                                                                                                   
+Content-Type              | 2      | text/css                                                                                                                                                                    
+Content-Type              | 2      | image/avif                                                                                                                                                                  
+Content-Type              | 1      | application/json                                                                                                                                                            
+Content-Type              | 1      | text/plain                                                                                                                                                                  
+Feature-Policy            | 67     | accelerometer 'none'; camera 'none'; geolocation 'self'; gyroscope 'none'; magnetometer 'none'; microphone 'none'; midi 'none'; payment 'none'; usb 'none'                  
+Permissions-Policy        | 67     | accelerometer=(), camera=(), geolocation=(self), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), usb=()                                                  
+Referrer-Policy           | 63     | no-referrer-when-downgrade                                                                                                                                                  
+Server                    | 67     | -                                                                                                                                                                           
+Strict-Transport-Security | 63     | max-age=15552000                                                                                                                                                            
+Transfer-Encoding         | 51     | chunked                                                                                                                                                                     
+Vary                      | 51     | Accept-Encoding                                                                                                                                                             
+X-Cache-Status            | 2      | STALE                                                                                                                                                                       
+X-Cache-Status            | 1      | HIT                                                                                                                                                                         
+X-Content-Type-Options    | 46     | nosniff                                                                                                                                                                     
+X-Content-Type-Options    | 17     | nosniff, nosniff                                                                                                                                                            
+X-Frame-Options           | 63     | SAMEORIGIN                                                                                                                                                                  
+X-XSS-Protection          | 63     | 1; mode=block                                                                                                                                                               
+
+
+HTTP Caching by content type (only from crawlable domains)
+----------------------------------------------------------
+
+Content type | Cache type   | URLs  | AVG lifetime | MIN lifetime | MAX lifetime
+----------------------------------------------------------------------------
+HTML         | Cache-Control + ETag + Last-Modified | 45    | 60 min | 60 min | 60 min
+Image        | Cache-Control + ETag + Last-Modified | 11    | 12 mon | 12 mon | 12 mon
+JS           | Cache-Control + ETag + Last-Modified | 4     | 12 mon | 12 mon | 12 mon
+HTML         | Cache-Control | 3     | 60 min | 60 min | 60 min
+CSS          | Cache-Control + ETag + Last-Modified | 2     | 12 mon | 12 mon | 12 mon
+JSON         | No cache headers | 1     | -          | -          | -         
+Document     | Cache-Control + ETag + Last-Modified | 1     | 60 min | 60 min | 60 min
+
+
+HTTP Caching by domain
+----------------------
+
+Domain               | Cache type   | URLs  | AVG lifetime | MIN lifetime | MAX lifetime
+------------------------------------------------------------------------------------
+crawler.siteone.io   | Cache-Control + ETag + Last-Modified | 63    | 3 mon  | 60 min | 12 mon
+crawler.siteone.io   | Cache-Control | 3     | 60 min | 60 min | 60 min
+crawler.siteone.io   | No cache headers | 1     | -          | -          | -         
+
+
+HTTP Caching by domain and content type
+---------------------------------------
+
+Domain               | Content type | Cache type   | URLs  | AVG lifetime | MIN lifetime | MAX lifetime
+---------------------------------------------------------------------------------------------------
+crawler.siteone.io   | HTML         | Cache-Control + ETag + Last-Modified | 45    | 60 min | 60 min | 60 min
+crawler.siteone.io   | Image        | Cache-Control + ETag + Last-Modified | 11    | 12 mon | 12 mon | 12 mon
+crawler.siteone.io   | JS           | Cache-Control + ETag + Last-Modified | 4     | 12 mon | 12 mon | 12 mon
+crawler.siteone.io   | HTML         | Cache-Control | 3     | 60 min | 60 min | 60 min
+crawler.siteone.io   | CSS          | Cache-Control + ETag + Last-Modified | 2     | 12 mon | 12 mon | 12 mon
+crawler.siteone.io   | JSON         | No cache headers | 1     | -          | -          | -         
+crawler.siteone.io   | Document     | Cache-Control + ETag + Last-Modified | 1     | 60 min | 60 min | 60 min
+
+
+TOP non-unique titles
+---------------------
+
+Count | Title                                                                                                                                                                                                   
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+2     | SiteOne Crawler - free website analyzer, offline exporter, sitemap generator and Swiss Army Knife, you will love                                                                                        
+
+
+TOP non-unique descriptions
+---------------------------
+
+Count | Description                                                                                                                                                                                             
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+21    |                                                                                                                                                                                                         
+2     | A very useful and free website analyzer you                                                                                                                                                             
+
+
+Best practices
+--------------
+
+Analysis name                            | OK    | Notice | Warning | Critical
+--------------------------------------------------------------------------------
+Large inline SVGs (> 5120 B)             | 148   | 0      | 108     | 0       
+Invalid inline SVGs                      | 63    | 0      | 193     | 0       
+Duplicate inline SVGs (> 5 and > 1024 B) | 254   | 0      | 2       | 0       
+DOM depth (> 30)                         | 47    | 0      | 0       | 0       
+Heading structure                        | 0     | 47     | 0       | 0       
+Title uniqueness (> 10%)                 | 47    | 0      | 0       | 0       
+Description uniqueness (> 10%)           | 26    | 0      | 1       | 0       
+Brotli support                           | 3     | 0      | 45      | 0       
+WebP support                             | 3     | 0      | 0       | 0       
+AVIF support                             | 2     | 0      | 0       | 0       
+
+
+Accessibility
+-------------
+
+Analysis name                | OK    | Notice | Warning | Critical
+--------------------------------------------------------------------
+Missing image alt attributes | 1419  | 0      | 2       | 0       
+Missing html lang attribute  | 0     | 0      | 0       | 1       
+
+
+Source domains
+--------------
+
+Domain             | Totals       | HTML       | Image      | JS          | CSS         | Document    | JSON      
+--------------------------------------------------------------------------------------------------------------------
+crawler.siteone.io | 67/30MB/6.2s | 48/12MB/4s | 11/18MB/2s | 4/13kB/54ms | 2/77kB/41ms | 1/135B/10ms | 1/36B/14ms
+
+
+Content types
+-------------
+
+Content type | URLs  | Total size | Total time | Avg time | Status 20x | Status 40x
+-------------------------------------------------------------------------------------
+HTML         | 48    | 12 MB      | 4 s        | 84 ms    | 48         | 0         
+Image        | 11    | 18 MB      | 2 s        | 185 ms   | 11         | 0         
+JS           | 4     | 13 kB      | 54 ms      | 14 ms    | 4          | 0         
+CSS          | 2     | 77 kB      | 41 ms      | 20 ms    | 2          | 0         
+Document     | 1     | 135 B      | 10 ms      | 10 ms    | 1          | 0         
+JSON         | 1     | 36 B       | 14 ms      | 14 ms    | 0          | 1         
+
+
+Content types (MIME types)
+--------------------------
+
+Content type               | URLs  | Total size | Total time | Avg time | Status 20x | Status 40x
+---------------------------------------------------------------------------------------------------
+text/html                  | 45    | 2 MB       | 1.2 s      | 26 ms    | 45         | 0         
+application/javascript     | 4     | 13 kB      | 54 ms      | 14 ms    | 4          | 0         
+image/svg+xml              | 3     | 2 kB       | 55 ms      | 18 ms    | 3          | 0         
+text/html; charset=utf-8   | 3     | 10 MB      | 2.9 s      | 959 ms   | 3          | 0         
+image/webp                 | 3     | 87 kB      | 53 ms      | 18 ms    | 3          | 0         
+image/gif                  | 3     | 16 MB      | 1.8 s      | 591 ms   | 3          | 0         
+text/css                   | 2     | 77 kB      | 41 ms      | 20 ms    | 2          | 0         
+image/avif                 | 2     | 2 MB       | 154 ms     | 77 ms    | 2          | 0         
+application/json           | 1     | 36 B       | 14 ms      | 14 ms    | 0          | 1         
+text/plain                 | 1     | 135 B      | 10 ms      | 10 ms    | 1          | 0         
+
+
+DNS info
+--------
+
+DNS resolving tree                                                    
+------------------------------------------------------------------------
+crawler.siteone.io                                                    
+  IPv4: 86.49.167.242                                                 
+                                                                      
+DNS server: 10.255.255.254                                            
+
+
+Security
+--------
+
+Header                     | OK    | Notice | Warning | Critical | Recommendation                                                                                                                                                
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Strict-Transport-Security  | 45    | 0      | 0       | 3        | Strict-Transport-Security header is not set. It enforces secure connections and protects against MITM attacks.                                                
+X-XSS-Protection           | 45    | 0      | 0       | 3        | X-XSS-Protection header is not set. It enables browser's built-in defenses against XSS attacks.                                                               
+X-Frame-Options            | 0     | 45     | 3       | 0        | X-Frame-Options header is set to SAMEORIGIN which allows this origin to embed the resource in a frame..X-F…kjacking attacks when set to 'deny' or 'sameorigin.
+X-Content-Type-Options     | 45    | 0      | 3       | 0        | X-Content-Type-Options header is not set. It stops MIME type sniffing and mitigates content type attacks.                                                     
+Referrer-Policy            | 45    | 0      | 3       | 0        | Referrer-Policy header is not set. It controls referrer header sharing and enhances privacy and security.                                                     
+Content-Security-Policy    | 48    | 0      | 0       | 0        |                                                                                                                                                               
+Feature-Policy             | 48    | 0      | 0       | 0        |                                                                                                                                                               
+Permissions-Policy         | 48    | 0      | 0       | 0        |                                                                                                                                                               
+Server                     | 48    | 0      | 0       | 0        | Server header is not set or empty. This is recommended.                                                                                                       
+
+
+Analysis stats
+--------------
+
+Class::method                                        | Exec time | Exec count
+-------------------------------------------------------------------------------
+Manager::parseDOMDocument                            | 707 ms    | 48        
+SslTlsAnalyzer::getTLSandSSLCertificateInfo          | 215 ms    | 1         
+BestPracticeAnalyzer::checkNonClickablePhoneNumbers  | 94 ms     | 48        
+BestPracticeAnalyzer::checkInlineSvg                 | 59 ms     | 48        
+BestPracticeAnalyzer::checkHeadingStructure          | 15 ms     | 48        
+BestPracticeAnalyzer::checkMaxDOMDepth               | 15 ms     | 48        
+BestPracticeAnalyzer::checkMissingQuotesOnAttributes | 14 ms     | 48        
+AccessibilityAnalyzer::checkImageAltAttributes       | 3 ms      | 48        
+AccessibilityAnalyzer::checkMissingLabels            | 1 ms      | 48        
+AccessibilityAnalyzer::checkMissingAriaLabels        | 1 ms      | 48        
+AccessibilityAnalyzer::checkMissingRoles             | 1 ms      | 48        
+AccessibilityAnalyzer::checkMissingLang              | 0 ms      | 48        
+SeoAndOpenGraphAnalyzer::analyzeSeo                  | 0 ms      | 1         
+SeoAndOpenGraphAnalyzer::analyzeHeadings             | 0 ms      | 1         
+SeoAndOpenGraphAnalyzer::analyzeOpenGraph            | 0 ms      | 1         
+BestPracticeAnalyzer::checkTitleUniqueness           | 0 ms      | 1         
+BestPracticeAnalyzer::checkMetaDescriptionUniqueness | 0 ms      | 1         
+BestPracticeAnalyzer::checkBrotliSupport             | 0 ms      | 1         
+BestPracticeAnalyzer::checkWebpSupport               | 0 ms      | 1         
+BestPracticeAnalyzer::checkAvifSupport               | 0 ms      | 1         
+
