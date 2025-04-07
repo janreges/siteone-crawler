@@ -27,7 +27,8 @@ class HtmlToMarkdownConverter
     // Deduplication properties removed
     public function __construct(
         private readonly string $html,
-        private readonly array $excludedSelectors = []
+        private readonly array $excludedSelectors = [],
+        private readonly array $implicitExcludedSelectors = ['.hidden', '.hide', '.invisible', '.lg:sl-hidden', '.md:sl-hidden', '.lg:hidden', '.md:hidden']
     ) {
         $this->dom = new \DOMDocument();
         $this->dom->preserveWhiteSpace = true;
@@ -66,7 +67,8 @@ class HtmlToMarkdownConverter
     private function removeExcludedNodes(): void
     {
         $xpath = new \DOMXPath($this->dom);
-        foreach ($this->excludedSelectors as $selector) {
+        $allExcludedSelectors = array_merge($this->excludedSelectors, $this->implicitExcludedSelectors);
+        foreach ($allExcludedSelectors as $selector) {
             if (strpos($selector, '#') === 0) {
                 $id = substr($selector, 1);
                 $selectorForXPath = "//*[@id='" . $id . "']";
