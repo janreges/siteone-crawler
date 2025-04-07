@@ -24,12 +24,11 @@ class HtmlToMarkdownConverter
     private bool $convertTables = true;
     private bool $convertStrikethrough = true;
     private string $strikethroughDelimiter = '~~';
-
+    // Deduplication properties removed
     public function __construct(
         private readonly string $html,
-        private readonly array  $excludedSelectors = []
-    )
-    {
+        private readonly array $excludedSelectors = []
+    ) {
         $this->dom = new \DOMDocument();
         $this->dom->preserveWhiteSpace = true;
         $this->dom->formatOutput = false;
@@ -91,8 +90,93 @@ class HtmlToMarkdownConverter
         if (!$node) {
             return '';
         }
-        $markdown = $this->convertNode($node);
-        return trim($this->normalizeWhitespace($markdown));
+        $rawMarkdown = $this->convertNode($node);
+        $normalizedMarkdown = $this->normalizeWhitespace($rawMarkdown);
+
+        // --- Start Deduplication Logic ---
+        // Split into blocks based on two or more newlines
+        $blocks = preg_split('/\n{2,}/', $normalizedMarkdown);
+        $blocks = false; // temporary disabled duplicates removing
+        if ($blocks === false || count($blocks) <= 1) {
+            // No blocks or only one block, nothing to deduplicate
+            return trim($normalizedMarkdown);
+        }
+
+        $fingerprints = []; // Map: [fingerprint => ['block' => original_block, 'index' => original_index]]
+        $uniqueBlocksInOrder = []; // Array to store final blocks preserving relative order
+
+        foreach ($blocks as $index => $originalBlock) {
+            $trimmedBlock = trim($originalBlock);
+
+            // Skip completely empty blocks after trimming, but keep track of original index if needed for spacing later
+            // For now, we filter them out before fingerprinting. If spacing needs explicit preservation, logic might adjust.
+            if (empty($trimmedBlock)) {
+                // Option 1: Keep empty blocks to preserve spacing structure
+                 $uniqueBlocksInOrder[$index] = $originalBlock; // Store original block (might be just whitespace/newlines)
+                // Option 2: Discard empty blocks (simpler, might alter vertical spacing)
+                // continue; // Uncomment this line to discard empty blocks entirely
+
+                // Let's go with Option 1 for now to be less destructive of original spacing
+                continue;
+            }
+
+            // Create fingerprint: lowercase alphanumeric only
+            // Using mb_strtolower for multi-byte safety, although preg_replace might handle it
+            $fingerprint = mb_strtolower(preg_replace('/[^a-z0-9]+/i', '', $trimmedBlock));
+
+            // If fingerprint is empty (block contained only non-alphanumeric chars), treat as unique
+            if (empty($fingerprint)) {
+                 $uniqueBlocksInOrder[$index] = $originalBlock;
+                 continue;
+            }
+
+            if (!isset($fingerprints[$fingerprint])) {
+                // First time seeing this fingerprint
+                $fingerprints[$fingerprint] = [
+                    'block' => $originalBlock,
+                    'index' => $index // Store original index
+                ];
+                 $uniqueBlocksInOrder[$index] = $originalBlock; // Add to ordered list
+            } else {
+                // Duplicate fingerprint found
+                $existingBlockData = $fingerprints[$fingerprint];
+                $existingBlock = $existingBlockData['block'];
+                $existingIndex = $existingBlockData['index'];
+
+                // Compare original lengths (using mb_strlen for multi-byte safety)
+                if (mb_strlen(trim($originalBlock)) > mb_strlen(trim($existingBlock))) {
+                    // Current block is longer, replace the previous one in the ordered list
+                    // Check if the shorter block actually exists in the ordered list before unsetting
+                    if (isset($uniqueBlocksInOrder[$existingIndex])) {
+                        unset($uniqueBlocksInOrder[$existingIndex]); // Remove the shorter one
+                    }
+                    $uniqueBlocksInOrder[$index] = $originalBlock; // Add the longer one at its original position
+                    // Update the fingerprint map to point to the new longer block and its index
+                    $fingerprints[$fingerprint] = [
+                        'block' => $originalBlock,
+                        'index' => $index
+                    ];
+                } else {
+                    // Existing block is longer or equal, do nothing.
+                    // The current (shorter or equal) block is implicitly discarded
+                    // as it's not added to $uniqueBlocksInOrder at this index.
+                }
+            }
+        }
+
+        // Filter out potential null/unset values and re-index if necessary before imploding
+        // Using array_filter might re-index numerically, potentially losing original spacing context if empty blocks were kept via index.
+        // Let's stick with the indexed array and implode directly. Empty blocks kept by index will become empty strings between \n\n.
+        // If empty blocks were fully discarded, this is simpler.
+        // ksort($uniqueBlocksInOrder); // Ensure original order if indices matter and manipulation occurred
+
+        // Reconstruct the markdown preserving original relative order and spacing blocks
+        // Implode will place "\n\n" between elements.
+        $finalMarkdown = implode("\n\n", $uniqueBlocksInOrder);
+        // --- End Deduplication Logic ---
+
+        // Final trim to remove leading/trailing whitespace from the whole result
+        return trim($finalMarkdown);
     }
 
     private function convertNode(\DOMNode $node): string
@@ -108,6 +192,7 @@ class HtmlToMarkdownConverter
         if (!($node instanceof \DOMElement)) {
             return ''; // Ignore comments, processing instructions, etc.
         }
+
         switch (strtolower($node->nodeName)) {
             case 'strong':
             case 'b':
@@ -129,9 +214,9 @@ class HtmlToMarkdownConverter
             case 'h6':
                 return $this->convertHeading($node);
             case 'p':
-                 // Add block context only if the paragraph is not empty after conversion
-                 $innerMd = trim($this->getInnerMarkdown($node));
-                 return !empty($innerMd) ? "\n\n" . $innerMd . "\n\n" : '';
+                // Add block context only if the paragraph is not empty after conversion
+                $innerMd = trim($this->getInnerMarkdown($node));
+                return !empty($innerMd) ? "\n\n" . $innerMd . "\n\n" : '';
             case 'br':
                 // Check parent context, maybe ignore inside <pre>?
                 // Standard Markdown: two spaces for hard break
@@ -173,14 +258,14 @@ class HtmlToMarkdownConverter
             // dt and dd are handled within convertDefinitionList or getInnerMarkdown
             case 'dt':
             case 'dd':
-                 // Should typically be handled by parent (dl), but provide fallback
-                 return $this->getInnerMarkdown($node);
+                // Should typically be handled by parent (dl), but provide fallback
+                return $this->getInnerMarkdown($node);
             case 'sup':
-                 // Basic superscript handling
-                 return '^' . $this->collapseInlineWhitespace($this->getInnerMarkdown($node)) . '^';
+                // Basic superscript handling
+                return '^' . $this->collapseInlineWhitespace($this->getInnerMarkdown($node)) . '^';
             case 'sub':
-                 // Basic subscript handling
-                 return '~' . $this->collapseInlineWhitespace($this->getInnerMarkdown($node)) . '~';
+                // Basic subscript handling
+                return '~' . $this->collapseInlineWhitespace($this->getInnerMarkdown($node)) . '~';
 
             // ignore form elements and other non-content tags
             case 'form':
@@ -201,7 +286,7 @@ class HtmlToMarkdownConverter
             case 'iframe':
             case 'frame':
                 return '';
-                
+
             case 'nav': // Often contains lists/links handled inside, but nav itself adds no markdown
             case 'header':
             case 'footer':
@@ -211,15 +296,15 @@ class HtmlToMarkdownConverter
             case 'main':    // Treat like div by default
             case 'figure':  // Content (img, figcaption) handled inside
             case 'figcaption': // Treat like p? Or just inner markdown?
-                 return $this->getInnerMarkdown($node); // Process children by default for containers
+                return $this->getInnerMarkdown($node); // Process children by default for containers
             case 'div':
             case 'span':
-                 // Treat like containers, just process children
-                 return $this->getInnerMarkdown($node);
+                // Treat like containers, just process children
+                return $this->getInnerMarkdown($node);
             default:
-                 // For unknown tags, just process their children
-                 // error_log("HtmlToMarkdownConverter: Encountered unknown tag '{$node->nodeName}', processing children.");
-                 return $this->getInnerMarkdown($node);
+                // For unknown tags, just process their children
+                // error_log("HtmlToMarkdownConverter: Encountered unknown tag '{$node->nodeName}', processing children.");
+                return $this->getInnerMarkdown($node);
         }
     }
 
@@ -275,7 +360,7 @@ class HtmlToMarkdownConverter
 
     private function convertHeading(\DOMElement $node): string
     {
-        $level = (int)substr($node->nodeName, 1);
+        $level = (int) substr($node->nodeName, 1);
         // Use collapseInlineWhitespace for content extraction
         $content = $this->collapseInlineWhitespace($this->getInnerMarkdown($node));
         // Remove markdown characters that might interfere if used inside headings
@@ -388,6 +473,10 @@ class HtmlToMarkdownConverter
         // Trim leading/trailing newlines often added by browsers/editors
         $code = trim($code, "\n\r");
 
+        // Replace '\' followed by multiple spaces with '\' + newline for multi-line commands
+        // Replace '\' followed by multiple spaces with '\' + newline + original spaces for multi-line commands
+        $code = preg_replace('/(\\\\)(\s{2,})/', "$1\n$2", $code);
+
         $language = '';
         // Check class on <pre> or inner <code>
         $classAttr = $node->getAttribute('class');
@@ -402,8 +491,8 @@ class HtmlToMarkdownConverter
                     $language = substr($class, 9);
                     break;
                 } elseif (str_starts_with($class, 'lang-')) {
-                     $language = substr($class, 5);
-                     break;
+                    $language = substr($class, 5);
+                    break;
                 }
             }
         }
@@ -470,58 +559,59 @@ class HtmlToMarkdownConverter
                 }
             }
         } else {
-             // Look for direct TR children if no thead/tbody
-             foreach($node->childNodes as $child) {
-                 if ($child instanceof \DOMElement && $child->nodeName === 'tr') {
-                     $directTrs[] = $child;
-                 }
-             }
+            // Look for direct TR children if no thead/tbody
+            foreach ($node->childNodes as $child) {
+                if ($child instanceof \DOMElement && $child->nodeName === 'tr') {
+                    $directTrs[] = $child;
+                }
+            }
         }
 
 
         foreach ($directTrs as $tr) {
-             // If no header found yet, treat the first row as header if it contains <th>
-             if (!$hasHeader && empty($rows)) {
-                 $potentialHeaderCells = [];
-                 $isPotentialHeader = false;
-                 $colIndex = 0;
-                 foreach ($tr->childNodes as $cell) {
-                     if ($cell instanceof \DOMElement && ($cell->nodeName === 'th' || $cell->nodeName === 'td')) {
-                         if ($cell->nodeName === 'th') $isPotentialHeader = true;
-                         $content = $this->collapseInlineWhitespace($this->getInnerMarkdown($cell));
-                         $potentialHeaderCells[$colIndex] = $content;
-                         $maxColLengths[$colIndex] = max($maxColLengths[$colIndex] ?? 0, mb_strlen($content));
-                         $colIndex++;
-                     }
-                 }
-                 if ($isPotentialHeader) {
-                     $headerCells = $potentialHeaderCells;
-                     $hasHeader = true;
-                     continue; // Skip adding this row to data rows
-                 }
-             }
+            // If no header found yet, treat the first row as header if it contains <th>
+            if (!$hasHeader && empty($rows)) {
+                $potentialHeaderCells = [];
+                $isPotentialHeader = false;
+                $colIndex = 0;
+                foreach ($tr->childNodes as $cell) {
+                    if ($cell instanceof \DOMElement && ($cell->nodeName === 'th' || $cell->nodeName === 'td')) {
+                        if ($cell->nodeName === 'th')
+                            $isPotentialHeader = true;
+                        $content = $this->collapseInlineWhitespace($this->getInnerMarkdown($cell));
+                        $potentialHeaderCells[$colIndex] = $content;
+                        $maxColLengths[$colIndex] = max($maxColLengths[$colIndex] ?? 0, mb_strlen($content));
+                        $colIndex++;
+                    }
+                }
+                if ($isPotentialHeader) {
+                    $headerCells = $potentialHeaderCells;
+                    $hasHeader = true;
+                    continue; // Skip adding this row to data rows
+                }
+            }
 
-             // Process as data row
-             $rowCells = [];
-             $colIndex = 0;
-             foreach ($tr->childNodes as $cell) {
-                 if ($cell instanceof \DOMElement && ($cell->nodeName === 'th' || $cell->nodeName === 'td')) {
-                     $content = $this->collapseInlineWhitespace($this->getInnerMarkdown($cell));
-                     $rowCells[$colIndex] = $content;
-                     $maxColLengths[$colIndex] = max($maxColLengths[$colIndex] ?? 0, mb_strlen($content));
-                     $colIndex++;
-                 }
-             }
-             // Pad row if it has fewer cells than max columns determined so far
-             $numCols = count($maxColLengths);
-             while (count($rowCells) < $numCols) {
-                 $rowCells[] = '';
-             }
-             // Update maxColLengths if this row is longer
-             foreach ($rowCells as $idx => $content) {
-                 $maxColLengths[$idx] = max($maxColLengths[$idx] ?? 0, mb_strlen($content));
-             }
-             $rows[] = $rowCells;
+            // Process as data row
+            $rowCells = [];
+            $colIndex = 0;
+            foreach ($tr->childNodes as $cell) {
+                if ($cell instanceof \DOMElement && ($cell->nodeName === 'th' || $cell->nodeName === 'td')) {
+                    $content = $this->collapseInlineWhitespace($this->getInnerMarkdown($cell));
+                    $rowCells[$colIndex] = $content;
+                    $maxColLengths[$colIndex] = max($maxColLengths[$colIndex] ?? 0, mb_strlen($content));
+                    $colIndex++;
+                }
+            }
+            // Pad row if it has fewer cells than max columns determined so far
+            $numCols = count($maxColLengths);
+            while (count($rowCells) < $numCols) {
+                $rowCells[] = '';
+            }
+            // Update maxColLengths if this row is longer
+            foreach ($rowCells as $idx => $content) {
+                $maxColLengths[$idx] = max($maxColLengths[$idx] ?? 0, mb_strlen($content));
+            }
+            $rows[] = $rowCells;
         }
 
 
@@ -531,8 +621,10 @@ class HtmlToMarkdownConverter
 
         // Ensure maxColLengths covers all columns found in header or rows
         $numCols = 0;
-        if (!empty($headerCells)) $numCols = count($headerCells);
-        if (!empty($rows)) $numCols = max($numCols, ...array_map('count', $rows)); // Get max row length
+        if (!empty($headerCells))
+            $numCols = count($headerCells);
+        if (!empty($rows))
+            $numCols = max($numCols, ...array_map('count', $rows)); // Get max row length
 
         for ($i = 0; $i < $numCols; $i++) {
             $maxColLengths[$i] = max(3, $maxColLengths[$i] ?? 0); // Ensure min length 3 for separator
@@ -541,21 +633,23 @@ class HtmlToMarkdownConverter
 
         $markdown = "\n\n";
         if (!empty($headerCells)) {
-             // Pad header if needed
-             while (count($headerCells) < $numCols) $headerCells[] = '';
-             $markdown .= $this->formatTableRow($headerCells, $maxColLengths);
-             $markdown .= $this->formatTableSeparator($maxColLengths);
+            // Pad header if needed
+            while (count($headerCells) < $numCols)
+                $headerCells[] = '';
+            $markdown .= $this->formatTableRow($headerCells, $maxColLengths);
+            $markdown .= $this->formatTableSeparator($maxColLengths);
         } else {
-             // Add separator even without header if there are rows (GFM requires it)
-             if (!empty($rows)) {
-                 $markdown .= $this->formatTableSeparator($maxColLengths);
-             }
+            // Add separator even without header if there are rows (GFM requires it)
+            if (!empty($rows)) {
+                $markdown .= $this->formatTableSeparator($maxColLengths);
+            }
         }
 
         foreach ($rows as $row) {
-             // Pad row if needed
-             while (count($row) < $numCols) $row[] = '';
-             $markdown .= $this->formatTableRow($row, $maxColLengths);
+            // Pad row if needed
+            while (count($row) < $numCols)
+                $row[] = '';
+            $markdown .= $this->formatTableRow($row, $maxColLengths);
         }
 
         return rtrim($markdown) . "\n\n"; // Ensure trailing newline
@@ -582,7 +676,8 @@ class HtmlToMarkdownConverter
             $cellContent = $this->convertLink($linkNode);
 
             // If convertLink returned empty (e.g., no href), skip this link
-            if (empty($cellContent)) continue;
+            if (empty($cellContent))
+                continue;
 
             $cells[] = $cellContent;
             // Calculate length based on the final Markdown string
@@ -597,7 +692,7 @@ class HtmlToMarkdownConverter
 
         // Ensure all columns have a min length for the separator
         foreach ($maxColLengths as $i => $length) {
-             $maxColLengths[$i] = max(3, $length);
+            $maxColLengths[$i] = max(3, $length);
         }
 
         // Create a single-row table
@@ -652,26 +747,26 @@ class HtmlToMarkdownConverter
         foreach (['thead', 'tbody', 'tfoot'] as $sectionName) {
             $sections = $node->getElementsByTagName($sectionName);
             foreach ($sections as $section) {
-                 // Ensure the section is a direct child of the table? No, getElementsByTagName is fine.
-                 $cleanSection = $this->dom->createElement($sectionName);
-                 foreach ($section->childNodes as $tr) {
-                     if ($tr instanceof \DOMElement && $tr->nodeName === 'tr') {
-                         $cleanSection->appendChild($this->createCleanTableRow($tr));
-                     }
-                 }
-                 if ($cleanSection->hasChildNodes()) {
-                     $cleanTable->appendChild($cleanSection);
-                 }
+                // Ensure the section is a direct child of the table? No, getElementsByTagName is fine.
+                $cleanSection = $this->dom->createElement($sectionName);
+                foreach ($section->childNodes as $tr) {
+                    if ($tr instanceof \DOMElement && $tr->nodeName === 'tr') {
+                        $cleanSection->appendChild($this->createCleanTableRow($tr));
+                    }
+                }
+                if ($cleanSection->hasChildNodes()) {
+                    $cleanTable->appendChild($cleanSection);
+                }
             }
         }
 
         // Handle TRs that are direct children of TABLE (if no thead/tbody/tfoot)
         if (!$cleanTable->getElementsByTagName('tbody')->length && !$cleanTable->getElementsByTagName('thead')->length && !$cleanTable->getElementsByTagName('tfoot')->length) {
-             foreach ($node->childNodes as $tr) {
-                 if ($tr instanceof \DOMElement && $tr->nodeName === 'tr') {
-                     $cleanTable->appendChild($this->createCleanTableRow($tr));
-                 }
-             }
+            foreach ($node->childNodes as $tr) {
+                if ($tr instanceof \DOMElement && $tr->nodeName === 'tr') {
+                    $cleanTable->appendChild($this->createCleanTableRow($tr));
+                }
+            }
         }
 
 
@@ -748,12 +843,13 @@ class HtmlToMarkdownConverter
         $dtContent = null; // Store dt content temporarily
 
         foreach ($node->childNodes as $item) {
-            if (!($item instanceof \DOMElement)) continue; // Skip non-element nodes
+            if (!($item instanceof \DOMElement))
+                continue; // Skip non-element nodes
 
             if ($item->nodeName === 'dt') {
                 // If there was a previous dt without a dd, output it as a simple line
                 if ($dtContent !== null) {
-                     $markdown .= $dtContent . "\n";
+                    $markdown .= $dtContent . "\n";
                 }
                 $dtContent = $this->getInnerMarkdown($item); // Get content for the current dt
             } elseif ($item->nodeName === 'dd') {
@@ -814,8 +910,8 @@ class HtmlToMarkdownConverter
     {
         // Basic validation for common markers
         if (!in_array($marker, ['-', '*', '+'])) {
-             error_log("HtmlToMarkdownConverter: Invalid bullet list marker '{$marker}'. Using '-'.");
-             $marker = '-';
+            error_log("HtmlToMarkdownConverter: Invalid bullet list marker '{$marker}'. Using '-'.");
+            $marker = '-';
         }
         $this->bulletListMarker = $marker;
         return $this;
@@ -824,8 +920,8 @@ class HtmlToMarkdownConverter
     public function setCodeBlockFence(string $fence): self
     {
         if (strlen($fence) < 3 || strpos($fence, '`') !== 0) {
-             error_log("HtmlToMarkdownConverter: Invalid code block fence '{$fence}'. Using '```'.");
-             $fence = '```';
+            error_log("HtmlToMarkdownConverter: Invalid code block fence '{$fence}'. Using '```'.");
+            $fence = '```';
         }
         $this->codeBlockFence = $fence;
         return $this;
@@ -835,8 +931,8 @@ class HtmlToMarkdownConverter
     {
         // Basic validation
         if (!preg_match('/^(\* *){3,}$|^(- *){3,}$|^(_ *){3,}$/', $rule)) {
-             error_log("HtmlToMarkdownConverter: Invalid horizontal rule '{$rule}'. Using '* * *'.");
-             $rule = '* * *';
+            error_log("HtmlToMarkdownConverter: Invalid horizontal rule '{$rule}'. Using '* * *'.");
+            $rule = '* * *';
         }
         $this->horizontalRule = $rule;
         return $this;
@@ -891,7 +987,8 @@ class HtmlToMarkdownConverter
      * @return string Markdown representation of the list.
      * @throws \InvalidArgumentException If the input element is not ul or ol.
      */
-    private function convertListToMarkdown(\DOMElement $element): string {
+    private function convertListToMarkdown(\DOMElement $element): string
+    {
         $tagName = strtolower($element->tagName);
         if ($tagName !== 'ul' && $tagName !== 'ol') {
             throw new \InvalidArgumentException('Input element must be <ul> or <ol>. Found: <' . $element->tagName . '>');
@@ -908,17 +1005,19 @@ class HtmlToMarkdownConverter
      * @param int $level The current nesting level (for indentation).
      * @return string Markdown for this list and its sub-items.
      */
-    private function processList(\DOMElement $listElement, int $level): string {
+    private function processList(\DOMElement $listElement, int $level): string
+    {
         $markdown = '';
         $itemCounter = 1; // Counter for ordered lists (ol)
         $isOrdered = strtolower($listElement->tagName) === 'ol';
         $startAttribute = $listElement->getAttribute('start');
         if ($isOrdered && ctype_digit($startAttribute) && $startAttribute > 1) {
-            $itemCounter = (int)$startAttribute;
+            $itemCounter = (int) $startAttribute;
         }
 
         // Indentation string for items in this list (4 spaces per level typical)
         $indent = str_repeat('    ', $level);
+        $indentNextLevel = str_repeat('    ', $level + 1);
 
         // Iterates through all direct child nodes of the list element
         foreach ($listElement->childNodes as $childNode) {
@@ -947,8 +1046,9 @@ class HtmlToMarkdownConverter
 
                 // Append the Markdown for any nested list found within this <li>
                 if (!empty($nestedListMarkdown)) {
+                    $nestedListMarkdown = preg_replace("/^\n/", "\n{$indentNextLevel}", $nestedListMarkdown);
                     // processList returns trimmed markdown, add necessary indentation/spacing
-                    $markdown .= $nestedListMarkdown; // Nested list already includes indentation
+                    $markdown .= $nestedListMarkdown . "\n"; // Nested list already includes indentation
                 }
             }
             // Ignore other direct children like text nodes containing only whitespace
@@ -965,7 +1065,8 @@ class HtmlToMarkdownConverter
      * @param int $level The current nesting level of the parent list.
      * @return array An array containing [itemContentMarkdown, nestedListMarkdown].
      */
-    private function extractLiData(\DOMElement $liElement, int $level): array {
+    private function extractLiData(\DOMElement $liElement, int $level): array
+    {
         $itemContentMarkdown = ''; // Store markdown of non-list content within <li>
         $nestedListMarkdown = '';  // Store markdown of direct ul/ol children
 
@@ -978,12 +1079,12 @@ class HtmlToMarkdownConverter
                 // Convert other child nodes (text, p, span, a, etc.) to markdown
                 // Handle paragraphs inside list items: don't add extra \n\n
                 if ($node instanceof \DOMElement && strtolower($node->tagName) === 'p') {
-                     // Convert paragraph content, trim potential surrounding newlines from its conversion
-                     $itemContentMarkdown .= trim($this->getInnerMarkdown($node));
-                     // Add a single newline to simulate paragraph break within list item if needed
-                     $itemContentMarkdown .= "\n";
+                    // Convert paragraph content, trim potential surrounding newlines from its conversion
+                    $itemContentMarkdown .= trim($this->getInnerMarkdown($node));
+                    // Add a single newline to simulate paragraph break within list item if needed
+                    $itemContentMarkdown .= "\n";
                 } else {
-                     $itemContentMarkdown .= $this->convertNode($node);
+                    $itemContentMarkdown .= $this->convertNode($node);
                 }
             }
         }
@@ -998,7 +1099,7 @@ class HtmlToMarkdownConverter
         $cleanedNestedListMarkdown = trim($nestedListMarkdown);
         // Ensure nested list starts on a new line relative to item text if item text exists
         if (!empty($cleanedNestedListMarkdown) && !empty($cleanedItemText)) {
-             $cleanedNestedListMarkdown = "\n" . $cleanedNestedListMarkdown;
+            $cleanedNestedListMarkdown = "\n" . $cleanedNestedListMarkdown;
         }
 
 
@@ -1015,26 +1116,27 @@ class HtmlToMarkdownConverter
      * @param int $level The current nesting level.
      * @return array An array containing [summaryText, nestedListMarkdown].
      */
-    private function processDetailsElement(\DOMElement $detailsElement, int $level): array {
+    private function processDetailsElement(\DOMElement $detailsElement, int $level): array
+    {
         // This method seems unused by the refactored list logic.
         // Keeping the structure but it might need removal or integration elsewhere if <details> support is needed.
         $summaryText = '';
         $nestedListMarkdown = ''; // Only lists directly under details
 
         foreach ($detailsElement->childNodes as $node) {
-             if ($node instanceof \DOMElement) {
-                 $tagName = strtolower($node->tagName);
-                 if ($tagName === 'summary') {
-                     $summaryText = $this->getInnerMarkdown($node); // Just get inner markdown of summary
-                 } elseif ($tagName === 'ul' || $tagName === 'ol') {
-                     $nestedListMarkdown .= $this->processList($node, $level + 1); // Process lists directly under details
-                 }
-                 // Ignore other elements within details for this specific extraction logic
-             }
+            if ($node instanceof \DOMElement) {
+                $tagName = strtolower($node->tagName);
+                if ($tagName === 'summary') {
+                    $summaryText = $this->getInnerMarkdown($node); // Just get inner markdown of summary
+                } elseif ($tagName === 'ul' || $tagName === 'ol') {
+                    $nestedListMarkdown .= $this->processList($node, $level + 1); // Process lists directly under details
+                }
+                // Ignore other elements within details for this specific extraction logic
+            }
         }
-         $cleanedSummaryText = trim(preg_replace('/\s+/u', ' ', $summaryText));
-         // Return format expected by original caller (if any)
-         return [$cleanedSummaryText, $nestedListMarkdown];
+        $cleanedSummaryText = trim(preg_replace('/\s+/u', ' ', $summaryText));
+        // Return format expected by original caller (if any)
+        return [$cleanedSummaryText, $nestedListMarkdown];
     }
 
 
@@ -1045,7 +1147,8 @@ class HtmlToMarkdownConverter
      * @param \DOMNode $node The starting node.
      * @return string Extracted and cleaned text content.
      */
-    private function extractVisibleTextRecursive(\DOMNode $node): string {
+    private function extractVisibleTextRecursive(\DOMNode $node): string
+    {
         // Base case: Text node
         if ($node instanceof \DOMText) {
             return $node->nodeValue; // Return raw value, collapse later
@@ -1079,7 +1182,8 @@ class HtmlToMarkdownConverter
      * @param \DOMElement $aElement The <a> element.
      * @return string Markdown link string "[text](url)". Returns inner text if href is missing.
      */
-    private function formatLink(\DOMElement $aElement): string {
+    private function formatLink(\DOMElement $aElement): string
+    {
         $href = $aElement->getAttribute('href');
 
         // Extract raw text content recursively first
@@ -1105,8 +1209,8 @@ class HtmlToMarkdownConverter
             $markdown .= ' "' . $this->escapeMarkdownChars($title) . '"'; // Add escaped title if present
         }
         $markdown .= ')';
-
         return $markdown;
     }
 
-} // End of class HtmlToMarkdownConverter
+    // Deduplication helper methods removed
+}
