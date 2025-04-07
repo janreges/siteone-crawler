@@ -312,33 +312,48 @@ class HtmlToMarkdownConverter
     private function getInnerMarkdown(\DOMNode $node): string
     {
         $markdown = '';
-        $consecutiveLinks = [];
+        $consecutiveLinks = []; // Stores only *valid* consecutive links
 
         foreach ($node->childNodes as $child) {
-            if ($child instanceof \DOMElement && strtolower($child->nodeName) === 'a') {
+            $isPotentialLink = ($child instanceof \DOMElement && strtolower($child->nodeName) === 'a');
+            $isValidLink = false;
+
+            // Check if it's a valid link for consecutive formatting purposes
+            if ($isPotentialLink) {
+                $href = $child->getAttribute('href');
+                // Must have href AND (non-empty text content OR an image child)
+                $textContent = trim($child->textContent);
+                $hasImageChild = $child->getElementsByTagName('img')->length > 0;
+
+                if (!empty($href) && (!empty($textContent) || $hasImageChild)) {
+                    $isValidLink = true;
+                }
+            }
+
+            if ($isValidLink) {
+                // It's a valid link, add it to the list
                 $consecutiveLinks[] = $child;
             } elseif ($child instanceof \DOMText && trim($child->nodeValue) === '' && !empty($consecutiveLinks)) {
-                // Ignore whitespace text nodes *between* potential links
+                // Ignore whitespace text nodes *between* potential valid links
                 continue;
             } else {
-                // End of a potential link sequence found (or start of content)
-
-                // Process collected links if there were 2 or more
+                // Not a valid link, or not a link at all. Process collected valid links first.
+                // Use original threshold (>= 2) for table formatting of VALID links.
                 if (count($consecutiveLinks) >= 2) {
                     $markdown .= $this->convertConsecutiveLinksToTable($consecutiveLinks);
                 } elseif (count($consecutiveLinks) === 1) {
-                    // Process single link normally using convertLink
                     $markdown .= $this->convertLink($consecutiveLinks[0]);
                 }
-                $consecutiveLinks = []; // Reset link collector
+                $consecutiveLinks = []; // Reset
 
-                // Process the current non-link/non-whitespace node
+                // Now process the current node that broke the sequence
+                // (This will correctly handle anchors or other non-valid links via convertNode)
                 $markdown .= $this->convertNode($child);
             }
         }
 
-        // Process any remaining collected links at the end of the parent node
-        if (count($consecutiveLinks) >= 2) {
+        // Process any remaining collected valid links at the end
+        if (count($consecutiveLinks) >= 2) { // Use original threshold >= 2
             $markdown .= $this->convertConsecutiveLinksToTable($consecutiveLinks);
         } elseif (count($consecutiveLinks) === 1) {
             $markdown .= $this->convertLink($consecutiveLinks[0]);
