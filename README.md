@@ -497,6 +497,12 @@ Your contributions with realized improvements, bug fixes, and new features are w
 
 If you are interested in the author's motivation for creating this tool, read it on [the project website 🌐](https://crawler.siteone.io/introduction/motivation/).
 
+## 🤝 Partnership
+
+We thank our partner JetBrains for their support!
+
+[![PhpStorm logo.](https://resources.jetbrains.com/storage/products/company/brand/logos/PhpStorm.svg)](https://jb.gg/OpenSourceSupport)
+
 ## ⚠️ Disclaimer
 
 Please use responsibly and ensure that you have the necessary permissions when crawling websites. Some sites may have
