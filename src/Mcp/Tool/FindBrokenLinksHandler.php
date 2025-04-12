@@ -136,30 +136,17 @@ class FindBrokenLinksHandler implements ToolHandlerInterface
     {
         $rows = $crawlerOutput['tables']['404']['rows'] ?? [];
         $transformed = [];
-        $groupedBySource = [];
         
-        // Group broken links by their source page
+        // Create a flat list of broken links as expected by tests
         foreach ($rows as $row) {
-            $sourceId = $row['sourceUqId'] ?? 'unknown';
-            $brokenUrl = $row['url'] ?? '';
-            $statusCode = $row['statusCode'] ?? 404;
-            
-            if (!isset($groupedBySource[$sourceId])) {
-                $groupedBySource[$sourceId] = [
-                    'sourcePage' => $this->findSourcePageUrl($sourceId, $crawlerOutput['results'] ?? []),
-                    'brokenLinks' => []
-                ];
-            }
-            
-            $groupedBySource[$sourceId]['brokenLinks'][] = [
-                'url' => $brokenUrl,
-                'statusCode' => $statusCode
+            $transformed[] = [
+                'url' => $row['url'] ?? '',
+                'statusCode' => $row['statusCode'] ?? 404,
+                'foundOn' => [
+                    'url' => $row['foundOnUrl'] ?? '',
+                    'title' => $row['foundOnTitle'] ?? ''
+                ]
             ];
-        }
-        
-        // Convert to a flat array
-        foreach ($groupedBySource as $sourceData) {
-            $transformed[] = $sourceData;
         }
         
         return $transformed;
@@ -178,10 +165,13 @@ class FindBrokenLinksHandler implements ToolHandlerInterface
         
         foreach ($rows as $row) {
             $transformed[] = [
-                'sourceUrl' => $row['url'] ?? '',
-                'targetUrl' => $row['targetUrl'] ?? '',
+                'url' => $row['url'] ?? '',
                 'statusCode' => $row['statusCode'] ?? 0,
-                'foundOnPage' => $this->findSourcePageUrl($row['sourceUqId'] ?? 'unknown', $crawlerOutput['results'] ?? [])
+                'location' => $row['location'] ?? '',
+                'foundOn' => [
+                    'url' => $row['foundOnUrl'] ?? '',
+                    'title' => $row['foundOnTitle'] ?? ''
+                ]
             ];
         }
         
@@ -197,45 +187,11 @@ class FindBrokenLinksHandler implements ToolHandlerInterface
     private function transformSkippedUrls(array $rows): array
     {
         $transformed = [];
-        $domains = [];
         
-        // Count skipped URLs by domain
         foreach ($rows as $row) {
-            $url = $row['url'] ?? '';
-            $reason = $row['reason'] ?? 0;
-            
-            // Extract domain from URL
-            $domain = parse_url($url, PHP_URL_HOST) ?? 'unknown';
-            
-            if (!isset($domains[$domain])) {
-                $domains[$domain] = [
-                    'domain' => $domain,
-                    'count' => 0,
-                    'reasons' => []
-                ];
-            }
-            
-            $domains[$domain]['count']++;
-            
-            // Track reasons (simplified version)
-            $reasonText = $this->getSkipReasonText($reason);
-            if (!isset($domains[$domain]['reasons'][$reasonText])) {
-                $domains[$domain]['reasons'][$reasonText] = 0;
-            }
-            $domains[$domain]['reasons'][$reasonText]++;
-        }
-        
-        // Convert to a flat array and format reasons
-        foreach ($domains as $domain => $data) {
-            $reasonsArray = [];
-            foreach ($data['reasons'] as $reason => $count) {
-                $reasonsArray[] = "$reason ($count)";
-            }
-            
             $transformed[] = [
-                'domain' => $domain,
-                'count' => $data['count'],
-                'reasons' => $reasonsArray
+                'url' => $row['url'] ?? '',
+                'reason' => $row['reason'] ?? 'unknown'
             ];
         }
         
@@ -263,11 +219,21 @@ class FindBrokenLinksHandler implements ToolHandlerInterface
     /**
      * Get a textual description for a skip reason code
      * 
-     * @param int $reasonCode The reason code
+     * @param int|string $reasonCode The reason code
      * @return string The reason description
      */
-    private function getSkipReasonText(int $reasonCode): string
+    private function getSkipReasonText($reasonCode): string
     {
+        // If the reason is already a string, just return it
+        if (is_string($reasonCode) && !is_numeric($reasonCode)) {
+            return $reasonCode;
+        }
+        
+        // Convert to integer if it's a numeric string
+        if (is_string($reasonCode) && is_numeric($reasonCode)) {
+            $reasonCode = (int)$reasonCode;
+        }
+        
         // These are example mappings, actual codes may vary
         $reasons = [
             1 => 'External domain',

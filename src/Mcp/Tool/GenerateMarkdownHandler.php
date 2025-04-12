@@ -69,6 +69,21 @@ class GenerateMarkdownHandler implements ToolHandlerInterface
                     'description' => 'Whether to download and include images (optional, default true)',
                     'default' => true
                 ],
+                'includeLinks' => [
+                    'type' => 'boolean',
+                    'description' => 'Whether to preserve links in the markdown (optional, default true)',
+                    'default' => true
+                ],
+                'frontMatter' => [
+                    'type' => 'boolean',
+                    'description' => 'Whether to include front matter in generated markdown files (optional, default false)',
+                    'default' => false
+                ],
+                'githubFlavor' => [
+                    'type' => 'boolean',
+                    'description' => 'Whether to use GitHub flavored markdown (optional, default true)',
+                    'default' => true
+                ],
                 'includeAssets' => [
                     'type' => 'boolean',
                     'description' => 'Whether to download and include assets like CSS and JS (optional, default false)',
@@ -108,6 +123,9 @@ class GenerateMarkdownHandler implements ToolHandlerInterface
         $outputDir = $parameters['outputDir'];
         $depth = $parameters['depth'] ?? 1;
         $includeImages = $parameters['includeImages'] ?? true;
+        $includeLinks = $parameters['includeLinks'] ?? true;
+        $frontMatter = $parameters['frontMatter'] ?? false;
+        $githubFlavor = $parameters['githubFlavor'] ?? true;
         $includeAssets = $parameters['includeAssets'] ?? false;
         $preserveHtml = $parameters['preserveHtml'] ?? true;
         $singleFile = $parameters['singleFile'] ?? false;
@@ -119,12 +137,12 @@ class GenerateMarkdownHandler implements ToolHandlerInterface
         $crawlerParams = [
             'url' => $url,
             'max-depth' => $depth,
-            'export-markdown' => true,
-            'markdown-dir' => $outputDir,
-            'markdown-download-images' => $includeImages,
-            'markdown-download-assets' => $includeAssets,
-            'markdown-preserve-html' => $preserveHtml,
-            'markdown-single-file' => $singleFile
+            'export-md' => true,
+            'md-dir' => $outputDir,
+            'md-include-images' => $includeImages,
+            'md-include-links' => $includeLinks,
+            'md-front-matter' => $frontMatter,
+            'md-github-flavor' => $githubFlavor
         ];
         
         // Run the crawler
@@ -149,21 +167,26 @@ class GenerateMarkdownHandler implements ToolHandlerInterface
         // List the generated markdown files
         $generatedFiles = $this->listGeneratedFiles($outputDir);
         
+        // Extract pages from markdown table
+        $pages = $this->extractPages($crawlerOutput);
+        
         return [
             'success' => true,
             'summary' => [
                 'crawledUrls' => count($crawlerOutput['results'] ?? []),
-                'generatedFiles' => count($generatedFiles),
+                'convertedPages' => count($pages),
+                'totalContentSize' => $this->calculateTotalContentSize($crawlerOutput),
                 'outputDirectory' => $outputDir,
                 'crawlDate' => $crawlerOutput['crawler']['executedAt'] ?? null
             ],
             'markdownInfo' => $markdownInfo,
-            'generatedFiles' => $generatedFiles
+            'generatedFiles' => $generatedFiles,
+            'pages' => $pages
         ];
     }
     
     /**
-     * Extract Markdown export information from crawler output
+     * Extract markdown export information from crawler output
      * 
      * @param array $crawlerOutput The crawler output
      * @return array The Markdown export information
@@ -259,5 +282,48 @@ class GenerateMarkdownHandler implements ToolHandlerInterface
         if (!is_writable($dir)) {
             throw new \RuntimeException(sprintf('Directory "%s" is not writable', $dir));
         }
+    }
+    
+    /**
+     * Extract pages from markdown table
+     * 
+     * @param array $crawlerOutput The crawler output
+     * @return array The list of pages
+     */
+    private function extractPages(array $crawlerOutput): array
+    {
+        $pages = [];
+        
+        if (isset($crawlerOutput['tables']['markdown']['rows'])) {
+            foreach ($crawlerOutput['tables']['markdown']['rows'] as $row) {
+                $pages[] = [
+                    'url' => $row['url'] ?? '',
+                    'file' => $row['outputFile'] ?? '',
+                    'title' => $row['title'] ?? '',
+                    'contentLength' => $row['contentLength'] ?? 0
+                ];
+            }
+        }
+        
+        return $pages;
+    }
+    
+    /**
+     * Calculate total content size from markdown tables
+     * 
+     * @param array $crawlerOutput The crawler output
+     * @return int The total content size
+     */
+    private function calculateTotalContentSize(array $crawlerOutput): int
+    {
+        $totalSize = 0;
+        
+        if (isset($crawlerOutput['tables']['markdown']['rows'])) {
+            foreach ($crawlerOutput['tables']['markdown']['rows'] as $row) {
+                $totalSize += (int)($row['contentLength'] ?? 0);
+            }
+        }
+        
+        return $totalSize;
     }
 } 
