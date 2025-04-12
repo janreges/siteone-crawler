@@ -82,7 +82,7 @@ class GetSeoMetadataHandler implements ToolHandlerInterface
         // Execute the crawler with appropriate parameters
         $crawlerParams = [
             'url' => $url,
-            'max-depth' => $crawl ? 3 : 0,
+            'max-depth' => $crawl ? 1 : 0,
             'analyze' => true,
             'analyze-seo' => true
         ];
@@ -102,19 +102,186 @@ class GetSeoMetadataHandler implements ToolHandlerInterface
      */
     private function transformOutput(array $crawlerOutput): array
     {
+        // Extract pages from results
+        $pages = $this->extractPages($crawlerOutput['results'] ?? []);
+        
+        // Detect SEO issues
+        $issues = $this->detectSeoIssues($crawlerOutput['results'] ?? []);
+        
         return [
             'summary' => [
-                'analyzedUrls' => count($crawlerOutput['results'] ?? []),
+                'crawledUrls' => count($crawlerOutput['results'] ?? []),
+                'pagesWithTitle' => $this->countPagesWithProperty($pages, 'title'),
+                'pagesWithDescription' => $this->countPagesWithProperty($pages, 'description'),
+                'crawlDate' => $crawlerOutput['crawler']['executedAt'] ?? null,
                 'nonUniqueMetaData' => [
                     'titles' => $this->summarizeNonUniqueTable($crawlerOutput['tables']['non-unique-titles']['rows'] ?? []),
                     'descriptions' => $this->summarizeNonUniqueTable($crawlerOutput['tables']['non-unique-descriptions']['rows'] ?? [])
                 ],
                 'headingIssuesCount' => $this->countHeadingIssues($crawlerOutput['tables']['seo-headings']['rows'] ?? [])
             ],
+            'pages' => $pages,
+            'issues' => $issues,
             'pageMetadata' => $this->transformSeoTable($crawlerOutput['tables']['seo']['rows'] ?? []),
             'openGraph' => $this->transformOpenGraphTable($crawlerOutput['tables']['open-graph']['rows'] ?? []),
             'headings' => $this->transformHeadingsTable($crawlerOutput['tables']['seo-headings']['rows'] ?? [])
         ];
+    }
+    
+    /**
+     * Extract pages from crawler results
+     * 
+     * @param array $results The crawler results
+     * @return array The extracted pages
+     */
+    private function extractPages(array $results): array
+    {
+        $pages = [];
+        
+        foreach ($results as $result) {
+            // Only include HTML pages
+            if (($result['type'] ?? 0) === 1) {
+                $pages[] = [
+                    'url' => $result['url'] ?? '',
+                    'title' => $result['title'] ?? '',
+                    'description' => $result['metaDescription'] ?? '',
+                    'h1' => $result['h1Text'] ?? '',
+                    'h1Count' => $result['h1Count'] ?? 0,
+                    'metaTags' => $result['metaTags'] ?? []
+                ];
+            }
+        }
+        
+        return $pages;
+    }
+    
+    /**
+     * Detect SEO issues in crawler results
+     * 
+     * @param array $results The crawler results
+     * @return array The detected issues
+     */
+    private function detectSeoIssues(array $results): array
+    {
+        $issues = [];
+        
+        foreach ($results as $result) {
+            // Only analyze HTML pages
+            if (($result['type'] ?? 0) !== 1) {
+                continue;
+            }
+            
+            $url = $result['url'] ?? '';
+            
+            // Check for missing title
+            if (empty($result['title'] ?? '')) {
+                $issues[] = [
+                    'url' => $url,
+                    'type' => 'missing_title',
+                    'severity' => 'critical',
+                    'message' => 'Page is missing a title tag'
+                ];
+            } elseif (mb_strlen($result['title'] ?? '') < 10) {
+                $issues[] = [
+                    'url' => $url,
+                    'type' => 'short_title',
+                    'severity' => 'warning',
+                    'message' => 'Page title is too short (less than 10 characters)'
+                ];
+            } elseif (mb_strlen($result['title'] ?? '') > 70) {
+                $issues[] = [
+                    'url' => $url,
+                    'type' => 'long_title',
+                    'severity' => 'warning',
+                    'message' => 'Page title is too long (more than 70 characters)'
+                ];
+            }
+            
+            // Check for missing meta description
+            if (empty($result['metaDescription'] ?? '')) {
+                $issues[] = [
+                    'url' => $url,
+                    'type' => 'missing_description',
+                    'severity' => 'critical',
+                    'message' => 'Page is missing a meta description'
+                ];
+            } elseif (mb_strlen($result['metaDescription'] ?? '') < 50) {
+                $issues[] = [
+                    'url' => $url,
+                    'type' => 'short_description',
+                    'severity' => 'warning',
+                    'message' => 'Meta description is too short (less than 50 characters)'
+                ];
+            } elseif (mb_strlen($result['metaDescription'] ?? '') > 160) {
+                $issues[] = [
+                    'url' => $url,
+                    'type' => 'long_description',
+                    'severity' => 'warning',
+                    'message' => 'Meta description is too long (more than 160 characters)'
+                ];
+            }
+            
+            // Check H1 issues
+            if (($result['h1Count'] ?? 0) === 0) {
+                $issues[] = [
+                    'url' => $url,
+                    'type' => 'missing_h1',
+                    'severity' => 'critical',
+                    'message' => 'Page has no H1 heading'
+                ];
+            } elseif (($result['h1Count'] ?? 0) > 1) {
+                $issues[] = [
+                    'url' => $url,
+                    'type' => 'multiple_h1',
+                    'severity' => 'warning',
+                    'message' => 'Page has multiple H1 headings'
+                ];
+            }
+            
+            // Check for mismatch between title and H1
+            if (!empty($result['title'] ?? '') && !empty($result['h1Text'] ?? '') && 
+                $result['title'] !== $result['h1Text']) {
+                $issues[] = [
+                    'url' => $url,
+                    'type' => 'title_h1_mismatch',
+                    'severity' => 'notice',
+                    'message' => 'Title and H1 heading do not match'
+                ];
+            }
+            
+            // Check for OpenGraph issues
+            $metaTags = $result['metaTags'] ?? [];
+            if (isset($metaTags['og:title']) && $metaTags['og:title'] !== $result['title']) {
+                $issues[] = [
+                    'url' => $url,
+                    'type' => 'og_title_mismatch',
+                    'severity' => 'notice',
+                    'message' => 'OpenGraph title does not match page title'
+                ];
+            }
+        }
+        
+        return $issues;
+    }
+    
+    /**
+     * Count pages with a non-empty property
+     * 
+     * @param array $pages The pages
+     * @param string $property The property to check
+     * @return int The count of pages with the property
+     */
+    private function countPagesWithProperty(array $pages, string $property): int
+    {
+        $count = 0;
+        
+        foreach ($pages as $page) {
+            if (!empty($page[$property] ?? '')) {
+                $count++;
+            }
+        }
+        
+        return $count;
     }
     
     /**

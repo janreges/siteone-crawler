@@ -84,7 +84,8 @@ class GetWebsitePerformanceHandler implements ToolHandlerInterface
             'url' => $url,
             'max-depth' => $depth,
             'analyze' => true,
-            'analyze-performance' => true
+            'analyze-performance' => true,
+            'record-response-time' => true
         ];
         
         // Run the crawler
@@ -105,15 +106,19 @@ class GetWebsitePerformanceHandler implements ToolHandlerInterface
         // Calculate overall metrics
         $overallMetrics = $this->calculateOverallMetrics($crawlerOutput['results'] ?? []);
         
+        // Extract performance data from results
+        $performanceData = $this->extractPerformanceData($crawlerOutput['results'] ?? []);
+        
         return [
             'summary' => [
                 'crawledUrls' => count($crawlerOutput['results'] ?? []),
-                'totalLoadTime' => $overallMetrics['totalLoadTime'],
-                'averageLoadTime' => $overallMetrics['averageLoadTime'],
-                'totalSize' => $overallMetrics['totalSize'],
-                'averageSize' => $overallMetrics['averageSize'],
+                'averageResponseTime' => $overallMetrics['averageLoadTime'],
+                'totalContentSize' => $overallMetrics['totalSize'],
                 'crawlDate' => $crawlerOutput['crawler']['executedAt'] ?? null
             ],
+            'slowestPages' => $this->sortPagesByResponseTime($performanceData, 'desc'),
+            'fastestPages' => $this->sortPagesByResponseTime($performanceData, 'asc'),
+            'largestPages' => $this->sortPagesBySize($performanceData, 'desc'),
             'slowestUrls' => $this->transformSlowUrls($crawlerOutput['tables']['slowest-urls']['rows'] ?? []),
             'fastestUrls' => $this->transformFastUrls($crawlerOutput['tables']['fastest-urls']['rows'] ?? []),
             'performanceByContentType' => $this->transformContentTypePerformance($crawlerOutput['tables']['content-types']['rows'] ?? []),
@@ -134,8 +139,8 @@ class GetWebsitePerformanceHandler implements ToolHandlerInterface
         $count = count($results);
         
         foreach ($results as $result) {
-            $totalLoadTime += (float)($result['elapsedTime'] ?? 0);
-            $totalSize += (int)($result['size'] ?? 0);
+            $totalLoadTime += (float)($result['time'] ?? 0);
+            $totalSize += (int)($result['contentLength'] ?? 0);
         }
         
         $averageLoadTime = $count > 0 ? $totalLoadTime / $count : 0;
@@ -147,6 +152,73 @@ class GetWebsitePerformanceHandler implements ToolHandlerInterface
             'totalSize' => $totalSize,
             'averageSize' => $averageSize
         ];
+    }
+    
+    /**
+     * Extract performance data from the crawler results
+     * 
+     * @param array $results The crawler results
+     * @return array The extracted performance data
+     */
+    private function extractPerformanceData(array $results): array
+    {
+        $performanceData = [];
+        
+        foreach ($results as $result) {
+            $performanceData[] = [
+                'url' => $result['url'] ?? '',
+                'responseTime' => (float)($result['time'] ?? 0),
+                'contentLength' => (int)($result['contentLength'] ?? 0),
+                'contentType' => $result['contentType'] ?? '',
+                'statusCode' => $result['status'] ?? ''
+            ];
+        }
+        
+        return $performanceData;
+    }
+    
+    /**
+     * Sort pages by response time
+     * 
+     * @param array $pages The pages
+     * @param string $direction The sort direction ('asc' or 'desc')
+     * @return array The sorted pages
+     */
+    private function sortPagesByResponseTime(array $pages, string $direction = 'desc'): array
+    {
+        $sorted = $pages;
+        
+        usort($sorted, function($a, $b) use ($direction) {
+            if ($direction === 'asc') {
+                return $a['responseTime'] <=> $b['responseTime'];
+            } else {
+                return $b['responseTime'] <=> $a['responseTime'];
+            }
+        });
+        
+        return $sorted;
+    }
+    
+    /**
+     * Sort pages by content size
+     * 
+     * @param array $pages The pages
+     * @param string $direction The sort direction ('asc' or 'desc')
+     * @return array The sorted pages
+     */
+    private function sortPagesBySize(array $pages, string $direction = 'desc'): array
+    {
+        $sorted = $pages;
+        
+        usort($sorted, function($a, $b) use ($direction) {
+            if ($direction === 'asc') {
+                return $a['contentLength'] <=> $b['contentLength'];
+            } else {
+                return $b['contentLength'] <=> $a['contentLength'];
+            }
+        });
+        
+        return $sorted;
     }
     
     /**
