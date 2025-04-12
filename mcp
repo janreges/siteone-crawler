@@ -1,0 +1,35 @@
+#!/bin/bash
+
+# MCP Server for SiteOne Crawler
+# This script serves as the entry point for the MCP server (Linux/macOS version)
+
+# Get the directory of the script
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Parse command-line arguments
+TRANSPORT="stdio"
+HOST="127.0.0.1"
+PORT="7777"
+
+for i in "$@"; do
+  case $i in
+    --transport=*)
+      TRANSPORT="${i#*=}"
+      shift
+      ;;
+    --host=*)
+      HOST="${i#*=}"
+      shift
+      ;;
+    --port=*)
+      PORT="${i#*=}"
+      shift
+      ;;
+    *)
+      # Unknown option
+      ;;
+  esac
+done
+
+# Run the PHP MCP server with the provided arguments
+php -f "$DIR/src/mcp-server.php" -- --transport="$TRANSPORT" --host="$HOST" --port="$PORT" 
