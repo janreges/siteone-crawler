@@ -22,48 +22,100 @@ use SiteOne\Mcp\Tool\GetWebsitePerformanceHandler;
 use SiteOne\Mcp\Tool\CheckSecurityHeadersHandler;
 use SiteOne\Mcp\Tool\GenerateMarkdownHandler;
 use SiteOne\Mcp\Tool\GenerateSitemapHandler;
+use SiteOne\Mcp\Logger;
+use SiteOne\Mcp\ErrorHandler;
 
 // Parse command-line arguments
-$options = getopt('', ['transport::', 'host::', 'port::']);
+$options = getopt('', ['transport::', 'host::', 'port::', 'log-level::', 'log-dir::', 'debug::']);
 $transport = $options['transport'] ?? 'stdio';
 $host = $options['host'] ?? '127.0.0.1';
 $port = (int)($options['port'] ?? 7777);
+$logLevel = $options['log-level'] ?? Logger::INFO;
+$logDir = $options['log-dir'] ?? __DIR__ . '/../log';
+$debug = isset($options['debug']);
 
-// Initialize the crawler executor
-$executor = new CrawlerExecutor();
+// Set up the logger with appropriate log levels
+$consoleLogLevel = $debug ? Logger::DEBUG : Logger::INFO;
+$fileLogLevel = $logLevel;
 
-// Initialize the appropriate transport
-if ($transport === 'http') {
-    echo "Starting MCP HTTP/SSE server on {$host}:{$port}\n";
-    $transportHandler = new HttpSseTransport($host, $port);
-} else {
-    // Default to stdio transport
-    $transportHandler = new StdioTransport();
-}
+// Initialize logger
+$logger = new Logger(
+    $logDir,
+    'mcp-server',
+    $fileLogLevel,
+    $consoleLogLevel,
+    true // Console output enabled
+);
 
-// Create and configure the MCP server
-$server = new McpServer($transportHandler);
+// Log startup information
+$logger->info('MCP Server starting up', [
+    'transport' => $transport,
+    'host' => $host,
+    'port' => $port,
+    'logLevel' => $logLevel,
+    'debug' => $debug
+]);
 
-// Register all MCP tools
-$tools = [
-    new AnalyzeWebsiteHandler($executor),
-    new GetSeoMetadataHandler($executor),
-    new FindBrokenLinksHandler($executor),
-    new GetWebsitePerformanceHandler($executor),
-    new CheckSecurityHeadersHandler($executor),
-    new GenerateMarkdownHandler($executor),
-    new GenerateSitemapHandler($executor)
-];
+// Initialize error handler
+$errorHandler = new ErrorHandler($logger);
+$errorHandler->register();
 
-foreach ($tools as $tool) {
-    $server->registerTool($tool);
-}
-
-// Start the server
-if ($transport === 'http') {
-    // For HTTP transport, we need to call the transport's start method
-    $transportHandler->start();
-} else {
-    // For stdio transport, we use the server's start method
-    $server->start();
+try {
+    // Initialize the crawler executor with the logger
+    $executor = new CrawlerExecutor(null, null, $logger);
+    
+    // Initialize the appropriate transport
+    if ($transport === 'http') {
+        $logger->info("Starting MCP HTTP/SSE server on {$host}:{$port}");
+        $transportHandler = new HttpSseTransport($host, $port);
+    } else {
+        // Default to stdio transport
+        $logger->info("Starting MCP stdio transport");
+        $transportHandler = new StdioTransport();
+    }
+    
+    // Create and configure the MCP server
+    $server = new McpServer($transportHandler, $logger);
+    
+    // Register all MCP tools
+    $tools = [
+        new AnalyzeWebsiteHandler($executor),
+        new GetSeoMetadataHandler($executor),
+        new FindBrokenLinksHandler($executor),
+        new GetWebsitePerformanceHandler($executor),
+        new CheckSecurityHeadersHandler($executor),
+        new GenerateMarkdownHandler($executor),
+        new GenerateSitemapHandler($executor)
+    ];
+    
+    foreach ($tools as $tool) {
+        $logger->debug("Registering tool: " . $tool->getName());
+        $server->registerTool($tool);
+    }
+    
+    // Start the server
+    $logger->info("MCP Server initialization complete, starting server...");
+    
+    if ($transport === 'http') {
+        // For HTTP transport, we need to call the transport's start method
+        $transportHandler->start();
+    } else {
+        // For stdio transport, we use the server's start method
+        $server->start();
+    }
+} catch (\Throwable $e) {
+    // Log the exception
+    $logger->critical("Fatal error during MCP Server startup", ['exception' => $e]);
+    
+    // Display error message
+    echo "Fatal error: " . $e->getMessage() . PHP_EOL;
+    
+    // Exit with error code
+    exit(1);
+} finally {
+    // Unregister error handler on shutdown
+    $errorHandler->unregister();
+    
+    // Log server shutdown
+    $logger->info("MCP Server shutting down");
 } 

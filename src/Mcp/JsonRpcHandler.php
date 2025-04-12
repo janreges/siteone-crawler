@@ -8,6 +8,8 @@ declare(strict_types=1);
 
 namespace SiteOne\Mcp;
 
+use SiteOne\Mcp\Exception\McpException;
+
 class JsonRpcHandler
 {
     /**
@@ -16,55 +18,93 @@ class JsonRpcHandler
     private const JSON_RPC_VERSION = '2.0';
     
     /**
+     * Logger instance
+     */
+    private ?Logger $logger;
+    
+    /**
+     * Constructor
+     * 
+     * @param Logger|null $logger The logger instance
+     */
+    public function __construct(?Logger $logger = null)
+    {
+        $this->logger = $logger;
+    }
+    
+    /**
      * Parse a JSON-RPC request from a JSON string
      * 
      * @param string $json The JSON string to parse
      * @return array The parsed request object
-     * @throws \RuntimeException If the request is invalid
+     * @throws McpException If the request is invalid
      */
     public function parseRequest(string $json): array
     {
-        $request = json_decode($json, true);
-        
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            throw $this->createParseError();
+        try {
+            $request = json_decode($json, true);
+            
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                $error = 'Parse error: ' . json_last_error_msg();
+                if ($this->logger) {
+                    $this->logger->error($error, ['json' => $this->sanitizeJson($json)]);
+                }
+                throw McpException::parseError($error);
+            }
+            
+            $this->validateRequest($request);
+            
+            return $request;
+        } catch (McpException $e) {
+            // Re-throw McpException instances as they are already properly formatted
+            throw $e;
+        } catch (\Throwable $e) {
+            // Convert other exceptions to McpException
+            if ($this->logger) {
+                $this->logger->error('Error parsing JSON-RPC request', ['exception' => $e]);
+            }
+            throw McpException::parseError('Internal error during request parsing', [], $e);
         }
-        
-        $this->validateRequest($request);
-        
-        return $request;
     }
     
     /**
      * Validate a JSON-RPC request object
      * 
      * @param mixed $request The request object to validate
-     * @throws \RuntimeException If the request is invalid
+     * @throws McpException If the request is invalid
      */
     private function validateRequest($request): void
     {
+        $errors = [];
+        
         if (!is_array($request)) {
-            throw $this->createInvalidRequestError("Request must be an object");
+            throw McpException::invalidRequest("Request must be an object");
         }
         
         if (!isset($request['jsonrpc']) || $request['jsonrpc'] !== self::JSON_RPC_VERSION) {
-            throw $this->createInvalidRequestError("Invalid or missing 'jsonrpc' property");
+            $errors['jsonrpc'] = "Invalid or missing 'jsonrpc' property";
         }
         
         if (!isset($request['method']) || !is_string($request['method']) || empty($request['method'])) {
-            throw $this->createInvalidRequestError("Invalid or missing 'method' property");
+            $errors['method'] = "Invalid or missing 'method' property";
         }
         
         if (isset($request['params']) && !is_array($request['params'])) {
-            throw $this->createInvalidRequestError("'params' must be an object or array");
+            $errors['params'] = "'params' must be an object or array";
         }
         
         if (!isset($request['id'])) {
-            throw $this->createInvalidRequestError("Missing 'id' property");
+            $errors['id'] = "Missing 'id' property";
+        } elseif (!is_string($request['id']) && !is_int($request['id']) && !is_null($request['id'])) {
+            $errors['id'] = "'id' must be a string, number, or null";
         }
         
-        if (!is_string($request['id']) && !is_int($request['id']) && !is_null($request['id'])) {
-            throw $this->createInvalidRequestError("'id' must be a string, number, or null");
+        if (!empty($errors)) {
+            // Throw with detailed validation errors
+            throw McpException::invalidRequest(
+                'Invalid JSON-RPC request',
+                ['validationErrors' => $errors]
+            );
         }
     }
     
@@ -82,6 +122,13 @@ class JsonRpcHandler
             'result' => $result,
             'id' => $id
         ];
+        
+        if ($this->logger) {
+            $this->logger->debug('Creating JSON-RPC response', [
+                'id' => $id,
+                'hasResult' => $result !== null
+            ]);
+        }
         
         return json_encode($response);
     }
@@ -112,60 +159,104 @@ class JsonRpcHandler
             'id' => $id
         ];
         
+        if ($this->logger) {
+            $this->logger->warning('Creating JSON-RPC error response', [
+                'id' => $id,
+                'code' => $code,
+                'message' => $message
+            ]);
+        }
+        
         return json_encode($response);
+    }
+    
+    /**
+     * Create a JSON-RPC error response from an McpException
+     * 
+     * @param mixed $id The request ID
+     * @param McpException $exception The exception
+     * @return string The JSON-RPC error response as a JSON string
+     */
+    public function createErrorResponseFromException($id, McpException $exception): string
+    {
+        return $this->createErrorResponse(
+            $id,
+            $exception->getCode(),
+            $exception->getMessage(),
+            $exception->getDetails()
+        );
     }
     
     /**
      * Create a parse error exception
      * 
-     * @return \RuntimeException The parse error exception
+     * @param string|null $message Custom error message (optional)
+     * @return McpException The parse error exception
      */
-    public function createParseError(): \RuntimeException
+    public function createParseError(?string $message = null): McpException
     {
-        return new \RuntimeException('Parse error: ' . json_last_error_msg(), -32700);
+        return McpException::parseError($message ?? 'Parse error: ' . json_last_error_msg());
     }
     
     /**
      * Create an invalid request error exception
      * 
      * @param string $message The error message
-     * @return \RuntimeException The invalid request error exception
+     * @return McpException The invalid request error exception
      */
-    public function createInvalidRequestError(string $message): \RuntimeException
+    public function createInvalidRequestError(string $message): McpException
     {
-        return new \RuntimeException('Invalid Request: ' . $message, -32600);
+        return McpException::invalidRequest('Invalid Request: ' . $message);
     }
     
     /**
      * Create a method not found error exception
      * 
      * @param string $method The method name
-     * @return \RuntimeException The method not found error exception
+     * @return McpException The method not found error exception
      */
-    public function createMethodNotFoundError(string $method): \RuntimeException
+    public function createMethodNotFoundError(string $method): McpException
     {
-        return new \RuntimeException("Method not found: {$method}", -32601);
+        return McpException::methodNotFound($method);
     }
     
     /**
      * Create an invalid params error exception
      * 
      * @param string $message The error message
-     * @return \RuntimeException The invalid params error exception
+     * @param array $details Additional error details
+     * @return McpException The invalid params error exception
      */
-    public function createInvalidParamsError(string $message): \RuntimeException
+    public function createInvalidParamsError(string $message, array $details = []): McpException
     {
-        return new \RuntimeException("Invalid params: {$message}", -32602);
+        return McpException::invalidParams('Invalid params: ' . $message, $details);
     }
     
     /**
      * Create an internal error exception
      * 
      * @param string $message The error message
-     * @return \RuntimeException The internal error exception
+     * @param \Throwable|null $previous The previous exception
+     * @return McpException The internal error exception
      */
-    public function createInternalError(string $message): \RuntimeException
+    public function createInternalError(string $message, ?\Throwable $previous = null): McpException
     {
-        return new \RuntimeException("Internal error: {$message}", -32603);
+        return new McpException('Internal error: ' . $message, McpException::INTERNAL_ERROR, [], $previous);
+    }
+    
+    /**
+     * Sanitize JSON for logging
+     * 
+     * @param string $json The JSON to sanitize
+     * @return string The sanitized JSON
+     */
+    private function sanitizeJson(string $json): string
+    {
+        // Truncate large JSON strings for logging
+        if (strlen($json) > 1000) {
+            return substr($json, 0, 500) . '...[truncated]...' . substr($json, -500);
+        }
+        
+        return $json;
     }
 } 

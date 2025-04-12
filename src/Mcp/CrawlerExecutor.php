@@ -22,13 +22,22 @@ class CrawlerExecutor
     private string $tempDir;
     
     /**
+     * Logger instance
+     */
+    private Logger $logger;
+    
+    /**
      * Constructor
      * 
-     * @param string $crawlerPath Path to the crawler executable
-     * @param string $tempDir Directory for temporary files
+     * @param string|null $crawlerPath Path to the crawler executable
+     * @param string|null $tempDir Directory for temporary files
+     * @param Logger|null $logger Logger instance
      */
-    public function __construct(string $crawlerPath = null, string $tempDir = null)
-    {
+    public function __construct(
+        ?string $crawlerPath = null, 
+        ?string $tempDir = null,
+        ?Logger $logger = null
+    ) {
         // Detect the appropriate crawler executable based on the platform
         if ($crawlerPath === null) {
             $this->crawlerPath = PHP_OS_FAMILY === 'Windows' ? 'crawler.bat' : './crawler';
@@ -43,10 +52,28 @@ class CrawlerExecutor
             $this->tempDir = rtrim($tempDir, '\\/');
         }
         
+        // Set logger
+        $this->logger = $logger ?? new Logger();
+        
         // Ensure the temporary directory exists
+        $this->ensureTempDirExists();
+    }
+    
+    /**
+     * Ensure that the temporary directory exists
+     * 
+     * @return void
+     * @throws \RuntimeException If the directory cannot be created
+     */
+    private function ensureTempDirExists(): void
+    {
         if (!is_dir($this->tempDir)) {
+            $this->logger->info("Creating temporary directory: {$this->tempDir}");
+            
             if (!mkdir($this->tempDir, 0755, true) && !is_dir($this->tempDir)) {
-                throw new \RuntimeException("Failed to create temporary directory: {$this->tempDir}");
+                $error = "Failed to create temporary directory: {$this->tempDir}";
+                $this->logger->error($error);
+                throw new \RuntimeException($error);
             }
         }
     }
@@ -60,32 +87,80 @@ class CrawlerExecutor
      */
     public function execute(array $parameters): array
     {
+        $this->logger->info("Executing crawler", ['parameters' => $this->sanitizeParameters($parameters)]);
+        
         // Generate a unique output file name
         $jsonOutputFile = $this->tempDir . DIRECTORY_SEPARATOR . 'mcp_output_' . uniqid() . '.json';
+        $this->logger->debug("Using JSON output file: {$jsonOutputFile}");
         
         // Build the command with parameters
         $command = $this->buildCommand($parameters, $jsonOutputFile);
+        $this->logger->debug("Generated command: " . $this->sanitizeCommand($command));
         
-        // Execute the command
-        $output = $this->executeCommand($command);
-        
-        // Check if the JSON output file was created
-        if (!file_exists($jsonOutputFile)) {
-            throw new \RuntimeException("JSON output file was not created. Command output: " . implode("\n", $output));
+        try {
+            // Measure execution time
+            $startTime = microtime(true);
+            
+            // Execute the command
+            $output = $this->executeCommand($command);
+            
+            $executionTime = microtime(true) - $startTime;
+            $this->logger->info("Crawler execution completed", [
+                'time' => $executionTime,
+                'exitCode' => 0
+            ]);
+            
+            // Check if the JSON output file was created
+            if (!file_exists($jsonOutputFile)) {
+                $error = "JSON output file was not created.";
+                $this->logger->error($error, [
+                    'stdout' => $output['stdout'],
+                    'stderr' => $output['stderr']
+                ]);
+                throw new \RuntimeException($error . " Command output: " . implode("\n", $output));
+            }
+            
+            // Get file size for logging
+            $fileSize = filesize($jsonOutputFile);
+            $this->logger->debug("JSON output file size: {$fileSize} bytes");
+            
+            // Parse the JSON output
+            $jsonContent = file_get_contents($jsonOutputFile);
+            $data = json_decode($jsonContent, true);
+            
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                $error = "Failed to parse JSON output: " . json_last_error_msg();
+                $this->logger->error($error);
+                throw new \RuntimeException($error);
+            }
+            
+            // Log some basic stats about the data
+            $resultsCount = count($data['results'] ?? []);
+            $this->logger->info("Parsed crawler output", [
+                'resultsCount' => $resultsCount
+            ]);
+            
+            // Clean up the temporary file
+            if (file_exists($jsonOutputFile)) {
+                $this->logger->debug("Cleaning up temporary file: {$jsonOutputFile}");
+                unlink($jsonOutputFile);
+            }
+            
+            return $data;
+        } catch (\Throwable $e) {
+            // Ensure temp file is cleaned up even on error
+            if (file_exists($jsonOutputFile)) {
+                $this->logger->debug("Cleaning up temporary file after error: {$jsonOutputFile}");
+                unlink($jsonOutputFile);
+            }
+            
+            // Log and re-throw the exception
+            $this->logger->error("Error during crawler execution", [
+                'exception' => $e,
+                'parameters' => $this->sanitizeParameters($parameters)
+            ]);
+            throw $e;
         }
-        
-        // Parse the JSON output
-        $jsonContent = file_get_contents($jsonOutputFile);
-        $data = json_decode($jsonContent, true);
-        
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            throw new \RuntimeException("Failed to parse JSON output: " . json_last_error_msg());
-        }
-        
-        // Clean up the temporary file
-        unlink($jsonOutputFile);
-        
-        return $data;
     }
     
     /**
@@ -135,11 +210,15 @@ class CrawlerExecutor
             2 => ['pipe', 'w']   // stderr
         ];
         
+        $this->logger->debug("Starting process execution");
+        
         // Start the process
         $process = proc_open($command, $descriptorSpec, $pipes);
         
         if (!is_resource($process)) {
-            throw new \RuntimeException("Failed to execute crawler process: {$command}");
+            $error = "Failed to execute crawler process";
+            $this->logger->error($error, ['command' => $this->sanitizeCommand($command)]);
+            throw new \RuntimeException("{$error}: {$command}");
         }
         
         // Close stdin as we don't need it
@@ -157,12 +236,58 @@ class CrawlerExecutor
         $exitCode = proc_close($process);
         
         if ($exitCode !== 0) {
-            throw new \RuntimeException("Crawler process failed with exit code {$exitCode}: {$stderr}");
+            $error = "Crawler process failed with exit code {$exitCode}";
+            $this->logger->error($error, [
+                'stderr' => $stderr,
+                'stdout' => $stdout,
+                'exitCode' => $exitCode
+            ]);
+            throw new \RuntimeException("{$error}: {$stderr}");
         }
+        
+        $this->logger->debug("Process completed successfully", [
+            'exitCode' => $exitCode,
+            'stderr_size' => strlen($stderr),
+            'stdout_size' => strlen($stdout)
+        ]);
         
         return [
             'stdout' => $stdout,
             'stderr' => $stderr
         ];
+    }
+    
+    /**
+     * Sanitize parameters for logging
+     * 
+     * @param array $parameters The parameters to sanitize
+     * @return array The sanitized parameters
+     */
+    private function sanitizeParameters(array $parameters): array
+    {
+        // Create a copy of the parameters
+        $sanitized = $parameters;
+        
+        // Truncate potentially large values
+        foreach ($sanitized as $key => $value) {
+            if (is_string($value) && strlen($value) > 100) {
+                $sanitized[$key] = substr($value, 0, 50) . '...' . substr($value, -50);
+            }
+        }
+        
+        return $sanitized;
+    }
+    
+    /**
+     * Sanitize command for logging (remove sensitive information)
+     * 
+     * @param string $command The command to sanitize
+     * @return string The sanitized command
+     */
+    private function sanitizeCommand(string $command): string
+    {
+        // For now, just return the command as is
+        // In the future, could mask tokens, API keys, etc.
+        return $command;
     }
 } 
