@@ -143,8 +143,8 @@ class GetWebsitePerformanceHandler implements ToolHandlerInterface
             $totalSize += (int)($result['contentLength'] ?? 0);
         }
         
-        $averageLoadTime = $count > 0 ? $totalLoadTime / $count : 0;
-        $averageSize = $count > 0 ? $totalSize / $count : 0;
+        $averageLoadTime = $count > 0 ? (int)round($totalLoadTime / $count) : 0;
+        $averageSize = $count > 0 ? (int)round($totalSize / $count) : 0;
         
         return [
             'totalLoadTime' => $totalLoadTime,

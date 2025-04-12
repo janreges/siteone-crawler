@@ -32,4 +32,4 @@ for i in "$@"; do
 done
 
 # Run the PHP MCP server with the provided arguments
-php -f "$DIR/src/mcp-server.php" -- --transport="$TRANSPORT" --host="$HOST" --port="$PORT" 
+"$DIR/bin/swoole-cli" -f "$DIR/src/mcp-server.php" -- --transport="$TRANSPORT" --host="$HOST" --port="$PORT" 

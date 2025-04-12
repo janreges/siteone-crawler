@@ -8,8 +8,27 @@
  */
 declare(strict_types=1);
 
-// Include the autoloader
-require_once __DIR__ . '/autoload.php';
+require_once 'mcp-bootstrap.php';
+
+if (!defined('BASE_DIR')) {
+    // If bootstrap wasn't loaded, define BASE_DIR directly
+    if ($baseDir) {
+        define('BASE_DIR', $baseDir);
+        define('SRC_DIR', BASE_DIR . '/src');
+        
+        // Set up a basic autoloader
+        spl_autoload_register(function ($class) {
+            $classFile = SRC_DIR . '/' . str_replace('\\', '/', $class) . '.php';
+            if (file_exists($classFile)) {
+                require_once $classFile;
+                return true;
+            }
+            return false;
+        });
+    } else {
+        die("Cannot determine the project root directory. Bootstrap file not found.");
+    }
+}
 
 use SiteOne\Mcp\McpServer;
 use SiteOne\Mcp\Transport\StdioTransport;
@@ -31,8 +50,13 @@ $transport = $options['transport'] ?? 'stdio';
 $host = $options['host'] ?? '127.0.0.1';
 $port = (int)($options['port'] ?? 7777);
 $logLevel = $options['log-level'] ?? Logger::INFO;
-$logDir = $options['log-dir'] ?? __DIR__ . '/../log';
+$logDir = $options['log-dir'] ?? BASE_DIR . '/log';
 $debug = isset($options['debug']);
+
+// If debug is enabled, set it in $_SERVER for the autoloader
+if ($debug) {
+    $_SERVER['MCP_DEBUG'] = true;
+}
 
 // Set up the logger with appropriate log levels
 $consoleLogLevel = $debug ? Logger::DEBUG : Logger::INFO;
@@ -53,7 +77,8 @@ $logger->info('MCP Server starting up', [
     'host' => $host,
     'port' => $port,
     'logLevel' => $logLevel,
-    'debug' => $debug
+    'debug' => $debug,
+    'baseDir' => BASE_DIR
 ]);
 
 // Initialize error handler
