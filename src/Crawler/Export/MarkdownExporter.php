@@ -41,6 +41,12 @@ class MarkdownExporter extends BaseExporter implements Exporter
     protected ?string $markdownExportDirectory = null;
 
     /**
+     * Path where combined markdown file will be stored, if set, all exported markdown files will be combined into a single file.
+     * @var string|null
+     */
+    protected ?string $markdownExportSingleFile = null;
+
+    /**
      * Do not export and show images in markdown files. Images are enabled by default.
      * @var bool
      */
@@ -93,7 +99,7 @@ class MarkdownExporter extends BaseExporter implements Exporter
     protected bool $markdownMoveContentBeforeH1ToEnd = false;
 
     /**
-     * Exporter is activated when --markdown-export-dir is set
+     * Exporter is activated when either --markdown-export-dir or --markdown-export-single-file is set
      * @return bool
      */
     public function shouldBeActivated(): bool
@@ -101,7 +107,7 @@ class MarkdownExporter extends BaseExporter implements Exporter
         ini_set('pcre.backtrack_limit', '100000000');
         ini_set('pcre.recursion_limit', '100000000');
         $this->markdownExportDirectory = $this->markdownExportDirectory ? rtrim($this->markdownExportDirectory, '/') : null;
-        return $this->markdownExportDirectory !== null;
+        return $this->markdownExportDirectory !== null || $this->markdownExportSingleFile !== null;
     }
 
     /**
@@ -157,6 +163,39 @@ class MarkdownExporter extends BaseExporter implements Exporter
                 Utils::getFormattedDuration(microtime(true) - $startTime)
             )
         );
+        
+        // combine markdown files to a single file if requested
+        if ($this->markdownExportSingleFile !== null && $this->markdownExportDirectory !== null) {
+            try {
+                $combineStartTime = microtime(true);
+                $combiner = new \Crawler\Export\Utils\MarkdownSiteAggregator($this->crawler->getCoreOptions()->url);
+                $combinedMarkdown = $combiner->combineDirectory($this->markdownExportDirectory);
+                
+                // ensure directory exists
+                $singleFileDir = dirname($this->markdownExportSingleFile);
+                if (!is_dir($singleFileDir)) {
+                    if (!mkdir($singleFileDir, 0777, true)) {
+                        throw new Exception("Cannot create directory for single markdown file: '$singleFileDir'");
+                    }
+                }
+                
+                // write the combined file
+                if (file_put_contents($this->markdownExportSingleFile, $combinedMarkdown) === false) {
+                    throw new Exception("Cannot write single markdown file: '{$this->markdownExportSingleFile}'");
+                }
+                
+                $this->status->addInfoToSummary(
+                    'markdown-combined',
+                    sprintf(
+                        "Markdown files combined into single file '%s' and took %s",
+                        Utils::getOutputFormattedPath($this->markdownExportSingleFile),
+                        Utils::getFormattedDuration(microtime(true) - $combineStartTime)
+                    )
+                );
+            } catch (Exception $e) {
+                $this->status->addCriticalToSummary('markdown-combine-error', "Error combining markdown files: " . $e->getMessage());
+            }
+        }
     }
 
     /**
@@ -786,6 +825,7 @@ class MarkdownExporter extends BaseExporter implements Exporter
             self::GROUP_MARKDOWN_EXPORTER,
             'Markdown exporter options', [
             new Option('--markdown-export-dir', '-med', 'markdownExportDirectory', Type::DIR, false, 'Path to directory where to save the markdown version of the website.', null, true),
+            new Option('--markdown-export-single-file', null, 'markdownExportSingleFile', Type::FILE, false, 'Path to a file where to save the combined markdown files into one document. Requires --markdown-export-dir to be set.', null, true),
             new Option('--markdown-move-content-before-h1-to-end', null, 'markdownMoveContentBeforeH1ToEnd', Type::BOOL, false, 'Move all content before the main H1 heading (typically the header with the menu) to the end of the markdown.', false, true, false),
             new Option('--markdown-disable-images', '-mdi', 'markdownDisableImages', Type::BOOL, false, 'Do not export and show images in markdown files. Images are enabled by default.', false, true),
             new Option('--markdown-disable-files', '-mdf', 'markdownDisableFiles', Type::BOOL, false, 'Do not export and link files other than HTML/CSS/JS/fonts/images - eg. PDF, ZIP, etc. These files are enabled by default.', false, true),

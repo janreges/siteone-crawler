@@ -144,8 +144,11 @@ The following features are summarized in greater detail:
 - to prevent that at the beginning of the markdown of all pages the header, long menu etc. will be repeated, so the
   first occurrence of the most important heading (typically h1) is searched and all content before this heading is moved
   to the end of the page below the line `---`.
-- converter has implemented **code block detection** and **syntax highlighting** for the most popular languages
-- html tables are converted to **markdown tables**
+- converter has implemented **code block detection** and **syntax highlighting** for the most popular languages.
+- html tables are converted to **markdown tables**.
+- can combine all exported markdown files into a **single large markdown file** - ideal for AI tools that need to
+  process the entire website content in one go.
+- smart removal of duplicate website headers and footers is also implemented in exported single large markdown file.
 - see all available [markdown exporter options](#markdown-exporter-options).
 
 💡 Tip: you can push the exported markdown folder to your GitHub repository, where it will be automatically rendered as a browsable
@@ -275,6 +278,7 @@ required arguments:
   --sitemap-base-priority=0.5 \
   --sitemap-priority-increase=0.1 \
   --markdown-export-dir=tmp/mydomain.tld.md \
+  --markdown-export-single-file=tmp/mydomain.tld.combined.md \
   --markdown-move-content-before-h1-to-end \
   --markdown-disable-images \
   --markdown-disable-files \
@@ -413,6 +417,7 @@ For a clearer list, I recommend going to the documentation: 🌐 https://crawler
 | Parameter | Description |
 |-----------|-------------|
 | `--markdown-export-dir=<dir>` | Path to directory where to save the markdown version of the website.<br>Directory will be created if it doesn't exist. |
+| `--markdown-export-single-file=<file>` | Path to a file where to save the combined markdown files into one document. Requires `--markdown-export-dir` to be set. Ideal for AI tools that need to process the entire website content in one go. |
 | `--markdown-move-content-before-h1-to-end` | Move all content before the main H1 heading (typically the header with the menu) to the end of the markdown. |
 | `--markdown-disable-images` | Do not export and show images in markdown files.<br>Images are enabled by default. |
 | `--markdown-disable-files` | Do not export and link files other than HTML/CSS/JS/fonts/images - eg. PDF, ZIP, etc.<br>These files are enabled by default. |
