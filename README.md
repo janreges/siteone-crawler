@@ -282,8 +282,10 @@ required arguments:
   --markdown-move-content-before-h1-to-end \
   --markdown-disable-images \
   --markdown-disable-files \
+  --markdown-remove-links-and-images-from-single-file \
   --markdown-exclude-selector='.exclude-me' \
   --markdown-replace-content='/<foo[^>]+>/ -> <bar>' \
+  --markdown-replace-query-string='/[a-z]+=[^&]*(&|$)/i -> $1__$2' \
   --mail-to=your.name@my-mail.tld \
   --mail-to=your.friend.name@my-mail.tld \
   --mail-from=crawler@ymy-mail.tld \
@@ -421,6 +423,7 @@ For a clearer list, I recommend going to the documentation: 🌐 https://crawler
 | `--markdown-move-content-before-h1-to-end` | Move all content before the main H1 heading (typically the header with the menu) to the end of the markdown. |
 | `--markdown-disable-images` | Do not export and show images in markdown files.<br>Images are enabled by default. |
 | `--markdown-disable-files` | Do not export and link files other than HTML/CSS/JS/fonts/images - eg. PDF, ZIP, etc.<br>These files are enabled by default. |
+| `--markdown-remove-links-and-images-from-single-file` | Remove links and images from the combined single markdown file. Useful for AI tools that don't need these elements.<br>Requires `--markdown-export-single-file` to be set. |
 | `--markdown-exclude-selector=<val>` | Exclude some page content (DOM elements) from markdown export defined by CSS selectors like 'header', '.header', '#header', etc.<br>Can be specified multiple times. |
 | `--markdown-replace-content=<val>` | Replace text content with `foo -> bar` or regexp in PREG format: `/card[0-9]/i -> card`.<br>Can be specified multiple times. |
 | `--markdown-replace-query-string=<val>` | Instead of using a short hash instead of a query string in the filename, just replace some characters.<br>You can use simple format 'foo -> bar' or regexp in PREG format, e.g.<br>`'/([a-z]+)=([^&]*)(&|$)/i -> $1__$2'`. Can be specified multiple times. |

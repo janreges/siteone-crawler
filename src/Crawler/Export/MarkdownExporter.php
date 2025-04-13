@@ -59,6 +59,13 @@ class MarkdownExporter extends BaseExporter implements Exporter
     protected bool $markdownDisableFiles = false;
 
     /**
+     * Remove links and images from the combined single markdown file. 
+     * Useful for AI tools that don't need these elements.
+     * @var bool
+     */
+    protected bool $markdownRemoveLinksAndImagesFromSingleFile = false;
+
+    /**
      * Exclude some page content (DOM elements) from markdown export defined by CSS selectors like 'header', 'footer', '.header', '#footer', etc.
      * @var string[]
      */
@@ -169,7 +176,10 @@ class MarkdownExporter extends BaseExporter implements Exporter
             try {
                 $combineStartTime = microtime(true);
                 $combiner = new \Crawler\Export\Utils\MarkdownSiteAggregator($this->crawler->getCoreOptions()->url);
-                $combinedMarkdown = $combiner->combineDirectory($this->markdownExportDirectory);
+                $combinedMarkdown = $combiner->combineDirectory(
+                    $this->markdownExportDirectory,
+                    $this->markdownRemoveLinksAndImagesFromSingleFile
+                );
                 
                 // ensure directory exists
                 $singleFileDir = dirname($this->markdownExportSingleFile);
@@ -930,6 +940,7 @@ class MarkdownExporter extends BaseExporter implements Exporter
             new Option('--markdown-move-content-before-h1-to-end', null, 'markdownMoveContentBeforeH1ToEnd', Type::BOOL, false, 'Move all content before the main H1 heading (typically the header with the menu) to the end of the markdown.', false, true, false),
             new Option('--markdown-disable-images', '-mdi', 'markdownDisableImages', Type::BOOL, false, 'Do not export and show images in markdown files. Images are enabled by default.', false, true),
             new Option('--markdown-disable-files', '-mdf', 'markdownDisableFiles', Type::BOOL, false, 'Do not export and link files other than HTML/CSS/JS/fonts/images - eg. PDF, ZIP, etc. These files are enabled by default.', false, true),
+            new Option('--markdown-remove-links-and-images-from-single-file', null, 'markdownRemoveLinksAndImagesFromSingleFile', Type::BOOL, false, 'Remove links and images from the combined single markdown file. Useful for AI tools that don\'t need these elements.', false, false),
             new Option('--markdown-exclude-selector', '-mes', 'markdownExcludeSelector', Type::STRING, true, "Exclude some page content (DOM elements) from markdown export defined by CSS selectors like 'header', '.header', '#header', etc.", null, false, true),
             new Option('--markdown-replace-content', null, 'markdownReplaceContent', Type::REPLACE_CONTENT, true, "Replace text content with `foo -> bar` or regexp in PREG format: `/card[0-9]/i -> card`", null, true, true),
             new Option('--markdown-replace-query-string', null, 'markdownReplaceQueryString', Type::REPLACE_CONTENT, true, "Instead of using a short hash instead of a query string in the filename, just replace some characters. You can use simple format 'foo -> bar' or regexp in PREG format, e.g. '/([a-z]+)=([^&]*)(&|$)/i -> $1__$2'", null, true, true),

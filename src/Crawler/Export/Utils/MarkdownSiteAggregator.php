@@ -23,7 +23,7 @@ class MarkdownSiteAggregator
         $this->baseUrl = rtrim($baseUrl, '/');
     }
 
-    public function combineDirectory(string $directoryPath): string
+    public function combineDirectory(string $directoryPath, bool $removeLinksAndImages = false): string
     {
         $files = $this->getMarkdownFiles($directoryPath);
         
@@ -99,7 +99,45 @@ class MarkdownSiteAggregator
         
         // Merge the array of lines into a single text separated by newlines
         $finalMarkdown = implode("\n", $resultLines);
+        
+        // Remove links and images if requested
+        if ($removeLinksAndImages) {
+            $finalMarkdown = $this->removeLinksAndImages($finalMarkdown);
+        }
+        
         return $finalMarkdown;
+    }
+
+    /**
+     * Removes all links and images from markdown text and cleans up any empty table rows
+     * 
+     * @param string $markdown The original markdown text
+     * @return string The cleaned markdown text
+     */
+    private function removeLinksAndImages(string $markdown): string
+    {
+        // Remove image in anchor text: [![logo by @foobar](data:image/gif;base64,fooo= "logo by @foobar")](index.html)
+        $markdown = preg_replace('/\[!\[[^\]]*\]\([^\)]*\)\]\([^\)]*\)/', '', $markdown);
+        
+        // Remove standalone images: ![alt text](image.jpg "Title")
+        $markdown = preg_replace('/!\[.*?\]\([^)]*\)(\s*\"[^\"]*\")?/', '', $markdown);
+        
+        // Replace links: [link text](http://example.com) -> '' (but only if this links is in list item)
+        $markdown = preg_replace('/^\s*(\*|\-|[0-9]+\.)\s*\[([^\]]+)\]\([^)]+\)/m', '', $markdown);
+        
+        // Replace any empty links: [](http://example.com) -> ''
+        $markdown = preg_replace('/\[\]\([^)]+\)/', '', $markdown);
+        
+        // Clean up tables - remove rows that contain only whitespace and vertical bars
+        $markdown = preg_replace('/^\s*(\|\s*)+\|\s*$/m', '', $markdown);
+
+        // Clean empty list items
+        $markdown = preg_replace('/^\s*(\*|\-|[0-9]+\.)\s*$/m', '', $markdown);
+        
+        // Remove multiple consecutive empty lines (more than 2)
+        $markdown = preg_replace('/\n{3,}/', "\n\n", $markdown);
+        
+        return $markdown;
     }
 
     private function getMarkdownFiles(string $dir): array
@@ -138,7 +176,7 @@ class MarkdownSiteAggregator
         if (empty($pages)) return [];
         // Take an array of pages (url=>lines). For comparison, use the first few pages (e.g., 5 or all if fewer).
         $urls = array_keys($pages);
-        $sampleUrls = array_slice($urls, 0, min(5, count($urls)));
+        $sampleUrls = array_slice($urls, 2, min(3, count($urls)));
         
         $commonHeader = $pages[$sampleUrls[0]];  // start with the complete content of the first page as a candidate
         // Gradually narrow down commonHeader by comparing with others from the sample
@@ -154,7 +192,7 @@ class MarkdownSiteAggregator
     {
         if (empty($pages)) return [];
         $urls = array_keys($pages);
-        $sampleUrls = array_slice($urls, 0, min(5, count($urls)));
+        $sampleUrls = array_slice($urls, 2, min(3, count($urls)));
         $commonFooter = $pages[$sampleUrls[0]];
         // Reverse the first page (to compare suffix as prefix)
         $commonFooter = array_reverse($commonFooter);

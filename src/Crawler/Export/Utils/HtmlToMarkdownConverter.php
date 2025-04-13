@@ -178,6 +178,13 @@ class HtmlToMarkdownConverter
         $finalMarkdown = implode("\n\n", $uniqueBlocksInOrder);
         // --- End Deduplication Logic ---
 
+        // Replace backslashes with the actual characters they represent
+        $originalMarkdown = $finalMarkdown;
+        $finalMarkdown = @preg_replace('/\\\\([.-])/', '$1', $finalMarkdown);
+        if ($finalMarkdown === false) {
+            $finalMarkdown = $originalMarkdown;
+        }
+
         // Final trim to remove leading/trailing whitespace from the whole result
         return trim($finalMarkdown);
     }
