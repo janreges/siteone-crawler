@@ -26,7 +26,6 @@ class MarkdownSiteAggregator
     public function combineDirectory(string $directoryPath): string
     {
         $files = $this->getMarkdownFiles($directoryPath);
-        sort($files);  // alphabetical sorting of paths (for final sorting by URL)
         
         // Load the content of all files into an array [url => content]
         $pages = [];
@@ -35,6 +34,28 @@ class MarkdownSiteAggregator
             $content = file_get_contents($filePath);
             $pages[$url] = explode("\n", rtrim($content));  // store content as an array of lines (without trailing empty line)
         }
+        
+        // Sort URLs to ensure index pages (homepage, section homepages) come first
+        uksort($pages, function($urlA, $urlB) {
+            // Root URL (homepage) should always be first
+            if ($urlA === $this->baseUrl || $urlA === '') return -1;
+            if ($urlB === $this->baseUrl || $urlB === '') return 1;
+            
+            // Section index pages should come before other pages in the same section
+            $partsA = explode('/', rtrim($urlA, '/'));
+            $partsB = explode('/', rtrim($urlB, '/'));
+            
+            // Compare path segments
+            $minLength = min(count($partsA), count($partsB));
+            for ($i = 0; $i < $minLength; $i++) {
+                if ($partsA[$i] !== $partsB[$i]) {
+                    return strcmp($partsA[$i], $partsB[$i]);
+                }
+            }
+            
+            // If one URL is a prefix of the other (shorter), it should come first
+            return count($partsA) - count($partsB);
+        });
         
         // Detect common header and footer (as array of lines)
         $headerLines = $this->detectCommonHeader($pages);
@@ -103,6 +124,12 @@ class MarkdownSiteAggregator
         }
         // If the file is named index (e.g. "about/index"), the URL can end with a slash ... (optional modification)
         $relPath = preg_replace('#/index$#', '/', $relPath);
+        
+        // Special handling for root index.md file
+        if ($relPath === 'index' || $relPath === '') {
+            return $this->baseUrl !== '' ? $this->baseUrl : '';
+        }
+        
         return $this->baseUrl !== '' ? $this->baseUrl . '/' . ltrim($relPath, '/') : $relPath;
     }
 
