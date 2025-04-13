@@ -400,88 +400,96 @@ class MarkdownExporter extends BaseExporter implements Exporter
 
         // trim -#*
         $mdContent = trim($mdContent, "\n\t -#*");
+        
+        // fix excessive whitespace issues
+        $mdContent = $this->removeExcessiveWhitespace($mdContent);
 
         file_put_contents($mdFilePath, $mdContent);
     }
 
     /**
-     * Check if URL can be stored with respect to --markdown-export-store-only-url-regex option and --allow-domain-*
+     * Removes excessive whitespace from markdown content while preserving
+     * necessary indentation for nested structures like lists and code blocks
      *
-     * @param VisitedUrl $visitedUrl
-     * @return bool
+     * @param string $md
+     * @return string
      */
-    private function shouldBeUrlStored(VisitedUrl $visitedUrl): bool
+    private function removeExcessiveWhitespace(string $md): string
     {
-        $result = false;
+        $lines = explode("\n", $md);
+        $result = [];
+        $inCodeBlock = false;
+        $lastLineWasEmpty = false;
 
-        // by --markdown-export-store-only-url-regex
-        if ($this->markdownExportStoreOnlyUrlRegex) {
-            foreach ($this->markdownExportStoreOnlyUrlRegex as $storeOnlyUrlRegex) {
-                if (preg_match($storeOnlyUrlRegex, $visitedUrl->url) === 1) {
-                    $result = true;
-                    break;
-                }
+        foreach ($lines as $line) {
+            // Check if we're entering or leaving a code block
+            if (preg_match('/^```/', $line)) {
+                $inCodeBlock = !$inCodeBlock;
+                $result[] = $line;
+                $lastLineWasEmpty = false;
+                continue;
             }
-        } else {
-            $result = true;
-        }
 
-        // by --allow-domain-* for external domains
-        if ($result && $visitedUrl->isExternal) {
-            $parsedUrl = ParsedUrl::parse($visitedUrl->url);
-            if ($this->crawler->isExternalDomainAllowedForCrawling($parsedUrl->host)) {
-                $result = true;
-            } else if (($visitedUrl->isStaticFile() || $parsedUrl->isStaticFile()) && $this->crawler->isDomainAllowedForStaticFiles($parsedUrl->host)) {
-                $result = true;
+            // Don't modify lines inside code blocks
+            if ($inCodeBlock) {
+                $result[] = $line;
+                $lastLineWasEmpty = false;
+                continue;
+            }
+
+            // Check if this is a list item line (preserve indentation)
+            $isListItem = preg_match('/^(\s*)([-*+]|\d+\.)\s/', $line);
+            
+            // Check if line is part of a table
+            $isTableRow = preg_match('/^\s*\|.*\|\s*$/', $line);
+            
+            // Check if line is a heading
+            $isHeading = preg_match('/^#+\s+/', $line);
+            
+            // Line is completely empty
+            if (trim($line) === '') {
+                // Avoid multiple consecutive empty lines
+                if (!$lastLineWasEmpty) {
+                    $result[] = '';
+                    $lastLineWasEmpty = true;
+                }
+                continue;
+            }
+            
+            if ($isListItem || $isTableRow || $isHeading) {
+                // For list items, tables and headings - preserve their structure
+                $result[] = $line;
             } else {
-                $result = false;
-            }
-        }
-
-        // do not store robots.txt
-        if (basename($visitedUrl->url) === 'robots.txt') {
-            $result = false;
-        }
-
-        return $result;
-    }
-
-    private function getRelativeFilePathForFileByUrl(VisitedUrl $visitedUrl): string
-    {
-        $urlConverter = new OfflineUrlConverter(
-            $this->crawler->getInitialParsedUrl(),
-            ParsedUrl::parse($visitedUrl->sourceUqId ? $this->status->getUrlByUqId($visitedUrl->sourceUqId) : $this->crawler->getCoreOptions()->url),
-            ParsedUrl::parse($visitedUrl->url),
-            [$this->crawler, 'isDomainAllowedForStaticFiles'],
-            [$this->crawler, 'isExternalDomainAllowedForCrawling'],
-            // give hint about image (simulating 'src' attribute) to have same logic about dynamic images URL without extension
-            $visitedUrl->contentType === Crawler::CONTENT_TYPE_ID_IMAGE ? 'src' : 'href'
-        );
-
-        $relativeUrl = $urlConverter->convertUrlToRelative(false);
-        $relativeTargetUrl = $urlConverter->getRelativeTargetUrl();
-        $relativePath = '';
-
-        switch ($urlConverter->getTargetDomainRelation()) {
-            case TargetDomainRelation::INITIAL_DIFFERENT__BASE_SAME:
-            case TargetDomainRelation::INITIAL_DIFFERENT__BASE_DIFFERENT:
-                $relativePath = ltrim(str_replace('../', '', $relativeUrl), '/ ');
-                if (!str_starts_with($relativePath, '_' . $relativeTargetUrl->host)) {
-                    $relativePath = '_' . $relativeTargetUrl->host . '/' . $relativePath;
+                // For regular text - trim excess spaces, but maintain paragraph structure
+                $trimmedLine = preg_replace('/\s+/', ' ', trim($line));
+                if (!empty($trimmedLine)) {
+                    $result[] = $trimmedLine;
                 }
-                break;
-            case TargetDomainRelation::INITIAL_SAME__BASE_SAME:
-            case TargetDomainRelation::INITIAL_SAME__BASE_DIFFERENT:
-                $relativePath = ltrim(str_replace('../', '', $relativeUrl), '/ ');
-                break;
+            }
+            $lastLineWasEmpty = false;
         }
-
-        return $relativePath;
-    }
-
-    private function isValidUrl(string $url): bool
-    {
-        return filter_var($url, FILTER_VALIDATE_URL) !== false;
+        
+        // Join lines back together
+        $content = implode("\n", $result);
+        
+        // Fix multiple spaces in text (but not in code blocks or tables)
+        $content = preg_replace_callback(
+            '/```.*?```|`.*?`|\|.*?\||([^`\|]+)/s', 
+            function($matches) {
+                if (isset($matches[1])) {
+                    // Only replace multiple spaces in regular text
+                    return preg_replace('/[ ]{2,}/', ' ', $matches[1]);
+                }
+                // Return code blocks, inline code and table cells unchanged
+                return $matches[0];
+            },
+            $content
+        );
+        
+        // Remove spaces at the end of lines
+        $content = preg_replace('/[ \t]+$/m', '', $content);
+        
+        return $content;
     }
 
     /**
@@ -498,6 +506,7 @@ class MarkdownExporter extends BaseExporter implements Exporter
         $inList = false;
         $lastLineEmpty = false;
         $lastIndentLevel = 0;
+        $lastNonEmptyLine = '';
 
         foreach ($lines as $line) {
             $trimmedLine = trim($line);
@@ -507,11 +516,21 @@ class MarkdownExporter extends BaseExporter implements Exporter
                 $inList = true;
 
                 if ($lastLineEmpty) {
-                    array_pop($result);
+                    // Only add an empty line between list items of different nesting levels
+                    preg_match('/^[ ]*/', $line, $matches);
+                    $currentIndent = strlen($matches[0]);
+                    
+                    if (abs($currentIndent - $lastIndentLevel) > 2) {
+                        // Different nesting level, keep the empty line
+                    } else {
+                        // Same nesting level, remove the empty line
+                        array_pop($result);
+                    }
                 }
 
                 $result[] = $line;
                 $lastLineEmpty = false;
+                $lastNonEmptyLine = $line;
 
                 preg_match('/^[ ]*/', $line, $matches);
                 $lastIndentLevel = strlen($matches[0]);
@@ -533,6 +552,8 @@ class MarkdownExporter extends BaseExporter implements Exporter
 
                 $result[] = $line;
                 $lastLineEmpty = false;
+                $lastNonEmptyLine = $line;
+                $lastIndentLevel = $currentIndent;
             }
         }
 
@@ -816,6 +837,86 @@ class MarkdownExporter extends BaseExporter implements Exporter
 
         // return detected language or empty string if nothing was detected
         return $maxScore > 0 ? $detectedLang : '';
+    }
+
+    private function getRelativeFilePathForFileByUrl(VisitedUrl $visitedUrl): string
+    {
+        $urlConverter = new OfflineUrlConverter(
+            $this->crawler->getInitialParsedUrl(),
+            ParsedUrl::parse($visitedUrl->sourceUqId ? $this->status->getUrlByUqId($visitedUrl->sourceUqId) : $this->crawler->getCoreOptions()->url),
+            ParsedUrl::parse($visitedUrl->url),
+            [$this->crawler, 'isDomainAllowedForStaticFiles'],
+            [$this->crawler, 'isExternalDomainAllowedForCrawling'],
+            // give hint about image (simulating 'src' attribute) to have same logic about dynamic images URL without extension
+            $visitedUrl->contentType === Crawler::CONTENT_TYPE_ID_IMAGE ? 'src' : 'href'
+        );
+
+        $relativeUrl = $urlConverter->convertUrlToRelative(false);
+        $relativeTargetUrl = $urlConverter->getRelativeTargetUrl();
+        $relativePath = '';
+
+        switch ($urlConverter->getTargetDomainRelation()) {
+            case TargetDomainRelation::INITIAL_DIFFERENT__BASE_SAME:
+            case TargetDomainRelation::INITIAL_DIFFERENT__BASE_DIFFERENT:
+                $relativePath = ltrim(str_replace('../', '', $relativeUrl), '/ ');
+                if (!str_starts_with($relativePath, '_' . $relativeTargetUrl->host)) {
+                    $relativePath = '_' . $relativeTargetUrl->host . '/' . $relativePath;
+                }
+                break;
+            case TargetDomainRelation::INITIAL_SAME__BASE_SAME:
+            case TargetDomainRelation::INITIAL_SAME__BASE_DIFFERENT:
+                $relativePath = ltrim(str_replace('../', '', $relativeUrl), '/ ');
+                break;
+        }
+
+        return $relativePath;
+    }
+
+    private function isValidUrl(string $url): bool
+    {
+        return filter_var($url, FILTER_VALIDATE_URL) !== false;
+    }
+
+    /**
+     * Check if URL can be stored with respect to --markdown-export-store-only-url-regex option and --allow-domain-*
+     *
+     * @param VisitedUrl $visitedUrl
+     * @return bool
+     */
+    private function shouldBeUrlStored(VisitedUrl $visitedUrl): bool
+    {
+        $result = false;
+
+        // by --markdown-export-store-only-url-regex
+        if ($this->markdownExportStoreOnlyUrlRegex) {
+            foreach ($this->markdownExportStoreOnlyUrlRegex as $storeOnlyUrlRegex) {
+                if (preg_match($storeOnlyUrlRegex, $visitedUrl->url) === 1) {
+                    $result = true;
+                    break;
+                }
+            }
+        } else {
+            $result = true;
+        }
+
+        // by --allow-domain-* for external domains
+        if ($result && $visitedUrl->isExternal) {
+            $parsedUrl = ParsedUrl::parse($visitedUrl->url);
+            if ($this->crawler->isExternalDomainAllowedForCrawling($parsedUrl->host)) {
+                $result = true;
+            } else if (($visitedUrl->isStaticFile() || $parsedUrl->isStaticFile()) && $this->crawler->isDomainAllowedForStaticFiles($parsedUrl->host)) {
+                $result = true;
+            } else {
+                $result = false;
+            }
+        }
+
+        // do not store robots.txt
+        if (basename($visitedUrl->url) === 'robots.txt') {
+            $result = false;
+        }
+
+        return $result;
     }
 
     public static function getOptions(): Options

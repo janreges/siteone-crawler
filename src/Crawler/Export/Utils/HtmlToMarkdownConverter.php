@@ -98,7 +98,8 @@ class HtmlToMarkdownConverter
         // --- Start Deduplication Logic ---
         // Split into blocks based on two or more newlines
         $blocks = preg_split('/\n{2,}/', $normalizedMarkdown);
-        $blocks = false; // temporary disabled duplicates removing
+        // Deduplication logic disabled for now as it's causing type errors
+        // $blocks = false; // temporary disabled duplicates removing
         if ($blocks === false || count($blocks) <= 1) {
             // No blocks or only one block, nothing to deduplicate
             return trim($normalizedMarkdown);
@@ -321,7 +322,7 @@ class HtmlToMarkdownConverter
             $isValidLink = false;
 
             // Check if it's a valid link for consecutive formatting purposes
-            if ($isPotentialLink) {
+            if ($isPotentialLink && $child instanceof \DOMElement) {
                 $href = $child->getAttribute('href');
                 // Must have href AND (non-empty text content OR an image child)
                 $textContent = trim($child->textContent);
@@ -536,7 +537,7 @@ class HtmlToMarkdownConverter
         return "\n\n" . rtrim($markdown) . "\n\n";
     }
 
-    // *** ORIGINAL convertTable (with improvements) ***
+    // *** CORRECTED convertTable ***
     private function convertTable(\DOMElement $node): string
     {
         if (!$this->convertTables) {
@@ -553,11 +554,23 @@ class HtmlToMarkdownConverter
         if ($thead) {
             $hasHeader = true;
             $tr = $thead->getElementsByTagName('tr')->item(0); // Assuming single header row
-            if ($tr) {
+            if (!$tr) {
+                // Handle case where <tr> is not present but <th> is a direct child of <thead>
+                $thElements = $thead->getElementsByTagName('th');
+                if ($thElements->length > 0) {
+                    $colIndex = 0;
+                    foreach ($thElements as $cell) {
+                        $content = $this->extractHeaderContent($cell);
+                        $headerCells[$colIndex] = $content;
+                        $maxColLengths[$colIndex] = max($maxColLengths[$colIndex] ?? 0, mb_strlen($content));
+                        $colIndex++;
+                    }
+                }
+            } else {
                 $colIndex = 0;
                 foreach ($tr->childNodes as $cell) {
                     if ($cell instanceof \DOMElement && ($cell->nodeName === 'th' || $cell->nodeName === 'td')) {
-                        $content = $this->collapseInlineWhitespace($this->getInnerMarkdown($cell));
+                        $content = $this->extractHeaderContent($cell);
                         $headerCells[$colIndex] = $content;
                         $maxColLengths[$colIndex] = max($maxColLengths[$colIndex] ?? 0, mb_strlen($content));
                         $colIndex++;
@@ -595,7 +608,7 @@ class HtmlToMarkdownConverter
                     if ($cell instanceof \DOMElement && ($cell->nodeName === 'th' || $cell->nodeName === 'td')) {
                         if ($cell->nodeName === 'th')
                             $isPotentialHeader = true;
-                        $content = $this->collapseInlineWhitespace($this->getInnerMarkdown($cell));
+                        $content = $this->extractHeaderContent($cell);
                         $potentialHeaderCells[$colIndex] = $content;
                         $maxColLengths[$colIndex] = max($maxColLengths[$colIndex] ?? 0, mb_strlen($content));
                         $colIndex++;
@@ -670,6 +683,59 @@ class HtmlToMarkdownConverter
         }
 
         return rtrim($markdown) . "\n\n"; // Ensure trailing newline
+    }
+
+    /**
+     * Helper method to extract header content from TH elements
+     * This special method handles nested structure commonly found in table headers
+     *
+     * @param \DOMElement $cell The header cell element (usually TH)
+     * @return string The extracted content with formatting preserved
+     */
+    private function extractHeaderContent(\DOMElement $cell): string
+    {
+        // First try normal inner markdown conversion
+        $content = $this->collapseInlineWhitespace($this->getInnerMarkdown($cell));
+        
+        // If content is empty after processing, try more direct extraction
+        if (empty(trim($content))) {
+            // Look for specific nested structure: div > p > strong
+            $divs = $cell->getElementsByTagName('div');
+            if ($divs->length > 0) {
+                foreach ($divs as $div) {
+                    $paragraphs = $div->getElementsByTagName('p');
+                    if ($paragraphs->length > 0) {
+                        foreach ($paragraphs as $p) {
+                            $strongs = $p->getElementsByTagName('strong');
+                            if ($strongs->length > 0) {
+                                return $this->strongDelimiter . trim($strongs->item(0)->textContent) . $this->strongDelimiter;
+                            } else {
+                                return trim($p->textContent);
+                            }
+                        }
+                    } else {
+                        // Just div with no paragraphs
+                        $strongs = $div->getElementsByTagName('strong');
+                        if ($strongs->length > 0) {
+                            return $this->strongDelimiter . trim($strongs->item(0)->textContent) . $this->strongDelimiter;
+                        } else {
+                            return trim($div->textContent);
+                        }
+                    }
+                }
+            }
+            
+            // If we still don't have content, try other specific elements
+            $strongs = $cell->getElementsByTagName('strong');
+            if ($strongs->length > 0) {
+                return $this->strongDelimiter . trim($strongs->item(0)->textContent) . $this->strongDelimiter;
+            }
+            
+            // Last resort - get direct text content of the cell
+            return trim($cell->textContent);
+        }
+        
+        return $content;
     }
 
     // *** NEW METHOD ***

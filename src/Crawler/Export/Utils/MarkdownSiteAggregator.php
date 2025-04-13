@@ -60,11 +60,11 @@ class MarkdownSiteAggregator
         }
         // Add content of all pages with their URLs
         foreach ($pages as $url => $lines) {
-            $resultLines[] = "--- URL: {$url} ---";
+            $resultLines[] = "⬇️ `URL: {$url}`\n\n---\n\n";
             foreach ($lines as $line) {
                 $resultLines[] = $line;
             }
-            $resultLines[] = "";  // separator empty line between pages
+            $resultLines[] = "\n\n---\n";  // separator empty line between pages
         }
         if (!empty($footerLines)) {
             // Remove the last empty line before footer, if present
