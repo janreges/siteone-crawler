@@ -117,7 +117,7 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
         // store all allowed URLs
         try {
             foreach ($exportedUrls as $exportedUrl) {
-                if ($this->isValidUrl($exportedUrl->url) && $this->shouldBeUrlStored($exportedUrl)) {
+                if (self::isValidUrl($exportedUrl->url) && $this->shouldBeUrlStored($exportedUrl)) {
                     $this->storeFile($exportedUrl);
                 }
             }
@@ -303,9 +303,24 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
         return $relativePath;
     }
 
-    private function isValidUrl(string $url): bool
+    public static function isValidUrl(string $url): bool
     {
-        return filter_var($url, FILTER_VALIDATE_URL) !== false;
+        // First try standard validation
+        if (filter_var($url, FILTER_VALIDATE_URL) !== false) {
+            return true;
+        }
+        
+        // If that fails, try with URL-encoded version for URLs with international characters
+        // This handles German umlauts (ä, ö, ü, ß) and other UTF-8 characters
+        $encodedUrl = preg_replace_callback(
+            '/[^\x20-\x7E]/',
+            function ($matches) {
+                return rawurlencode($matches[0]);
+            },
+            $url
+        );
+        
+        return filter_var($encodedUrl, FILTER_VALIDATE_URL) !== false;
     }
 
     public static function getOptions(): Options

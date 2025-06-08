@@ -221,10 +221,18 @@ class OfflineUrlConverter
             case TargetDomainRelation::INITIAL_DIFFERENT__BASE_SAME:
                 // browsing within the same base domain different from the initial domain
                 if (str_starts_with($this->relativeTargetUrl->path, '/')) {
-                    $this->relativeTargetUrl->changeDepth(
-                        $baseDepth,
-                        "Increased depth for '$baseDepth' because its path starts with '/'"
-                    );
+                    if ($baseDepth > 0) {
+                        $this->relativeTargetUrl->changeDepth(
+                            $baseDepth,
+                            "Increased depth for '$baseDepth' because its path starts with '/'"
+                        );
+                    } else {
+                        // For root level, just remove the leading slash
+                        $this->relativeTargetUrl->setPath(
+                            ltrim($this->relativeTargetUrl->path, '/'),
+                            "Removed leading slash for root level"
+                        );
+                    }
                 }
                 break;
 
@@ -250,10 +258,8 @@ class OfflineUrlConverter
                 break;
         }
 
-        // remove first slash from path if needed
-        if (str_starts_with($this->relativeTargetUrl->path, '/')) {
-            $this->relativeTargetUrl->setPath(ltrim($this->relativeTargetUrl->path, '/ '), "Remove first slash from path");
-        }
+        // Note: The changeDepth method already handles leading slash removal when adding '../' prefixes
+        // So we don't need to remove it again here - doing so could create malformed paths
     }
 
     private function isDomainAllowedForStaticFiles(string $domain): bool
@@ -281,6 +287,10 @@ class OfflineUrlConverter
      */
     public static function sanitizeFilePath(string $filePath, bool $keepFragment): string
     {
+        // First decode URL-encoded characters to get proper UTF-8 characters
+        // This converts %C3%BC to ü, %C3%B6 to ö, %E4%B8%AD to 中, etc.
+        $filePath = rawurldecode($filePath);
+        
         // transform query string to filename (small hash before extension)
         $parsedFilePath = parse_url($filePath);
         $pathWithExtension = preg_match('/^(.+)\.([a-z0-9]{1,10})/i', $parsedFilePath['path'] ?? '', $matches) === 1;
@@ -302,9 +312,29 @@ class OfflineUrlConverter
             }
         }
 
-        $dangerousCharacters = ['\\', ':', '%20', '%', '*', '?', '"', "'", '<', '>', '|', '+', ' '];
+        // Remove characters that are truly dangerous for filesystems across platforms
+        // These are forbidden in Windows: \ : * ? " < > |
+        // Note: Forward slash (/) is NOT dangerous - it's needed for directory structure!
+        // Additional problematic ones: control characters, null bytes
+        $dangerousCharacters = ['\\', ':', '*', '?', '"', '<', '>', '|'];
         $filePath = str_replace($dangerousCharacters, '_', $filePath);
-        $filePath = preg_replace('/_{2,}/', '_', $filePath); // remove multiple underscores
+        
+        // Replace control characters (0x00-0x1F), DEL (0x7F), and other problematic characters
+        // But preserve valid UTF-8 characters (including emojis, CJK, Arabic, etc.)
+        $filePath = preg_replace('/[\x00-\x1F\x7F]/u', '_', $filePath);
+        
+        // Handle filesystem-specific limitations
+        // Some filesystems have issues with:
+        // - Leading/trailing spaces
+        // - Reserved Windows names (CON, PRN, AUX, NUL, COM1-9, LPT1-9)
+        // Note: We should NOT trim dots as they may be part of relative paths like ../
+        $filePath = trim($filePath, " \t\n\r\0\x0B");
+        
+        // Replace multiple spaces with single underscore
+        $filePath = preg_replace('/\s+/', '_', $filePath);
+        
+        // Remove multiple underscores
+        $filePath = preg_replace('/_{2,}/', '_', $filePath);
 
         // when filepath is too long and there is a long filename, we replace filename with shorter md5 and the same extension
         // filepath length is calculated from root of offline website directory for better results
@@ -325,6 +355,25 @@ class OfflineUrlConverter
         // situation where I may need the folder "foo/next.js/" and the file "foo/next.js" or
         // "foo/template.com/" vs file "foo/template.com" (real cases from vercel.com)
         $filePath = preg_replace('/([^.]+)\.(' . $staticFilesExtensions . ')\//i', '$1.$2_/', $filePath);
+        
+        // Also handle any other dotted folder names that might conflict (e.g., "slozka.test/")
+        // This regex matches folder names with dots that aren't already handled by the above
+        // But skip domain names (starting with underscore or part of a domain path)
+        $filePath = preg_replace_callback('/([^\/]+)\.([a-z0-9]+)\//i', function($matches) use ($staticFilesExtensions) {
+            // Skip if this is a domain name (starts with underscore)
+            if (str_starts_with($matches[1], '_')) {
+                return $matches[0];
+            }
+            // Skip if this looks like a domain name (contains dots and common TLDs)
+            if (preg_match('/\.(com|org|net|dev|io|test|local|localhost)$/i', $matches[1] . '.' . $matches[2])) {
+                return $matches[0];
+            }
+            // Check if this extension was already handled by the previous regex
+            if (preg_match('/^(' . $staticFilesExtensions . ')$/i', $matches[2])) {
+                return $matches[0]; // Already handled
+            }
+            return $matches[1] . '.' . $matches[2] . '_/';
+        }, $filePath);
 
         // replace extensions of typical dynamic pages
         $filePath = preg_replace('/\.(action|asp|aspx|cfm|cfml|cgi|do|gsp|jsp|jspx|lasso|phtml|php3|php4|php5|php7|php8|php9|php|pl|py|rb|rbw|rhtml|shtml|srv|vm)$/i', '.$1.html', $filePath);

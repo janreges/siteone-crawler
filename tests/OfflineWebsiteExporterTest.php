@@ -173,4 +173,114 @@ class OfflineWebsiteExporterTest extends TestCase
             ['https://siteone.io/', 'https://unknown.com/', 'https://unknown.com/'],
         ];
     }
+
+    /**
+     * Test isValidUrl method with UTF-8 URLs
+     * @dataProvider utf8UrlProvider
+     */
+    public function testIsValidUrlWithUtf8($url, $expected)
+    {
+        $result = \Crawler\Export\OfflineWebsiteExporter::isValidUrl($url);
+        $this->assertEquals($expected, $result, "Failed for URL: $url");
+    }
+
+    /**
+     * @return array[]
+     */
+    public static function utf8UrlProvider(): array
+    {
+        return [
+            // Valid UTF-8 URLs
+            ['http://example.com/české-výrobky', true],
+            ['https://example.com/products/české-výrobky.html', true],
+            ['http://example.com/电子产品', true],
+            ['https://example.com/products/电子产品.html', true],
+            ['http://example.com/über-uns', true],
+            ['https://example.com/bücher', true],
+            ['http://example.com/o-nás', true],
+            ['https://example.com/联系我们', true],
+            ['http://example.com/příliš-žluťoučký', true],
+            ['https://example.com/größe-ändern', true],
+            ['http://example.com/süße-träume', true],
+            ['https://example.com/úžasné-věci', true],
+            ['http://example.com/žlutý-kůň', true],
+            ['https://example.com/新闻中心', true],
+            ['http://example.com/技术支持', true],
+            ['https://example.com/产品列表', true],
+            
+            // Mixed ASCII and UTF-8
+            ['http://example.com/page-české', true],
+            ['https://example.com/test_电子_page', true],
+            ['http://example.com/über-page-123', true],
+            
+            // URLs with query parameters containing UTF-8
+            ['http://example.com/search?q=české', true],
+            ['https://example.com/page?name=电子产品', true],
+            
+            // URLs with fragments containing UTF-8
+            ['http://example.com/page#české-sekce', true],
+            ['https://example.com/doc#电子部分', true],
+            
+            // Complex UTF-8 URLs
+            ['http://example.com/категория/товары/список', true], // Cyrillic
+            ['https://example.com/ελληνικά/σελίδα', true], // Greek
+            ['http://example.com/العربية/صفحة', true], // Arabic
+            ['https://example.com/日本語/ページ', true], // Japanese
+            ['http://example.com/한국어/페이지', true], // Korean
+            
+            // Invalid URLs (should still validate the URL structure)
+            ['not-a-url', false],
+            ['http://', false],
+            ['://example.com', false],
+            ['', false],
+            ['http://example.com:99999', false], // Invalid port
+        ];
+    }
+
+    /**
+     * Test convertUrlToRelative with UTF-8 URLs
+     * @dataProvider utf8ConvertUrlProvider
+     */
+    public function testConvertUrlToRelativeWithUtf8($baseUrl, $targetUrl, $expected, $attribute = null)
+    {
+        $result = $this->processor->convertUrlToRelative(\Crawler\ParsedUrl::parse($baseUrl), $targetUrl, $attribute);
+        $this->assertEquals($expected, $result);
+    }
+
+    /**
+     * @return array[]
+     */
+    public static function utf8ConvertUrlProvider(): array
+    {
+        return [
+            // UTF-8 URLs conversion
+            ["https://siteone.io/", "https://siteone.io/české-výrobky", "české-výrobky.html"],
+            ["https://siteone.io/", "https://siteone.io/products/české-výrobky", "products/české-výrobky.html"],
+            ["https://siteone.io/", "https://siteone.io/电子产品", "电子产品.html"],
+            ["https://siteone.io/", "https://siteone.io/über-uns", "über-uns.html"],
+            ["https://siteone.io/", "https://siteone.io/联系我们", "联系我们.html"],
+            ["https://siteone.io/", "https://siteone.io/o-nás", "o-nás.html"],
+            
+            // UTF-8 URLs with query strings
+            ["https://siteone.io/", "https://siteone.io/české?p=1", "české.cff19eeeeb.html"],
+            ["https://siteone.io/", "https://siteone.io/电子产品?id=123", "电子产品.c17f7d2a6e.html"],
+            
+            // UTF-8 URLs with fragments
+            ["https://siteone.io/", "https://siteone.io/české#sekce", "české.html#sekce"],
+            ["https://siteone.io/", "https://siteone.io/电子产品#部分", "电子产品.html#部分"],
+            
+            // Relative UTF-8 URLs
+            ["https://siteone.io/", "/české-výrobky", "české-výrobky.html"],
+            ["https://siteone.io/", "/products/电子产品", "products/电子产品.html"],
+            ["https://siteone.io/path/", "../über-uns", "../über-uns.html"],
+            
+            // UTF-8 URLs from different domains
+            ["https://siteone.io/", "https://nextjs.org/české", "_nextjs.org/české.html"],
+            ["https://siteone.io/", "https://svelte.dev/电子产品", "_svelte.dev/电子产品.html"],
+            
+            // Complex paths with UTF-8
+            ["https://siteone.io/products/", "https://siteone.io/products/české-výrobky/", "../products/české-výrobky/index.html"],
+            ["https://siteone.io/test/", "https://siteone.io/联系我们/info", "../联系我们/info.html"],
+        ];
+    }
 }

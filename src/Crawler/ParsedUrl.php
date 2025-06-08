@@ -198,7 +198,9 @@ class ParsedUrl
     {
         $newPath = $this->path;
         if ($change > 0) {
-            $newPath = str_repeat('../', $change) . ltrim($newPath, '/');
+            // First trim any leading slashes to ensure clean path
+            $cleanPath = ltrim($newPath, '/');
+            $newPath = str_repeat('../', $change) . $cleanPath;
         } else if ($change < 0) {
             $newPath = preg_replace('/\.\.\//', '', $newPath, abs($change));
         }

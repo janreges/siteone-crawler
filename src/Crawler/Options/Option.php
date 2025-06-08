@@ -246,8 +246,19 @@ class Option
             throw new Exception("Option {$this->name} ({$value}) must be valid PCRE regular expression");
         } else if ($this->type === Type::URL) {
             $value = is_string($value) ? $this->correctUrl($value) : null;
+            // First try standard validation
             if (!filter_var($value, FILTER_VALIDATE_URL)) {
-                throw new Exception("Option {$this->name} ({$value}) must be valid URL");
+                // If that fails, try with URL-encoded version for URLs with international characters
+                $encodedUrl = preg_replace_callback(
+                    '/[^\x20-\x7E]/',
+                    function ($matches) {
+                        return rawurlencode($matches[0]);
+                    },
+                    $value
+                );
+                if (!filter_var($encodedUrl, FILTER_VALIDATE_URL)) {
+                    throw new Exception("Option {$this->name} ({$value}) must be valid URL");
+                }
             }
         } else if ($this->type === Type::EMAIL && !filter_var($value, FILTER_VALIDATE_EMAIL)) {
             throw new Exception("Option {$this->name} ({$value}) must be valid email '{$value}'");
