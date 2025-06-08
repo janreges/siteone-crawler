@@ -61,7 +61,7 @@ jobs:
         
         # Clean up unnecessary files
         cd releases/${RELEASE_NAME}
-        rm -rf .git .github docs/ tests/ composer.json composer.lock package.json phpstan.neon phpunit.xml
+        rm -rf .git .github docs/ tests/ composer.json composer.lock package.json phpstan.neon phpunit.xml pack-sfx.php
         
         # Extract and copy Swoole binary
         cd ../..
@@ -95,7 +95,7 @@ jobs:
         
         # Clean up unnecessary files
         cd releases/${RELEASE_NAME}
-        rm -rf .git .github docs/ tests/ composer.json composer.lock package.json phpstan.neon phpunit.xml
+        rm -rf .git .github docs/ tests/ composer.json composer.lock package.json phpstan.neon phpunit.xml pack-sfx.php
         
         # Extract and copy Swoole binary
         cd ../..
@@ -129,7 +129,7 @@ jobs:
         
         # Clean up unnecessary files
         cd releases/${RELEASE_NAME}
-        rm -rf .git .github docs/ tests/ composer.json composer.lock package.json phpstan.neon phpunit.xml
+        rm -rf .git .github docs/ tests/ composer.json composer.lock package.json phpstan.neon phpunit.xml pack-sfx.php
         
         # Extract and copy Swoole binary
         cd ../..
@@ -163,7 +163,7 @@ jobs:
         
         # Clean up unnecessary files
         cd releases/${RELEASE_NAME}
-        rm -rf .git .github docs/ tests/ composer.json composer.lock package.json phpstan.neon phpunit.xml
+        rm -rf .git .github docs/ tests/ composer.json composer.lock package.json phpstan.neon phpunit.xml pack-sfx.php
         
         # Extract and copy Swoole binary
         cd ../..
@@ -197,7 +197,7 @@ jobs:
         
         # Clean up unnecessary files
         cd releases/${RELEASE_NAME}
-        rm -rf .git .github docs/ tests/ composer.json composer.lock package.json phpstan.neon phpunit.xml
+        rm -rf .git .github docs/ tests/ composer.json composer.lock package.json phpstan.neon phpunit.xml pack-sfx.php
         
         # Extract Windows Swoole
         cd ../..
