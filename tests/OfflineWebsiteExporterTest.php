@@ -83,10 +83,10 @@ class OfflineWebsiteExporterTest extends TestCase
             ["https://siteone.io", "https://siteone.io/page/", "page/index.html"],
             ["https://siteone.io/", "https://siteone.io/page?p=1", "page.cff19eeeeb.html"],
             ["https://siteone.io/t", "https://siteone.io/page?p=1", "page.cff19eeeeb.html"],
-            ["https://siteone.io/", "https://nextjs.org/page?p=1", "_nextjs.org_/page.cff19eeeeb.html"],
+            ["https://siteone.io/", "https://nextjs.org/page?p=1", "_nextjs.org/page.cff19eeeeb.html"],
             ["https://siteone.io/t/", "https://siteone.io/page#fragment", "../page.html#fragment"],
-            ["https://siteone.io/t/2/", "https://nextjs.org/page/extra/#fragment", "../../_nextjs.org_/page/extra/index.html#fragment"],
-            ["https://nextjs.org/z/3/", "https://svelte.dev/page?p=1#fragment", "../../../_svelte.dev_/page.cff19eeeeb.html#fragment"],
+            ["https://siteone.io/t/2/", "https://nextjs.org/page/extra/#fragment", "../../_nextjs.org/page/extra/index.html#fragment"],
+            ["https://nextjs.org/z/3/", "https://svelte.dev/page?p=1#fragment", "../../../_svelte.dev/page.cff19eeeeb.html#fragment"],
             ["https://siteone.io/", "https://siteone.io/page/?p=1#fragment", "page/index.cff19eeeeb.html#fragment"],
             ["https://siteone.io/path/", "https://siteone.io/path/page", "../path/page.html"],
             ["https://siteone.io/path/", "https://siteone.io/path/page/?p=1", "../path/page/index.cff19eeeeb.html"],
@@ -105,26 +105,26 @@ class OfflineWebsiteExporterTest extends TestCase
             ["https://siteone.io/path/", "../style.css?p=1", "../style.cff19eeeeb.css"],
 
             // Absolute URLs from different domain
-            ["https://siteone.io/", "https://nextjs.org/", "_nextjs.org_/index.html"],
-            ["https://siteone.io/t", "https://svelte.dev/", "_svelte.dev_/index.html"],
-            ["https://siteone.io/t/", "https://svelte.dev/x", "../_svelte.dev_/x.html"],
-            ["https://siteone.io/t/", "https://svelte.dev/x/file.css", "../_svelte.dev_/x/file.css"],
+            ["https://siteone.io/", "https://nextjs.org/", "_nextjs.org/index.html"],
+            ["https://siteone.io/t", "https://svelte.dev/", "_svelte.dev/index.html"],
+            ["https://siteone.io/t/", "https://svelte.dev/x", "../_svelte.dev/x.html"],
+            ["https://siteone.io/t/", "https://svelte.dev/x/file.css", "../_svelte.dev/x/file.css"],
 
             // Absolute backlink to initial domain and other domains
             ["https://nextjs.org/", "https://siteone.io/t/", "../t/index.html"],
             ["https://nextjs.org/subpage", "https://siteone.io/", "../index.html"],
             ["https://nextjs.org/subpage/", "https://siteone.io/a", "../../a.html"],
             ["https://nextjs.org/", "https://siteone.io/", "../index.html"],
-            ["https://nextjs.org/", "https://svelte.dev/page", "../_svelte.dev_/page.html"],
-            ["https://nextjs.org/subpage/", "https://svelte.dev/page/", "../../_svelte.dev_/page/index.html"],
+            ["https://nextjs.org/", "https://svelte.dev/page", "../_svelte.dev/page.html"],
+            ["https://nextjs.org/subpage/", "https://svelte.dev/page/", "../../_svelte.dev/page/index.html"],
             ["https://nextjs.org/", "/nextpage", "nextpage.html"],
             ["https://nextjs.org/next/", "/next/file.css?p=1", "../next/file.cff19eeeeb.css"],
 
             // Protocol-relative URLs
-            ["https://siteone.io/", "//nextjs.org/", "_nextjs.org_/index.html"],
+            ["https://siteone.io/", "//nextjs.org/", "_nextjs.org/index.html"],
             ["https://nextjs.org/", "//siteone.io/page", "../page.html"],
-            ["https://nextjs.org/", "//svelte.dev/page/", "../_svelte.dev_/page/index.html"],
-            ["https://nextjs.org/", "//svelte.dev/file.js", "../_svelte.dev_/file.js"],
+            ["https://nextjs.org/", "//svelte.dev/page/", "../_svelte.dev/page/index.html"],
+            ["https://nextjs.org/", "//svelte.dev/file.js", "../_svelte.dev/file.js"],
 
             // URLs with query string only
             ["https://siteone.io/", "?p=1", "index.cff19eeeeb.html"],
@@ -153,13 +153,13 @@ class OfflineWebsiteExporterTest extends TestCase
             ["https://siteone.io/path/more/", "../../../page/?p=1#fragment", "../../../page/index.cff19eeeeb.html#fragment"],
 
             // Other special cases - external CSS
-            ['https://cdn.siteone.io/siteone.io/css/styles.css', 'https://cdn.webflow.com/a/b1.jpg', '../../../_cdn.webflow.com_/a/b1.jpg'],
-            ['https://cdn.siteone.io/siteone.io/css/hello/hi/styles.css', 'https://cdn.webflow.com/b2.jpg', '../../../../../_cdn.webflow.com_/b2.jpg'],
+            ['https://cdn.siteone.io/siteone.io/css/styles.css', 'https://cdn.webflow.com/a/b1.jpg', '../../../_cdn.webflow.com/a/b1.jpg'],
+            ['https://cdn.siteone.io/siteone.io/css/hello/hi/styles.css', 'https://cdn.webflow.com/b2.jpg', '../../../../../_cdn.webflow.com/b2.jpg'],
             ['https://cdn.siteone.io/siteone.io/css/hello/hi/styles.css', 'https://siteone.io/test/image.jpg', '../../../../../test/image.jpg'],
             ['https://cdn.siteone.io/siteone.io/css/styles.css', '/abt.jpg', '../../abt.jpg'],
             ['https://cdn.siteone.io/siteone.io/css/styles.css', '../abz.jpg', '../abz.jpg'],
-            ['https://cdn.siteone.io/siteone.io/css/hello/hi/styles.css', 'https://cdn.webflow.com/b2d.jpg', '../../../../../_cdn.webflow.com_/b2d.jpg'],
-            ['https://cdn.siteone.io/siteone.io/css/hello/hi/styles.css', 'https://cdn.webflow.com/slozka.test/b2d.jpg', '../../../../../_cdn.webflow.com_/slozka.test_/b2d.jpg'],
+            ['https://cdn.siteone.io/siteone.io/css/hello/hi/styles.css', 'https://cdn.webflow.com/b2d.jpg', '../../../../../_cdn.webflow.com/b2d.jpg'],
+            ['https://cdn.siteone.io/siteone.io/css/hello/hi/styles.css', 'https://cdn.webflow.com/slozka.test/b2d.jpg', '../../../../../_cdn.webflow.com/slozka.test/b2d.jpg'],
 
             // Other special cases - dynamic images with needed extension estimation
             ['https://nextjs.org/', 'https://nextjs.org/_next/image?url=%2F_next%2Fstatic%2Fmedia%2Fpreview-audible.6063405a.png&w=640&q=75&dpl=dpl_4C87ukg3PhFXfiHatxfw16hpDnFr', '_next/image.9580c6e093.png', 'src'],
