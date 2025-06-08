@@ -794,8 +794,17 @@ class BestPracticeAnalyzer extends BaseAnalyzer implements Analyzer
             return $url->contentTypeHeader === 'image/webp';
         });
 
+        // Check if AVIF is already supported (AVIF is more modern than WebP)
+        $avifImages = array_filter($urls, function (VisitedUrl $url) {
+            return $url->contentTypeHeader === 'image/avif';
+        });
+
         if ($webpImages) {
             $this->status->addOkToSummary($summaryAplCode, count($webpImages) . ' WebP image(s) found on the website.');
+        } elseif ($avifImages) {
+            // If AVIF is supported, don't warn about missing WebP
+            $this->status->addOkToSummary($summaryAplCode, 'No WebP images found, but AVIF (more modern format) is supported with ' . count($avifImages) . ' image(s).');
+            return $this->getAnalysisResult(self::ANALYSIS_WEBP_SUPPORT, 1, 0, 0, 0);
         } else {
             $this->status->addWarningToSummary($summaryAplCode, 'No WebP image found on the website.');
         }
