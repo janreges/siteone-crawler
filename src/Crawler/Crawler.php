@@ -477,11 +477,17 @@ class Crawler
                 $httpResponse = HttpResponse::createSkipped($finalUrlForHttpClient, "URL with basename '{$urlBaseName}' has more than " . $this->options->maxNon200ResponsesPerBasename . " non-200 responses (" . $this->non200BasenamesToOccurrences[$urlBaseName] . ").");
             } else {
                 $port = $parsedUrl->port ?: ($scheme === 'https' ? 443 : 80);
+                
+                // Apply URL transformations for HTTP request
+                $transformedRequest = $this->applyHttpRequestTransformations($parsedUrl->host, $finalUrlForHttpClient);
+                $httpRequestHost = $transformedRequest['host'];
+                $httpRequestPath = $transformedRequest['path'];
+                
                 $httpResponse = $this->httpClient->request(
-                    $parsedUrl->host,
+                    $httpRequestHost,
                     $port,
                     $scheme,
-                    $finalUrlForHttpClient,
+                    $httpRequestPath,
                     'GET',
                     $this->options->timeout,
                     $this->finalUserAgent,
@@ -489,7 +495,7 @@ class Crawler
                     $this->options->acceptEncoding,
                     $setOrigin ? $origin : null,
                     $useHttpAuthIfConfigured,
-                    $this->getForcedIpForDomainAndPort($parsedUrl->host, $port)
+                    $this->getForcedIpForDomainAndPort($httpRequestHost, $port)
                 );
             }
 
@@ -975,6 +981,59 @@ class Crawler
     }
 
     /**
+     * Apply URL transformations for HTTP request based on --transform-url options
+     * This transforms the host and potentially the path for the actual HTTP request
+     * @param string $host
+     * @param string $path
+     * @return array{host: string, path: string}
+     */
+    public function applyHttpRequestTransformations(string $host, string $path): array
+    {
+        if (empty($this->options->transformUrl)) {
+            return ['host' => $host, 'path' => $path];
+        }
+        
+        // Reconstruct full URL for transformation
+        $fullUrl = $host . $path;
+        $originalUrl = $fullUrl;
+        
+        foreach ($this->options->transformUrl as $transform) {
+            $parts = explode('->', $transform);
+            if (count($parts) !== 2) {
+                continue;
+            }
+            
+            $from = trim($parts[0]);
+            $to = trim($parts[1]);
+            
+            // Check if it's a regex pattern
+            if (preg_match('/^([\/#~%]).*\1[a-z]*$/i', $from)) {
+                // Regex replacement
+                $newUrl = @preg_replace($from, $to, $fullUrl);
+                if ($newUrl !== null) {
+                    $fullUrl = $newUrl;
+                }
+            } else {
+                // Simple string replacement
+                $fullUrl = str_replace($from, $to, $fullUrl);
+            }
+        }
+        
+        // Debug output if URL was transformed
+        if ($fullUrl !== $originalUrl) {
+            Debugger::debug('http-request-transformation', "Transformed HTTP request: '{$originalUrl}' -> '{$fullUrl}'");
+            $this->output->addNotice("HTTP request transformed: '{$originalUrl}' -> '{$fullUrl}'");
+        }
+        
+        // Parse transformed URL back to host and path
+        $parsedUrl = parse_url('http://' . $fullUrl);
+        $newHost = $parsedUrl['host'] ?? $host;
+        $newPath = ($parsedUrl['path'] ?? '/') . (isset($parsedUrl['query']) ? '?' . $parsedUrl['query'] : '');
+        
+        return ['host' => $newHost, 'path' => $newPath];
+    }
+
+    /**
      * @return int[]
      */
     public static function getContentTypeIds(): array
@@ -1152,11 +1211,17 @@ class Crawler
             $ports = $extraPort ? [$extraPort] : [443, 80];
             foreach ($ports as $port) {
                 $httpClient = new HttpClient($proxy, $httpAuth, null);
+                
+                // Apply URL transformations for robots.txt request
+                $transformedRequest = $crawler->applyHttpRequestTransformations($domain, '/robots.txt');
+                $robotsTxtHost = $transformedRequest['host'];
+                $robotsTxtPath = $transformedRequest['path'];
+                
                 $robotsTxtResponse = $httpClient->request(
-                    $domain,
+                    $robotsTxtHost,
                     $port,
                     $port === 443 ? 'https' : 'http', // warning: this will not work for HTTPS with non-standard port
-                    '/robots.txt',
+                    $robotsTxtPath,
                     'GET',
                     3,
                     self::getCrawlerUserAgentSignature(),
@@ -1164,7 +1229,7 @@ class Crawler
                     'gzip, deflate, br',
                     null,
                     $useHttpAuthIfConfigured,
-                    $crawler->getForcedIpForDomainAndPort($domain, $port)
+                    $crawler->getForcedIpForDomainAndPort($robotsTxtHost, $port)
                 );
                 self::$loadedRobotsTxtCount++;
 

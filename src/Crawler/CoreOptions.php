@@ -105,6 +105,12 @@ class CoreOptions
     public ?string $analyzerFilterRegex = null;
     public bool $addRandomQueryParams = false;
     public bool $removeQueryParams = false;
+    
+    /**
+     * Transform URLs before crawling with `from -> to` or regexp format
+     * @var string[]
+     */
+    public array $transformUrl = [];
 
     // experts settings
 
@@ -239,6 +245,7 @@ class CoreOptions
             new Option('--accept-encoding', null, 'acceptEncoding', Type::STRING, false, 'Set `Accept-Encoding` request header.', 'gzip, deflate, br', false),
             new Option('--remove-query-params', '-rqp', 'removeQueryParams', Type::BOOL, false, 'Remove URL query parameters from crawled URLs.', false, false),
             new Option('--add-random-query-params', '-arqp', 'addRandomQueryParams', Type::BOOL, false, 'Add random query parameters to each crawled URL.', false, false),
+            new Option('--transform-url', '-tu', 'transformUrl', Type::REPLACE_CONTENT, true, "Transform URLs before crawling. Format: `from -> to` or `/regex/ -> replacement`. Example: `live-site.com -> local-site.local` or `/live-site\\.com\\/wp/ -> local-site.local/`. Can be specified multiple times.", null, true, true),
             new Option('--ignore-robots-txt', '-irt', 'ignoreRobotsTxt', Type::BOOL, false, 'Should robots.txt content be ignored? Useful for crawling an otherwise private/unindexed site.', false, false),
             new Option('--max-queue-length', '-mql', 'maxQueueLength', Type::INT, false, 'Max URL queue length. It affects memory requirements.', 9000, false),
             new Option('--max-visited-urls', '-mvu', 'maxVisitedUrls', Type::INT, false, 'Max visited URLs. It affects memory requirements.', 10000, false),

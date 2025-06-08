@@ -263,6 +263,8 @@ required arguments:
   --analyzer-filter-regex="/^.*$/i" \
   --remove-query-params \
   --add-random-query-params \
+  --transform-url="live-site.com -> local-site.local" \
+  --transform-url="/cdn\.live-site\.com/ -> local-site.local/cdn" \
   --show-scheme-and-host \
   --do-not-truncate-url \
   --output-html-report=tmp/myreport.html \
@@ -363,6 +365,7 @@ For a clearer list, I recommend going to the documentation: 🌐 https://crawler
 | `--accept-encoding=<val>` | Custom `Accept-Encoding` request header. Default is `gzip, deflate, br`. |
 | `--remove-query-params` | Remove query parameters from found URLs. Useful on websites where a lot of links<br>are made to the same pages, only with different irrelevant query parameters. |
 | `--add-random-query-params` | Adds several random query parameters to each URL.<br>With this, it is possible to bypass certain forms of server and CDN caches. |
+| `--transform-url=<from->to>` | Transform URLs before crawling. Use `from -> to` format for simple replacement or `/regex/ -> replacement` for pattern matching.<br>Useful when archiving sites that reference different domains.<br>Example: `--transform-url="live-site.com -> local-site.local"`.<br>Can be specified multiple times. |
 | `--ignore-robots-txt` | Should robots.txt content be ignored? Useful for crawling an otherwise internal/private/unindexed site. |
 | `--http-cache-dir=<dir>` | Cache dir for HTTP responses. You can disable cache by `--http-cache-dir='off'`.<br>Default values is `tmp/http-client-cache`. |
 | `--http-cache-compression` | Enable compression for HTTP cache storage. Saves disk space, but uses more CPU. |
