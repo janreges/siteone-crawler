@@ -61,13 +61,17 @@ jobs:
         
         # Clean up unnecessary files
         cd releases/${RELEASE_NAME}
-        rm -rf .git .github
+        rm -rf .git .github docs/ tests/ composer.json composer.lock package.json phpstan.neon phpunit.xml
         
         # Extract and copy Swoole binary
         cd ../..
+        # Remove existing Linux x64 binary
+        rm -f releases/${RELEASE_NAME}/bin/swoole-cli
         tar -xf swoole-downloads/swoole-cli-v6.0.1-linux-arm64.tar.xz
         cp swoole-cli releases/${RELEASE_NAME}/bin/
         chmod +x releases/${RELEASE_NAME}/bin/swoole-cli
+        # Clean up extracted binary
+        rm -f swoole-cli
         
         # Create tar.gz archive
         cd releases
@@ -91,13 +95,17 @@ jobs:
         
         # Clean up unnecessary files
         cd releases/${RELEASE_NAME}
-        rm -rf .git .github
+        rm -rf .git .github docs/ tests/ composer.json composer.lock package.json phpstan.neon phpunit.xml
         
         # Extract and copy Swoole binary
         cd ../..
+        # Remove existing Linux x64 binary (if any)
+        rm -f releases/${RELEASE_NAME}/bin/swoole-cli
         tar -xf swoole-downloads/swoole-cli-v6.0.1-linux-x64.tar.xz
         cp swoole-cli releases/${RELEASE_NAME}/bin/
         chmod +x releases/${RELEASE_NAME}/bin/swoole-cli
+        # Clean up extracted binary
+        rm -f swoole-cli
         
         # Create tar.gz archive
         cd releases
@@ -121,13 +129,17 @@ jobs:
         
         # Clean up unnecessary files
         cd releases/${RELEASE_NAME}
-        rm -rf .git .github
+        rm -rf .git .github docs/ tests/ composer.json composer.lock package.json phpstan.neon phpunit.xml
         
         # Extract and copy Swoole binary
         cd ../..
+        # Remove existing Linux x64 binary
+        rm -f releases/${RELEASE_NAME}/bin/swoole-cli
         tar -xf swoole-downloads/swoole-cli-v6.0.1-macos-arm64.tar.xz
         cp swoole-cli releases/${RELEASE_NAME}/bin/
         chmod +x releases/${RELEASE_NAME}/bin/swoole-cli
+        # Clean up extracted binary
+        rm -f swoole-cli
         
         # Create tar.gz archive
         cd releases
@@ -151,13 +163,17 @@ jobs:
         
         # Clean up unnecessary files
         cd releases/${RELEASE_NAME}
-        rm -rf .git .github
+        rm -rf .git .github docs/ tests/ composer.json composer.lock package.json phpstan.neon phpunit.xml
         
         # Extract and copy Swoole binary
         cd ../..
+        # Remove existing Linux x64 binary
+        rm -f releases/${RELEASE_NAME}/bin/swoole-cli
         tar -xf swoole-downloads/swoole-cli-v6.0.1-macos-x64.tar.xz
         cp swoole-cli releases/${RELEASE_NAME}/bin/
         chmod +x releases/${RELEASE_NAME}/bin/swoole-cli
+        # Clean up extracted binary
+        rm -f swoole-cli
         
         # Create tar.gz archive
         cd releases
@@ -181,10 +197,12 @@ jobs:
         
         # Clean up unnecessary files
         cd releases/${RELEASE_NAME}
-        rm -rf .git .github
+        rm -rf .git .github docs/ tests/ composer.json composer.lock package.json phpstan.neon phpunit.xml
         
         # Extract Windows Swoole
         cd ../..
+        # Remove existing Linux x64 binary
+        rm -f releases/${RELEASE_NAME}/bin/swoole-cli
         unzip -q swoole-downloads/swoole-cli-v6.0.1-cygwin-x64.zip
         
         # Copy Windows binaries and DLLs
