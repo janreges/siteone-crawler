@@ -1,0 +1,183 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.0.9)'
+        required: true
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Get version
+      id: get_version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          VERSION="${{ github.event.inputs.version }}"
+        else
+          VERSION=${GITHUB_REF#refs/tags/v}
+        fi
+        echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+        echo "Building version: ${VERSION}"
+    
+    - name: Download Swoole binaries
+      run: |
+        mkdir -p swoole-downloads
+        cd swoole-downloads
+        
+        # Download all Swoole binaries
+        wget https://github.com/swoole/swoole-cli/releases/download/v6.0.1.0/swoole-cli-v6.0.1-cygwin-x64.zip
+        wget https://github.com/swoole/swoole-cli/releases/download/v6.0.1.0/swoole-cli-v6.0.1-linux-arm64.tar.xz
+        wget https://github.com/swoole/swoole-cli/releases/download/v6.0.1.0/swoole-cli-v6.0.1-linux-x64.tar.xz
+        wget https://github.com/swoole/swoole-cli/releases/download/v6.0.1.0/swoole-cli-v6.0.1-macos-arm64.tar.xz
+        wget https://github.com/swoole/swoole-cli/releases/download/v6.0.1.0/swoole-cli-v6.0.1-macos-x64.tar.xz
+    
+    - name: Prepare Linux ARM64 release
+      run: |
+        VERSION=${{ steps.get_version.outputs.VERSION }}
+        RELEASE_NAME="siteone-crawler-v${VERSION}-linux-arm64"
+        
+        # Create release directory
+        mkdir -p releases/${RELEASE_NAME}
+        cp -r * releases/${RELEASE_NAME}/ || true
+        
+        # Clean up unnecessary files
+        cd releases/${RELEASE_NAME}
+        rm -rf .git .github releases swoole-downloads
+        
+        # Extract and copy Swoole binary
+        cd ../..
+        tar -xf swoole-downloads/swoole-cli-v6.0.1-linux-arm64.tar.xz
+        cp swoole-cli releases/${RELEASE_NAME}/bin/
+        chmod +x releases/${RELEASE_NAME}/bin/swoole-cli
+        
+        # Create tar.gz archive
+        cd releases
+        tar -czf ${RELEASE_NAME}.tar.gz ${RELEASE_NAME}
+        rm -rf ${RELEASE_NAME}
+    
+    - name: Prepare Linux x64 release
+      run: |
+        VERSION=${{ steps.get_version.outputs.VERSION }}
+        RELEASE_NAME="siteone-crawler-v${VERSION}-linux-x64"
+        
+        # Create release directory
+        mkdir -p releases/${RELEASE_NAME}
+        cp -r * releases/${RELEASE_NAME}/ || true
+        
+        # Clean up unnecessary files
+        cd releases/${RELEASE_NAME}
+        rm -rf .git .github releases swoole-downloads
+        
+        # Extract and copy Swoole binary
+        cd ../..
+        tar -xf swoole-downloads/swoole-cli-v6.0.1-linux-x64.tar.xz
+        cp swoole-cli releases/${RELEASE_NAME}/bin/
+        chmod +x releases/${RELEASE_NAME}/bin/swoole-cli
+        
+        # Create tar.gz archive
+        cd releases
+        tar -czf ${RELEASE_NAME}.tar.gz ${RELEASE_NAME}
+        rm -rf ${RELEASE_NAME}
+    
+    - name: Prepare macOS ARM64 release
+      run: |
+        VERSION=${{ steps.get_version.outputs.VERSION }}
+        RELEASE_NAME="siteone-crawler-v${VERSION}-macos-arm64"
+        
+        # Create release directory
+        mkdir -p releases/${RELEASE_NAME}
+        cp -r * releases/${RELEASE_NAME}/ || true
+        
+        # Clean up unnecessary files
+        cd releases/${RELEASE_NAME}
+        rm -rf .git .github releases swoole-downloads
+        
+        # Extract and copy Swoole binary
+        cd ../..
+        tar -xf swoole-downloads/swoole-cli-v6.0.1-macos-arm64.tar.xz
+        cp swoole-cli releases/${RELEASE_NAME}/bin/
+        chmod +x releases/${RELEASE_NAME}/bin/swoole-cli
+        
+        # Create tar.gz archive
+        cd releases
+        tar -czf ${RELEASE_NAME}.tar.gz ${RELEASE_NAME}
+        rm -rf ${RELEASE_NAME}
+    
+    - name: Prepare macOS x64 release
+      run: |
+        VERSION=${{ steps.get_version.outputs.VERSION }}
+        RELEASE_NAME="siteone-crawler-v${VERSION}-macos-x64"
+        
+        # Create release directory
+        mkdir -p releases/${RELEASE_NAME}
+        cp -r * releases/${RELEASE_NAME}/ || true
+        
+        # Clean up unnecessary files
+        cd releases/${RELEASE_NAME}
+        rm -rf .git .github releases swoole-downloads
+        
+        # Extract and copy Swoole binary
+        cd ../..
+        tar -xf swoole-downloads/swoole-cli-v6.0.1-macos-x64.tar.xz
+        cp swoole-cli releases/${RELEASE_NAME}/bin/
+        chmod +x releases/${RELEASE_NAME}/bin/swoole-cli
+        
+        # Create tar.gz archive
+        cd releases
+        tar -czf ${RELEASE_NAME}.tar.gz ${RELEASE_NAME}
+        rm -rf ${RELEASE_NAME}
+    
+    - name: Prepare Windows x64 release
+      run: |
+        VERSION=${{ steps.get_version.outputs.VERSION }}
+        RELEASE_NAME="siteone-crawler-v${VERSION}-win-x64"
+        
+        # Create release directory
+        mkdir -p releases/${RELEASE_NAME}
+        cp -r * releases/${RELEASE_NAME}/ || true
+        
+        # Clean up unnecessary files
+        cd releases/${RELEASE_NAME}
+        rm -rf .git .github releases swoole-downloads
+        
+        # Extract Windows Swoole
+        cd ../..
+        unzip -q swoole-downloads/swoole-cli-v6.0.1-cygwin-x64.zip
+        
+        # Copy Windows binaries and DLLs
+        cp swoole-cli-v6.0.1-cygwin-x64/bin/* releases/${RELEASE_NAME}/bin/
+        
+        # Copy etc/pki structure
+        cp -r swoole-cli-v6.0.1-cygwin-x64/etc releases/${RELEASE_NAME}/
+        
+        # Create zip archive
+        cd releases
+        zip -q -r ${RELEASE_NAME}.zip ${RELEASE_NAME}
+        rm -rf ${RELEASE_NAME}
+    
+    - name: Upload release artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-packages
+        path: releases/*
+        retention-days: 7
+    
+    - name: Create Release
+      if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: releases/*
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
