@@ -339,7 +339,13 @@ class Utils
                 $width = 138;
             }
         } else {
-            $width = intval(@shell_exec('tput cols') ?: 138);
+            // Check if we're in a non-interactive environment (e.g., cron job)
+            // If TERM is not set or we're not in a TTY, use default width
+            if (!getenv('TERM') || !function_exists('posix_isatty') || !posix_isatty(STDOUT)) {
+                $width = 138;
+            } else {
+                $width = intval(@shell_exec('tput cols') ?: 138);
+            }
         }
 
         $width = max($width, 100);
