@@ -273,13 +273,7 @@ class ParsedUrl
                 if (str_ends_with($baseUrl->path, '/')) {
                     $url = $baseUrl->path . substr($url, 2);
                 } else {
-                    $dir = dirname($baseUrl->path);
-                    $file = substr($url, 2);
-                    if ($dir === '/') {
-                        $url = '/' . $file;
-                    } else {
-                        $url = $dir . '/' . $file;
-                    }
+                    $url = dirname($baseUrl->path) . substr($url, 1);
                 }
             } else if (!str_starts_with($url, 'http:') && !str_starts_with($url, 'https:') && preg_match('/^[a-z0-9_]/i', $url) === 1) {
                 // URL is relative to base URL by xyz/abc
