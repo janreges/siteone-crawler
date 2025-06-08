@@ -246,6 +246,10 @@ class Option
             throw new Exception("Option {$this->name} ({$value}) must be valid PCRE regular expression");
         } else if ($this->type === Type::URL) {
             $value = is_string($value) ? $this->correctUrl($value) : null;
+            // Check if value is null or empty
+            if ($value === null || $value === '') {
+                throw new Exception("Option {$this->name} must be valid URL (starting with http:// or https://)");
+            }
             // First try standard validation
             if (!filter_var($value, FILTER_VALIDATE_URL)) {
                 // If that fails, try with URL-encoded version for URLs with international characters
