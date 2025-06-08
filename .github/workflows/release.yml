@@ -24,6 +24,8 @@ jobs:
       run: |
         if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
           VERSION="${{ github.event.inputs.version }}"
+          # Remove 'v' prefix if present
+          VERSION="${VERSION#v}"
         else
           VERSION=${GITHUB_REF#refs/tags/v}
         fi
@@ -49,11 +51,17 @@ jobs:
         
         # Create release directory
         mkdir -p releases/${RELEASE_NAME}
-        cp -r * releases/${RELEASE_NAME}/ || true
+        
+        # Copy project files (excluding certain directories)
+        for item in *; do
+          if [ "$item" != "releases" ] && [ "$item" != "swoole-downloads" ]; then
+            cp -r "$item" "releases/${RELEASE_NAME}/"
+          fi
+        done
         
         # Clean up unnecessary files
         cd releases/${RELEASE_NAME}
-        rm -rf .git .github releases swoole-downloads
+        rm -rf .git .github
         
         # Extract and copy Swoole binary
         cd ../..
@@ -64,7 +72,7 @@ jobs:
         # Create tar.gz archive
         cd releases
         tar -czf ${RELEASE_NAME}.tar.gz ${RELEASE_NAME}
-        rm -rf ${RELEASE_NAME}
+        sudo rm -rf ${RELEASE_NAME}
     
     - name: Prepare Linux x64 release
       run: |
@@ -73,11 +81,17 @@ jobs:
         
         # Create release directory
         mkdir -p releases/${RELEASE_NAME}
-        cp -r * releases/${RELEASE_NAME}/ || true
+        
+        # Copy project files (excluding certain directories)
+        for item in *; do
+          if [ "$item" != "releases" ] && [ "$item" != "swoole-downloads" ]; then
+            cp -r "$item" "releases/${RELEASE_NAME}/"
+          fi
+        done
         
         # Clean up unnecessary files
         cd releases/${RELEASE_NAME}
-        rm -rf .git .github releases swoole-downloads
+        rm -rf .git .github
         
         # Extract and copy Swoole binary
         cd ../..
@@ -88,7 +102,7 @@ jobs:
         # Create tar.gz archive
         cd releases
         tar -czf ${RELEASE_NAME}.tar.gz ${RELEASE_NAME}
-        rm -rf ${RELEASE_NAME}
+        sudo rm -rf ${RELEASE_NAME}
     
     - name: Prepare macOS ARM64 release
       run: |
@@ -97,11 +111,17 @@ jobs:
         
         # Create release directory
         mkdir -p releases/${RELEASE_NAME}
-        cp -r * releases/${RELEASE_NAME}/ || true
+        
+        # Copy project files (excluding certain directories)
+        for item in *; do
+          if [ "$item" != "releases" ] && [ "$item" != "swoole-downloads" ]; then
+            cp -r "$item" "releases/${RELEASE_NAME}/"
+          fi
+        done
         
         # Clean up unnecessary files
         cd releases/${RELEASE_NAME}
-        rm -rf .git .github releases swoole-downloads
+        rm -rf .git .github
         
         # Extract and copy Swoole binary
         cd ../..
@@ -112,7 +132,7 @@ jobs:
         # Create tar.gz archive
         cd releases
         tar -czf ${RELEASE_NAME}.tar.gz ${RELEASE_NAME}
-        rm -rf ${RELEASE_NAME}
+        sudo rm -rf ${RELEASE_NAME}
     
     - name: Prepare macOS x64 release
       run: |
@@ -121,11 +141,17 @@ jobs:
         
         # Create release directory
         mkdir -p releases/${RELEASE_NAME}
-        cp -r * releases/${RELEASE_NAME}/ || true
+        
+        # Copy project files (excluding certain directories)
+        for item in *; do
+          if [ "$item" != "releases" ] && [ "$item" != "swoole-downloads" ]; then
+            cp -r "$item" "releases/${RELEASE_NAME}/"
+          fi
+        done
         
         # Clean up unnecessary files
         cd releases/${RELEASE_NAME}
-        rm -rf .git .github releases swoole-downloads
+        rm -rf .git .github
         
         # Extract and copy Swoole binary
         cd ../..
@@ -136,7 +162,7 @@ jobs:
         # Create tar.gz archive
         cd releases
         tar -czf ${RELEASE_NAME}.tar.gz ${RELEASE_NAME}
-        rm -rf ${RELEASE_NAME}
+        sudo rm -rf ${RELEASE_NAME}
     
     - name: Prepare Windows x64 release
       run: |
@@ -145,11 +171,17 @@ jobs:
         
         # Create release directory
         mkdir -p releases/${RELEASE_NAME}
-        cp -r * releases/${RELEASE_NAME}/ || true
+        
+        # Copy project files (excluding certain directories)
+        for item in *; do
+          if [ "$item" != "releases" ] && [ "$item" != "swoole-downloads" ]; then
+            cp -r "$item" "releases/${RELEASE_NAME}/"
+          fi
+        done
         
         # Clean up unnecessary files
         cd releases/${RELEASE_NAME}
-        rm -rf .git .github releases swoole-downloads
+        rm -rf .git .github
         
         # Extract Windows Swoole
         cd ../..
@@ -164,7 +196,11 @@ jobs:
         # Create zip archive
         cd releases
         zip -q -r ${RELEASE_NAME}.zip ${RELEASE_NAME}
-        rm -rf ${RELEASE_NAME}
+        
+        # Clean up - use sudo for files with permission issues
+        sudo rm -rf ${RELEASE_NAME}
+        cd ..
+        sudo rm -rf swoole-cli-v6.0.1-cygwin-x64
     
     - name: Upload release artifacts
       uses: actions/upload-artifact@v4
