@@ -27,7 +27,7 @@
     },
     "scripts": {
       "test": "phpunit --color=always --testdox",
-      "phpstan": "phpstan analyse",
+      "phpstan": "phpstan analyse --memory-limit=1024M",
       "changelog": "auto-changelog --commit-limit false --sort-commits date-desc --package --hide-credit"
     }
 }

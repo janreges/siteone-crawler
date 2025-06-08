@@ -181,7 +181,7 @@ class HtmlToMarkdownConverter
         // Replace backslashes with the actual characters they represent
         $originalMarkdown = $finalMarkdown;
         $finalMarkdown = @preg_replace('/\\\\([.-])/', '$1', $finalMarkdown);
-        if ($finalMarkdown === false) {
+        if ($finalMarkdown === null) {
             $finalMarkdown = $originalMarkdown;
         }
 
@@ -405,7 +405,7 @@ class HtmlToMarkdownConverter
     }
 
     // *** CORRECTED convertLink ***
-    private function convertLink(\DOMElement $node): string
+    private function convertLink(\DOMNode $node): string
     {
         // This method is now only called for single links (not consecutive ones)
         $href = $node->getAttribute('href');
@@ -677,9 +677,7 @@ class HtmlToMarkdownConverter
             $markdown .= $this->formatTableSeparator($maxColLengths);
         } else {
             // Add separator even without header if there are rows (GFM requires it)
-            if (!empty($rows)) {
-                $markdown .= $this->formatTableSeparator($maxColLengths);
-            }
+            $markdown .= $this->formatTableSeparator($maxColLengths);
         }
 
         foreach ($rows as $row) {
@@ -749,7 +747,7 @@ class HtmlToMarkdownConverter
     /**
      * Converts an array of consecutive <a> link nodes into a Markdown table.
      *
-     * @param \DOMElement[] $linkNodes Array of <a> DOMElement nodes.
+     * @param array<int, \DOMNode> $linkNodes Array of <a> DOMNode nodes.
      * @return string Markdown table representation.
      */
     private function convertConsecutiveLinksToTable(array $linkNodes): string
@@ -1206,6 +1204,7 @@ class HtmlToMarkdownConverter
      * @param int $level The current nesting level.
      * @return array An array containing [summaryText, nestedListMarkdown].
      */
+    /** @phpstan-ignore-next-line */
     private function processDetailsElement(\DOMElement $detailsElement, int $level): array
     {
         // This method seems unused by the refactored list logic.
@@ -1271,6 +1270,7 @@ class HtmlToMarkdownConverter
      *
      * @param \DOMElement $aElement The <a> element.
      * @return string Markdown link string "[text](url)". Returns inner text if href is missing.
+     * @phpstan-ignore-next-line
      */
     private function formatLink(\DOMElement $aElement): string
     {

@@ -51,7 +51,6 @@ class UploadExporter extends BaseExporter implements Exporter
 
     /**
      * @param string $html
-     * @param int $timeout
      * @return string
      * @throws Exception
      */

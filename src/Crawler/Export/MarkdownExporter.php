@@ -273,7 +273,7 @@ class MarkdownExporter extends BaseExporter implements Exporter
             }
         }
 
-        if ($saveFile && @file_put_contents($storeFilePath, $content) === false) {
+        if (@file_put_contents($storeFilePath, $content) === false) {
             // throw exception if file has extension (handle edge-cases as <img src="/icon/hash/"> and response is SVG)
             $exceptionOnError = preg_match('/\.[a-z0-9\-]{1,15}$/i', $storeFilePath) === 1;
             // AND if the exception should NOT be ignored

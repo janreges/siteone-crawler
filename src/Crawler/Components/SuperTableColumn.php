@@ -84,7 +84,7 @@ class SuperTableColumn
      */
     public function getDataValue(array|object $row)
     {
-        if ($this->getDataValueCallback && is_callable($this->getDataValueCallback)) {
+        if ($this->getDataValueCallback) {
             return ($this->getDataValueCallback)($row);
         }
         return is_object($row) ? @$row->{$this->aplCode} : @$row[$this->aplCode];
