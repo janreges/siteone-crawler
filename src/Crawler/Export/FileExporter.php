@@ -26,6 +26,7 @@ class FileExporter extends BaseExporter implements Exporter
     const GROUP_FILE_EXPORT_SETTINGS = 'file-export-settings';
 
     protected ?string $outputHtmlReport = null;
+    protected ?string $htmlReportOptions = null;
     protected ?string $outputJsonFile = null;
     protected ?string $outputTextFile = null;
     protected bool $addTimestampToOutputFile = false;
@@ -93,7 +94,7 @@ class FileExporter extends BaseExporter implements Exporter
         // html file
         if ($this->outputHtmlReport) {
             $s = microtime(true);
-            $htmlReport = new HtmlReport($this->status);
+            $htmlReport = new HtmlReport($this->status, 5, $this->htmlReportOptions);
             $htmlReportBody = $htmlReport->getHtml();
             $reportFile = $this->getExportFilePath($this->outputHtmlReport, 'html');
             file_put_contents(
@@ -140,6 +141,7 @@ class FileExporter extends BaseExporter implements Exporter
             self::GROUP_FILE_EXPORT_SETTINGS,
             'File export settings', [
             new Option('--output-html-report', null, 'outputHtmlReport', Type::FILE, false, "Save HTML report into that file. Set to empty '' to disable HTML report.", 'tmp/%domain%.report.%datetime%.html', true),
+            new Option('--html-report-options', null, 'htmlReportOptions', Type::STRING, false, "Comma-separated list of sections to include in HTML report. Available sections: summary, seo-opengraph, image-gallery, video-gallery, visited-urls, dns-ssl, crawler-stats, crawler-info, headers, content-types, skipped-urls, caching, best-practices, accessibility, security, redirects, 404-pages, slowest-urls, fastest-urls, source-domains. Default: all sections.", null, true),
             new Option('--output-json-file', null, 'outputJsonFile', Type::FILE, false, "Save report as JSON. Set to empty '' to disable JSON report.", 'tmp/%domain%.output.%datetime%.json', true),
             new Option('--output-text-file', null, 'outputTextFile', Type::FILE, false, "Save output as TXT. Set to empty '' to disable TXT report.", 'tmp/%domain%.output.%datetime%.txt', true),
             new Option('--add-host-to-output-file', null, 'addHostToOutputFile', Type::BOOL, false, 'Append initial URL host to filename except sitemaps.', false, false),

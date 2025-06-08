@@ -48,6 +48,7 @@ class HtmlReport
     public readonly Status $status;
     public readonly int $maxExampleUrls;
     private readonly array $skippedSuperTables;
+    private readonly ?array $allowedSections;
 
     /**
      * @var int[]
@@ -60,7 +61,7 @@ class HtmlReport
         'info' => 5
     ];
 
-    public function __construct(Status $status, int $maxExampleUrls = 5)
+    public function __construct(Status $status, int $maxExampleUrls = 5, ?string $htmlReportOptions = null)
     {
         $this->status = $status;
         $this->maxExampleUrls = $maxExampleUrls;
@@ -76,9 +77,17 @@ class HtmlReport
             ContentTypeAnalyzer::SUPER_TABLE_CONTENT_MIME_TYPES, // will be in tab Content Types
             SkippedUrlsAnalyzer::SUPER_TABLE_SKIPPED, // will be in tab Skipped URLs
             CachingAnalyzer::SUPER_TABLE_CACHING_PER_DOMAIN, // will be in tab Caching
-            CachingANalyzer::SUPER_TABLE_CACHING_PER_DOMAIN_AND_CONTENT_TYPE, // will be in tab Caching
+            CachingAnalyzer::SUPER_TABLE_CACHING_PER_DOMAIN_AND_CONTENT_TYPE, // will be in tab Caching
             ContentProcessorManager::SUPER_TABLE_CONTENT_PROCESSORS_STATS, // will be in tab Crawler stats
         ];
+        
+        // Parse allowed sections from options
+        if ($htmlReportOptions !== null && $htmlReportOptions !== '') {
+            $sections = array_map('trim', explode(',', $htmlReportOptions));
+            $this->allowedSections = array_filter($sections);
+        } else {
+            $this->allowedSections = null; // null means all sections are allowed
+        }
     }
 
     public function getHtml(): string
@@ -166,19 +175,105 @@ class HtmlReport
     }
 
     /**
+     * Map SuperTable aplCode to section name for filtering
+     */
+    private function getSectionNameBySuperTableAplCode(string $aplCode): ?string
+    {
+        $mapping = [
+            // Accessibility
+            'accessibility' => 'accessibility',
+            
+            // 404 Pages
+            '404' => '404-pages',
+            
+            // Source Domains
+            'source-domains' => 'source-domains',
+            
+            // Caching
+            'caching-per-content-type' => 'caching',
+            'caching-per-domain' => 'caching',
+            'caching-per-domain-and-content-type' => 'caching',
+            
+            // Headers
+            'headers' => 'headers',
+            'headers-values' => 'headers',
+            
+            // Slowest/Fastest URLs
+            'slowest-urls' => 'slowest-urls',
+            'fastest-urls' => 'fastest-urls',
+            
+            // Best Practices
+            'best-practices' => 'best-practices',
+            
+            // Skipped URLs
+            'skipped-summary' => 'skipped-urls',
+            'skipped' => 'skipped-urls',
+            
+            // Redirects
+            'redirects' => 'redirects',
+            
+            // Security
+            'security' => 'security',
+            
+            // Content Types
+            'content-types' => 'content-types',
+            'content-types-raw' => 'content-types',
+            
+            // These are already included in other tabs
+            'dns' => 'dns-ssl',
+            'certificate-info' => 'dns-ssl',
+            'seo' => 'seo-opengraph',
+            'open-graph' => 'seo-opengraph',
+            'seo-headings' => 'seo-opengraph',
+            'non-unique-titles' => 'seo-opengraph',
+            'non-unique-descriptions' => 'seo-opengraph',
+        ];
+        
+        return $mapping[$aplCode] ?? null;
+    }
+
+    /**
+     * Check if a section is allowed based on htmlReportOptions
+     */
+    private function isSectionAllowed(string $sectionName): bool
+    {
+        if ($this->allowedSections === null) {
+            return true; // All sections allowed if no filter specified
+        }
+        return in_array($sectionName, $this->allowedSections, true);
+    }
+
+    /**
      * @return Tab[]
      */
     private function getTabs(): array
     {
         $tabs = [];
-        $tabs[] = $this->getSummaryTab();
-        $tabs[] = $this->getSeoAndOpenGraphTab();
-        $tabs[] = $this->getImageGalleryTab();
-        $tabs[] = $this->getVideoGalleryTab();
-        $tabs[] = $this->getVisitedUrlsTab();
-        $tabs[] = $this->getDnsAndSslTlsTab();
-        $tabs[] = $this->getCrawlerStatsTab();
-        $tabs[] = $this->getCrawlerInfo();
+        
+        if ($this->isSectionAllowed('summary')) {
+            $tabs[] = $this->getSummaryTab();
+        }
+        if ($this->isSectionAllowed('seo-opengraph')) {
+            $tabs[] = $this->getSeoAndOpenGraphTab();
+        }
+        if ($this->isSectionAllowed('image-gallery')) {
+            $tabs[] = $this->getImageGalleryTab();
+        }
+        if ($this->isSectionAllowed('video-gallery')) {
+            $tabs[] = $this->getVideoGalleryTab();
+        }
+        if ($this->isSectionAllowed('visited-urls')) {
+            $tabs[] = $this->getVisitedUrlsTab();
+        }
+        if ($this->isSectionAllowed('dns-ssl')) {
+            $tabs[] = $this->getDnsAndSslTlsTab();
+        }
+        if ($this->isSectionAllowed('crawler-stats')) {
+            $tabs[] = $this->getCrawlerStatsTab();
+        }
+        if ($this->isSectionAllowed('crawler-info')) {
+            $tabs[] = $this->getCrawlerInfo();
+        }
 
         $hostToStripFromUrls = $this->getInitialHost();
         $schemeOfHostToStripFromUrls = $this->status->getOptions()->getInitialScheme();
@@ -188,6 +283,12 @@ class HtmlReport
         foreach ($superTables as $superTable) {
             if (in_array($superTable->aplCode, $this->skippedSuperTables, true)) {
                 continue;
+            }
+
+            // Check if this SuperTable's section is allowed
+            $sectionName = $this->getSectionNameBySuperTableAplCode($superTable->aplCode);
+            if ($sectionName !== null && !$this->isSectionAllowed($sectionName)) {
+                continue; // Skip this SuperTable if its section is not allowed
             }
 
             // set props used for clickable URLs building

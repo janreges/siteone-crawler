@@ -266,6 +266,7 @@ required arguments:
   --show-scheme-and-host \
   --do-not-truncate-url \
   --output-html-report=tmp/myreport.html \
+  --html-report-options="summary,seo-opengraph,visited-urls,security,redirects" \
   --output-json-file=/dir/report.json \
   --output-text-file=/dir/report.txt \
   --add-timestamp-to-output-file \
@@ -376,6 +377,7 @@ For a clearer list, I recommend going to the documentation: 🌐 https://crawler
 | Parameter | Description |
 |-----------|-------------|
 | `--output-html-report=<file>` | Save HTML report into that file. Set to empty '' to disable HTML report.<br>By default saved into `tmp/%domain%.report.%datetime%.html`. |
+| `--html-report-options=<sections>` | Comma-separated list of sections to include in HTML report.<br>Available sections: `summary`, `seo-opengraph`, `image-gallery`, `video-gallery`, `visited-urls`, `dns-ssl`, `crawler-stats`, `crawler-info`, `headers`, `content-types`, `skipped-urls`, `caching`, `best-practices`, `accessibility`, `security`, `redirects`, `404-pages`, `slowest-urls`, `fastest-urls`, `source-domains`.<br>Default: all sections. |
 | `--output-json-file=<file>` | File path for JSON output. Set to empty '' to disable JSON file.<br>By default saved into `tmp/%domain%.output.%datetime%.json`.<br>See [JSON Output Documentation](docs/JSON-OUTPUT.md) for format details. |
 | `--output-text-file=<file>` | File path for TXT output. Set to empty '' to disable TXT file.<br>By default saved into `tmp/%domain%.output.%datetime%.txt`.<br>See [Text Output Documentation](docs/TEXT-OUTPUT.md) for format details. |
 
