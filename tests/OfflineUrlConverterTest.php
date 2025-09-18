@@ -127,6 +127,42 @@ class OfflineUrlConverterTest extends TestCase
     }
 
     /**
+     * Test sanitizeFilePath with lowercase option
+     */
+    public function testSanitizeFilePathWithLowercase()
+    {
+        $testCases = [
+            ['Test/File.HTML', 'test/file.html'],
+            ['UPPERCASE/PATH.CSS', 'uppercase/path.css'],
+            ['MixedCase/File.JS', 'mixedcase/file.js'],
+            ['Special-Characters_File.PNG', 'special-characters_file.png'],
+            ['path/with/MULTIPLE/LEVELS.txt', 'path/with/multiple/levels.txt'],
+        ];
+
+        foreach ($testCases as [$input, $expected]) {
+            $result = OfflineUrlConverter::sanitizeFilePath($input, false, true);
+            $this->assertEquals($expected, $result, "Failed for input: $input");
+        }
+    }
+
+    /**
+     * Test sanitizeFilePath without lowercase option (should remain unchanged)
+     */
+    public function testSanitizeFilePathWithoutLowercase()
+    {
+        $testCases = [
+            ['Test/File.HTML', 'Test/File.HTML'],
+            ['UPPERCASE/PATH.CSS', 'UPPERCASE/PATH.CSS'],
+            ['MixedCase/File.JS', 'MixedCase/File.JS'],
+        ];
+
+        foreach ($testCases as [$input, $expected]) {
+            $result = OfflineUrlConverter::sanitizeFilePath($input, false, false);
+            $this->assertEquals($expected, $result, "Failed for input: $input");
+        }
+    }
+
+    /**
      * @return array[]
      */
     public static function utf8FilePathProvider(): array

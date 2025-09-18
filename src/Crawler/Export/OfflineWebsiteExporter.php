@@ -60,6 +60,12 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
     protected bool $ignoreStoreFileError = false;
 
     /**
+     * Convert all filenames to lowercase for offline export
+     * @var bool
+     */
+    protected bool $offlineExportLowercase = false;
+
+    /**
      * Replace HTML/JS/CSS content with `xxx -> bbb` or regexp in PREG format: `/card[0-9]/ -> card`
      *
      * @var string[]
@@ -102,6 +108,9 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
 
         // user-defined replaceQueryString will deactivate replacing query string with hash and use custom replacement
         OfflineUrlConverter::setReplaceQueryString($this->replaceQueryString);
+
+        // set lowercase option for all URL conversions
+        OfflineUrlConverter::setLowercase($this->offlineExportLowercase);
 
         // filter only relevant URLs with OK status codes
         $exportedUrls = array_filter($visitedUrls, function (VisitedUrl $visitedUrl) {
@@ -195,7 +204,7 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
         // same logic is in method convertUrlToRelative()
         $storeFilePath = sprintf('%s/%s',
             $this->offlineExportDirectory,
-            OfflineUrlConverter::sanitizeFilePath($this->getRelativeFilePathForFileByUrl($visitedUrl), false)
+            OfflineUrlConverter::sanitizeFilePath($this->getRelativeFilePathForFileByUrl($visitedUrl), false, $this->offlineExportLowercase)
         );
 
         $directoryPath = dirname($storeFilePath);
@@ -282,7 +291,7 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
             $visitedUrl->contentType === Crawler::CONTENT_TYPE_ID_IMAGE ? 'src' : 'href'
         );
 
-        $relativeUrl = $urlConverter->convertUrlToRelative(false);
+        $relativeUrl = $urlConverter->convertUrlToRelative(false, $this->offlineExportLowercase);
         $relativeTargetUrl = $urlConverter->getRelativeTargetUrl();
         $relativePath = '';
 
@@ -335,6 +344,7 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
             new Option('--offline-export-no-auto-redirect-html', null, 'offlineExportNoAutoRedirectHtml', Type::BOOL, false, "Disable automatic creation of redirect HTML files for subfolders that contain an index.html file. This solves situations for URLs where sometimes the URL ends with a slash, sometimes it doesn't.", false, false),
             new Option('--replace-content', null, 'replaceContent', Type::REPLACE_CONTENT, true, "Replace HTML/JS/CSS content with `foo -> bar` or regexp in PREG format: `/card[0-9]/i -> card`", null, true, true),
             new Option('--replace-query-string', null, 'replaceQueryString', Type::REPLACE_CONTENT, true, "Instead of using a short hash instead of a query string in the filename, just replace some characters. You can use simple format 'foo -> bar' or regexp in PREG format, e.g. '/([a-z]+)=([^&]*)(&|$)/i -> $1__$2'", null, true, true),
+            new Option('--offline-export-lowercase', null, 'offlineExportLowercase', Type::BOOL, false, 'Convert all filenames to lowercase for offline export. Useful for case-insensitive filesystems.', false, false),
             new Option('--ignore-store-file-error', null, 'ignoreStoreFileError', Type::BOOL, false, 'Ignores any file storing errors. The export process will continue.', false, false),
         ]));
         return $options;

@@ -26,6 +26,7 @@ class OfflineUrlConverter
     private readonly array $callbackIsExternalDomainAllowedForCrawling;
 
     private static array $replaceQueryString = [];
+    private static bool $lowercase = false;
 
     private TargetDomainRelation $targetDomainRelation;
 
@@ -58,9 +59,10 @@ class OfflineUrlConverter
 
     /**
      * @param bool $keepFragment
+     * @param bool $lowercase
      * @return string
      */
-    public function convertUrlToRelative(bool $keepFragment = true): string
+    public function convertUrlToRelative(bool $keepFragment = true, bool $lowercase = false): string
     {
         $forcedUrl = $this->getForcedUrlIfNeeded();
         if ($forcedUrl) {
@@ -71,7 +73,11 @@ class OfflineUrlConverter
         $this->calculateAndApplyDepth();
 
         $preFinalUrl = $this->relativeTargetUrl->getFullUrl(false, $keepFragment);
-        return self::sanitizeFilePath($preFinalUrl, $keepFragment);
+
+        // Use static lowercase setting if no explicit parameter provided
+        $useLowercase = $lowercase || self::$lowercase;
+
+        return self::sanitizeFilePath($preFinalUrl ?? '', $keepFragment, $useLowercase);
     }
 
     public function getRelativeTargetUrl(): ParsedUrl
@@ -283,9 +289,10 @@ class OfflineUrlConverter
      *
      * @param string $filePath
      * @param bool $keepFragment
+     * @param bool $lowercase
      * @return string
      */
-    public static function sanitizeFilePath(string $filePath, bool $keepFragment): string
+    public static function sanitizeFilePath(string $filePath, bool $keepFragment, bool $lowercase = false): string
     {
         // First decode URL-encoded characters to get proper UTF-8 characters
         // This converts %C3%BC to ü, %C3%B6 to ö, %E4%B8%AD to 中, etc.
@@ -303,7 +310,12 @@ class OfflineUrlConverter
 
             if (is_string($queryString) && trim($queryString) !== '') {
                 $queryHash = self::getQueryHashFromQueryString($queryString);
-                $filePath = $start . '.' . $queryHash . '.' . $extension;
+                // Only add query hash to filename if it's not empty after processing
+                if ($queryHash !== null && trim($queryHash) !== '') {
+                    $filePath = $start . '.' . $queryHash . '.' . $extension;
+                } else {
+                    $filePath = $start . '.' . $extension;
+                }
 
                 // add fragment to the end of the file path
                 if ($keepFragment && $fragment) {
@@ -382,6 +394,11 @@ class OfflineUrlConverter
             $filePath = preg_replace('/#.+$/', '', $filePath);
         }
 
+        // Convert to lowercase if requested
+        if ($lowercase) {
+            $filePath = strtolower($filePath);
+        }
+
         return $filePath;
     }
 
@@ -392,6 +409,15 @@ class OfflineUrlConverter
     public static function setReplaceQueryString(array $replaceQueryString): void
     {
         self::$replaceQueryString = $replaceQueryString;
+    }
+
+    /**
+     * @param bool $lowercase
+     * @return void
+     */
+    public static function setLowercase(bool $lowercase): void
+    {
+        self::$lowercase = $lowercase;
     }
 
     /**
