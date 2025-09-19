@@ -26,7 +26,7 @@ class MarkdownSiteAggregator
     public function combineDirectory(string $directoryPath, bool $removeLinksAndImages = false): string
     {
         $files = $this->getMarkdownFiles($directoryPath);
-        
+
         // Load the content of all files into an array [url => content]
         $pages = [];
         foreach ($files as $filePath) {
@@ -34,17 +34,17 @@ class MarkdownSiteAggregator
             $content = file_get_contents($filePath);
             $pages[$url] = explode("\n", rtrim($content));  // store content as an array of lines (without trailing empty line)
         }
-        
+
         // Sort URLs to ensure index pages (homepage, section homepages) come first
         uksort($pages, function($urlA, $urlB) {
             // Root URL (homepage) should always be first
             if ($urlA === $this->baseUrl || $urlA === '') return -1;
             if ($urlB === $this->baseUrl || $urlB === '') return 1;
-            
+
             // Section index pages should come before other pages in the same section
             $partsA = explode('/', rtrim($urlA, '/'));
             $partsB = explode('/', rtrim($urlB, '/'));
-            
+
             // Compare path segments
             $minLength = min(count($partsA), count($partsB));
             for ($i = 0; $i < $minLength; $i++) {
@@ -52,15 +52,15 @@ class MarkdownSiteAggregator
                     return strcmp($partsA[$i], $partsB[$i]);
                 }
             }
-            
+
             // If one URL is a prefix of the other (shorter), it should come first
             return count($partsA) - count($partsB);
         });
-        
+
         // Detect common header and footer (as array of lines)
         $headerLines = $this->detectCommonHeader($pages);
         $footerLines = $this->detectCommonFooter($pages);
-        
+
         // Remove header and footer from the content of individual pages
         foreach ($pages as $url => &$lines) {
             if (!empty($headerLines)) {
@@ -71,7 +71,7 @@ class MarkdownSiteAggregator
             }
         }
         unset($lines); // release the reference variable
-        
+
         // Build the resulting Markdown string
         $resultLines = [];
         if (!empty($headerLines)) {
@@ -96,21 +96,21 @@ class MarkdownSiteAggregator
             $resultLines[] = "";
             $resultLines = array_merge($resultLines, $footerLines);
         }
-        
+
         // Merge the array of lines into a single text separated by newlines
         $finalMarkdown = implode("\n", $resultLines);
-        
+
         // Remove links and images if requested
         if ($removeLinksAndImages) {
             $finalMarkdown = $this->removeLinksAndImages($finalMarkdown);
         }
-        
+
         return $finalMarkdown;
     }
 
     /**
      * Removes all links and images from markdown text and cleans up any empty table rows
-     * 
+     *
      * @param string $markdown The original markdown text
      * @return string The cleaned markdown text
      */
@@ -118,25 +118,25 @@ class MarkdownSiteAggregator
     {
         // Remove image in anchor text: [![logo by @foobar](data:image/gif;base64,fooo= "logo by @foobar")](index.html)
         $markdown = preg_replace('/\[!\[[^\]]*\]\([^\)]*\)\]\([^\)]*\)/', '', $markdown);
-        
+
         // Remove standalone images: ![alt text](image.jpg "Title")
         $markdown = preg_replace('/!\[.*?\]\([^)]*\)(\s*\"[^\"]*\")?/', '', $markdown);
-        
+
         // Replace links: [link text](http://example.com) -> '' (but only if this links is in list item)
         $markdown = preg_replace('/^\s*(\*|\-|[0-9]+\.)\s*\[([^\]]+)\]\([^)]+\)/m', '', $markdown);
-        
+
         // Replace any empty links: [](http://example.com) -> ''
         $markdown = preg_replace('/\[\]\([^)]+\)/', '', $markdown);
-        
+
         // Clean up tables - remove rows that contain only whitespace and vertical bars
         $markdown = preg_replace('/^\s*(\|\s*)+\|\s*$/m', '', $markdown);
 
         // Clean empty list items
         $markdown = preg_replace('/^\s*(\*|\-|[0-9]+\.)\s*$/m', '', $markdown);
-        
+
         // Remove multiple consecutive empty lines (more than 2)
         $markdown = preg_replace('/\n{3,}/', "\n\n", $markdown);
-        
+
         return $markdown;
     }
 
@@ -162,12 +162,12 @@ class MarkdownSiteAggregator
         }
         // If the file is named index (e.g. "about/index"), the URL can end with a slash ... (optional modification)
         $relPath = preg_replace('#/index$#', '/', $relPath);
-        
+
         // Special handling for root index.md file
         if ($relPath === 'index' || $relPath === '') {
             return $this->baseUrl !== '' ? $this->baseUrl : '';
         }
-        
+
         return $this->baseUrl !== '' ? $this->baseUrl . '/' . ltrim($relPath, '/') : $relPath;
     }
 
@@ -177,7 +177,7 @@ class MarkdownSiteAggregator
         // Take an array of pages (url=>lines). For comparison, use the first few pages (e.g., 5 or all if fewer).
         $urls = array_keys($pages);
         $sampleUrls = array_slice($urls, 2, min(3, count($urls)));
-        
+
         $commonHeader = $pages[$sampleUrls[0]];  // start with the complete content of the first page as a candidate
         // Gradually narrow down commonHeader by comparing with others from the sample
         for ($i = 1; $i < count($sampleUrls); $i++) {
