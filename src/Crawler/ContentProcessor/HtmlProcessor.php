@@ -219,9 +219,10 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
      */
     private function findHrefUrls(string $html, ParsedUrl $sourceUrl, FoundUrls $foundUrls, string $regexForHtmlExtensions): void
     {
-        preg_match_all('/<a[^>]*\shref=["\']?([^#][^"\'\s>]+)["\'\s]?[^>]*>/is', $html, $matches);
-        $foundUrlsTxt = $matches[1];
+        $urls = $this->matchUrlsRegex($html, '/<a[^>]*\shref={{quote}}((?!#){{no_quote}}[^{{quote}}{{quote_space}}>]+){{quote}}[^>]*>/is');
+        $foundUrlsTxt = $urls;
 
+        // TODO: Document what this is trying to do before converting it to ->matchUrlsRegex
         preg_match_all('/href\\\\["\'][:=]\\\\["\'](https?:\/\/[^"\'\\\\]+)\\\\["\']/i', $html, $matches);
         $foundUrlsTxt = array_merge($foundUrlsTxt, $matches[1] ?? []);
 
@@ -263,41 +264,140 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
     {
         $sourceUrlWithoutFragment = $sourceUrl->getFullUrl(true, false);
 
-        // CSS @font-face
-        preg_match_all("/url\s*\(\s*['\"]?([^'\"\s>]+\.(eot|ttf|woff2|woff|otf)[^'\")]*)['\"]?\s*\)/is", $html, $matches);
-        $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrlWithoutFragment, FoundUrl::SOURCE_CSS_URL);
+        // CSS @font-face        
+        $urls = $this->matchUrlsRegex($html, '/url\s*\(\s*{{quote}}({{no_quote}}[^{{quote}}{{quote_space}}\)]+\.{{extensions:eot|ttf|woff2?|otf}}){{quote_assert:\)}}[^\)]*\)/is');
+        $foundUrls->addUrlsFromTextArray($urls, $sourceUrlWithoutFragment, FoundUrl::SOURCE_CSS_URL);
 
         // <link href="...(eot|ttf|woff2|woff|otf)
-        preg_match_all('/<link\s+[^>]*href=["\']?([^"\' ]+\.(eot|ttf|woff2|woff|otf)[^"\' ]*)["\']?[^>]*>/is', $html, $matches);
-        $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrlWithoutFragment, FoundUrl::SOURCE_LINK_HREF);
+        $urls = $this->matchUrlsRegex($html, '/<link\s+[^>]*href={{quote}}({{no_quote}}[^{{quote}}{{quote_space}}>]+\.{{extensions:eot|ttf|woff2?|otf}}){{quote_assert:>}}[^>]*>/is');
+        $foundUrls->addUrlsFromTextArray($urls, $sourceUrlWithoutFragment, FoundUrl::SOURCE_LINK_HREF);
     }
 
-    private function pregMatchUrls(string $html, string $pattern_start, string $pattern_match, string $pattern_end, bool $unquoted = true, ?array &$all_matches = null): array
-    { 
+
+    /**
+     * Matches URLs in HTML using a pseudo regex template language that handles quoted and unquoted attributes.
+     *
+     * This method implements a powerful pseudo regex template system that automatically generates multiple
+     * regex patterns to handle different quoting scenarios (double quotes, single quotes, and unquoted values).
+     * It's specifically designed for extracting URLs from HTML attributes where the quoting style may vary.
+     *
+     * **Pseudo Regex Template Language:**
+     *
+     * The template uses special placeholders that get replaced with appropriate regex patterns:
+     *
+     * - `{{quote}}` - The actual quote character (", ', or empty for unquoted)
+     * - `{{quote_space}}` - Conditional space: empty for quoted, space for unquoted scenarios
+     * - `{{no_quote}}` - Conditional negation: empty for quoted, [^"'] for unquoted scenarios
+     * - `{{extensions:<extensions>}}` - Expands to (?:<extensions>)(?:\?[^{{quote}}{{quote_space}}>]*)?
+     * - `{{quote_assert:<chars>}}` - Expands to {{quote}}(?=[\s<chars>])
+     *
+     * **How it works:**
+     * 1. The method processes macro placeholders first ({{extensions:}} and {{quote_assert:}})
+     * 2. Then generates 2-3 regex patterns by replacing quote placeholders:
+     *    - Pattern 1: Double quotes ({{quote}} = ", {{quote_space}} = "", {{no_quote}} = "")
+     *    - Pattern 2: Single quotes ({{quote}} = ', {{quote_space}} = "", {{no_quote}} = "")
+     *    - Pattern 3: Unquoted ({{quote}} = "", {{quote_space}} = " ", {{no_quote}} = "[^\"']") - only if $unquoted=true
+     * 3. Executes all patterns and merges results
+     *
+     * **Key Insight - Conditional Replacements:**
+     * The `{{no_quote}}` and `{{quote_space}}` placeholders enable conditional behavior:
+     * - For quoted attributes: they become empty, so patterns only avoid the quote character
+     * - For unquoted attributes: they add restrictions to handle space-separated values
+     *
+     * Example: `[^{{quote}}{{quote_space}}>]` becomes:
+     * - `[^">]` for quoted (avoids quote and >)
+     * - `[^"' >]` for unquoted (avoids quotes, spaces, and >)
+     *
+     * @param string $html The HTML content to search in
+     * @param string $pattern_template The pseudo regex template with {{placeholders}}
+     * @param bool $unquoted Whether to include unquoted attribute matching (default: true)
+     * @param array|null $all_matches Reference to store all regex matches (optional)
+     * @return array Array of matched URLs (from capture group 1)
+     *
+     * @example Basic href extraction:
+     * ```php
+     * $urls = $this->matchUrlsRegex($html,
+     *     '/<a[^>]*\shref={{quote}}((?!#){{no_quote}}[^{{quote}}{{quote_space}}>]+){{quote}}[^>]*>/is'
+     * );
+     * // Matches: <a href="url">, <a href='url'>, <a href=url>
+     * // The [^{{quote}}{{quote_space}}>] part becomes:
+     * // - [^">] for quoted (stops at quote or >)
+     * // - [^"' >] for unquoted (stops at quotes, space, or >)
+     * ```
+     *
+     * @example CSS url() with file extensions:
+     * ```php
+     * $urls = $this->matchUrlsRegex($html,
+     *     '/url\s*\(\s*{{quote}}({{no_quote}}[^{{quote}}{{quote_space}}\)]+\.{{extensions:eot|ttf|woff2?|otf}}){{quote_assert:\)}}[^\)]*\)/is'
+     * );
+     * // Matches: url("font.woff"), url('font.ttf'), url(font.eot)
+     * // {{extensions:eot|ttf|woff2?|otf}} expands to: (?:eot|ttf|woff2?|otf)(?:\?[^{{quote}}{{quote_space}}>]*)?
+     * // {{quote_assert:\)}} expands to: {{quote}}(?=[\s\)])
+     * ```
+     *
+     * @example Image src with quote assertion:
+     * ```php
+     * $urls = $this->matchUrlsRegex($html,
+     *     '/<img\s+[^>]*?src={{quote}}({{no_quote}}[^{{quote}}{{quote_space}}>]+){{quote}}[^>]*>/is'
+     * );
+     * // Matches: <img src="image.jpg">, <img src='image.png'>, <img src=image.gif>
+     * ```
+     *
+     * **Generated Patterns Example:**
+     * Template: `href={{quote}}({{no_quote}}[^{{quote}}{{quote_space}}>]+){{quote}}`
+     *
+     * Generates:
+     * - `href="([^">]+)"` (double quotes - {{no_quote}} empty, {{quote_space}} empty)
+     * - `href='([^'>]+)'` (single quotes - {{no_quote}} empty, {{quote_space}} empty)
+     * - `href=([^"'][^"' >]+)` (unquoted - {{no_quote}} = [^"'], {{quote_space}} = space)
+     *
+     * **Use Cases:**
+     * - Extracting href URLs from <a> tags
+     * - Finding src URLs in <img>, <script>, <source> tags
+     * - Parsing CSS url() declarations
+     * - Extracting font file URLs with specific extensions
+     * - Any scenario where HTML attributes may be quoted or unquoted
+     */
+    private function matchUrlsRegex(string $html, string $pattern_template, bool $unquoted = true, ?array &$all_matches = null): array
+    {
         $all_matches = [[], []];
         $urls = [];
         $patterns = [];
-        $pattern_template = '/' . str_replace('/', '\/', $pattern_start) . "{{quote}}({{not_quote}}" . str_replace('/', '\/', $pattern_match) . "){{quote}}" . str_replace('/', '\/', $pattern_end) . '/is';
-        
-        $pattern = str_replace(['{{quote}}', '{{quote_space}}', '{{not_quote}}'], ['"', '', ''], $pattern_template);
-        $patterns[] = $pattern;
-        preg_match_all($pattern, $html, $matches);
-        if (!empty($matches[1])) {
-            $urls = array_merge($urls, $matches[1]);
-            $all_matches = array_map('array_merge', $all_matches, $matches);
-        }
-        
-        $pattern = str_replace(['{{quote}}', '{{quote_space}}', '{{not_quote}}'], ['\'', '', ''], $pattern_template);
-        $patterns[] = $pattern;
-        preg_match_all($pattern, $html, $matches);
-        if (!empty($matches[1])) {
-            $urls = array_merge($urls, $matches[1]);
-            $all_matches = array_map('array_merge', $all_matches, $matches);
+
+        // Process macro placeholders first
+        $pattern_template = preg_replace_callback('/{{extensions:([^}]+)}}/', function ($matches) {
+            return '(?:'. $matches[1] . ')(?:\?[^{{quote}}{{quote_space}}\>]*)?';
+        }, $pattern_template);
+
+        $pattern_template = preg_replace_callback('/{{quote_assert:([^}]+)}}/', function ($matches) {
+            return '{{quote}}(?=[\s' . $matches[1] . '])';
+        }, $pattern_template);
+
+        $pattern_variables = [
+            '{{quote}}',
+            '{{quote_space}}',
+            '{{no_quote}}',
+        ];
+
+        $quotes_replacements = [
+            ['', '', ''],
+        ];
+
+        if (strstr($pattern_template, '{{quote}}') !== false) {
+            $quotes_replacements = [
+                ['"', '', ''],
+                ["'", '', ''],
+            ];
+
+            if ($unquoted) {
+                $quotes_replacements[] = ['', ' ', '[^"\']'];
+            }
         }
 
-        if ($unquoted) {
-            $pattern = str_replace(['{{quote}}', '{{quote_space}}', '{{not_quote}}'], ['', ' ', '[^"\']'], $pattern_template);
+        foreach ($quotes_replacements as $replacement) {
+            $pattern = str_replace($pattern_variables, $replacement, $pattern_template);
             $patterns[] = $pattern;
+
             preg_match_all($pattern, $html, $matches);
             if (!empty($matches[1])) {
                 $urls = array_merge($urls, $matches[1]);
@@ -305,8 +405,6 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
             }
         }
 
-        // print_r($patterns);
-        // print_r($all_matches);
         return $urls;
     }
 
@@ -321,23 +419,23 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
         $sourceUrlWithoutFragment = $sourceUrl->getFullUrl(true, false);
 
         // <img src="..."
-        $urls = $this->pregMatchUrls($html, '<img\s+[^>]*?src=', '[^{{quote}}{{quote_space}}>]+', '[^>]*>');
+        $urls = $this->matchUrlsRegex($html, '/<img\s+[^>]*?src={{quote}}({{no_quote}}[^{{quote}}{{quote_space}}>]+){{quote}}[^>]*>/is');
         $foundUrls->addUrlsFromTextArray($urls, $sourceUrlWithoutFragment, FoundUrl::SOURCE_IMG_SRC);
 
         // <input src="..."
-        $urls = $this->pregMatchUrls($html, '<input\s+[^>]*?src=', '[^{{quote}}{{quote_space}}>]+', '[^>]*>');
+        $urls = $this->matchUrlsRegex($html, '/<input\s+[^>]*?src={{quote}}({{no_quote}}[^{{quote}}{{quote_space}}>]+){{quote}}[^>]*>/is');
         $foundUrls->addUrlsFromTextArray($urls, $sourceUrlWithoutFragment, FoundUrl::SOURCE_INPUT_SRC);
 
         // <link href="...(png|gif|jpg|jpeg|webp|avif|tif|bmp|svg)"
-        $urls = $this->pregMatchUrls($html, '<link\s+[^>]*?href=', '[^{{quote}}{{quote_space}}>]+\.(?:png|gif|jpe?g|webp|avif|tiff?|bmp|svg|ico)(?:\?[^{{quote}}{{quote_space}}\>]*)?', '(?=[\s>])[^>]*>');
+        $urls = $this->matchUrlsRegex($html, '/<link\s+[^>]*?href={{quote}}({{no_quote}}[^{{quote}}{{quote_space}}>]+\.(?:png|gif|jpe?g|webp|avif|tiff?|bmp|svg|ico)(?:\?[^{{quote}}{{quote_space}}\>]*)?){{quote}}(?=[\s>])[^>]*>/is');
         $foundUrls->addUrlsFromTextArray($urls, $sourceUrlWithoutFragment, FoundUrl::SOURCE_LINK_HREF);
 
         // <source src="..."
-        $urls = $this->pregMatchUrls($html, '<source\s+[^>]*?href=', '[^{{quote}}{{quote_space}}>]+', '[^>]*>');
+        $urls = $this->matchUrlsRegex($html, '/<source\s+[^>]*?src={{quote}}({{no_quote}}[^{{quote}}{{quote_space}}>]+){{quote}}[^>]*>/is');
         $foundUrls->addUrlsFromTextArray($urls, $sourceUrlWithoutFragment, FoundUrl::SOURCE_SOURCE_SRC);
 
         // CSS url()
-        $urls = $this->pregMatchUrls($html, 'url\s*\(\s*', '[^{{quote}}{{quote_space}}\)]+\.(?:png|gif|jpe?g|webp|avif|tiff?|bmp|svg|ico)(?:\?[^{{quote}}{{quote_space}}\)]*)?', '(?=[\s\)])[^\)]*\)');
+        $urls = $this->matchUrlsRegex($html, '/url\s*\(\s*{{quote}}({{no_quote}}[^{{quote}}{{quote_space}}\)]+\.(?:png|gif|jpe?g|webp|avif|tiff?|bmp|svg|ico)(?:\?[^{{quote}}{{quote_space}}\)]*)?){{quote}}(?=[\s\)])[^\)]*\)/is');
         $foundUrls->addUrlsFromTextArray($urls, $sourceUrlWithoutFragment, FoundUrl::SOURCE_CSS_URL);
 
         // <picture><source srcset="..."><img src="..."></picture>
@@ -444,7 +542,7 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
      */
     private function findStylesheets(string $html, ParsedUrl $sourceUrl, FoundUrls $foundUrls): void
     {
-        $this->pregMatchUrls($html, '<link\s+[^>]*?href=', '[^{{quote}}{{quote_space}}>]+', '[^>]*>', false, $all_matches);
+        $this->matchUrlsRegex($html, '/<link\s+[^>]*?href={{quote}}({{no_quote}}[^{{quote}}{{quote_space}}>]+){{quote}}[^>]*>/is', false, $all_matches);
         foreach ($all_matches[0] as $key => $match) {
             if (stripos($match, 'rel=') !== false && stripos($match, 'stylesheet') === false) {
                 unset($all_matches[0][$key]);
