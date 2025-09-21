@@ -272,6 +272,44 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
         $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrlWithoutFragment, FoundUrl::SOURCE_LINK_HREF);
     }
 
+    private function pregMatchUrls(string $html, string $pattern_start, string $pattern_match, string $pattern_end, bool $unquoted = true, ?array &$all_matches = null): array
+    { 
+        $all_matches = [[], []];
+        $urls = [];
+        $patterns = [];
+        $pattern_template = '/' . str_replace('/', '\/', $pattern_start) . "{{quote}}({{not_quote}}" . str_replace('/', '\/', $pattern_match) . "){{quote}}" . str_replace('/', '\/', $pattern_end) . '/is';
+        
+        $pattern = str_replace(['{{quote}}', '{{quote_space}}', '{{not_quote}}'], ['"', '', ''], $pattern_template);
+        $patterns[] = $pattern;
+        preg_match_all($pattern, $html, $matches);
+        if (!empty($matches[1])) {
+            $urls = array_merge($urls, $matches[1]);
+            $all_matches = array_map('array_merge', $all_matches, $matches);
+        }
+        
+        $pattern = str_replace(['{{quote}}', '{{quote_space}}', '{{not_quote}}'], ['\'', '', ''], $pattern_template);
+        $patterns[] = $pattern;
+        preg_match_all($pattern, $html, $matches);
+        if (!empty($matches[1])) {
+            $urls = array_merge($urls, $matches[1]);
+            $all_matches = array_map('array_merge', $all_matches, $matches);
+        }
+
+        if ($unquoted) {
+            $pattern = str_replace(['{{quote}}', '{{quote_space}}', '{{not_quote}}'], ['', ' ', '[^"\']'], $pattern_template);
+            $patterns[] = $pattern;
+            preg_match_all($pattern, $html, $matches);
+            if (!empty($matches[1])) {
+                $urls = array_merge($urls, $matches[1]);
+                $all_matches = array_map('array_merge', $all_matches, $matches);
+            }
+        }
+
+        // print_r($patterns);
+        // print_r($all_matches);
+        return $urls;
+    }
+
     /**
      * @param string $html
      * @param ParsedUrl $sourceUrl
@@ -283,24 +321,24 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
         $sourceUrlWithoutFragment = $sourceUrl->getFullUrl(true, false);
 
         // <img src="..."
-        preg_match_all('/<img\s+[^>]*?src=["\']?([^"\'> ]+)["\']?[^>]*>/is', $html, $matches);
-        $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrlWithoutFragment, FoundUrl::SOURCE_IMG_SRC);
+        $urls = $this->pregMatchUrls($html, '<img\s+[^>]*?src=', '[^{{quote}}{{quote_space}}>]+', '[^>]*>');
+        $foundUrls->addUrlsFromTextArray($urls, $sourceUrlWithoutFragment, FoundUrl::SOURCE_IMG_SRC);
 
         // <input src="..."
-        preg_match_all('/<input\s+[^>]*?src=["\']?([^"\'> ]+\.[a-z0-9]{1,10})["\']?[^>]*>/is', $html, $matches);
-        $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrlWithoutFragment, FoundUrl::SOURCE_INPUT_SRC);
+        $urls = $this->pregMatchUrls($html, '<input\s+[^>]*?src=', '[^{{quote}}{{quote_space}}>]+', '[^>]*>');
+        $foundUrls->addUrlsFromTextArray($urls, $sourceUrlWithoutFragment, FoundUrl::SOURCE_INPUT_SRC);
 
         // <link href="...(png|gif|jpg|jpeg|webp|avif|tif|bmp|svg)"
-        preg_match_all('/<link\s+[^>]*?href=["\']?([^"\'> ]+\.(png|gif|jpg|jpeg|webp|avif|tif|bmp|svg|ico)(|\?[^"\' ]))["\']?[^>]*>/is', $html, $matches);
-        $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrlWithoutFragment, FoundUrl::SOURCE_LINK_HREF);
+        $urls = $this->pregMatchUrls($html, '<link\s+[^>]*?href=', '[^{{quote}}{{quote_space}}>]+\.(?:png|gif|jpe?g|webp|avif|tiff?|bmp|svg|ico)(?:\?[^{{quote}}{{quote_space}}\>]*)?', '(?=[\s>])[^>]*>');
+        $foundUrls->addUrlsFromTextArray($urls, $sourceUrlWithoutFragment, FoundUrl::SOURCE_LINK_HREF);
 
         // <source src="..."
-        preg_match_all('/<source\s+[^>]*?src=["\']([^"\'>]+)["\'][^>]*>/is', $html, $matches);
-        $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrlWithoutFragment, FoundUrl::SOURCE_SOURCE_SRC);
+        $urls = $this->pregMatchUrls($html, '<source\s+[^>]*?href=', '[^{{quote}}{{quote_space}}>]+', '[^>]*>');
+        $foundUrls->addUrlsFromTextArray($urls, $sourceUrlWithoutFragment, FoundUrl::SOURCE_SOURCE_SRC);
 
         // CSS url()
-        preg_match_all("/url\s*\(\s*['\"]?([^'\")]+\.(jpg|jpeg|png|gif|bmp|tif|webp|avif)[^'\")]*)['\"]?\s*\)/is", $html, $matches);
-        $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrlWithoutFragment, FoundUrl::SOURCE_CSS_URL);
+        $urls = $this->pregMatchUrls($html, 'url\s*\(\s*', '[^{{quote}}{{quote_space}}\)]+\.(?:png|gif|jpe?g|webp|avif|tiff?|bmp|svg|ico)(?:\?[^{{quote}}{{quote_space}}\)]*)?', '(?=[\s\)])[^\)]*\)');
+        $foundUrls->addUrlsFromTextArray($urls, $sourceUrlWithoutFragment, FoundUrl::SOURCE_CSS_URL);
 
         // <picture><source srcset="..."><img src="..."></picture>
         // <img srcset="..."
@@ -406,15 +444,15 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
      */
     private function findStylesheets(string $html, ParsedUrl $sourceUrl, FoundUrls $foundUrls): void
     {
-        preg_match_all('/<link\s+[^>]*?href=["\']([^"\']+)["\'][^>]*>/is', $html, $matches);
-        foreach ($matches[0] as $key => $match) {
+        $this->pregMatchUrls($html, '<link\s+[^>]*?href=', '[^{{quote}}{{quote_space}}>]+', '[^>]*>', false, $all_matches);
+        foreach ($all_matches[0] as $key => $match) {
             if (stripos($match, 'rel=') !== false && stripos($match, 'stylesheet') === false) {
-                unset($matches[0][$key]);
-                unset($matches[1][$key]);
+                unset($all_matches[0][$key]);
+                unset($all_matches[1][$key]);
             }
         }
 
-        $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrl->getFullUrl(true, false), FoundUrl::SOURCE_LINK_HREF);
+        $foundUrls->addUrlsFromTextArray($all_matches[1], $sourceUrl->getFullUrl(true, false), FoundUrl::SOURCE_LINK_HREF);
     }
 
     /**
