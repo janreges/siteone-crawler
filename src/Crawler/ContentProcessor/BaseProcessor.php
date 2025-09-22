@@ -15,6 +15,7 @@ use Crawler\Crawler;
 use Crawler\Export\Utils\OfflineUrlConverter;
 use Crawler\FoundUrls;
 use Crawler\ParsedUrl;
+use Crawler\Utils;
 
 abstract class BaseProcessor implements ContentProcessor
 {
@@ -69,6 +70,8 @@ abstract class BaseProcessor implements ContentProcessor
      */
     public function convertUrlToRelative(ParsedUrl $parsedBaseUrl, string $targetUrl, ?string $attribute = null): string
     {
+        // normalize URL before parsing so that it matches what is used on FoundUrl
+        $targetUrl = Utils::normalizeUrl($targetUrl, $parsedBaseUrl->getFullUrl());
         $urlConverter = new OfflineUrlConverter(
             $this->crawler->getInitialParsedUrl(),
             $parsedBaseUrl,

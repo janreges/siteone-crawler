@@ -1340,4 +1340,34 @@ class Utils
         return $result;
     }
 
+    /**
+     * Normalize URL and remove some often used strange characters/behavior or remove unwanted http(s)://SAME_DOMAIN:SAME_OPTIONAL_PORT
+     *
+     * @param string $url
+     * @param string $sourceUrl
+     * @return string
+     */
+    public static function normalizeUrl(string $url, string $sourceUrl): string
+    {
+        $normalizedUrl = str_replace(
+            ['&#38;', '&amp;', "\\ ", ' '],
+            ['&', '&', '%20', '%20'], $url);
+
+        $normalizedUrl = ltrim($normalizedUrl, "\"'\t ");
+        $normalizedUrl = rtrim($normalizedUrl, "&\"'\t ");
+
+        // remove unwanted http(s)://SAME_DOMAIN:SAME_OPTIONAL_PORT
+        if (stripos($normalizedUrl, 'https://') === 0 || stripos($normalizedUrl, 'http://') === 0) {
+            $parsedUrl = ParsedUrl::parse($normalizedUrl, ParsedUrl::parse($sourceUrl));
+            $parsedSourceUrl = ParsedUrl::parse($sourceUrl);
+
+
+            if ($parsedUrl->host === $parsedSourceUrl->host && $parsedSourceUrl->port === $parsedUrl->port && $parsedSourceUrl->port !== null) {
+                $normalizedUrl = preg_replace('~' . $parsedUrl->scheme . ':\/\/' . $parsedUrl->host . "(:{$parsedUrl->port})?~i", '', $normalizedUrl);
+            }
+        }
+
+        return $normalizedUrl;
+    }    
+
 }

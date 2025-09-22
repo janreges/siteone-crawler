@@ -10,6 +10,8 @@ declare(strict_types=1);
 
 namespace Crawler;
 
+use Crawler\Utils;
+
 class FoundUrl
 {
     const SOURCE_INIT_URL = 5;
@@ -54,7 +56,7 @@ class FoundUrl
      */
     public function __construct(string $url, string $sourceUrl, int $source)
     {
-        $this->url = $this->normalizeUrl($url, $sourceUrl);
+        $this->url = Utils::normalizeUrl($url, $sourceUrl);
         $this->sourceUrl = $sourceUrl;
         $this->source = $source;
     }
@@ -71,36 +73,6 @@ class FoundUrl
     public function __toString(): string
     {
         return $this->url;
-    }
-
-    /**
-     * Normalize URL and remove some often used strange characters/behavior or remove unwanted http(s)://SAME_DOMAIN:SAME_OPTIONAL_PORT
-     *
-     * @param string $url
-     * @param string $sourceUrl
-     * @return string
-     */
-    private function normalizeUrl(string $url, string $sourceUrl): string
-    {
-        $normalizedUrl = str_replace(
-            ['&#38;', '&amp;', "\\ ", ' '],
-            ['&', '&', '%20', '%20'], $url);
-
-        $normalizedUrl = ltrim($normalizedUrl, "\"'\t ");
-        $normalizedUrl = rtrim($normalizedUrl, "&\"'\t ");
-
-        // remove unwanted http(s)://SAME_DOMAIN:SAME_OPTIONAL_PORT
-        if (stripos($normalizedUrl, 'https://') === 0 || stripos($normalizedUrl, 'http://') === 0) {
-            $parsedUrl = ParsedUrl::parse($normalizedUrl, ParsedUrl::parse($sourceUrl));
-            $parsedSourceUrl = ParsedUrl::parse($sourceUrl);
-
-
-            if ($parsedUrl->host === $parsedSourceUrl->host && $parsedSourceUrl->port === $parsedUrl->port && $parsedSourceUrl->port !== null) {
-                $normalizedUrl = preg_replace('~' . $parsedUrl->scheme . ':\/\/' . $parsedUrl->host . "(:{$parsedUrl->port})?~i", '', $normalizedUrl);
-            }
-        }
-
-        return $normalizedUrl;
     }
 
     /**
