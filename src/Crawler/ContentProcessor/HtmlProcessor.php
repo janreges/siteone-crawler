@@ -143,8 +143,8 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
     private function updateHtmlPathsToRelative(string $html, ParsedUrl $parsedBaseUrl): string
     {
         $patternHrefSrc = '/(\.|<[a-z0-9]{1,10}[^>]*\s+)(href|src|component-url)\s*(=)\s*({{quote}})({{no_quote}}[^{{quote}}{{quote_space}}>]+){{quote}}([^>]*)/is';
-        $patternSrcset = '/(\.|<[a-z0-9]{1,10}[^>]*\s+)(imagesrcset|srcset|renderer-url)\s*(=)\s*([\'"]?)([^\'">]+)\4([^>]*)/is';
-        $patternMetaUrl = '/(<meta[^>]*)(url)\s*(=)\s*([\'"]?)([^\'">]+)\4(")/im';
+        $patternSrcset = '/(\.|<[a-z0-9]{1,10}[^>]*\s+)(imagesrcset|srcset|renderer-url)\s*(=)\s*({{quote}})({{no_quote}}[^{{quote}}{{quote_space}}>]+){{quote}}([^>]*)/is';
+        $patternMetaUrl = '/(<meta[^>]*)(url)\s*(=)\s*({{quote}})({{no_quote}}[^{{quote}}{{quote_space}}>]+){{quote}}([^>]*)/im';
         $escapedHref = '/(.)(href\\\\["\']|src\\\\["\'])([:=])(\\\\["\'])([^"\'\\\\]+)\\\\["\'](.)/is';
 
         $replaceCallback = function ($matches) use ($parsedBaseUrl) {
@@ -202,8 +202,8 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
         };
 
         $html = $this->pregPatternsReplaceCallback($patternHrefSrc, $replaceCallback, $html);
-        $html = preg_replace_callback($patternSrcset, $replaceCallback, $html);
-        $html = preg_replace_callback($patternMetaUrl, $replaceCallback, $html);
+        $html = $this->pregPatternsReplaceCallback($patternSrcset, $replaceCallback, $html);
+        $html = $this->pregPatternsReplaceCallback($patternMetaUrl, $replaceCallback, $html);
         $html = preg_replace_callback($escapedHref, $replaceCallback, $html);
 
         return $html;
