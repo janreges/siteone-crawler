@@ -264,7 +264,7 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
     {
         $sourceUrlWithoutFragment = $sourceUrl->getFullUrl(true, false);
 
-        // CSS @font-face        
+        // CSS @font-face
         $urls = $this->pregPatternsMatchAll('/url\s*\(\s*{{quote}}({{no_quote}}[^{{quote}}{{quote_space}}\)]+\.{{extensions:eot|ttf|woff2?|otf:\)}}){{quote_assert:\)}}[^\)]*\)/is', $html);
         $foundUrls->addUrlsFromTextArray($urls, $sourceUrlWithoutFragment, FoundUrl::SOURCE_CSS_URL);
 
@@ -341,7 +341,7 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
         foreach ($pattern_replace as $replace) {
             $pattern = preg_replace($pattern_search, $replace, $pattern_template);
             $patterns[] = $pattern;
-        }        
+        }
 
         return $patterns;
     }

@@ -1368,6 +1368,6 @@ class Utils
         }
 
         return $normalizedUrl;
-    }    
+    }
 
 }
