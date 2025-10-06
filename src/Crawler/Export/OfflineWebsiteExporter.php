@@ -60,6 +60,12 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
     protected bool $ignoreStoreFileError = false;
 
     /**
+     * Disable inlining of Astro module scripts for offline export
+     * @var bool
+     */
+    protected bool $disableAstroInlineModules = false;
+
+    /**
      * Replace HTML/JS/CSS content with `xxx -> bbb` or regexp in PREG format: `/card[0-9]/ -> card`
      *
      * @var string[]
@@ -102,6 +108,16 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
 
         // user-defined replaceQueryString will deactivate replacing query string with hash and use custom replacement
         OfflineUrlConverter::setReplaceQueryString($this->replaceQueryString);
+
+        // configure AstroProcessor to disable inline modules if requested
+        if ($this->disableAstroInlineModules) {
+            foreach ($this->crawler->getContentProcessorManager()->getProcessors() as $processor) {
+                if ($processor instanceof \Crawler\ContentProcessor\AstroProcessor) {
+                    $processor->setDisableInlineModules(true);
+                    break;
+                }
+            }
+        }
 
         // filter only relevant URLs with OK status codes
         $exportedUrls = array_filter($visitedUrls, function (VisitedUrl $visitedUrl) {
@@ -336,6 +352,7 @@ class OfflineWebsiteExporter extends BaseExporter implements Exporter
             new Option('--replace-content', null, 'replaceContent', Type::REPLACE_CONTENT, true, "Replace HTML/JS/CSS content with `foo -> bar` or regexp in PREG format: `/card[0-9]/i -> card`", null, true, true),
             new Option('--replace-query-string', null, 'replaceQueryString', Type::REPLACE_CONTENT, true, "Instead of using a short hash instead of a query string in the filename, just replace some characters. You can use simple format 'foo -> bar' or regexp in PREG format, e.g. '/([a-z]+)=([^&]*)(&|$)/i -> $1__$2'", null, true, true),
             new Option('--ignore-store-file-error', null, 'ignoreStoreFileError', Type::BOOL, false, 'Ignores any file storing errors. The export process will continue.', false, false),
+            new Option('--disable-astro-inline-modules', null, 'disableAstroInlineModules', Type::BOOL, false, 'Disables inlining of Astro module scripts for offline export. Scripts will remain as external files with corrected relative paths.', false, false),
         ]));
         return $options;
     }

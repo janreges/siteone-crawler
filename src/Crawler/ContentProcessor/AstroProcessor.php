@@ -23,6 +23,8 @@ class AstroProcessor extends BaseProcessor implements ContentProcessor
         Crawler::CONTENT_TYPE_ID_SCRIPT,
     ];
 
+    private bool $disableInlineModules = false;
+
     /**
      * @inheritDoc
      */
@@ -48,6 +50,15 @@ class AstroProcessor extends BaseProcessor implements ContentProcessor
     }
 
     /**
+     * Set whether to disable inlining of Astro modules for offline export
+     * @param bool $disable
+     */
+    public function setDisableInlineModules(bool $disable): void
+    {
+        $this->disableInlineModules = $disable;
+    }
+
+    /**
      * Astro will need to replace all modules with inline content due to CORS is blocking modules with file:// protocol
      *
      * @inheritDoc
@@ -56,6 +67,11 @@ class AstroProcessor extends BaseProcessor implements ContentProcessor
     public function applyContentChangesForOfflineVersion(string &$content, int $contentType, ParsedUrl $url, bool $removeUnwantedCode): void
     {
         if (!str_contains($content, 'astro')) {
+            return;
+        }
+
+        // Skip inlining if disabled via option
+        if ($this->disableInlineModules) {
             return;
         }
 
