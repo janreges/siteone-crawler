@@ -153,7 +153,7 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
             $attributeRaw = $matches[2];
             $assignmentChar = $matches[3];
             $quote = $matches[4];
-            $value = $matches[5];
+            $value = html_entity_decode($matches[5], ENT_QUOTES | ENT_HTML5);
             $end = $matches[6];
 
             // when modifying x.src (JS) and there is no quote, we do not convert, because it is not a valid URL but JS code
