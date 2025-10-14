@@ -286,6 +286,10 @@ class HtmlProcessor extends BaseProcessor implements ContentProcessor
         preg_match_all('/<img\s+[^>]*?src=["\']?([^"\'> ]+)["\']?[^>]*>/is', $html, $matches);
         $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrlWithoutFragment, FoundUrl::SOURCE_IMG_SRC);
 
+        // <img data-src="..." (lazy loading js libraries)
+        preg_match_all('/<img\s+[^>]*?data-src=["\']?([^"\'> ]+)["\']?[^>]*>/is', $html, $matches);
+        $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrlWithoutFragment, FoundUrl::SOURCE_IMG_SRC);
+
         // <input src="..."
         preg_match_all('/<input\s+[^>]*?src=["\']?([^"\'> ]+\.[a-z0-9]{1,10})["\']?[^>]*>/is', $html, $matches);
         $foundUrls->addUrlsFromTextArray($matches[1], $sourceUrlWithoutFragment, FoundUrl::SOURCE_INPUT_SRC);
