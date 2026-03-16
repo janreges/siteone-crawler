@@ -235,12 +235,24 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
           WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
         run: |
-          wingetcreate update JanReges.SiteOneCrawler `
+          $urls = @(
+            "https://github.com/janreges/siteone-crawler/releases/download/v$env:VERSION/siteone-crawler-v$env:VERSION-win-x64.zip",
+            "https://github.com/janreges/siteone-crawler/releases/download/v$env:VERSION/siteone-crawler-v$env:VERSION-win-arm64.zip"
+          )
+          # Try update first; if the package doesn't exist yet, fall back to new
+          $result = wingetcreate update JanReges.SiteOneCrawler `
             --version $env:VERSION `
-            --urls "https://github.com/janreges/siteone-crawler/releases/download/v$env:VERSION/siteone-crawler-v$env:VERSION-win-x64.zip" `
-                   "https://github.com/janreges/siteone-crawler/releases/download/v$env:VERSION/siteone-crawler-v$env:VERSION-win-arm64.zip" `
+            --urls $urls `
             --token $env:WINGET_TOKEN `
-            --submit
+            --submit 2>&1
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Update failed, trying initial submission with 'new'..."
+            wingetcreate new `
+              --version $env:VERSION `
+              --urls $urls `
+              --token $env:WINGET_TOKEN `
+              --submit
+          }
 
   # ─────────────────────────────────────────────────────────────────
   # Update AUR package

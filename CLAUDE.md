@@ -144,8 +144,9 @@ Use [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:
 
 1. Update version in `Cargo.toml` (`version = "X.Y.Z"`)
 2. Update version in `src/version.rs` (`pub const CODE: &str = "X.Y.Z.YYYYMMDD";`)
-3. Commit: `git commit -m "Bump version to X.Y.Z"`
-4. Tag and push: `git tag vX.Y.Z && git push && git push --tags`
+3. Run `cargo check` so that `Cargo.lock` is updated with the new version
+4. Commit all three files (`Cargo.toml`, `src/version.rs`, `Cargo.lock`): `git commit -m "chore: bump version to X.Y.Z"`
+5. Tag and push: `git tag vX.Y.Z && git push && git push --tags`
 
 ### Important Conventions
 
