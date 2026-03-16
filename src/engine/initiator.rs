@@ -140,7 +140,7 @@ impl Initiator {
         println!(
             "{}",
             utils::get_color_text(
-                "Usage: ./crawler --url=https://mydomain.tld/ [options]",
+                "Usage: siteone-crawler --url=https://mydomain.tld/ [options]",
                 "yellow",
                 false,
             )
