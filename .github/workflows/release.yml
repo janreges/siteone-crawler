@@ -344,6 +344,7 @@ jobs:
           # Setup abuild config for builder
           mkdir -p "/home/$BUILDER/.abuild"
           printf '%s\n' "$ALPINE_RSA_KEY" > "/home/$BUILDER/.abuild/siteone.rsa"
+          printf '%s\n' "$ALPINE_RSA_PUB" > "/home/$BUILDER/.abuild/siteone.rsa.pub"
           chmod 600 "/home/$BUILDER/.abuild/siteone.rsa"
           cat > "/home/$BUILDER/.abuild/abuild.conf" << 'EOF'
           PACKAGER_PRIVKEY="$HOME/.abuild/siteone.rsa"
