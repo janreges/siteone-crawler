@@ -128,6 +128,10 @@ CLI options are defined in `options/core_options.rs` via `get_options()` which r
 
 Project uses `edition = "2024"` (Rust 1.85+) with `rust-version = "1.94"`. Edition 2024 features used throughout: `unsafe extern` blocks, `if let` chaining (`if let ... && ...`), `unsafe { std::env::set_var() }`.
 
+### Commit Policy
+
+**Never commit automatically.** Commits are only allowed on explicit user request. Before every commit, always run `git status`, review the changes, and stage only the relevant files — never use `git add -A` or `git add .` blindly.
+
 ### Commit Messages
 
 Use [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `refactor:`, `perf:`, `docs:`, `style:`, `ci:`, `chore:`, `test:`. Examples:

@@ -162,7 +162,7 @@ impl Initiator {
             utils::get_color_text("Created with ", "gray", false),
             utils::get_color_text("\u{2665}", "red", false),
             utils::get_color_text(
-                " by J\u{00e1}n Rege\u{0161} (jan.reges@siteone.cz) from www.SiteOne.io (Czech Republic) [11/2023]",
+                " by J\u{00e1}n Rege\u{0161} (jan.reges@siteone.cz) from www.SiteOne.io (Czech Republic) [2023-2026]",
                 "gray",
                 false,
             )
