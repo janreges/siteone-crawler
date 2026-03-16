@@ -224,6 +224,8 @@ jobs:
   publish-winget:
     name: Submit to WinGet
     runs-on: windows-latest
+    # Requires initial manual submission to microsoft/winget-pkgs first.
+    # Once JanReges.SiteOneCrawler exists in winget-pkgs, set PUBLISH_WINGET=true.
     if: vars.PUBLISH_WINGET == 'true'
     steps:
       - name: Determine version
@@ -243,20 +245,11 @@ jobs:
         run: |
           $url_x64 = "https://github.com/janreges/siteone-crawler/releases/download/v$env:VERSION/siteone-crawler-v$env:VERSION-win-x64.zip"
           $url_arm64 = "https://github.com/janreges/siteone-crawler/releases/download/v$env:VERSION/siteone-crawler-v$env:VERSION-win-arm64.zip"
-          # Try update first; if the package doesn't exist yet, fall back to new
           wingetcreate update JanReges.SiteOneCrawler `
             --version $env:VERSION `
             --urls $url_x64 $url_arm64 `
             --token $env:WINGET_TOKEN `
             --submit
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "Update failed, trying initial submission with 'new'..."
-            wingetcreate new $url_x64 $url_arm64 `
-              --out manifests `
-              --token $env:WINGET_TOKEN
-            wingetcreate submit manifests `
-              --token $env:WINGET_TOKEN
-          }
 
   # ─────────────────────────────────────────────────────────────────
   # Update AUR package
