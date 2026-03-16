@@ -31,6 +31,10 @@ GIF animation of the crawler in action (also available as a [▶️ video](https
 - [🚀 Installation](#-installation)
     * [📦 Pre-built binaries](#-pre-built-binaries)
     * [🍺 Homebrew (macOS / Linux)](#-homebrew-macos--linux)
+    * [🐧 Debian / Ubuntu (apt)](#-debian--ubuntu-apt)
+    * [🎩 Fedora / RHEL (dnf)](#-fedora--rhel-dnf)
+    * [🦎 openSUSE / SLES (zypper)](#-opensuse--sles-zypper)
+    * [🏔️ Alpine Linux (apk)](#️-alpine-linux-apk)
     * [🔨 Build from source](#-build-from-source)
 - [▶️ Usage](#️-usage)
     * [Basic example](#basic-example)
@@ -225,6 +229,34 @@ The binary is self-contained — no runtime dependencies required.
 ```bash
 brew install janreges/tap/siteone-crawler
 siteone-crawler --url=https://my.domain.tld
+```
+
+### 🐧 Debian / Ubuntu (apt)
+
+```bash
+curl -1sLf 'https://dl.cloudsmith.io/public/janreges/siteone-crawler/setup.deb.sh' | sudo -E bash
+sudo apt-get install siteone-crawler
+```
+
+### 🎩 Fedora / RHEL (dnf)
+
+```bash
+curl -1sLf 'https://dl.cloudsmith.io/public/janreges/siteone-crawler/setup.rpm.sh' | sudo -E bash
+sudo dnf install siteone-crawler
+```
+
+### 🦎 openSUSE / SLES (zypper)
+
+```bash
+curl -1sLf 'https://dl.cloudsmith.io/public/janreges/siteone-crawler/setup.rpm.sh' | sudo -E bash
+sudo zypper install siteone-crawler
+```
+
+### 🏔️ Alpine Linux (apk)
+
+```bash
+curl -1sLf 'https://dl.cloudsmith.io/public/janreges/siteone-crawler/setup.alpine.sh' | sudo -E bash
+sudo apk add siteone-crawler
 ```
 
 ### 🔨 Build from source
