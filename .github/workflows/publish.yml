@@ -4,6 +4,11 @@ name: Publish to package managers
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v2.0.1)'
+        required: true
 
 permissions:
   contents: write
@@ -20,12 +25,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
 
       - name: Determine version
         id: version
         run: |
-          TAG="${{ github.event.release.tag_name }}"
+          TAG="${{ github.event.release.tag_name || inputs.tag }}"
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
 
       - name: Ensure Cargo.toml has correct version
@@ -52,7 +57,7 @@ jobs:
       - name: Determine version
         id: version
         run: |
-          TAG="${{ github.event.release.tag_name }}"
+          TAG="${{ github.event.release.tag_name || inputs.tag }}"
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
 
       - name: Download release archives and compute SHA256
@@ -141,7 +146,7 @@ jobs:
       - name: Determine version
         id: version
         run: |
-          TAG="${{ github.event.release.tag_name }}"
+          TAG="${{ github.event.release.tag_name || inputs.tag }}"
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
 
       - name: Download Windows archives and compute SHA256
@@ -224,7 +229,7 @@ jobs:
         id: version
         shell: bash
         run: |
-          TAG="${{ github.event.release.tag_name }}"
+          TAG="${{ github.event.release.tag_name || inputs.tag }}"
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
 
       - name: Install wingetcreate
@@ -265,7 +270,7 @@ jobs:
       - name: Determine version
         id: version
         run: |
-          TAG="${{ github.event.release.tag_name }}"
+          TAG="${{ github.event.release.tag_name || inputs.tag }}"
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
 
       - name: Compute SHA256 for Linux archives
@@ -359,7 +364,7 @@ jobs:
       - name: Determine version
         id: version
         run: |
-          TAG="${{ github.event.release.tag_name }}"
+          TAG="${{ github.event.release.tag_name || inputs.tag }}"
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
 
       - name: Download .deb, .rpm and .apk from release
