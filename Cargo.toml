@@ -54,7 +54,7 @@ pulldown-cmark = "0.13.1"
 [package.metadata.deb]
 maintainer = "Ján Regeš <jan.reges@siteone.cz>"
 copyright = "2023-2026, Ján Regeš"
-depends = "$auto"
+depends = "libc6"
 section = "web"
 priority = "optional"
 extended-description = """\

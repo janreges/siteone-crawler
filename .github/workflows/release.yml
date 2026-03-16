@@ -211,12 +211,27 @@ jobs:
           echo "ARTIFACT_PATH=${ARTIFACT}.zip" >> "$GITHUB_ENV"
 
       # ── Build .deb and .rpm packages (Linux only) ──────────────
+      - name: Install cross-compilation tools (arm64)
+        if: runner.os == 'Linux' && matrix.cross
+        run: sudo apt-get install -y binutils-aarch64-linux-gnu
+
+      - name: Strip binary (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          BINARY="target/${{ matrix.target }}/release/siteone-crawler"
+          if [[ "${{ matrix.target }}" == "aarch64"* ]]; then
+            aarch64-linux-gnu-strip -s "$BINARY" || true
+          else
+            strip -s "$BINARY" || true
+          fi
+
       - name: Build .deb package
         if: runner.os == 'Linux'
         shell: bash
         run: |
           cargo install cargo-deb
-          cargo deb --no-build --target ${{ matrix.target }}
+          cargo deb --no-build --no-strip --target ${{ matrix.target }}
           echo "DEB_PATH=$(ls target/${{ matrix.target }}/debian/*.deb)" >> "$GITHUB_ENV"
 
       - name: Build .rpm package
@@ -224,18 +239,10 @@ jobs:
         shell: bash
         run: |
           cargo install cargo-generate-rpm
-          # Strip binary (use cross-strip for arm64)
-          if [[ "${{ matrix.target }}" == "aarch64"* ]]; then
-            sudo apt-get install -y binutils-aarch64-linux-gnu
-            aarch64-linux-gnu-strip -s "target/${{ matrix.target }}/release/siteone-crawler" || true
-          else
-            strip -s "target/${{ matrix.target }}/release/siteone-crawler" || true
-          fi
-          # cargo-generate-rpm needs binary at target/release/
           mkdir -p target/release
           cp "target/${{ matrix.target }}/release/siteone-crawler" target/release/
           cargo generate-rpm --target ${{ matrix.target }}
-          echo "RPM_PATH=$(ls target/generate-rpm/*.rpm)" >> "$GITHUB_ENV"
+          echo "RPM_PATH=$(find target -name '*.rpm' -path '*/generate-rpm/*' | head -1)" >> "$GITHUB_ENV"
 
       - name: Upload .deb artifact
         if: runner.os == 'Linux'
