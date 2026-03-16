@@ -2,7 +2,6 @@
 // (c) Jan Reges <jan.reges@siteone.cz>
 //
 
-
 use std::collections::HashMap;
 use std::io::Write;
 
