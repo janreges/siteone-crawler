@@ -1,0 +1,101 @@
+[package]
+name = "siteone-crawler"
+version = "2.0.0"
+edition = "2024"
+rust-version = "1.94"
+authors = ["Ján Regeš <jan.reges@siteone.cz>"]
+description = "Website crawler and QA toolkit in Rust for security, performance, SEO, and accessibility audits, offline cloning, markdown export, sitemap generation, cache warming, and CI/CD gating — one dependency-free binary for all major platforms, 10 tools in one."
+license = "MIT"
+repository = "https://github.com/janreges/siteone-crawler"
+homepage = "https://crawler.siteone.io/"
+keywords = ["crawler", "seo", "website-analysis", "accessibility", "security"]
+categories = ["command-line-utilities", "web-programming"]
+readme = "README.md"
+
+[[bin]]
+name = "siteone-crawler"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.13", features = ["gzip", "brotli", "deflate", "rustls", "socks", "cookies", "stream", "blocking", "multipart"] }
+scraper = "0.25"
+regex = "1"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+colored = "3"
+dashmap = "6"
+hickory-resolver = "0.25"
+rustls = { version = "0.23", features = ["ring"] }
+x509-parser = "0.18"
+lettre = { version = "0.11", default-features = false, features = ["tokio1-rustls-tls", "smtp-transport", "builder"] }
+flate2 = "1"
+brotli = "8"
+chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = "0.10"
+terminal_size = "0.4"
+quick-xml = "0.39"
+thiserror = "2"
+anyhow = "1"
+md-5 = "0.10"
+url = "2"
+percent-encoding = "2"
+mime = "0.3"
+once_cell = "1"
+indexmap = "2"
+gethostname = "1.1"
+rustls-native-certs = "0.8"
+ego-tree = "0.10"
+base64 = "0.22"
+dirs = "6"
+pulldown-cmark = "0.13.1"
+
+[package.metadata.deb]
+maintainer = "Ján Regeš <jan.reges@siteone.cz>"
+copyright = "2023-2026, Ján Regeš"
+depends = "$auto"
+section = "web"
+priority = "optional"
+extended-description = """\
+SiteOne Crawler is an ultra-fast, open-source website crawler and QA toolkit \
+written in Rust. It helps developers, DevOps teams, QA engineers, and technical \
+SEO specialists crawl websites, audit quality, stress-test pages under load, \
+clone sites for offline browsing and archiving, export content to markdown, \
+generate sitemaps, warm caches, and enforce CI/CD quality gates — all from a \
+single, dependency-free binary for Linux, macOS, and Windows.\n\
+\n\
+It combines multiple website tooling workflows in one application: security, \
+performance, SEO, accessibility, and best-practices audits; whole-site quality \
+scoring; UX checks that other tools miss (e.g. non-clickable phone numbers, \
+missing alt text, broken heading hierarchy); reporting of all external links \
+with their source pages, redirects, and 404s; stress/load testing with tunable \
+concurrency and rate limits; offline multi-domain cloning with URL rewriting; \
+markdown export for documentation, archiving, or AI workflows; sitemap \
+generation; post-deploy cache warming; and automated quality checks for CI/CD \
+pipelines.\n\
+\n\
+SiteOne Crawler can output results as interactive HTML reports (including an \
+image gallery of all pictures found on the site), structured JSON, or readable \
+terminal text, making it suitable both for local development and for automation \
+in CI/CD environments. It can also email HTML reports directly via \
+the user's own SMTP server and includes a built-in web server for browsing \
+generated markdown exports, plus extensive CLI configurability for advanced \
+use cases.\n\
+\n\
+Whether you need a technical website audit, an offline mirror, a load-testing \
+helper, a markdown export for LLM/AI processing, or a reliable quality gate \
+before deployment, SiteOne Crawler delivers 10 tools in one — as an ultra-fast, \
+portable, open-source Rust binary with zero runtime dependencies."""
+assets = [
+    ["target/release/siteone-crawler", "usr/bin/", "755"],
+    ["README.md", "usr/share/doc/siteone-crawler/", "644"],
+    ["LICENSE", "usr/share/doc/siteone-crawler/", "644"],
+]
+
+[package.metadata.generate-rpm]
+assets = [
+    { source = "target/release/siteone-crawler", dest = "/usr/bin/siteone-crawler", mode = "0755" },
+    { source = "README.md", dest = "/usr/share/doc/siteone-crawler/README.md", mode = "0644" },
+    { source = "LICENSE", dest = "/usr/share/doc/siteone-crawler/LICENSE", mode = "0644" },
+]

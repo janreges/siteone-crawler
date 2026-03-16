@@ -1,0 +1,14 @@
+#!/bin/bash
+# Pre-commit hook: run cargo fmt, clippy, and tests before committing.
+set -e
+
+echo "=== Pre-commit: cargo fmt --check ==="
+cargo fmt -- --check
+
+echo "=== Pre-commit: cargo clippy ==="
+cargo clippy -- -D warnings
+
+echo "=== Pre-commit: cargo test ==="
+cargo test
+
+echo "=== Pre-commit checks passed ==="

@@ -1,0 +1,390 @@
+name: Publish to package managers
+
+# Triggers when a draft release is published (manually via GitHub UI)
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────
+  # Publish to crates.io
+  # ─────────────────────────────────────────────────────────────────
+  publish-crates:
+    name: Publish to crates.io
+    runs-on: ubuntu-latest
+    if: vars.PUBLISH_CRATES == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Determine version
+        id: version
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure Cargo.toml has correct version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: sed -i "s/^version = .*/version = \"${VERSION}\"/" Cargo.toml
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --no-verify
+
+  # ─────────────────────────────────────────────────────────────────
+  # Update Homebrew tap
+  # ─────────────────────────────────────────────────────────────────
+  publish-homebrew:
+    name: Update Homebrew formula
+    runs-on: ubuntu-latest
+    if: vars.PUBLISH_HOMEBREW == 'true'
+    steps:
+      - name: Determine version
+        id: version
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Download release archives and compute SHA256
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          BASE_URL="https://github.com/${{ github.repository }}/releases/download/v${VERSION}"
+          for SUFFIX in linux-x64 linux-arm64 macos-x64 macos-arm64; do
+            FILE="siteone-crawler-v${VERSION}-${SUFFIX}.tar.gz"
+            curl -sfL "${BASE_URL}/${FILE}" -o "${FILE}"
+            SHA=$(sha256sum "${FILE}" | cut -d' ' -f1)
+            VAR_NAME="SHA_$(echo "${SUFFIX}" | tr '[:lower:]-' '[:upper:]_')"
+            echo "${VAR_NAME}=${SHA}" >> "$GITHUB_ENV"
+            echo "${VAR_NAME}=${SHA}"
+          done
+
+      - name: Clone Homebrew tap
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/janreges/homebrew-tap.git" tap
+
+      - name: Update formula
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          cat > tap/Formula/siteone-crawler.rb <<'FORMULA'
+          class SiteoneCrawler < Formula
+            desc "Website crawler and QA toolkit in Rust for security, performance, SEO, and accessibility audits, offline cloning, markdown export, sitemap generation, cache warming, and CI/CD gating — one dependency-free binary for all major platforms, 10 tools in one."
+            homepage "https://crawler.siteone.io/"
+            version "VERSION_PLACEHOLDER"
+            license "MIT"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "https://github.com/janreges/siteone-crawler/releases/download/v#{version}/siteone-crawler-v#{version}-macos-arm64.tar.gz"
+                sha256 "SHA_MACOS_ARM64_PLACEHOLDER"
+              else
+                url "https://github.com/janreges/siteone-crawler/releases/download/v#{version}/siteone-crawler-v#{version}-macos-x64.tar.gz"
+                sha256 "SHA_MACOS_X64_PLACEHOLDER"
+              end
+            end
+
+            on_linux do
+              if Hardware::CPU.arm?
+                url "https://github.com/janreges/siteone-crawler/releases/download/v#{version}/siteone-crawler-v#{version}-linux-arm64.tar.gz"
+                sha256 "SHA_LINUX_ARM64_PLACEHOLDER"
+              else
+                url "https://github.com/janreges/siteone-crawler/releases/download/v#{version}/siteone-crawler-v#{version}-linux-x64.tar.gz"
+                sha256 "SHA_LINUX_X64_PLACEHOLDER"
+              end
+            end
+
+            def install
+              bin.install "siteone-crawler"
+            end
+
+            test do
+              assert_match "SiteOne Crawler", shell_output("#{bin}/siteone-crawler --version")
+            end
+          end
+          FORMULA
+          sed -i "s/VERSION_PLACEHOLDER/${VERSION}/g" tap/Formula/siteone-crawler.rb
+          sed -i "s/SHA_MACOS_ARM64_PLACEHOLDER/${SHA_MACOS_ARM64}/g" tap/Formula/siteone-crawler.rb
+          sed -i "s/SHA_MACOS_X64_PLACEHOLDER/${SHA_MACOS_X64}/g" tap/Formula/siteone-crawler.rb
+          sed -i "s/SHA_LINUX_ARM64_PLACEHOLDER/${SHA_LINUX_ARM64}/g" tap/Formula/siteone-crawler.rb
+          sed -i "s/SHA_LINUX_X64_PLACEHOLDER/${SHA_LINUX_X64}/g" tap/Formula/siteone-crawler.rb
+
+      - name: Push updated formula
+        run: |
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/siteone-crawler.rb
+          git commit -m "Update siteone-crawler to v${{ steps.version.outputs.version }}"
+          git push
+
+  # ─────────────────────────────────────────────────────────────────
+  # Update Scoop bucket
+  # ─────────────────────────────────────────────────────────────────
+  publish-scoop:
+    name: Update Scoop manifest
+    runs-on: ubuntu-latest
+    if: vars.PUBLISH_SCOOP == 'true'
+    steps:
+      - name: Determine version
+        id: version
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Download Windows archives and compute SHA256
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          BASE_URL="https://github.com/${{ github.repository }}/releases/download/v${VERSION}"
+          for SUFFIX in win-x64 win-arm64; do
+            FILE="siteone-crawler-v${VERSION}-${SUFFIX}.zip"
+            curl -sfL "${BASE_URL}/${FILE}" -o "${FILE}"
+            SHA=$(sha256sum "${FILE}" | cut -d' ' -f1)
+            VAR_NAME="SHA_$(echo "${SUFFIX}" | tr '[:lower:]-' '[:upper:]_')"
+            echo "${VAR_NAME}=${SHA}" >> "$GITHUB_ENV"
+          done
+
+      - name: Clone Scoop bucket
+        env:
+          BUCKET_TOKEN: ${{ secrets.SCOOP_BUCKET_TOKEN }}
+        run: |
+          git clone "https://x-access-token:${BUCKET_TOKEN}@github.com/janreges/scoop-siteone.git" bucket
+
+      - name: Update manifest
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir -p bucket/bucket
+          cat > bucket/bucket/siteone-crawler.json << 'TEMPLATE'
+          {
+              "version": "VERSION_PLACEHOLDER",
+              "description": "Website crawler and QA toolkit in Rust for security, performance, SEO, and accessibility audits, offline cloning, markdown export, sitemap generation, cache warming, and CI/CD gating — one dependency-free binary for all major platforms, 10 tools in one.",
+              "homepage": "https://crawler.siteone.io/",
+              "license": "MIT",
+              "architecture": {
+                  "64bit": {
+                      "url": "https://github.com/janreges/siteone-crawler/releases/download/vVERSION_PLACEHOLDER/siteone-crawler-vVERSION_PLACEHOLDER-win-x64.zip",
+                      "hash": "HASH_X64_PLACEHOLDER"
+                  },
+                  "arm64": {
+                      "url": "https://github.com/janreges/siteone-crawler/releases/download/vVERSION_PLACEHOLDER/siteone-crawler-vVERSION_PLACEHOLDER-win-arm64.zip",
+                      "hash": "HASH_ARM64_PLACEHOLDER"
+                  }
+              },
+              "extract_dir": "siteone-crawler",
+              "bin": "siteone-crawler.exe",
+              "checkver": "github",
+              "autoupdate": {
+                  "architecture": {
+                      "64bit": {
+                          "url": "https://github.com/janreges/siteone-crawler/releases/download/v$version/siteone-crawler-v$version-win-x64.zip"
+                      },
+                      "arm64": {
+                          "url": "https://github.com/janreges/siteone-crawler/releases/download/v$version/siteone-crawler-v$version-win-arm64.zip"
+                      }
+                  }
+              }
+          }
+          TEMPLATE
+          sed -i "s/VERSION_PLACEHOLDER/${VERSION}/g" bucket/bucket/siteone-crawler.json
+          sed -i "s/HASH_X64_PLACEHOLDER/${SHA_WIN_X64}/g" bucket/bucket/siteone-crawler.json
+          sed -i "s/HASH_ARM64_PLACEHOLDER/${SHA_WIN_ARM64}/g" bucket/bucket/siteone-crawler.json
+
+      - name: Push updated manifest
+        run: |
+          cd bucket
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add bucket/siteone-crawler.json
+          git commit -m "Update siteone-crawler to v${{ steps.version.outputs.version }}"
+          git push
+
+  # ─────────────────────────────────────────────────────────────────
+  # Submit to WinGet
+  # ─────────────────────────────────────────────────────────────────
+  publish-winget:
+    name: Submit to WinGet
+    runs-on: windows-latest
+    if: vars.PUBLISH_WINGET == 'true'
+    steps:
+      - name: Determine version
+        id: version
+        shell: bash
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Install wingetcreate
+        run: winget install Microsoft.WingetCreate --accept-source-agreements --accept-package-agreements
+
+      - name: Update WinGet manifest
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+        run: |
+          wingetcreate update JanReges.SiteOneCrawler `
+            --version $env:VERSION `
+            --urls "https://github.com/janreges/siteone-crawler/releases/download/v$env:VERSION/siteone-crawler-v$env:VERSION-win-x64.zip" `
+                   "https://github.com/janreges/siteone-crawler/releases/download/v$env:VERSION/siteone-crawler-v$env:VERSION-win-arm64.zip" `
+            --token $env:WINGET_TOKEN `
+            --submit
+
+  # ─────────────────────────────────────────────────────────────────
+  # Update AUR package
+  # ─────────────────────────────────────────────────────────────────
+  publish-aur:
+    name: Update AUR package
+    runs-on: ubuntu-latest
+    if: vars.PUBLISH_AUR == 'true'
+    steps:
+      - name: Determine version
+        id: version
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Compute SHA256 for Linux archives
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          BASE_URL="https://github.com/${{ github.repository }}/releases/download/v${VERSION}"
+          for SUFFIX in linux-x64 linux-arm64; do
+            FILE="siteone-crawler-v${VERSION}-${SUFFIX}.tar.gz"
+            curl -sfL "${BASE_URL}/${FILE}" -o "${FILE}"
+            SHA=$(sha256sum "${FILE}" | cut -d' ' -f1)
+            VAR_NAME="SHA_$(echo "${SUFFIX}" | tr '[:lower:]-' '[:upper:]_')"
+            echo "${VAR_NAME}=${SHA}" >> "$GITHUB_ENV"
+          done
+
+      - name: Setup SSH for AUR
+        env:
+          AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$AUR_SSH_KEY" > ~/.ssh/aur
+          chmod 600 ~/.ssh/aur
+          echo "Host aur.archlinux.org" >> ~/.ssh/config
+          echo "  IdentityFile ~/.ssh/aur" >> ~/.ssh/config
+          echo "  User aur" >> ~/.ssh/config
+          ssh-keyscan aur.archlinux.org >> ~/.ssh/known_hosts
+
+      - name: Clone AUR repo and update PKGBUILD
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git clone ssh://aur@aur.archlinux.org/siteone-crawler-bin.git aur
+          cd aur
+
+          cat > PKGBUILD << PKGBUILD
+          # Maintainer: Jan Reges <jan.reges@siteone.cz>
+          pkgname=siteone-crawler-bin
+          pkgver=${VERSION}
+          pkgrel=1
+          pkgdesc="Website crawler and QA toolkit in Rust for security, performance, SEO, and accessibility audits, offline cloning, markdown export, sitemap generation, cache warming, and CI/CD gating — one dependency-free binary for all major platforms, 10 tools in one."
+          arch=('x86_64' 'aarch64')
+          url="https://crawler.siteone.io/"
+          license=('MIT')
+          provides=('siteone-crawler')
+          conflicts=('siteone-crawler')
+
+          source_x86_64=("https://github.com/janreges/siteone-crawler/releases/download/v\${pkgver}/siteone-crawler-v\${pkgver}-linux-x64.tar.gz")
+          source_aarch64=("https://github.com/janreges/siteone-crawler/releases/download/v\${pkgver}/siteone-crawler-v\${pkgver}-linux-arm64.tar.gz")
+          sha256sums_x86_64=('${SHA_LINUX_X64}')
+          sha256sums_aarch64=('${SHA_LINUX_ARM64}')
+
+          package() {
+              install -Dm755 "\${srcdir}/siteone-crawler/siteone-crawler" "\${pkgdir}/usr/bin/siteone-crawler"
+              install -Dm644 "\${srcdir}/siteone-crawler/LICENSE" "\${pkgdir}/usr/share/licenses/\${pkgname}/LICENSE"
+          }
+          PKGBUILD
+
+          cat > .SRCINFO << SRCINFO
+          pkgbase = siteone-crawler-bin
+          	pkgdesc = Website crawler and QA toolkit in Rust for security, performance, SEO, and accessibility audits, offline cloning, markdown export, sitemap generation, cache warming, and CI/CD gating — one dependency-free binary for all major platforms, 10 tools in one.
+          	pkgver = ${VERSION}
+          	pkgrel = 1
+          	url = https://crawler.siteone.io/
+          	arch = x86_64
+          	arch = aarch64
+          	license = MIT
+          	provides = siteone-crawler
+          	conflicts = siteone-crawler
+          	source_x86_64 = https://github.com/janreges/siteone-crawler/releases/download/v${VERSION}/siteone-crawler-v${VERSION}-linux-x64.tar.gz
+          	sha256sums_x86_64 = ${SHA_LINUX_X64}
+          	source_aarch64 = https://github.com/janreges/siteone-crawler/releases/download/v${VERSION}/siteone-crawler-v${VERSION}-linux-arm64.tar.gz
+          	sha256sums_aarch64 = ${SHA_LINUX_ARM64}
+
+          pkgname = siteone-crawler-bin
+          SRCINFO
+
+          git config user.name "Jan Reges"
+          git config user.email "jan.reges@siteone.cz"
+          git add PKGBUILD .SRCINFO
+          git commit -m "Update to v${VERSION}"
+          git push
+
+  # ─────────────────────────────────────────────────────────────────
+  # Publish .deb and .rpm to Cloudsmith (APT + DNF repository)
+  # ─────────────────────────────────────────────────────────────────
+  publish-cloudsmith:
+    name: Publish to Cloudsmith
+    runs-on: ubuntu-latest
+    if: vars.PUBLISH_CLOUDSMITH == 'true'
+    steps:
+      - name: Determine version
+        id: version
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Download .deb and .rpm from release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir -p packages
+          BASE_URL="https://github.com/${{ github.repository }}/releases/download/v${VERSION}"
+          # Download all .deb and .rpm assets from the release
+          for file in $(gh release view "v${VERSION}" --repo "${{ github.repository }}" --json assets -q '.assets[].name' | grep -E '\.(deb|rpm)$'); do
+            echo "Downloading ${file} ..."
+            curl -sfL "${BASE_URL}/${file}" -o "packages/${file}"
+          done
+
+      - name: List packages
+        run: ls -lhR packages/
+
+      - name: Install Cloudsmith CLI
+        run: pip install cloudsmith-cli
+
+      - name: Upload .deb packages
+        env:
+          CLOUDSMITH_API_KEY: ${{ secrets.CLOUDSMITH_API_KEY }}
+        run: |
+          for deb in packages/*.deb; do
+            [ -f "$deb" ] || continue
+            echo "Uploading $deb ..."
+            cloudsmith push deb janreges/siteone-crawler/any-distro/any-version "$deb"
+          done
+
+      - name: Upload .rpm packages
+        env:
+          CLOUDSMITH_API_KEY: ${{ secrets.CLOUDSMITH_API_KEY }}
+        run: |
+          for rpm in packages/*.rpm; do
+            [ -f "$rpm" ] || continue
+            echo "Uploading $rpm ..."
+            cloudsmith push rpm janreges/siteone-crawler/any-distro/any-version "$rpm"
+          done

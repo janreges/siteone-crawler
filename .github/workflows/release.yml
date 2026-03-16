@@ -1,240 +1,329 @@
-name: Build and Release
+name: Release
 
+# Trigger: push a tag like v1.0.10
 on:
   push:
     tags:
       - 'v*'
+  # Manual trigger for building artifacts only (no release created)
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to release (e.g., 1.0.9)'
+        description: 'Version number (e.g. 1.0.10)'
         required: true
-        type: string
 
 permissions:
   contents: write
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
   build:
-    runs-on: ubuntu-latest
-    
+    name: Build ${{ matrix.artifact_suffix }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact_suffix: linux-x64
+            archive: tar.gz
+
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact_suffix: linux-arm64
+            archive: tar.gz
+            cross: true
+
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            artifact_suffix: macos-x64
+            archive: tar.gz
+
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            artifact_suffix: macos-arm64
+            archive: tar.gz
+
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            artifact_suffix: win-x64
+            archive: zip
+
+          - target: aarch64-pc-windows-msvc
+            os: windows-latest
+            artifact_suffix: win-arm64
+            archive: zip
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Get version
-      id: get_version
-      run: |
-        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-          VERSION="${{ github.event.inputs.version }}"
-          # Remove 'v' prefix if present
-          VERSION="${VERSION#v}"
-        else
-          VERSION=${GITHUB_REF#refs/tags/v}
-        fi
-        echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
-        echo "Building version: ${VERSION}"
-    
-    - name: Download Swoole binaries
-      run: |
-        mkdir -p swoole-downloads
-        cd swoole-downloads
-        
-        # Download all Swoole binaries
-        wget https://github.com/swoole/swoole-cli/releases/download/v6.0.1.0/swoole-cli-v6.0.1-cygwin-x64.zip
-        wget https://github.com/swoole/swoole-cli/releases/download/v6.0.1.0/swoole-cli-v6.0.1-linux-arm64.tar.xz
-        wget https://github.com/swoole/swoole-cli/releases/download/v6.0.1.0/swoole-cli-v6.0.1-linux-x64.tar.xz
-        wget https://github.com/swoole/swoole-cli/releases/download/v6.0.1.0/swoole-cli-v6.0.1-macos-arm64.tar.xz
-        wget https://github.com/swoole/swoole-cli/releases/download/v6.0.1.0/swoole-cli-v6.0.1-macos-x64.tar.xz
-    
-    - name: Prepare Linux ARM64 release
-      run: |
-        VERSION=${{ steps.get_version.outputs.VERSION }}
-        RELEASE_NAME="siteone-crawler-v${VERSION}-linux-arm64"
-        
-        # Create release directory
-        mkdir -p releases/${RELEASE_NAME}
-        
-        # Copy project files (excluding certain directories)
-        for item in *; do
-          if [ "$item" != "releases" ] && [ "$item" != "swoole-downloads" ]; then
-            cp -r "$item" "releases/${RELEASE_NAME}/"
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Determine version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            # Extract from tag: v1.0.10 -> 1.0.10
+            VERSION="${GITHUB_REF_NAME#v}"
           fi
-        done
-        
-        # Clean up unnecessary files
-        cd releases/${RELEASE_NAME}
-        rm -rf .git .github docs/ tests/ composer.json composer.lock package.json phpstan.neon phpunit.xml pack-sfx.php
-        
-        # Extract and copy Swoole binary
-        cd ../..
-        # Remove existing Linux x64 binary
-        rm -f releases/${RELEASE_NAME}/bin/swoole-cli
-        tar -xf swoole-downloads/swoole-cli-v6.0.1-linux-arm64.tar.xz
-        cp swoole-cli releases/${RELEASE_NAME}/bin/
-        chmod +x releases/${RELEASE_NAME}/bin/swoole-cli
-        # Clean up extracted binary
-        rm -f swoole-cli
-        
-        # Create tar.gz archive
-        cd releases
-        tar -czf ${RELEASE_NAME}.tar.gz ${RELEASE_NAME}
-        sudo rm -rf ${RELEASE_NAME}
-    
-    - name: Prepare Linux x64 release
-      run: |
-        VERSION=${{ steps.get_version.outputs.VERSION }}
-        RELEASE_NAME="siteone-crawler-v${VERSION}-linux-x64"
-        
-        # Create release directory
-        mkdir -p releases/${RELEASE_NAME}
-        
-        # Copy project files (excluding certain directories)
-        for item in *; do
-          if [ "$item" != "releases" ] && [ "$item" != "swoole-downloads" ]; then
-            cp -r "$item" "releases/${RELEASE_NAME}/"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Version: ${VERSION}"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross (for cross-compilation)
+        if: matrix.cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Update version in source
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          DATE_SUFFIX="$(date +%Y%m%d)"
+          VERSION_CODE="${VERSION}.${DATE_SUFFIX}"
+
+          # Update Cargo.toml
+          sed -i.bak "s/^version = .*/version = \"${VERSION}\"/" Cargo.toml
+
+          # Update version.rs
+          sed -i.bak "s/^pub const CODE: .*/pub const CODE: \&str = \"${VERSION_CODE}\";/" src/version.rs
+
+          echo "Cargo.toml version: ${VERSION}"
+          echo "version.rs CODE: ${VERSION_CODE}"
+
+      - name: Build
+        shell: bash
+        run: |
+          if [[ "${{ matrix.cross }}" == "true" ]]; then
+            cross build --release --target ${{ matrix.target }}
+          else
+            cargo build --release --target ${{ matrix.target }}
           fi
-        done
-        
-        # Clean up unnecessary files
-        cd releases/${RELEASE_NAME}
-        rm -rf .git .github docs/ tests/ composer.json composer.lock package.json phpstan.neon phpunit.xml pack-sfx.php
-        
-        # Extract and copy Swoole binary
-        cd ../..
-        # Remove existing Linux x64 binary (if any)
-        rm -f releases/${RELEASE_NAME}/bin/swoole-cli
-        tar -xf swoole-downloads/swoole-cli-v6.0.1-linux-x64.tar.xz
-        cp swoole-cli releases/${RELEASE_NAME}/bin/
-        chmod +x releases/${RELEASE_NAME}/bin/swoole-cli
-        # Clean up extracted binary
-        rm -f swoole-cli
-        
-        # Create tar.gz archive
-        cd releases
-        tar -czf ${RELEASE_NAME}.tar.gz ${RELEASE_NAME}
-        sudo rm -rf ${RELEASE_NAME}
-    
-    - name: Prepare macOS ARM64 release
-      run: |
-        VERSION=${{ steps.get_version.outputs.VERSION }}
-        RELEASE_NAME="siteone-crawler-v${VERSION}-macos-arm64"
-        
-        # Create release directory
-        mkdir -p releases/${RELEASE_NAME}
-        
-        # Copy project files (excluding certain directories)
-        for item in *; do
-          if [ "$item" != "releases" ] && [ "$item" != "swoole-downloads" ]; then
-            cp -r "$item" "releases/${RELEASE_NAME}/"
+
+      # ── macOS Code Signing & Notarization ──────────────────────────
+      - name: Import Apple certificate
+        if: runner.os == 'macOS'
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          CERTIFICATE_PATH="$RUNNER_TEMP/certificate.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 16)"
+
+          echo -n "$CERTIFICATE_BASE64" | base64 --decode -o "$CERTIFICATE_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          security import "$CERTIFICATE_PATH" \
+            -P "$CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+
+          security set-key-partition-list \
+            -S apple-tool:,apple: \
+            -k "$KEYCHAIN_PASSWORD" \
+            "$KEYCHAIN_PATH"
+
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+
+      - name: Sign macOS binary
+        if: runner.os == 'macOS'
+        env:
+          SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          BINARY="target/${{ matrix.target }}/release/siteone-crawler"
+
+          codesign --force --options runtime \
+            --sign "$SIGNING_IDENTITY" \
+            "$BINARY"
+
+          echo "Verifying signature..."
+          codesign --verify --verbose "$BINARY"
+          echo "Signature OK"
+
+      - name: Notarize macOS binary
+        if: runner.os == 'macOS'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          BINARY="target/${{ matrix.target }}/release/siteone-crawler"
+          NOTARIZE_ZIP="$RUNNER_TEMP/notarize.zip"
+
+          # ditto is required — Apple's notary service rejects zip-created archives
+          ditto -c -k --keepParent "$BINARY" "$NOTARIZE_ZIP"
+
+          echo "Submitting for notarization..."
+          xcrun notarytool submit "$NOTARIZE_ZIP" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_ID_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+
+          echo "Notarization complete"
+
+      - name: Clean up keychain
+        if: runner.os == 'macOS' && always()
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
+          if [ -f "$KEYCHAIN_PATH" ]; then
+            security delete-keychain "$KEYCHAIN_PATH"
           fi
-        done
-        
-        # Clean up unnecessary files
-        cd releases/${RELEASE_NAME}
-        rm -rf .git .github docs/ tests/ composer.json composer.lock package.json phpstan.neon phpunit.xml pack-sfx.php
-        
-        # Extract and copy Swoole binary
-        cd ../..
-        # Remove existing Linux x64 binary
-        rm -f releases/${RELEASE_NAME}/bin/swoole-cli
-        tar -xf swoole-downloads/swoole-cli-v6.0.1-macos-arm64.tar.xz
-        cp swoole-cli releases/${RELEASE_NAME}/bin/
-        chmod +x releases/${RELEASE_NAME}/bin/swoole-cli
-        # Clean up extracted binary
-        rm -f swoole-cli
-        
-        # Create tar.gz archive
-        cd releases
-        tar -czf ${RELEASE_NAME}.tar.gz ${RELEASE_NAME}
-        sudo rm -rf ${RELEASE_NAME}
-    
-    - name: Prepare macOS x64 release
-      run: |
-        VERSION=${{ steps.get_version.outputs.VERSION }}
-        RELEASE_NAME="siteone-crawler-v${VERSION}-macos-x64"
-        
-        # Create release directory
-        mkdir -p releases/${RELEASE_NAME}
-        
-        # Copy project files (excluding certain directories)
-        for item in *; do
-          if [ "$item" != "releases" ] && [ "$item" != "swoole-downloads" ]; then
-            cp -r "$item" "releases/${RELEASE_NAME}/"
+      # ────────────────────────────────────────────────────────────────
+
+      - name: Package (Unix)
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          ARTIFACT="siteone-crawler-v${VERSION}-${{ matrix.artifact_suffix }}"
+          mkdir -p "staging/siteone-crawler"
+          cp "target/${{ matrix.target }}/release/siteone-crawler" "staging/siteone-crawler/"
+          cp README.md "staging/siteone-crawler/" 2>/dev/null || true
+          cp LICENSE "staging/siteone-crawler/" 2>/dev/null || true
+          chmod +x "staging/siteone-crawler/siteone-crawler"
+          (cd staging && tar czf "../${ARTIFACT}.tar.gz" siteone-crawler/)
+          echo "ARTIFACT_PATH=${ARTIFACT}.tar.gz" >> "$GITHUB_ENV"
+
+      - name: Package (Windows)
+        if: matrix.archive == 'zip'
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          ARTIFACT="siteone-crawler-v${VERSION}-${{ matrix.artifact_suffix }}"
+          mkdir -p "staging/siteone-crawler"
+          cp "target/${{ matrix.target }}/release/siteone-crawler.exe" "staging/siteone-crawler/"
+          cp README.md "staging/siteone-crawler/" 2>/dev/null || true
+          cp LICENSE "staging/siteone-crawler/" 2>/dev/null || true
+          (cd staging && 7z a -r "../${ARTIFACT}.zip" siteone-crawler/)
+          echo "ARTIFACT_PATH=${ARTIFACT}.zip" >> "$GITHUB_ENV"
+
+      # ── Build .deb and .rpm packages (Linux only) ──────────────
+      - name: Build .deb package
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          cargo install cargo-deb
+          cargo deb --no-build --target ${{ matrix.target }}
+          echo "DEB_PATH=$(ls target/${{ matrix.target }}/debian/*.deb)" >> "$GITHUB_ENV"
+
+      - name: Build .rpm package
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          cargo install cargo-generate-rpm
+          # Strip binary (use cross-strip for arm64)
+          if [[ "${{ matrix.target }}" == "aarch64"* ]]; then
+            sudo apt-get install -y binutils-aarch64-linux-gnu
+            aarch64-linux-gnu-strip -s "target/${{ matrix.target }}/release/siteone-crawler" || true
+          else
+            strip -s "target/${{ matrix.target }}/release/siteone-crawler" || true
           fi
-        done
-        
-        # Clean up unnecessary files
-        cd releases/${RELEASE_NAME}
-        rm -rf .git .github docs/ tests/ composer.json composer.lock package.json phpstan.neon phpunit.xml pack-sfx.php
-        
-        # Extract and copy Swoole binary
-        cd ../..
-        # Remove existing Linux x64 binary
-        rm -f releases/${RELEASE_NAME}/bin/swoole-cli
-        tar -xf swoole-downloads/swoole-cli-v6.0.1-macos-x64.tar.xz
-        cp swoole-cli releases/${RELEASE_NAME}/bin/
-        chmod +x releases/${RELEASE_NAME}/bin/swoole-cli
-        # Clean up extracted binary
-        rm -f swoole-cli
-        
-        # Create tar.gz archive
-        cd releases
-        tar -czf ${RELEASE_NAME}.tar.gz ${RELEASE_NAME}
-        sudo rm -rf ${RELEASE_NAME}
-    
-    - name: Prepare Windows x64 release
-      run: |
-        VERSION=${{ steps.get_version.outputs.VERSION }}
-        RELEASE_NAME="siteone-crawler-v${VERSION}-win-x64"
-        
-        # Create release directory
-        mkdir -p releases/${RELEASE_NAME}
-        
-        # Copy project files (excluding certain directories)
-        for item in *; do
-          if [ "$item" != "releases" ] && [ "$item" != "swoole-downloads" ]; then
-            cp -r "$item" "releases/${RELEASE_NAME}/"
-          fi
-        done
-        
-        # Clean up unnecessary files
-        cd releases/${RELEASE_NAME}
-        rm -rf .git .github docs/ tests/ composer.json composer.lock package.json phpstan.neon phpunit.xml pack-sfx.php
-        
-        # Extract Windows Swoole
-        cd ../..
-        # Remove existing Linux x64 binary
-        rm -f releases/${RELEASE_NAME}/bin/swoole-cli
-        unzip -q swoole-downloads/swoole-cli-v6.0.1-cygwin-x64.zip
-        
-        # Copy Windows binaries and DLLs
-        cp swoole-cli-v6.0.1-cygwin-x64/bin/* releases/${RELEASE_NAME}/bin/
-        
-        # Copy etc/pki structure
-        cp -r swoole-cli-v6.0.1-cygwin-x64/etc releases/${RELEASE_NAME}/
-        
-        # Create zip archive
-        cd releases
-        zip -q -r ${RELEASE_NAME}.zip ${RELEASE_NAME}
-        
-        # Clean up - use sudo for files with permission issues
-        sudo rm -rf ${RELEASE_NAME}
-        cd ..
-        sudo rm -rf swoole-cli-v6.0.1-cygwin-x64
-    
-    - name: Upload release artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: release-packages
-        path: releases/*
-        retention-days: 7
-    
-    - name: Create Release
-      if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
-      uses: softprops/action-gh-release@v1
-      with:
-        files: releases/*
-        generate_release_notes: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # cargo-generate-rpm needs binary at target/release/
+          mkdir -p target/release
+          cp "target/${{ matrix.target }}/release/siteone-crawler" target/release/
+          cargo generate-rpm --target ${{ matrix.target }}
+          echo "RPM_PATH=$(ls target/generate-rpm/*.rpm)" >> "$GITHUB_ENV"
+
+      - name: Upload .deb artifact
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v7
+        with:
+          name: siteone-crawler-${{ matrix.artifact_suffix }}-deb
+          path: ${{ env.DEB_PATH }}
+
+      - name: Upload .rpm artifact
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v7
+        with:
+          name: siteone-crawler-${{ matrix.artifact_suffix }}-rpm
+          path: ${{ env.RPM_PATH }}
+      # ────────────────────────────────────────────────────────────────
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: siteone-crawler-${{ matrix.artifact_suffix }}
+          path: ${{ env.ARTIFACT_PATH }}
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Determine version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: List artifacts
+        run: ls -lhR artifacts/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "v${{ steps.version.outputs.version }}"
+          body: |
+            ### Downloads
+
+            | Platform | Architecture | File |
+            |----------|-------------|------|
+            | Linux | x64 | `siteone-crawler-v${{ steps.version.outputs.version }}-linux-x64.tar.gz` |
+            | Linux | arm64 | `siteone-crawler-v${{ steps.version.outputs.version }}-linux-arm64.tar.gz` |
+            | macOS | arm64 (Apple Silicon) | `siteone-crawler-v${{ steps.version.outputs.version }}-macos-arm64.tar.gz` |
+            | macOS | x64 (Intel) | `siteone-crawler-v${{ steps.version.outputs.version }}-macos-x64.tar.gz` |
+            | Windows | x64 | `siteone-crawler-v${{ steps.version.outputs.version }}-win-x64.zip` |
+            | Windows | arm64 | `siteone-crawler-v${{ steps.version.outputs.version }}-win-arm64.zip` |
+
+            ### Linux packages
+
+            | Format | Architecture | File |
+            |--------|-------------|------|
+            | Debian/Ubuntu (.deb) | x64 | `siteone-crawler_${{ steps.version.outputs.version }}-1_amd64.deb` |
+            | Debian/Ubuntu (.deb) | arm64 | `siteone-crawler_${{ steps.version.outputs.version }}-1_arm64.deb` |
+            | Fedora/RHEL (.rpm) | x64 | `siteone-crawler-${{ steps.version.outputs.version }}-1.x86_64.rpm` |
+            | Fedora/RHEL (.rpm) | arm64 | `siteone-crawler-${{ steps.version.outputs.version }}-1.aarch64.rpm` |
+
+            ### Quick start
+
+            ```bash
+            # Extract and run
+            tar xzf siteone-crawler-v${{ steps.version.outputs.version }}-linux-x64.tar.gz
+            cd siteone-crawler
+            ./siteone-crawler --url=https://example.com
+            ```
+
+            ### Install via package manager
+
+            ```bash
+            # Debian/Ubuntu
+            sudo dpkg -i siteone-crawler_${{ steps.version.outputs.version }}-1_amd64.deb
+
+            # Fedora/RHEL
+            sudo dnf install ./siteone-crawler-${{ steps.version.outputs.version }}-1.x86_64.rpm
+            ```
+          files: artifacts/*
+          generate_release_notes: true
+          draft: true
+          prerelease: false

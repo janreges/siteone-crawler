@@ -1,5 +1,9 @@
-.idea
-log/*
-tmp/*
-.phpunit.*
-/vendor/
+/target
+/tmp/
+/dist/
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.cache

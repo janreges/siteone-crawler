@@ -2,12 +2,15 @@
 
 SiteOne Crawler is a powerful and easy-to-use **website analyzer, cloner, and converter** designed for developers seeking security and performance insights, SEO specialists identifying optimization opportunities, and website owners needing reliable backups and offline versions.
 
+**Now rewritten in Rust** for maximum performance, minimal resource usage, and zero runtime dependencies. The transition from PHP+Swoole to Rust resulted in **25% faster execution** and **30% lower memory consumption** while producing identical output.
+
 **Discover the SiteOne Crawler advantage:**
 
-*   **Run Anywhere:** Native support for **🪟 Windows**, **🍎 macOS**, and **🐧 Linux** (x64 & arm64). No complex setup needed.
+*   **Run Anywhere:** Single native binary for **🪟 Windows**, **🍎 macOS**, and **🐧 Linux** (x64 & arm64). No runtime dependencies.
 *   **Work Your Way:** Master the extensive **command-line interface** 📟 ([releases](https://github.com/janreges/siteone-crawler/releases), [▶️ video](https://www.youtube.com/watch?v=25T_yx13naA&list=PL9mElgTe-s1Csfg0jXWmDS0MHFN7Cpjwp)) for automation and power, or enjoy the intuitive **desktop GUI application** 💻 ([GUI app](https://github.com/janreges/siteone-crawler-gui), [▶️ video](https://www.youtube.com/watch?v=rFW8LNEVNdw)) for visual control.
-*   **Actionable Insights:** Generate comprehensive **HTML reports** 📊 packed with data on performance, SEO, accessibility, security, and more (see [nextjs.org sample](https://crawler.siteone.io/html/2024-08-23/forever/cl8xw4r-fdag8wg-44dd.html)). Find and fix problems faster.
-*   **Offline & Markdown Power:** Create complete **offline clones** 💾 for browsing without a server ([nextjs.org clone](https://crawler.siteone.io/examples-exports/nextjs.org/)) or convert entire websites into clean **Markdown** 📝 – perfect for backups, documentation, or feeding content to AI models ([examples](https://github.com/janreges/siteone-crawler-markdown-examples/)).
+*   **Rich Output Formats:** Interactive **HTML audit report** 📊 with sortable tables and quality scoring (0.0-10.0) (see [nextjs.org sample](https://crawler.siteone.io/html/2024-08-23/forever/cl8xw4r-fdag8wg-44dd.html)), detailed **JSON** for programmatic consumption, and human-readable **text** for terminal. Send HTML reports directly to your inbox via **built-in SMTP mailer** 📧.
+*   **CI/CD Integration:** Built-in **quality gate** (`--ci`) with configurable thresholds — exit code 10 on failure enables automated deployment blocking. Also useful for **cache warming** — crawling the entire site after deployment populates your reverse proxy/CDN cache.
+*   **Offline & Markdown Power:** Create complete **offline clones** 💾 for browsing without a server ([nextjs.org clone](https://crawler.siteone.io/examples-exports/nextjs.org/)) or convert entire websites into clean **Markdown** 📝 — perfect for backups, documentation, or feeding content to AI models ([examples](https://github.com/janreges/siteone-crawler-markdown-examples/)).
 *   **Deep Crawling & Analysis:** Thoroughly crawl every page and asset, identify errors (404s, redirects), generate **sitemaps** 🗺️, and even get **email summaries** 📧 (watch [▶️ video example](https://www.youtube.com/watch?v=PHIFSOmk0gk)).
 *   **Learn More:** Dive into the 🌐 [Project Website](https://crawler.siteone.io/), explore the detailed [Documentation](https://crawler.siteone.io/configuration/command-line-options/), or check the [JSON](docs/JSON-OUTPUT.md)/[Text](docs/TEXT-OUTPUT.md) output specs.
 
@@ -23,18 +26,17 @@ GIF animation of the crawler in action (also available as a [▶️ video](https
     * [📊 Analyzer](#-analyzer)
     * [📧 Reporter](#-reporter)
     * [💾 Offline website generator](#-offline-website-generator)
+    * [📝 Website to markdown converter](#-website-to-markdown-converter)
     * [🗺️ Sitemap generator](#️-sitemap-generator)
-    * [🤝 For active contributors](#-for-active-contributors)
 - [🚀 Installation](#-installation)
-    * [📦 Ready-to-use releases](#-ready-to-use-releases)
-    * [🐧 Linux (x64)](#-linux-x64)
-    * [🪟 Windows (x64)](#-windows-x64)
-    * [🍎 macOS (arm64, x64)](#-macos-arm64-x64)
-    * [🐧 Linux (arm64)](#-linux-arm64)
+    * [📦 Pre-built binaries](#-pre-built-binaries)
+    * [🍺 Homebrew (macOS / Linux)](#-homebrew-macos--linux)
+    * [🔨 Build from source](#-build-from-source)
 - [▶️ Usage](#️-usage)
     * [Basic example](#basic-example)
+    * [CI/CD example](#cicd-example)
     * [Fully-featured example](#fully-featured-example)
-    * [Arguments](#️-arguments)
+    * [⚙️ Arguments](#️-arguments)
         + [Basic settings](#basic-settings)
         + [Output settings](#output-settings)
         + [Resource filtering](#resource-filtering)
@@ -46,9 +48,15 @@ GIF animation of the crawler in action (also available as a [▶️ video](https
         + [Markdown exporter options](#markdown-exporter-options)
         + [Sitemap options](#sitemap-options)
         + [Expert options](#expert-options)
+        + [Fastest URL analyzer](#fastest-url-analyzer)
+        + [SEO and OpenGraph analyzer](#seo-and-opengraph-analyzer)
+        + [Slowest URL analyzer](#slowest-url-analyzer)
+        + [Built-in HTTP server](#built-in-http-server)
+        + [CI/CD settings](#cicd-settings)
+- [🏆 Quality Scoring](#-quality-scoring)
+- [🔄 CI/CD Integration](#-cicd-integration)
 - [📄 Output Examples](#-output-examples)
-- [🎯 Roadmap](#-roadmap)
-- [🤔 Motivation to create this tool](#-motivation-to-create-this-tool)
+- [🧪 Testing](#-testing)
 - [⚠️ Disclaimer](#️-disclaimer)
 - [📜 License](#-license)
 
@@ -58,70 +66,94 @@ In short, the main benefits can be summarized in these points:
 
 - **🕷️ Crawler** - very powerful crawler of the entire website reporting useful information about each URL (status code,
   response time, size, custom headers, titles, etc.)
-- **🛠️ Dev/DevOps assistant** - offers a set of very useful and often necessary features for developers and devops (stress
-  test, warm up cache, localhost testing, etc.)
+- **🛠️ Dev/DevOps assistant** - offers stress/load testing with configurable concurrent workers (`--workers`) and request
+  rate (`--max-reqs-per-sec`), cache warming, localhost testing, and rich URL/content-type filtering
 - **📊 Analyzer** - analyzes all webpages and reports strange or error behaviour and useful statistics (404, redirects, bad
   practices, SEO and security issues, heading structures, etc.)
-- **📧 Reporter** - sends a HTML report to your email addresses with all the information about the crawled website
-- **💾 Offline website generator** - allows you to export the entire website to offline form, where it is possible to
-  browse the site through local HTML files (without HTTP server) including all images, styles, scripts, fonts, etc.
-- **📝 Website to markdown converter** - allows you to export/convert the entire website with all subpages to browsable markdown.
-  Optionally with images and other files (PDF, etc.) included. Great for documentation, archiving, and **feeding content to AI tools** that process markdown better.
+- **📧 Reporter** - interactive **HTML audit report**, structured **JSON**, and colored **text** output; built-in
+  **SMTP mailer** sends HTML reports directly to your inbox
+- **💾 Offline website generator** - clone entire websites to browsable local HTML files (no server needed) including all
+  assets. Supports **multi-domain clones** — include subdomains or external domains with intelligent cross-linking.
+- **📝 Website to markdown converter** - export the entire website to browsable text markdown (viewable on GitHub or any
+  text editor), or generate a **single-file markdown** with smart header/footer deduplication — ideal for **feeding to AI
+  tools**. Includes a **built-in web server** that renders markdown exports as styled HTML pages.
   See [markdown examples](https://github.com/janreges/siteone-crawler-markdown-examples/).
 - **🗺️ Sitemap generator** - allows you to generate `sitemap.xml` and `sitemap.txt` files with a list of all pages on your
   website
+- **🏆 Quality scoring** - automatic quality scoring (0.0-10.0) across 5 categories: Performance, SEO, Security, Accessibility, Best Practices
+- **🔄 CI/CD quality gate** - configurable thresholds with exit code 10 on failure for automated pipelines; also
+  useful as a **post-deployment cache warmer** for reverse proxies and CDNs
 
 The following features are summarized in greater detail:
 
 ### 🕷️ Crawler
 
-- **all major platforms** supported without complicated installation or dependencies (🐧 Linux, 🪟 Windows, 🍎 macOS, arm64)
-- has incredible **🚀 C++ performance** (thanks to Swoole's coroutines)
-- provide simulation of **different device types** (desktop/mobile/tablet) thanks to predefined User-Agents
+- **all major platforms** supported without dependencies (🐧 Linux, 🪟 Windows, 🍎 macOS, arm64) — single native binary
+- has incredible **🚀 native Rust performance** with async I/O and multi-threaded crawling
+- provides simulation of **different device types** (desktop/mobile/tablet) thanks to predefined User-Agents
 - will crawl **all files**, styles, scripts, fonts, images, documents, etc. on your website
 - will respect the `robots.txt` file and will not crawl the pages that are not allowed
 - has a **beautiful interactive** and **🎨 colourful output**
 - it will **clearly warn you** ⚠️ of any wrong use of the tool (e.g. input parameters validation or wrong permissions)
-- **captures CTRL+C** and ends with the statistics for at least the current processed URLs
 - as `--url` parameter, you can specify also a `sitemap.xml` file (or [sitemap index](https://www.sitemaps.org/protocol.html#index)),
-  which will be processed as a list of URLs. Note: gzip pre-compressed sitemaps `*.xml.gz` are not supported.
+  which will be processed as a list of URLs. In sitemap-only mode, the crawler follows only URLs from
+  the sitemap — it does not discover additional links from HTML pages. Gzip-compressed sitemaps (`*.xml.gz`)
+  are fully supported, both as direct URLs and when referenced from sitemap index files.
+- respects the HTML `<base href>` tag when resolving relative URLs on pages that use it.
 
 ### 🛠️ Dev/DevOps assistant
 
 - allows testing **public** and **local projects on specific ports** (e.g. `http://localhost:3000/`)
-- will perform a **stress test** and allow you to test the protection of the infrastructure against DoS attacks
+- works as a **stress/load tester** — configure the number of **concurrent workers** (`--workers`) and the **maximum
+  requests per second** (`--max-reqs-per-sec`) to simulate various traffic levels and test your infrastructure's
+  resilience against high load or DoS scenarios
+- combine with **rich filtering options** — include/ignore URLs by regex (`--include-regex`, `--ignore-regex`), disable
+  specific asset types (`--disable-javascript`, `--disable-images`, etc.), or limit crawl depth (`--max-depth`) to focus
+  the load on specific parts of your website
 - will help you **warm up the application cache** or the **cache on the reverse proxy** of the entire website
 
 ### 📊 Analyzer
 
 - will **find the weak points** or **strange behavior** of your website
-- allows you to implement **your own analyzers** by simply adding an analyzer class that implements
-  the `Crawler\Analyzer` interface.
+- built-in analyzers cover SEO, security headers, accessibility, best practices, performance, SSL/TLS, caching, and more
 
 ### 📧 Reporter
 
-- will provide you with data for **SEO analysis**, just add the `Title`, `Keywords` and `Description`
-- will send you a **nice HTML report** to your email addresses
-- will **export** the output to JSON, HTML or text for **your integrations**
-  will provide useful **summaries and statistics** at the end of the processing
+Three output formats:
+
+- **Interactive HTML report** — a self-contained `.html` file with sortable tables, quality scores, color-coded
+  findings, and sections for SEO, security, accessibility, performance, headers, redirects, 404s, and more. Open it
+  in any browser — no server needed.
+- **JSON output** — structured data with all crawled URLs, response details, analysis findings, scores, and CI/CD gate
+  results. Ideal for programmatic consumption, dashboards, and integrations.
+- **Text output** — human-readable colored terminal output with tables, progress bars, and summaries.
+
+Additional reporting features:
+
+- **Built-in SMTP mailer** — send the HTML audit report directly to one or more email addresses via your own SMTP
+  server. Configure sender, recipients, subject template, and SMTP credentials via CLI options.
+- will provide you with data for **SEO analysis**, just add the `Title`, `Keywords` and `Description` extra columns
+- will provide useful **summaries and statistics** at the end of the processing
 
 ### 💾 Offline website generator
 
 - will help you **export the entire website** to offline form, where it is possible to browse the site through local
-  HTML files (without HTTP server) including all document, images, styles, scripts, fonts, etc.
+  HTML files (without HTTP server) including all documents, images, styles, scripts, fonts, etc.
+- supports **multi-domain clones** — include subdomains (`*.mysite.tld`) or entirely different domains in a single
+  offline export. All URLs across included domains are **intelligently rewritten to relative paths**, so the resulting
+  offline version cross-links pages between domains seamlessly — you get one unified browsable clone.
 - you can **limit what assets** you want to download and export (see `--disable-*` directives) .. for some types of
   websites the best result is with the `--disable-javascript` option.
-- you can specify by `--allowed-domain-for-external-files` (short `-adf`) from which **external domains** it is possible to **download
-  ** assets (JS, CSS, fonts, images, documents) including `*` option for all domains.
-- you can specify by `--allowed-domain-for-crawling` (short `-adc`) which **other domains** should be included in the **crawling** if
-  there are any links pointing to them. You can enable e.g. `mysite.*` to export all language mutations that have a
-  different TLD or `*.mysite.tld` to export all subdomains.
-- you can try `---disable-styles` and `---disable-fonts` and see how well you handle **accessibility** and **semantics**
+- you can specify by `--allowed-domain-for-external-files` (short `-adf`) from which **external domains** it is possible
+  to **download** assets (JS, CSS, fonts, images, documents) including `*` option for all domains.
+- you can specify by `--allowed-domain-for-crawling` (short `-adc`) which **other domains** should be included in the
+  **crawling** if there are any links pointing to them. You can enable e.g. `mysite.*` to export all language mutations
+  that have a different TLD or `*.mysite.tld` to export all subdomains.
 - you can use `--single-page` to **export only one page** to which the URL is given (and its assets), but do not follow
   other pages.
 - you can use `--single-foreign-page` to **export only one page** from another domain (if allowed by `--allowed-domain-for-crawling`),
   but do not follow other pages.
-- you can use `--replace-content` to **replace content** in HTML/JS/CSS with `foo -> bar` or regexp in PREG format, e.g.
+- you can use `--replace-content` to **replace content** in HTML/JS/CSS with `foo -> bar` or regexp in PCRE format, e.g.
   `/card[0-9]/i -> card`. Can be specified multiple times.
 - you can use `--replace-query-string` to **replace chars in query string** in the filename.
 - you can use `--max-depth` to set the **maximum crawling depth** (for pages, not assets). `1` means `/about` or `/about/`,
@@ -130,121 +162,113 @@ The following features are summarized in greater detail:
   static backup and part of your **disaster recovery plan** or **archival/legal needs**
 - works great with **older conventional websites** but also **modern ones**, built on frameworks like Next.js, Nuxt.js,
   SvelteKit, Astro, Gatsby, etc. When a JS framework is detected, the export also performs some framework-specific code
-  modifications for optimal results. For example, most frameworks can't handle the relative location of a project and
-  linking assets from root `/`, which doesn't work with `file://` mode.
+  modifications for optimal results.
 - **try it** for your website, and you will be very pleasantly surprised :-)
-- roadmap: we are also planning to release a version of the export compatible with **Nginx** that will preserve all
-  original URLs for your website and allow you to host it on your own infrastructure.
 
 ### 📝 Website to markdown converter
 
-- will help you **export/convert the entire website** with all subpages to **browsable markdown**. This is particularly useful for feeding website content (like documentation) into **AI tools** that often handle markdown more effectively than raw HTML.
-- you can optionally disable export and hide images and other files (PDF, etc.) which are included by default.
-- you can set multiple selectors (CSS like) to **remove unwanted elements** from the exported markdown.
-- to prevent that at the beginning of the markdown of all pages the header, long menu etc. will be repeated, so the
-  first occurrence of the most important heading (typically h1) is searched and all content before this heading is moved
-  to the end of the page below the line `---`.
-- converter has implemented **code block detection** and **syntax highlighting** for the most popular languages.
-- html tables are converted to **markdown tables**.
-- can combine all exported markdown files into a **single large markdown file** - ideal for AI tools that need to
-  process the entire website content in one go.
-- smart removal of duplicate website headers and footers is also implemented in exported single large markdown file.
-- see all available [markdown exporter options](#markdown-exporter-options).
+Two export modes:
+
+- **Multi-file markdown** — exports the entire website with all subpages to a directory of **browsable `.md` files**.
+  The markdown renders nicely when uploaded to GitHub, viewed in VS Code, or any text editor. Links between pages are
+  converted to relative `.md` links so you can navigate between files. Optionally includes images and other files
+  (PDF, etc.).
+- **Single-file markdown** — combines all pages into **one large markdown file** with smart removal of duplicate website
+  headers and footers across pages. Ideal for **feeding entire website content to AI tools** (ChatGPT, Claude, etc.)
+  that process markdown more effectively than raw HTML.
+
+Smart conversion features:
+
+- **collapsible accordions** — large link lists (menus, navigation, footer links with 8+ items) are automatically
+  collapsed into `<details>` accordions with contextual labels ("Menu", "Links") for better readability
+- content before the main heading (typically h1) — such as the site header and navigation — is moved to the end of the
+  page below a `---` separator, so the actual page content comes first
+- you can set multiple selectors (CSS-like) to **remove unwanted elements** from the exported markdown
+- **code block detection** and **syntax highlighting** for popular programming languages
+- HTML tables are converted to proper **markdown tables**
+
+Built-in web server:
+
+- use `--serve-markdown=<dir>` to start a **built-in HTTP server** that renders your markdown export as styled HTML
+  pages with tables, dark/light mode, breadcrumb navigation, and accordion support — perfect for browsing and sharing
+  the export locally or on a network
 
 💡 Tip: you can push the exported markdown folder to your GitHub repository, where it will be automatically rendered as a browsable
 documentation. You can look at the [examples](https://github.com/janreges/siteone-crawler-markdown-examples/) of converted websites to markdown.
 
+See all available [markdown exporter options](#markdown-exporter-options).
+
 ### 🗺️ Sitemap generator
 
-- will help you create a `sitemap.xml` and `sitemap.xml` for your website
+- will help you create a `sitemap.xml` and `sitemap.txt` for your website
 - you can set the priority of individual pages based on the number of slashes in the URL
 
 Don't hesitate and try it. You will love it as we do! ❤️
 
-### 🤝 For active contributors
-
-- the crawler code provides some useful functionality that facilitates further **development** and **extensibility** of
-  the project
-
 ## 🚀 Installation
 
-### 📦 Ready-to-use releases
+### 📦 Pre-built binaries
 
-You can download ready-to-use releases from [🐙 GitHub releases](https://github.com/janreges/siteone-crawler/releases) for all major platforms (🐧 Linux, 🪟 Windows, 🍎 macOS, arm64).
+Download pre-built binaries from [🐙 GitHub releases](https://github.com/janreges/siteone-crawler/releases) for all major platforms (🐧 Linux, 🪟 Windows, 🍎 macOS, x64 & arm64).
 
-Unpack the downloaded archive, and you will find the `crawler` or `crawler.bat` (Windows) executable binary and run crawler by `./crawler --url=https://my.domain.tld`.
+The binary is self-contained — no runtime dependencies required.
 
-**Note for Windows users**: use Cygwin-based release `*-win-x64.zip` only if you can't use WSL (Ubuntu/Debian), what is recommended. If you really have to use the Cygwin version, set `--workers=1` for higher stability.
+```bash
+# Linux / macOS — download, extract, run
+./siteone-crawler --url=https://my.domain.tld
+```
 
 **Note for macOS users**: In case that Mac refuses to start the crawler from your Download folder, move the entire folder with the Crawler **via the terminal** to another location, for example to the homefolder `~`.
 
-### 🐧 Linux (x64)
+### 🍺 Homebrew (macOS / Linux)
 
-Most easily installation is on most Linux (x64) distributions.
+```bash
+brew install janreges/tap/siteone-crawler
+siteone-crawler --url=https://my.domain.tld
+```
+
+### 🔨 Build from source
+
+Requires [Rust](https://www.rust-lang.org/tools/install) 1.85 or later.
 
 ```bash
 git clone https://github.com/janreges/siteone-crawler.git
 cd siteone-crawler
 
-# run crawler with basic options
-./crawler --url=https://my.domain.tld
+# Build optimized release binary
+cargo build --release
+
+# Run
+./target/release/siteone-crawler --url=https://my.domain.tld
 ```
-
-### 🪟 Windows (x64)
-
-If using Windows, the best choice is to use [Ubuntu](https://ubuntu.com/wsl)
-or [Debian](https://www.linuxfordevices.com/tutorials/linux/install-debian-on-windows-wsl)
-in [WSL](https://learn.microsoft.com/en-us/windows/wsl/install).
-
-Otherwise, you can
-download [swoole-cli-v4.8.13-cygwin-x64.zip](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-cygwin-x64.zip)
-from [Swoole releases](https://github.com/swoole/swoole-src/releases) and use precompiled
-Cygwin-based `bin/swoole-cli.exe`.
-
-A really functional and tested Windows command looks like this (modify path to your `swoole-cli.exe` and `src\crawler.php`):
-
-```bash
-c:\Tools\swoole-cli-v4.8.13-cygwin-x64\bin\swoole-cli.exe C:\Tools\siteone-crawler\src\crawler.php --url=https://www.siteone.io/
-```
-
-**NOTICE**: Cygwin does not support STDERR with rewritable lines in the console. Therefore, the output is not as
-beautiful as on Linux or macOS.
-
-### 🍎 macOS (arm64, x64)
-
-If using macOS with latest arm64 M1/M2 CPU, download arm64
-version [swoole-cli-v4.8.13-macos-arm64.tar.xz](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-macos-arm64.tar.xz),
-unpack and use its precompiled `swoole-cli`.
-
-If using macOS with Intel CPU (x64), download x64
-version  [swoole-cli-v4.8.13-macos-x64.tar.xz](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-macos-x64.tar.xz),
-unpack and use its precompiled `swoole-cli`.
-
-### 🐧 Linux (arm64)
-
-If using arm64 Linux, you can
-download [swoole-cli-v4.8.13-linux-arm64.tar.xz](https://github.com/swoole/swoole-src/releases/download/v4.8.13/swoole-cli-v4.8.13-linux-arm64.tar.xz)
-and use its precompiled `swoole-cli`.
 
 ## ▶️ Usage
 
-To run the crawler, execute the `crawler` executable file from the command line and provide the
+To run the crawler, execute the `siteone-crawler` binary from the command line and provide the
 required arguments:
 
 ### Basic example
 
 ```bash
-./crawler --url=https://mydomain.tld/ --device=mobile
+./siteone-crawler --url=https://mydomain.tld/ --device=mobile
+```
+
+### CI/CD example
+
+```bash
+# Fail deployment if quality score < 7.0 or any 5xx errors
+./siteone-crawler --url=https://mydomain.tld/ --ci --ci-min-score=7.0 --ci-max-5xx=0
+echo $?  # 0 = pass, 10 = fail
 ```
 
 ### Fully-featured example
 
 ```bash
-./crawler --url=https://mydomain.tld/ \
+./siteone-crawler --url=https://mydomain.tld/ \
   --output=text \
   --workers=2 \
   --max-reqs-per-sec=10 \
-  --memory-limit=1024M \
+  --memory-limit=2048M \
   --resolve='mydomain.tld:443:127.0.0.1' \
   --timeout=5 \
   --proxy=proxy.mydomain.tld:8080 \
@@ -276,8 +300,8 @@ required arguments:
   --offline-export-dir=tmp/mydomain.tld \
   --replace-content='/<foo[^>]+>/ -> <bar>' \
   --ignore-store-file-error \
-  --sitemap-xml-file==/dir/sitemap.xml \
-  --sitemap-txt-file==/dir/sitemap.txt \
+  --sitemap-xml-file=/dir/sitemap.xml \
+  --sitemap-txt-file=/dir/sitemap.txt \
   --sitemap-base-priority=0.5 \
   --sitemap-priority-increase=0.1 \
   --markdown-export-dir=tmp/mydomain.tld.md \
@@ -291,13 +315,14 @@ required arguments:
   --markdown-replace-query-string='/[a-z]+=[^&]*(&|$)/i -> $1__$2' \
   --mail-to=your.name@my-mail.tld \
   --mail-to=your.friend.name@my-mail.tld \
-  --mail-from=crawler@ymy-mail.tld \
+  --mail-from=crawler@my-mail.tld \
   --mail-from-name="SiteOne Crawler" \
   --mail-subject-template="Crawler Report for %domain% (%date%)" \
   --mail-smtp-host=smtp.my-mail.tld \
   --mail-smtp-port=25 \
   --mail-smtp-user=smtp.user \
-  --mail-smtp-pass=secretPassword123
+  --mail-smtp-pass=secretPassword123 \
+  --ci --ci-min-score=7.0 --ci-min-security=8.0
 ```
 
 ## ⚙️ Arguments
@@ -311,11 +336,12 @@ For a clearer list, I recommend going to the documentation: 🌐 https://crawler
 | `--url=<url>` | Required. HTTP or HTTPS URL address of the website or sitemap xml to be crawled.<br>Use quotation marks `''` if the URL contains query parameters. |
 | `--single-page` | Load only one page to which the URL is given (and its assets), but do not follow other pages. |
 | `--max-depth=<int>` | Maximum crawling depth (for pages, not assets). Default is `0` (no limit). `1` means `/about`<br>or `/about/`, `2` means `/about/contacts` etc. |
-| `--device=<val>` | Device type for choosing a predefined User-Agent. Ignored when `--user-agent` is defined.<br>Supported values: `desktop`, `mobile`, `tablet`. Defaults is `desktop`. |
+| `--device=<val>` | Device type for choosing a predefined User-Agent. Ignored when `--user-agent` is defined.<br>Supported values: `desktop`, `mobile`, `tablet`. Default is `desktop`. |
 | `--user-agent=<val>` | Custom User-Agent header. Use quotation marks. If specified, it takes precedence over<br>the device parameter. If you add `!` at the end, the siteone-crawler/version will not be<br>added as a signature at the end of the final user-agent. |
-| `--timeout=<int>` | Request timeout in seconds. Default is `3`. |
+| `--timeout=<int>` | Request timeout in seconds. Default is `5`. |
 | `--proxy=<host:port>` | HTTP proxy to use in `host:port` format. Host can be hostname, IPv4 or IPv6. |
 | `--http-auth=<user:pass>` | Basic HTTP authentication in `username:password` format. |
+| `--config-file=<file>` | Load CLI options from a config file. One option per line, `#` comments allowed.<br>Without this flag, auto-discovers `~/.siteone-crawler.conf` or `/etc/siteone-crawler.conf`.<br>CLI arguments override config file values. |
 
 ### Output settings
 
@@ -324,8 +350,8 @@ For a clearer list, I recommend going to the documentation: 🌐 https://crawler
 | `--output=<val>` | Output type. Supported values: `text`, `json`. Default is `text`. |
 | `--extra-columns=<values>` | Comma delimited list of extra columns added to output table. You can specify HTTP headers<br>(e.g. `X-Cache`), predefined values (`Title`, `Keywords`, `Description`, `DOM`), or custom<br>extraction from text files (HTML, JS, CSS, TXT, JSON, XML, etc.) using XPath or regexp.<br>For custom extraction, use the format `Custom_column_name=method:pattern#group(length)`, where<br>`method` is `xpath` or `regexp`, `pattern` is the extraction pattern, an optional `#group` specifies the<br>capturing group (or node index for XPath) to return (defaulting to the entire match or first node), and an<br>optional `(length)` sets the maximum output length (append `>` to disable truncation).<br>For example, use `Heading1=xpath://h1/text()(20>)` to extract the text of the first H1 element<br>from the HTML document, and `ProductPrice=regexp:/Price:\s*\$?(\d+(?:\.\d{2})?)/i#1(10)`<br>to extract a numeric price (e.g., "29.99") from a string like "Price: $29.99". |
 | `--url-column-size=<num>` | Basic URL column width. By default, it is calculated from the size of your terminal window. |
-| `--rows-limit=<num>` | Max. number of rows to display in tables with analysis results (protection against very long and slow report).<br>Default is `200`. |
-| `--timezone=<val>` | Timezone for datetimes in HTML reports and timestamps in output folders/files, e.g. `Europe/Prague`.<br>Default is `UTC`. Available values can be found at [Timezones Documentation](https://www.php.net/manual/en/timezones.php). |
+| `--rows-limit=<num>` | Max. number of rows to display in tables with analysis results.<br>Default is `200`. |
+| `--timezone=<val>` | Timezone for datetimes in HTML reports and timestamps in output folders/files, e.g. `Europe/Prague`.<br>Default is `UTC`. |
 | `--do-not-truncate-url` | In the text output, long URLs are truncated by default to `--url-column-size` so the table does not<br>wrap due to long URLs. With this option, you can turn off the truncation. |
 | `--show-scheme-and-host` | On text output, show scheme and host also for origin domain URLs. |
 | `--hide-progress-bar` | Hide progress bar visible in text and JSON output for more compact view. |
@@ -335,7 +361,6 @@ For a clearer list, I recommend going to the documentation: 🌐 https://crawler
 | `--show-inline-warnings` | Show warnings from the analyzer directly in the URL table. |
 
 ### Resource filtering
-
 
 | Parameter | Description |
 |-----------|-------------|
@@ -354,44 +379,51 @@ For a clearer list, I recommend going to the documentation: 🌐 https://crawler
 | `--workers=<int>` | Maximum number of concurrent workers (threads).<br>Crawler will not make more simultaneous requests to the server than this number.<br>Use carefully! A high number of workers can cause a DoS attack. Default is `3`. |
 | `--max-reqs-per-sec=<val>` | Max requests/s for whole crawler. Be careful not to cause a DoS attack. Default value is `10`. |
 | `--memory-limit=<size>` | Memory limit in units `M` (Megabytes) or `G` (Gigabytes). Default is `2048M`. |
-| `--resolve=<host:port:ip>` | Custom DNS resolution in `domain:port:ip` format. Same as [curl --resolve](https://everything.curl.dev/usingcurl/connections/name.html?highlight=resolve#provide-a-custom-ip-address-for-a-name).<br>Can be specified multiple times for multiple domain:port pairs.<br>Example: `--resolve='mydomain.tld:443:127.0.0.1` |
-| `--allowed-domain-for-external-files=<domain>` | Primarily, the crawler crawls only the URL within the domain for initial URL. This allows<br>you to enable loading of file content from another domain as well (e.g. if you want to<br>load assets from a CDN). Can be specified multiple times. Use can use domains with wildcard `*`. |
-| `--allowed-domain-for-crawling=<domain>` | This option will allow you to crawl all content from other listed domains - typically in the case<br>of language mutations on other domains. Can be specified multiple times.<br>Use can use domains with wildcard `*` including e.g. `*.siteone.*`. |
-| `--single-foreign-page` | If crawling of other domains is allowed (using `--allowed-domain-for-crawling`),<br>it ensures that when another domain is not on same second-level domain, only that linked page<br>and its assets are crawled from that foreign domain. |
-| `--include-regex=<regex>` | Regular expression compatible with PHP preg_match() for URLs that should be included.<br>Argument can be specified multiple times. Example: `--include-regex='/^\/public\//'` |
-| `--ignore-regex=<regex>` | Regular expression compatible with PHP preg_match() for URLs that should be ignored.<br>Argument can be specified multiple times.<br>Example: `--ignore-regex='/^.*\/downloads\/.*\.pdf$/i'` |
-| `--regex-filtering-only-for-pages` | Set if you want filtering by `*-regex` rules apply only to page URLs, but static assets (JS, CSS, images,<br>fonts, documents) have to be loaded regardless of filtering.<br>Useful where you want to filter only /sub-pages/ by `--include-regex='/\/sub-pages\//'`, but<br>assets have to be loaded from any URLs. |
-| `--analyzer-filter-regex` | Regular expression compatible with PHP preg_match() applied to Analyzer class names<br> for analyzers filtering.<br>Example: `/(content\|accessibility)/i` or `/^(?:(?!best\|access).)*$/i` for all<br>analyzers except `BestPracticesAnalyzer` and `AccessibilityAnalyzer`. |
+| `--resolve=<host:port:ip>` | Custom DNS resolution in `domain:port:ip` format. Same as [curl --resolve](https://everything.curl.dev/usingcurl/connections/name.html?highlight=resolve#provide-a-custom-ip-address-for-a-name).<br>Can be specified multiple times. |
+| `--allowed-domain-for-external-files=<domain>` | Enable loading of file content from another domain (e.g. CDN).<br>Can be specified multiple times. Use `*` for all domains. |
+| `--allowed-domain-for-crawling=<domain>` | Allow crawling of other listed domains — typically language mutations on other domains.<br>Can be specified multiple times. Use wildcards like `*.mysite.tld`. |
+| `--single-foreign-page` | When crawling of other domains is allowed, ensures that only the linked page<br>and its assets are crawled from foreign domains. |
+| `--include-regex=<regex>` | PCRE-compatible regular expression for URLs that should be included.<br>Can be specified multiple times. Example: `--include-regex='/^\/public\//'` |
+| `--ignore-regex=<regex>` | PCRE-compatible regular expression for URLs that should be ignored.<br>Can be specified multiple times. |
+| `--regex-filtering-only-for-pages` | Apply `*-regex` rules only to page URLs, not static assets. |
+| `--analyzer-filter-regex` | PCRE-compatible regular expression for filtering analyzers by name. |
 | `--accept-encoding=<val>` | Custom `Accept-Encoding` request header. Default is `gzip, deflate, br`. |
-| `--remove-query-params` | Remove query parameters from found URLs. Useful on websites where a lot of links<br>are made to the same pages, only with different irrelevant query parameters. |
-| `--add-random-query-params` | Adds several random query parameters to each URL.<br>With this, it is possible to bypass certain forms of server and CDN caches. |
-| `--transform-url=<from->to>` | Transform URLs before crawling. Use `from -> to` format for simple replacement or `/regex/ -> replacement` for pattern matching.<br>Useful when archiving sites that reference different domains.<br>Example: `--transform-url="live-site.com -> local-site.local"`.<br>Can be specified multiple times. |
-| `--ignore-robots-txt` | Should robots.txt content be ignored? Useful for crawling an otherwise internal/private/unindexed site. |
-| `--http-cache-dir=<dir>` | Cache dir for HTTP responses. You can disable cache by `--http-cache-dir='off'`.<br>Default values is `tmp/http-client-cache`. |
-| `--http-cache-compression` | Enable compression for HTTP cache storage. Saves disk space, but uses more CPU. |
-| `--max-queue-length=<num>` | The maximum length of the waiting URL queue. Increase in case of large websites,<br>but expect higher memory requirements. Default is `9000`. |
-| `--max-visited-urls=<num>` | The maximum number of the visited URLs. Increase in case of large websites, but expect<br>higher memory requirements. Default is `10000`. |
-| `--max-skipped-urls=<num>` | The maximum number of the skipped URLs. Increase in case of large websites, but expect<br>higher memory requirements. Default is `10000`. |
-| `--max-url-length=<num>` | The maximum supported URL length in chars. Increase in case of very long URLs, but expect<br>higher memory requirements. Default is `2083`. |
-| `--max-non200-responses-per-basename=<num>` | Protection against looping with dynamic non-200 URLs. If a basename (the last part of the URL<br>after the last slash) has more non-200 responses than this limit, other URLs with same basename<br>will be ignored/skipped. Default is `5`. |
+| `--remove-query-params` | Remove query parameters from found URLs. |
+| `--add-random-query-params` | Add random query parameters to each URL to bypass caches. |
+| `--transform-url=<from->to>` | Transform URLs before crawling. Use `from -> to` for simple replacement or `/regex/ -> replacement`.<br>Can be specified multiple times. |
+| `--force-relative-urls` | Normalize all discovered URLs matching the initial domain (incl. www variant and protocol<br>differences) to canonical form. Prevents duplicate files in offline export when the site<br>uses inconsistent URL formats (http/https, www/non-www). |
+| `--ignore-robots-txt` | Ignore robots.txt content. |
+| `--http-cache-dir=<dir>` | Cache dir for HTTP responses. Disable with `--http-cache-dir='off'` or `--no-cache`.<br>Default is `~/.cache/siteone-crawler/http-cache` (XDG-compliant, respects `$XDG_CACHE_HOME`). |
+| `--http-cache-compression` | Enable compression for HTTP cache storage. |
+| `--http-cache-ttl=<val>` | TTL for HTTP cache entries (e.g. `1h`, `7d`, `30m`). Use `0` for infinite. Default is `24h`. |
+| `--no-cache` | Disable HTTP cache completely. Shortcut for `--http-cache-dir='off'`. |
+| `--max-queue-length=<num>` | Maximum length of the waiting URL queue. Default is `9000`. |
+| `--max-visited-urls=<num>` | Maximum number of visited URLs. Default is `10000`. |
+| `--max-skipped-urls=<num>` | Maximum number of skipped URLs. Default is `10000`. |
+| `--max-url-length=<num>` | Maximum supported URL length in chars. Default is `2083`. |
+| `--max-non200-responses-per-basename=<num>` | Protection against looping with dynamic non-200 URLs. Default is `5`. |
 
 ### File export settings
 
 | Parameter | Description |
 |-----------|-------------|
-| `--output-html-report=<file>` | Save HTML report into that file. Set to empty '' to disable HTML report.<br>By default saved into `tmp/%domain%.report.%datetime%.html`. |
-| `--html-report-options=<sections>` | Comma-separated list of sections to include in HTML report.<br>Available sections: `summary`, `seo-opengraph`, `image-gallery`, `video-gallery`, `visited-urls`, `dns-ssl`, `crawler-stats`, `crawler-info`, `headers`, `content-types`, `skipped-urls`, `caching`, `best-practices`, `accessibility`, `security`, `redirects`, `404-pages`, `slowest-urls`, `fastest-urls`, `source-domains`.<br>Default: all sections. |
-| `--output-json-file=<file>` | File path for JSON output. Set to empty '' to disable JSON file.<br>By default saved into `tmp/%domain%.output.%datetime%.json`.<br>See [JSON Output Documentation](docs/JSON-OUTPUT.md) for format details. |
-| `--output-text-file=<file>` | File path for TXT output. Set to empty '' to disable TXT file.<br>By default saved into `tmp/%domain%.output.%datetime%.txt`.<br>See [Text Output Documentation](docs/TEXT-OUTPUT.md) for format details. |
+| `--output-html-report=<file>` | Save HTML report into that file. Set to empty `''` to disable HTML report.<br>By default saved into `tmp/%domain%.report.%datetime%.html`. |
+| `--html-report-options=<sections>` | Comma-separated list of sections to include in HTML report.<br>Available sections: `summary`, `seo-opengraph`, `image-gallery`, `video-gallery`, `visited-urls`, `dns-ssl`, `crawler-stats`, `crawler-info`, `headers`, `content-types`, `skipped-urls`, `external-links`, `caching`, `best-practices`, `accessibility`, `security`, `redirects`, `404-pages`, `slowest-urls`, `fastest-urls`, `source-domains`.<br>Default: all sections. |
+| `--output-json-file=<file>` | File path for JSON output. Set to empty `''` to disable JSON file.<br>By default saved into `tmp/%domain%.output.%datetime%.json`.<br>See [JSON Output Documentation](docs/JSON-OUTPUT.md) for format details. |
+| `--output-text-file=<file>` | File path for TXT output. Set to empty `''` to disable TXT file.<br>By default saved into `tmp/%domain%.output.%datetime%.txt`.<br>See [Text Output Documentation](docs/TEXT-OUTPUT.md) for format details. |
+| `--add-timestamp-to-output-file` | Append timestamp to output filenames (HTML report, JSON, TXT) except sitemaps. |
+| `--add-host-to-output-file` | Append initial URL host to output filenames (HTML report, JSON, TXT) except sitemaps. |
+
+**Default output directory:** Report files are saved into `./tmp/` in the current working directory. If `./tmp/` cannot be created (e.g. read-only filesystem), the crawler falls back to the platform's XDG data directory (`~/.local/share/siteone-crawler/` on Linux, `~/Library/Application Support/siteone-crawler/` on macOS, `%APPDATA%\siteone-crawler\` on Windows) and prints a notice to stderr.
 
 ### Mailer options
 
 | Parameter | Description |
 |-----------|-------------|
-| `--mail-to=<email>` | Recipients of HTML e-mail reports. Optional but required for mailer activation.<br>You can specify multiple emails separated by comma. |
-| `--mail-from=<email>` | E-mail sender address. Default values is `siteone-crawler@your-hostname.com`. |
-| `--mail-from-name=<val>` | E-mail sender name. Default values is `SiteOne Crawler`. |
-| `--mail-subject-template=<val>` | E-mail subject template. You can use dynamic variables `%domain%`, `%date%` and `%datetime%`.<br>Default values is `Crawler Report for %domain% (%date%)`. |
+| `--mail-to=<email>` | Recipients of HTML e-mail reports. Required for mailer activation.<br>You can specify multiple emails separated by comma. |
+| `--mail-from=<email>` | E-mail sender address. Default is `siteone-crawler@your-hostname.com`. |
+| `--mail-from-name=<val>` | E-mail sender name. Default is `SiteOne Crawler`. |
+| `--mail-subject-template=<val>` | E-mail subject template. You can use `%domain%`, `%date%` and `%datetime%`.<br>Default is `Crawler Report for %domain% (%date%)`. |
 | `--mail-smtp-host=<host>` | SMTP host for sending emails. Default is `localhost`. |
 | `--mail-smtp-port=<port>` | SMTP port for sending emails. Default is `25`. |
 | `--mail-smtp-user=<user>` | SMTP user, if your SMTP server requires authentication. |
@@ -402,61 +434,65 @@ For a clearer list, I recommend going to the documentation: 🌐 https://crawler
 | Parameter | Description |
 |-----------|-------------|
 | `--upload` | Enable HTML report upload to `--upload-to`. |
-| `--upload-to=<url>` | URL of the endpoint where to send the HTML report. Default value is `https://crawler.siteone.io/up`. |
-| `--upload-retention=<val>` | How long should the HTML report be kept in the online version?<br>Values: 1h / 4h / 12h / 24h / 3d / 7d / 30d / 365d / forever.<br>Default value is `30d`. |
-| `--upload-password=<val>` | Optional password, which must be entered (the user will be 'crawler')<br>to display the online HTML report. |
-| `--upload-timeout=<int>` | Upload timeout in seconds. Default value is `3600`. |
+| `--upload-to=<url>` | URL of the endpoint where to send the HTML report. Default is `https://crawler.siteone.io/up`. |
+| `--upload-retention=<val>` | How long should the HTML report be kept in the online version?<br>Values: 1h / 4h / 12h / 24h / 3d / 7d / 30d / 365d / forever.<br>Default is `30d`. |
+| `--upload-password=<val>` | Optional password (user will be 'crawler') to display the online HTML report. |
+| `--upload-timeout=<int>` | Upload timeout in seconds. Default is `3600`. |
 
 ### Offline exporter options
 
 | Parameter | Description |
 |-----------|-------------|
-| `--offline-export-dir=<dir>` | Path to directory where to save the offline version of the website. If target directory<br>does not exist, crawler will try to create it (requires sufficient rights). |
-| `--offline-export-store-only-url-regex=<regex>` | For debug - when filled it will activate debug mode and store only URLs<br>which match one of these PCRE regexes. Can be specified multiple times. |
-| `--offline-export-remove-unwanted-code=<1/0>` | Remove unwanted code for offline mode? Typically, JS of the analytics, social networks,<br>cookie consent, cross origins, etc. Default values is `1`. |
-| `--offline-export-no-auto-redirect-html` | Disables the automatic creation of redirect HTML files for each subfolder that contains<br>an `index.html`. This solves situations for URLs where sometimes the URL ends with a slash,<br>sometimes it doesn't. |
-| `--replace-content=<val>` | Replace content in HTML/JS/CSS with `foo -> bar` or regexp in PREG format,<br>e.g. `/card[0-9]/i -> card`. Can be specified multiple times. |
-| `--replace-query-string=<val>` | Instead of using a short hash instead of a query string in the filename, just replace some characters.<br>You can use simple format `foo -> bar` or regexp in PREG format,<br> e.g. `'/([a-z]+)=([^&]*)(&|$)/i -> $1__$2'`. Can be specified multiple times. |
-| `--ignore-store-file-error` | Enable this option to ignore any file storing errors.<br>The export process will continue. |
+| `--offline-export-dir=<dir>` | Path to directory where to save the offline version of the website. |
+| `--offline-export-store-only-url-regex=<regex>` | Debug: store only URLs matching these PCRE regexes. Can be specified multiple times. |
+| `--offline-export-remove-unwanted-code=<1/0>` | Remove unwanted code for offline mode (analytics, social networks, etc.). Default is `1`. |
+| `--offline-export-no-auto-redirect-html` | Disable automatic creation of redirect HTML files for subfolders containing `index.html`. |
+| `--offline-export-preserve-url-structure` | Preserve the original URL path structure. E.g. `/about` is stored as `about/index.html`<br>instead of `about.html`. Useful for web server deployment where the clone should maintain<br>the same URL hierarchy as the original site. |
+| `--replace-content=<val>` | Replace content in HTML/JS/CSS with `foo -> bar` or PCRE regexp.<br>Can be specified multiple times. |
+| `--replace-query-string=<val>` | Replace characters in query string filenames.<br>Can be specified multiple times. |
+| `--offline-export-lowercase` | Convert all filenames to lowercase for offline export. Useful for case-insensitive filesystems. |
+| `--ignore-store-file-error` | Ignore any file storing errors and continue. |
+| `--disable-astro-inline-modules` | Disable inlining of Astro module scripts for offline export.<br>Scripts will remain as external files with corrected relative paths. |
 
 ### Markdown exporter options
 
 | Parameter | Description |
 |-----------|-------------|
-| `--markdown-export-dir=<dir>` | Path to directory where to save the markdown version of the website.<br>Directory will be created if it doesn't exist. |
-| `--markdown-export-single-file=<file>` | Path to a file where to save the combined markdown files into one document. Requires `--markdown-export-dir` to be set. Ideal for AI tools that need to process the entire website content in one go. |
-| `--markdown-move-content-before-h1-to-end` | Move all content before the main H1 heading (typically the header with the menu) to the end of the markdown. |
-| `--markdown-disable-images` | Do not export and show images in markdown files.<br>Images are enabled by default. |
-| `--markdown-disable-files` | Do not export and link files other than HTML/CSS/JS/fonts/images - eg. PDF, ZIP, etc.<br>These files are enabled by default. |
-| `--markdown-remove-links-and-images-from-single-file` | Remove links and images from the combined single markdown file. Useful for AI tools that don't need these elements.<br>Requires `--markdown-export-single-file` to be set. |
-| `--markdown-exclude-selector=<val>` | Exclude some page content (DOM elements) from markdown export defined by CSS selectors like 'header', '.header', '#header', etc.<br>Can be specified multiple times. |
-| `--markdown-replace-content=<val>` | Replace text content with `foo -> bar` or regexp in PREG format: `/card[0-9]/i -> card`.<br>Can be specified multiple times. |
-| `--markdown-replace-query-string=<val>` | Instead of using a short hash instead of a query string in the filename, just replace some characters.<br>You can use simple format 'foo -> bar' or regexp in PREG format, e.g.<br>`'/([a-z]+)=([^&]*)(&|$)/i -> $1__$2'`. Can be specified multiple times. |
-| `--markdown-export-store-only-url-regex=<regex>` | For debug - when filled it will activate debug mode and store only URLs which match one of these<br>PCRE regexes.<br>Can be specified multiple times. |
-| `--markdown-ignore-store-file-error` | Ignores any file storing errors. The export process will continue. |
+| `--markdown-export-dir=<dir>` | Path to directory where to save the markdown version of the website. |
+| `--markdown-export-single-file=<file>` | Path to a file for combined markdown. Requires `--markdown-export-dir`. |
+| `--markdown-move-content-before-h1-to-end` | Move content before main H1 heading to the end of the markdown. |
+| `--markdown-disable-images` | Do not export and show images in markdown files. |
+| `--markdown-disable-files` | Do not export files other than HTML/CSS/JS/fonts/images (e.g. PDF, ZIP). |
+| `--markdown-remove-links-and-images-from-single-file` | Remove links and images from combined single file. |
+| `--markdown-exclude-selector=<val>` | Exclude DOM elements by CSS selector from markdown export.<br>Can be specified multiple times. |
+| `--markdown-replace-content=<val>` | Replace text content with `foo -> bar` or PCRE regexp.<br>Can be specified multiple times. |
+| `--markdown-replace-query-string=<val>` | Replace characters in query string filenames.<br>Can be specified multiple times. |
+| `--markdown-export-store-only-url-regex=<regex>` | Debug: store only URLs matching these PCRE regexes. Can be specified multiple times. |
+| `--markdown-ignore-store-file-error` | Ignore any file storing errors and continue. |
 
 ### Sitemap options
 
 | Parameter | Description |
 |-----------|-------------|
-| `--sitemap-xml-file=<file>` | File path where generated XML Sitemap will be saved.<br>Extension `.xml` is automatically added if not specified. |
-| `--sitemap-txt-file=<file>` | File path where generated TXT Sitemap will be saved.<br>Extension `.txt` is automatically added if not specified. |
-| `--sitemap-base-priority=<num>` | Base priority for XML sitemap. Default values is `0.5`. |
-| `--sitemap-priority-increase=<num>` | Priority increase value based on slashes count in the URL. Default values is `0.1`. |
+| `--sitemap-xml-file=<file>` | File path for generated XML Sitemap. Extension `.xml` added if not specified. |
+| `--sitemap-txt-file=<file>` | File path for generated TXT Sitemap. Extension `.txt` added if not specified. |
+| `--sitemap-base-priority=<num>` | Base priority for XML sitemap. Default is `0.5`. |
+| `--sitemap-priority-increase=<num>` | Priority increase based on slashes in URL. Default is `0.1`. |
 
 ### Expert options
 
 | Parameter | Description |
 |-----------|-------------|
 | `--debug` | Activate debug mode. |
-| `--debug-log-file=<file>` | Log file where to save debug messages. When `--debug` is not set and `--debug-log-file`<br> is set, logging will be active without visible output. |
-| `--debug-url-regex=<regex>` | Regex for URL(s) to debug. When crawled URL is matched, parsing, URL replacing,<br>and other actions are printed to output. Can be specified multiple times. |
-| `--result-storage=<val>` | Result storage type for content and headers. Values: `memory` or `file`.<br>Use `file` for large websites. Default values is `memory`. |
-| `--result-storage-dir=<dir>` | Directory for `--result-storage=file`. Default values is `tmp/result-storage`. |
-| `--result-storage-compression` | Enable compression for results storage. Saves disk space, but uses more CPU. |
-| `--http-cache-dir=<dir>` | Cache dir for HTTP responses. You can disable cache by `--http-cache-dir='off'`.<br>Default values is `tmp/http-client-cache`. |
-| `--http-cache-compression` | Enable compression for HTTP cache storage.<br>Saves disk space, but uses more CPU. |
-| `--websocket-server=<host:port>` | Start crawler with websocket server on given host:port, e.g. `0.0.0.0:8000`.<br>To connected clients will be sent this message after each URL is crawled:<br>`{"type":"urlResult","url":"...","statusCode":200,"size":4528,"execTime":0.823}`. |
+| `--debug-log-file=<file>` | Log file for debug messages. When set without `--debug`, logging is active without visible output. |
+| `--debug-url-regex=<regex>` | Regex for URL(s) to debug. Can be specified multiple times. |
+| `--result-storage=<val>` | Result storage type. Values: `memory` or `file`. Use `file` for large websites. Default is `memory`. |
+| `--result-storage-dir=<dir>` | Directory for `--result-storage=file`. Default is `tmp/result-storage`. |
+| `--result-storage-compression` | Enable compression for results storage. |
+| `--http-cache-dir=<dir>` | Cache dir for HTTP responses. Disable with `--http-cache-dir='off'` or `--no-cache`.<br>Default is `~/.cache/siteone-crawler/http-cache` (XDG-compliant, respects `$XDG_CACHE_HOME`). |
+| `--http-cache-compression` | Enable compression for HTTP cache storage. |
+| `--http-cache-ttl=<val>` | TTL for HTTP cache entries (e.g. `1h`, `7d`, `30m`). Use `0` for infinite. Default is `24h`. |
+| `--websocket-server=<host:port>` | Start crawler with websocket server on given host:port. |
 | `--console-width=<int>` | Enforce a fixed console width, disabling automatic detection. |
 
 ### Fastest URL analyzer
@@ -478,7 +514,146 @@ For a clearer list, I recommend going to the documentation: 🌐 https://crawler
 |-----------|-------------|
 | `--slowest-urls-top-limit=<int>` | Number of URLs in TOP slowest list. Default is `20`. |
 | `--slowest-urls-min-time=<val>` | Minimum response time threshold for slow URLs. Default is `0.01`. |
-| `--slowest-urls-max-time=<val>` | Maximum response time for an URL to be considered very slow.<br>Default is `3`. |
+| `--slowest-urls-max-time=<val>` | Maximum response time for very slow evaluation. Default is `3`. |
+
+### Built-in HTTP server
+
+Browse exported markdown or offline HTML files through a local web server with a built-in viewer.
+
+| Parameter | Description |
+|-----------|-------------|
+| `--serve-markdown=<dir>` | Start built-in HTTP server for browsing a markdown export directory.<br>Renders `.md` files as styled HTML with tables, accordions, dark/light mode, and breadcrumb navigation. |
+| `--serve-offline=<dir>` | Start built-in HTTP server for browsing an offline HTML export directory.<br>Serves static files with Content-Security-Policy restricting assets to the same origin. |
+| `--serve-port=<int>` | Port for the built-in HTTP server. Default is `8321`. |
+| `--serve-bind-address=<addr>` | Bind address for the built-in HTTP server. Default is `127.0.0.1` (localhost only).<br>Use `0.0.0.0` to listen on all network interfaces and their IP addresses. |
+
+**Example:**
+
+```bash
+# Browse markdown export
+./siteone-crawler --serve-markdown=./exports/markdown
+
+# Browse offline export on custom port, accessible from network
+./siteone-crawler --serve-offline=./exports/offline --serve-port=9000 --serve-bind-address=0.0.0.0
+```
+
+### CI/CD settings
+
+| Parameter | Description |
+|-----------|-------------|
+| `--ci` | Enable CI/CD quality gate. Crawler exits with code 10 if thresholds are not met. Default file outputs (HTML, JSON, TXT reports) are suppressed unless explicitly requested via `--output-*` options. |
+| `--ci-min-score=<val>` | Minimum overall quality score (0.0-10.0). Default is `5.0`. |
+| `--ci-min-performance=<val>` | Minimum Performance category score (0.0-10.0). Default is `5.0`. |
+| `--ci-min-seo=<val>` | Minimum SEO category score (0.0-10.0). Default is `5.0`. |
+| `--ci-min-security=<val>` | Minimum Security category score (0.0-10.0). Default is `5.0`. |
+| `--ci-min-accessibility=<val>` | Minimum Accessibility category score (0.0-10.0). Default is `3.0`. |
+| `--ci-min-best-practices=<val>` | Minimum Best Practices category score (0.0-10.0). Default is `5.0`. |
+| `--ci-max-404=<int>` | Maximum number of 404 responses allowed. Default is `0`. |
+| `--ci-max-5xx=<int>` | Maximum number of 5xx server error responses allowed. Default is `0`. |
+| `--ci-max-criticals=<int>` | Maximum number of critical analysis findings allowed. Default is `0`. |
+| `--ci-max-warnings=<int>` | Maximum number of warning analysis findings allowed. Not checked by default. |
+| `--ci-max-avg-response=<val>` | Maximum average response time in seconds. Not checked by default. |
+| `--ci-min-pages=<int>` | Minimum number of HTML pages that must be found. Default is `10`. |
+| `--ci-min-assets=<int>` | Minimum number of assets (JS, CSS, images, fonts) that must be found. Default is `10`. |
+| `--ci-min-documents=<int>` | Minimum number of documents (PDF, etc.) that must be found. Default is `0` (not checked). |
+
+**Default behavior with `--ci` alone:** overall score >= 5.0, each category score >= 5.0 (Performance, SEO, Security, Best Practices) and Accessibility >= 3.0, 404 errors <= 0, 5xx errors <= 0, critical findings <= 0, HTML pages >= 10, assets >= 10. File outputs (HTML, JSON, TXT reports) are not generated. To save reports in CI mode, specify the desired output explicitly, e.g. `--ci --output-html-report=report.html`.
+
+## 🏆 Quality Scoring
+
+The crawler automatically calculates a quality score (0.0-10.0) across 5 weighted categories:
+
+| Category | Weight | What it measures |
+|----------|--------|------------------|
+| **Performance** | 20% | Response times, slow URLs |
+| **SEO** | 20% | Missing H1, title uniqueness, meta descriptions, 404s, redirects |
+| **Security** | 25% | SSL/TLS certificates, security headers, unsafe protocols |
+| **Accessibility** | 20% | Lang attribute, image alt text, form labels, ARIA, heading levels |
+| **Best Practices** | 15% | Duplicate/large SVGs, deep DOM, Brotli/WebP support |
+
+The overall score is a weighted average of all categories. Scores are displayed in a colored box in the console output and included in JSON and HTML report outputs.
+
+Score labels:
+- **9.0-10.0** — Excellent (green)
+- **7.0-8.9** — Good (blue)
+- **5.0-6.9** — Fair (yellow)
+- **3.0-4.9** — Poor (purple)
+- **0.0-2.9** — Critical (red)
+
+## 🔄 CI/CD Integration
+
+The `--ci` flag enables a quality gate that evaluates configurable thresholds after crawling completes. When any threshold is not met, the crawler exits with **code 10** (distinct from exit code 1 for runtime errors). In CI mode, default file outputs (HTML, JSON, TXT reports) are automatically suppressed — only the console output and exit code matter. If you need report files in CI, specify them explicitly (e.g. `--output-html-report=report.html`).
+
+**Bonus: Cache warming** — running the crawler as a post-deployment step in your CI/CD pipeline crawls every page and asset on your site, which populates the HTML/asset cache on your **reverse proxy** (Varnish, Nginx) or **CDN** (Cloudflare, CloudFront). This way, the first real visitors always hit a warm cache instead of cold origin requests.
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | Success (with `--ci` this also means all quality thresholds passed) |
+| `1` | Runtime error |
+| `2` | Help/version displayed |
+| `3` | No pages crawled (e.g. DNS failure, timeout, connection refused) |
+| `10` | CI/CD quality gate failed |
+| `101` | Configuration error |
+
+### Example: GitHub Actions
+
+```yaml
+- name: Check website quality
+  run: |
+    ./siteone-crawler \
+      --url=https://staging.example.com \
+      --ci \
+      --ci-min-score=7.0 \
+      --ci-min-security=8.0 \
+      --ci-max-404=0 \
+      --ci-max-5xx=0
+```
+
+### Example: GitLab CI
+
+```yaml
+quality_check:
+  script:
+    - ./siteone-crawler --url=$STAGING_URL --ci --ci-min-score=6.0
+  allow_failure: false
+```
+
+### Console output
+
+When `--ci` is enabled, a quality gate box is displayed after the quality scores:
+
+```
+╔══════════════════════════════════════════════════════════════╗
+║                      CI/CD QUALITY GATE                      ║
+╠══════════════════════════════════════════════════════════════╣
+║  [PASS] Overall score: 7.2 >= 5                              ║
+║  [PASS] 404 errors: 0 <= 0                                   ║
+║  [PASS] 5xx errors: 0 <= 0                                   ║
+║  [FAIL] Critical findings: 2 > 0 (max: 0)                    ║
+╠══════════════════════════════════════════════════════════════╣
+║  RESULT: FAIL (1 of 4 checks failed) — exit code 10          ║
+╚══════════════════════════════════════════════════════════════╝
+```
+
+### JSON output
+
+When using `--output=json --ci`, the JSON includes a `ciGate` object:
+
+```json
+{
+  "ciGate": {
+    "passed": false,
+    "exitCode": 10,
+    "checks": [
+      {"metric": "Overall score", "operator": ">=", "threshold": 5.0, "actual": 7.2, "passed": true},
+      {"metric": "404 errors", "operator": "<=", "threshold": 0.0, "actual": 0.0, "passed": true},
+      {"metric": "Critical findings", "operator": "<=", "threshold": 0.0, "actual": 2.0, "passed": false}
+    ]
+  }
+}
+```
 
 ## 📄 Output Examples
 
@@ -493,22 +668,14 @@ To understand the richness of the data provided by the crawler, you can examine 
 
 These examples showcase the various tables and metrics generated, demonstrating the tool's capabilities in analyzing website structure, performance, SEO, security, and more.
 
-## 🎯 Roadmap
+## 🧪 Testing
 
-* Well tested Docker images for easy usage in CI/CD pipelines on hub.docker.com (for all platforms).
-* Better static assets processing - now are assets processed immediately, same as other URLs. This can cause
-  problems with large websites. We will implement a better solution with a separate queue for static assets and separate
-  visualization in the output.
-* Support for configurable thresholds for response times, status codes, etc. to exit with a non-zero code.
-* Support for secure SMTP.
+```bash
+cargo test                                       # unit tests + offline integration tests
+cargo test --test integration_crawl -- --ignored --test-threads=1  # network integration tests (crawls crawler.siteone.io)
+```
 
-If you have any suggestions or feature requests, please open an issue on GitHub. We'd love to hear from you!
-
-Your contributions with realized improvements, bug fixes, and new features are welcome. Please open a pull request :-)
-
-## 🤔 Motivation to create this tool
-
-If you are interested in the author's motivation for creating this tool, read it on [the project website 🌐](https://crawler.siteone.io/introduction/motivation/).
+Unit tests live in each source file (`#[cfg(test)] mod tests`). Integration tests are in `tests/integration_crawl.rs` — network-dependent tests are `#[ignore]` by default so that `cargo test` stays fast and offline.
 
 ## ⚠️ Disclaimer
 
@@ -522,5 +689,12 @@ rules against automated access detailed in their robots.txt.
 This work is licensed under a [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) license.
 
 ## Powered by
+
+[![Hosted By: Cloudsmith](https://img.shields.io/badge/OSS%20hosting%20by-cloudsmith-blue?logo=cloudsmith&style=for-the-badge)](https://cloudsmith.com)
+
+Package repository hosting is graciously provided by  [Cloudsmith](https://cloudsmith.com).
+Cloudsmith is the only fully hosted, cloud-native, universal package management solution, that
+enables your organization to create, store and share packages in any format, to any place, with total
+confidence.
 
 [![PhpStorm logo.](https://resources.jetbrains.com/storage/products/company/brand/logos/PhpStorm.svg)](https://jb.gg/OpenSourceSupport)

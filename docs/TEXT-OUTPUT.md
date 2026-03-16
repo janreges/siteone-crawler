@@ -8,20 +8,26 @@
     *   [3.1. Progress Report](#31-progress-report)
     *   [3.2. Skipped URLs Summary](#32-skipped-urls-summary)
     *   [3.3. Skipped URLs](#33-skipped-urls)
-    *   [3.4. Redirected URLs](#34-redirected-urls)
-    *   [3.5. 404 URLs](#35-404-urls)
-    *   [3.6. SSL/TLS Info](#36-ssltls-info)
-    *   [3.7. Performance Metrics (Fastest/Slowest URLs)](#37-performance-metrics-fastestslowest-urls)
-    *   [3.8. SEO & Content Analysis](#38-seo--content-analysis)
-    *   [3.9. HTTP Headers](#39-http-headers)
-    *   [3.10. HTTP Caching](#310-http-caching)
-    *   [3.11. Best Practices](#311-best-practices)
-    *   [3.12. Accessibility](#312-accessibility)
-    *   [3.13. Source Domains](#313-source-domains)
-    *   [3.14. Content Types](#314-content-types)
-    *   [3.15. DNS Info](#315-dns-info)
-    *   [3.16. Security](#316-security)
-    *   [3.17. Analysis Stats](#317-analysis-stats)
+    *   [3.4. External URLs](#34-external-urls)
+    *   [3.5. Redirected URLs](#35-redirected-urls)
+    *   [3.6. 404 URLs](#36-404-urls)
+    *   [3.7. SSL/TLS Info](#37-ssltls-info)
+    *   [3.8. Performance Metrics (Fastest/Slowest URLs)](#38-performance-metrics-fastestslowest-urls)
+    *   [3.9. SEO & Content Analysis](#39-seo--content-analysis)
+    *   [3.10. HTTP Headers](#310-http-headers)
+    *   [3.11. HTTP Caching](#311-http-caching)
+    *   [3.12. Non-Unique Titles and Descriptions](#312-non-unique-titles-and-descriptions)
+    *   [3.13. Best Practices](#313-best-practices)
+    *   [3.14. Accessibility](#314-accessibility)
+    *   [3.15. Source Domains](#315-source-domains)
+    *   [3.16. Content Types](#316-content-types)
+    *   [3.17. DNS Info](#317-dns-info)
+    *   [3.18. Security](#318-security)
+    *   [3.19. Analysis Stats](#319-analysis-stats)
+    *   [3.20. Content Processor Stats](#320-content-processor-stats)
+    *   [3.21. Execution Summary](#321-execution-summary)
+    *   [3.22. Website Quality Score](#322-website-quality-score)
+    *   [3.23. Summary](#323-summary)
 *   [4. Information Obtainable from Text Output](#4-information-obtainable-from-text-output)
 *   [5. Use Cases for Text Output](#5-use-cases-for-text-output)
 *   [6. Note on JSON Output](#6-note-on-json-output)
@@ -36,53 +42,73 @@ The text output begins with an ASCII art logo, version information, and the auth
 *   **Progress Report:** Real-time status of crawled URLs.
 *   **Skipped URLs Summary:** Aggregated counts of URLs skipped for various reasons.
 *   **Skipped URLs:** Detailed list of skipped URLs, reasons, and sources.
+*   **External URLs:** List of all external URLs found during the crawl, with page counts and source locations.
 *   **Redirected URLs:** List of URLs that resulted in redirects.
 *   **404 URLs:** List of URLs that returned a 404 Not Found status.
 *   **SSL/TLS Info:** Details about the website's SSL/TLS certificate.
 *   **Performance Metrics:** Top fastest and slowest URLs.
-*   **SEO &amp; Content Analysis:** SEO metadata, OpenGraph metadata, heading structure, and duplicate content reports.
+*   **SEO & Content Analysis:** SEO metadata, OpenGraph metadata, heading structure.
 *   **HTTP Headers:** Analysis of HTTP headers found during the crawl.
 *   **HTTP Caching:** Detailed breakdown of caching strategies by content type and domain.
+*   **Non-Unique Titles and Descriptions:** Reports on duplicate page titles and meta descriptions.
 *   **Best Practices:** Results of various best practice checks.
 *   **Accessibility:** Results of accessibility checks.
-*   **Source Domains:** Summary of crawled domains.
+*   **Source Domains:** Summary of crawled domains with content type breakdowns.
 *   **Content Types:** Summary of crawled content types (general and MIME types).
 *   **DNS Info:** Information about DNS resolution.
 *   **Security:** Results of security header checks.
 *   **Analysis Stats:** Performance statistics for the crawler's internal analyzers.
+*   **Content Processor Stats:** Performance statistics for content processors (HTML, CSS, JS, etc.).
+*   **Execution Summary:** Total execution time, URL counts, response time statistics, and DNS info.
+*   **Website Quality Score:** Scored rating (0-10) across five quality categories.
+*   **Summary:** Categorized findings with severity indicators.
 
 ## 2. General Format
 
 The output uses simple text formatting:
 
-*   **Headers:** Section titles are typically preceded by `---` lines and followed by `===` or `---` lines for visual separation.
-*   **Tables:** Data is presented in fixed-width tables with headers underlined by hyphens (`-`). Column alignment is maintained using spaces. This documentation uses Markdown tables for examples.
-*   **Truncation:** Some tables containing potentially large amounts of data (like SEO metadata or heading structures) might show only a limited number of rows (e.g., max 10) in the text output, with a note advising the use of the HTML report (`--output-html-report`) for the complete data.
+*   **Headers:** Section titles are followed by `---` underlines for visual separation. The final execution summary block uses `===` double-line borders.
+*   **Tables:** Data is presented in fixed-width tables with headers underlined by hyphens (`-`). Column alignment is maintained using spaces. Columns are separated by ` | ` (pipe with surrounding spaces). This documentation uses Markdown tables for illustrative examples.
+*   **Truncation:** Some tables containing potentially large amounts of data (like SEO metadata or heading structures) show only a limited number of rows (e.g., max 10) in the text output, with a note advising the use of the HTML report (`--output-html-report`) for the complete data. Long cell values may be truncated with an ellipsis character.
 
 ## 3. Detailed Section Breakdown
 
 ### 3.1. Progress Report
 
-This section shows the progress of the crawl in real-time (or the final state if the crawl is complete).
+This section shows the progress of the crawl in real-time (or the final state if the crawl is complete). The columns displayed depend on the detected terminal width. When the terminal width is less than 140 characters, a compact mode is activated that omits the `%` and `Bar` columns.
 
-| Progress | %    | Bar      | URL                                                     | Status | Type | Time  | Size  | Cache  | Access. | Best pr. |
-| :------- | :--- | :------- | :------------------------------------------------------ | :----- | :--- | :---- | :---- | :----- | :------ | :------- |
-| 1/43     | 2%   |          | /                                                       | 200    | HTML | 34 ms | 45 kB | 60 min | 1/1/2   | 1/5      |
-| 2/64     | 3%   |          | /installation-and-requirements/ready-to-use-packages/ | 200    | HTML | 13 ms | 61 kB | 60 min | 1/3     | 1/5      |
-| ...      | ...  | ...      | ...                                                     | ...    | ...  | ...   | ...   | ...    | ...     | ...      |
+A message like this appears before the progress table when compact mode is active:
 
-*   **Progress report:** Columns include:
+```
+Detected terminal width 138 < 140 chars - compact mode activated.
+```
+
+**Compact mode (terminal width < 140 chars):**
+
+| Progress | URL                                                     | Status | Type | Time  | Size  | Cache  | Access. | Best pr. |
+| :------- | :------------------------------------------------------ | :----- | :--- | :---- | :---- | :----- | :------ | :------- |
+| 1/40     | /                                                       | 200    | HTML | 4 ms  | 50 kB | 60 min | 3/1     | 7        |
+| 2/66     | /introduction/key-features/                             | 200    | HTML | 4 ms  | 54 kB | 60 min | 2/2     | 1/6      |
+| ...      | ...                                                     | ...    | ...  | ...   | ...   | ...    | ...     | ...      |
+
+**Wide mode (terminal width >= 140 chars) includes two additional columns:**
+
+| Progress | %   | Bar | URL | Status | Type | Time | Size | Cache | Access. | Best pr. |
+| :------- | :-- | :-- | :-- | :----- | :--- | :--- | :--- | :---- | :------ | :------- |
+| 1/40     | 2%  | >   | /   | 200    | HTML | 4 ms | 50 kB| 60 min| 3/1     | 7        |
+
+*   **Progress report columns:**
     *   `Progress` (`X/Y`): `X` = URL sequence number, `Y` = Total URLs found so far.
-    *   `%`: Percentage of URLs processed relative to the total found.
-    *   `Bar`: Visual indicator (`>`, `>>`, etc.).
+    *   `%`: *(wide mode only)* Percentage of URLs processed relative to the total found.
+    *   `Bar`: *(wide mode only)* Visual progress indicator.
     *   `URL`: The path or full URL being processed.
-    *   `Status`: HTTP status code returned (e.g., 200, 404, 301).
-    *   `Type`: Detected content type (e.g., HTML, JS, CSS, Image).
+    *   `Status`: HTTP status code returned (e.g., 200, 404, 301, 429).
+    *   `Type`: Detected content type (e.g., HTML, JS, CSS, Image, Document).
     *   `Time`: Time taken to download the URL.
     *   `Size`: Size of the downloaded content.
-    *   `Cache`: Detected cache lifetime (e.g., 60 min, 12 mon, none).
-    *   `Access.`: Accessibility issues summary (OK/Notice/Warning/Critical).
-    *   `Best pr.`: Best practices issues summary (OK/Notice/Warning/Critical).
+    *   `Cache`: Detected cache lifetime (e.g., `60 min`, `12 mon`, `etag`, `none`).
+    *   `Access.`: Accessibility issues summary as compact numeric counts. Values like `3/1` mean "3 OK / 1 warning", `2/2` means "2 OK / 2 warnings", and a single number like `7` means that count of findings in the most relevant severity. Empty for non-HTML resources.
+    *   `Best pr.`: Best practices issues summary in the same compact numeric format. Values like `1/6` mean "1 OK / 6 warnings". Empty for non-HTML resources.
 
 ### 3.2. Skipped URLs Summary
 
@@ -92,9 +118,9 @@ Provides a high-level overview of why URLs were skipped during the crawl, groupe
 
 | Reason           | Domain             | Unique URLs |
 | :--------------- | :----------------- | :---------- |
-| Not allowed host | nextjs.org         | 1294        |
-| Not allowed host | astro.build        | 925         |
-| Robots.txt       | crawler.siteone.io | 3           |
+| Not allowed host | github.com         | 29          |
+| Not allowed host | twitter.com        | 13          |
+| Robots.txt       | crawler.siteone.io | 6           |
 | ...              | ...                | ...         |
 
 *   **Reason:** Why the URL was skipped (e.g., `Not allowed host`, `Robots.txt`, `Max depth reached`).
@@ -107,227 +133,494 @@ Lists individual skipped URLs with more context.
 
 **Skipped URLs**
 
-| Reason           | Skipped URL           | Source   | Found at URL                                         |
-| :--------------- | :-------------------- | :------- | :--------------------------------------------------- |
-| Not allowed host | http://astro.build/   | `<a href>` | /html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html |
-| Not allowed host | https://adamwathan.me/ | `<a href>` | /introduction/thanks/                                |
-| ...              | ...                   | ...      | ...                                                  |
+| Reason           | Skipped URL                      | Source     | Found at URL                        |
+| :--------------- | :------------------------------- | :--------- | :---------------------------------- |
+| Robots.txt       | /examples-exports/docs.astro.build/ | `<a href>` | /                                   |
+| Not allowed host | https://adamwathan.me/           | `<a href>` | /introduction/thanks/               |
+| ...              | ...                              | ...        | ...                                 |
 
 *   **Reason:** Why the URL was skipped.
 *   **Skipped URL:** The specific URL that was not crawled.
-*   **Source:** How the URL was discovered (e.g., `<a href>`, `<img src>`, `CSS url()`).
+*   **Source:** How the URL was discovered (e.g., `<a href>`, `<img src>`, `<script src>`, `CSS url()`).
 *   **Found at URL:** The URL where the skipped URL was found.
 
-### 3.4. Redirected URLs
+### 3.4. External URLs
 
-Lists URLs that resulted in an HTTP redirect. (Empty in the example, but would follow a similar table format if redirects were found).
+Lists all external URLs found during the crawl, along with the number of pages each was found on and up to 5 example source pages.
 
-### 3.5. 404 URLs
+**External URLs**
+
+| External URL                                            | Pages | Found on URL (max 5)                      |
+| :------------------------------------------------------ | :---- | :---------------------------------------- |
+| https://adamwathan.me/                                  | 1     | /introduction/thanks/                     |
+| https://discord.gg/Uh66HaZJ                             | 1     | /                                         |
+| https://github.com/janreges/siteone-crawler             | 1     | /                                         |
+| ...                                                     | ...   | ...                                       |
+
+*   **External URL:** The full external URL that was found but not crawled.
+*   **Pages:** Number of distinct pages the external URL was found on.
+*   **Found on URL (max 5):** Up to 5 source pages where the external URL was discovered.
+
+### 3.5. Redirected URLs
+
+Lists URLs that resulted in an HTTP redirect. If no redirects were found, the section displays "No redirects found."
+
+**Redirected URLs**
+
+| Status | URL from                        | URL to                          | Found at URL              |
+| :----- | :------------------------------ | :------------------------------ | :------------------------ |
+| 301    | /old-page/                      | /new-page/                      | /some-page/               |
+| ...    | ...                             | ...                             | ...                       |
+
+When there are no redirects, the output is simply:
+
+```
+Redirected URLs
+---------------
+
+No redirects found.
+```
+
+### 3.6. 404 URLs
 
 Lists URLs that returned a 404 Not Found status code.
 
 **404 URLs**
 
-| Status | URL 404                                                             | Found at URL                                                              |
-| :----- | :------------------------------------------------------------------ | :------------------------------------------------------------------------ |
-| 404    | https://crawler.siteone.io/html/2024-08-23/forever/httpAgentOptions | https://crawler.siteone.io/html/2024-08-23/forever/cl8xw4r-fdag8wg-44dd.html |
-| ...    | ...                                                                 | ...                                                                       |
+| Status | URL 404                                          | Found at URL                       |
+| :----- | :----------------------------------------------- | :--------------------------------- |
+| 404    | /docs/features/content-type-analysis             | /features/performance-metrics/     |
+| ...    | ...                                              | ...                                |
 
 *   **Status:** The HTTP status code (typically 404).
 *   **URL 404:** The URL that resulted in the 404 error.
 *   **Found at URL:** The URL containing the link to the broken page.
 
-### 3.6. SSL/TLS Info
+### 3.7. SSL/TLS Info
 
-Provides details about the SSL/TLS certificate of the primary host.
+Provides details about the SSL/TLS certificate of the primary host. Includes the raw certificate output and raw protocol test output.
 
 **SSL/TLS info**
 
-| Info                   | Text                                                                    |
-| :--------------------- | :---------------------------------------------------------------------- |
-| Issuer                 | C = BE, O = GlobalSign nv-sa, CN = GlobalSign GCC R6 AlphaSSL CA 2023 |
-| Subject                | CN = *.siteone.io                                                       |
-| Valid from             | Jan 23 09:52:19 2025 GMT (VALID already 73.2 day(s))                    |
-| Valid to               | Feb 24 09:52:18 2026 GMT (VALID still for 323.8 day(s))                 |
-| Supported protocols    | TLSv1.2                                                                 |
-| RAW certificate output | `Certificate: ...` (details omitted)                                    |
-| RAW protocols output   | `=== ssl2 === ...` (details omitted)                                    |
+| Info                   | Text                                                                                  |
+| :--------------------- | :------------------------------------------------------------------------------------ |
+| Issuer                 | C = BE, O = GlobalSign nv-sa, CN = GlobalSign GCC R6 AlphaSSL CA 2025                |
+| Subject                | CN = *.siteone.io                                                                     |
+| Valid from             | Feb  9 15:43:30 2026 GMT (VALID already 35 day(s))                                    |
+| Valid to               | Mar 13 15:43:29 2027 GMT (VALID still for 362 day(s))                                 |
+| Supported protocols    | TLSv1.2                                                                               |
+| RAW certificate output | `Certificate: Data: Version: 3 (0x2) ...` (truncated)                                 |
+| RAW protocols output   | `=== ssl2 === s_client: Unknown option: -ssl2 ...` (truncated)                         |
 
 *   **Info:** The type of information (Issuer, Subject, Validity dates, Supported protocols).
-*   **Text:** The corresponding value for the information type. Includes raw output snippets.
+*   **Text:** The corresponding value for the information type. The RAW rows contain the full openssl output, which may span multiple lines and be truncated in the text output.
 
-### 3.7. Performance Metrics (Fastest/Slowest URLs)
+### 3.8. Performance Metrics (Fastest/Slowest URLs)
 
-Two tables listing the top N fastest and slowest URLs encountered during the crawl.
+Two tables listing the top N fastest and slowest URLs encountered during the crawl. By default, up to 20 fastest and 8 slowest URLs are shown (configurable via `--fastest-top-limit` and `--slowest-top-limit`).
 
 **TOP fastest URLs**
 
-| Time  | Status | Fast URL                                                              |
-| :---- | :----- | :-------------------------------------------------------------------- |
-| 11 ms | 200    | https://crawler.siteone.io/installation-and-requirements/desktop-application/ |
-| ...   | ...    | ...                                                                   |
+| Time  | Status | Fast URL                                     |
+| :---- | :----- | :------------------------------------------- |
+| 4 ms  | 200    | /features/performance-analysis/              |
+| 4 ms  | 200    | /features/availability/                      |
+| ...   | ...    | ...                                          |
 
 **TOP slowest URLs**
 
-| Time  | Status | Slow URL                                                              |
-| :---- | :----- | :-------------------------------------------------------------------- |
-| 2.7 s | 200    | https://crawler.siteone.io/html/2024-08-24/forever/hwzxj1-qrs69-1fqlxbd.html |
-| ...   | ...    | ...                                                                   |
+| Time   | Status | Slow URL                                     |
+| :----- | :----- | :------------------------------------------- |
+| 142 ms | 200    | /features/deep-website-crawling/             |
+| 132 ms | 200    | /introduction/ideas-and-roadmap/             |
+| ...    | ...    | ...                                          |
 
 *   **Time:** Time taken to download the URL.
 *   **Status:** HTTP status code.
 *   **Fast/Slow URL:** The URL itself.
 
-### 3.8. SEO & Content Analysis
+### 3.9. SEO & Content Analysis
 
-Includes several sub-sections like SEO metadata, OpenGraph metadata, heading structure, and duplicate content reports. *(Note: These tables are often truncated in the text output and are not shown here in Markdown format for brevity).*
+Includes several sub-sections: SEO metadata, OpenGraph metadata, and heading structure. These tables are often truncated in the text output to show max 10 rows, with a note advising the use of `--output-html-report=tmp/myreport.html` for the complete data.
 
-### 3.9. HTTP Headers
+**SEO metadata**
 
-Analyzes HTTP response headers across all crawled URLs.
+| URL                                            | Indexing | Title        | H1           | Description  | Keywords |
+| :--------------------------------------------- | :------- | :----------- | :----------- | :----------- | :------- |
+| /                                              | Allowed  | SiteOne...ve | SiteOne...ler| A very u...  |          |
+| /advanced-topics/caching/                      | Allowed  | Caching...ler| Caching      | SiteOne...ls.|          |
+| ...                                            | ...      | ...          | ...          | ...          | ...      |
 
-*   **HTTP headers (Summary):** Lists unique headers, occurrence count, unique value count, preview of values, and min/max values where applicable (e.g., for Content-Length or dates).
-*   **HTTP header values (Detailed):** Lists specific values for headers with multiple distinct values, along with their occurrence counts.
+*   **URL:** The crawled page URL.
+*   **Indexing:** Whether the page allows indexing (`Allowed` or specific directive).
+*   **Title:** The page's `<title>` tag content (truncated in text output).
+*   **H1:** The page's first `<h1>` heading content (truncated in text output).
+*   **Description:** The page's meta description (truncated in text output).
+*   **Keywords:** The page's meta keywords (usually empty on modern sites).
 
-**HTTP headers (Summary Example)**
+**OpenGraph metadata**
 
-| Header        | Occurs | Unique | Values preview                           | Min value | Max value |
-| :------------ | :----- | :----- | :--------------------------------------- | :-------- | :-------- |
-| Accept-Ranges | 12     | 1      | bytes                                    |           |           |
-| Cache-Control | 66     | 2      | max-age=3600 (49) / max-age=31536000 (17) |           |           |
-| ...           | ...    | ...    | ...                                      | ...       | ...       |
+| URL                                | OG Title   | OG Description | OG Image          | Twitter Title | Twitter Description | Twitter Image |
+| :--------------------------------- | :--------- | :------------- | :---------------- | :------------ | :------------------ | :------------ |
+| /                                  | SiteOne... | A very...      | /siteone-cra...   |               |                     |               |
+| /advanced-topics/caching/          | Caching    | SiteOne...     | /siteone-cra...   |               |                     |               |
+| ...                                | ...        | ...            | ...               | ...           | ...                 | ...           |
 
-**HTTP header values (Detailed Example)**
+**Heading structure**
 
-| Header        | Occurs | Value        |
-| :------------ | :----- | :----------- |
-| Accept-Ranges | 12     | bytes        |
-| Cache-Control | 49     | max-age=3600 |
-| ...           | ...    | ...          |
+| Heading structure                                                    | Count | Errors | URL                           |
+| :------------------------------------------------------------------- | :---- | :----- | :---------------------------- |
+| `<h2>` On this page ... `<h1>` FAQ ...                               | 14    | 13     | /introduction/faq/            |
+| `<h2>` On this page ... `<h1>` Examples ...                          | 13    | 12     | /configuration/examples/      |
+| ...                                                                  | ...   | ...    | ...                           |
 
-### 3.10. HTTP Caching
+*   **Heading structure:** A compressed representation of the heading hierarchy, showing heading tags with their text and IDs.
+*   **Count:** Total number of headings on the page.
+*   **Errors:** Number of heading structure errors (e.g., skipped levels, out-of-order headings).
+*   **URL:** The page where the heading structure was found.
 
-Provides detailed analysis of HTTP caching headers.
+### 3.10. HTTP Headers
 
-*   **HTTP Caching by content type:** Summarizes caching strategies (e.g., `Cache-Control + ETag`, `No cache headers`) used for different content types (HTML, CSS, JS, Image, etc.), including counts and average/min/max lifetimes.
+Analyzes HTTP response headers across all crawled URLs. Presented in two tables.
+
+*   **HTTP headers:** Lists unique headers, occurrence count, unique value count, preview of values, and min/max values where applicable (e.g., for Content-Length or dates). Headers with many unique values show `[ignored generic values]` and display `-` for unique count.
+*   **HTTP header values:** Lists specific values for each header with their occurrence counts.
+
+**HTTP headers (Summary)**
+
+| Header                    | Occurs | Unique | Values preview                                    | Min value  | Max value  |
+| :------------------------ | :----- | :----- | :------------------------------------------------ | :--------- | :--------- |
+| Accept-Ranges             | 10     | 1      | bytes                                             |            |            |
+| Cache-Control             | 65     | 2      | max-age=3600 (51) / max-age=31536000 (14)         |            |            |
+| Content-Length            | 18     | -      | [ignored generic values]                          | 152 B      | 8 MB       |
+| Content-Type              | 73     | 8      | text/html (58) / application/jav...text/plain (1) |            |            |
+| Date                      | 73     | -      | [ignored generic values]                          | 2026-03-16 | 2026-03-16 |
+| ...                       | ...    | ...    | ...                                               | ...        | ...        |
+
+**HTTP header values (Detailed)**
+
+| Header                    | Occurs | Value                                                           |
+| :------------------------ | :----- | :-------------------------------------------------------------- |
+| Accept-Ranges             | 10     | bytes                                                           |
+| Cache-Control             | 51     | max-age=3600                                                    |
+| Cache-Control             | 14     | max-age=31536000                                                |
+| Content-Type              | 58     | text/html                                                       |
+| Content-Type              | 4      | application/javascript                                          |
+| ...                       | ...    | ...                                                             |
+
+### 3.11. HTTP Caching
+
+Provides detailed analysis of HTTP caching headers in three tables.
+
+*   **HTTP Caching by content type:** Summarizes caching strategies (e.g., `Cache-Control + ETag + Last-Modified`, `ETag`) used for different content types (HTML, CSS, JS, Image, etc.), including counts and average/min/max lifetimes.
 *   **HTTP Caching by domain:** Similar summary, but grouped by domain.
 *   **HTTP Caching by domain and content type:** The most granular view, showing caching strategies for each content type within each domain.
 
-**HTTP Caching by content type (Example)**
+**HTTP Caching by content type (only from crawlable domains)**
 
 | Content type | Cache type                           | URLs | AVG lifetime | MIN lifetime | MAX lifetime |
 | :----------- | :----------------------------------- | :--- | :----------- | :----------- | :----------- |
-| HTML         | Cache-Control + ETag + Last-Modified | 45   | 60 min       | 60 min       | 60 min       |
-| Image        | Cache-Control + ETag + Last-Modified | 11   | 12 mon       | 12 mon       | 12 mon       |
-| ...          | ...                                  | ...  | ...          | ...          | ...          |
+| HTML         | Cache-Control + ETag + Last-Modified | 50   | 60 min       | 60 min       | 60 min       |
+| HTML         | ETag                                 | 8    | -            | -            | -            |
+| Image        | Cache-Control + ETag + Last-Modified | 8    | 12 mon       | 12 mon       | 12 mon       |
+| JS           | Cache-Control + ETag + Last-Modified | 4    | 12 mon       | 12 mon       | 12 mon       |
+| CSS          | Cache-Control + ETag + Last-Modified | 2    | 12 mon       | 12 mon       | 12 mon       |
+| Document     | Cache-Control + ETag + Last-Modified | 1    | 60 min       | 60 min       | 60 min       |
 
-### 3.11. Best Practices
+**HTTP Caching by domain**
+
+| Domain             | Cache type                           | URLs | AVG lifetime | MIN lifetime | MAX lifetime |
+| :----------------- | :----------------------------------- | :--- | :----------- | :----------- | :----------- |
+| crawler.siteone.io | Cache-Control + ETag + Last-Modified | 65   | 78 d         | 60 min       | 12 mon       |
+| crawler.siteone.io | ETag                                 | 8    | -            | -            | -            |
+
+**HTTP Caching by domain and content type**
+
+| Domain             | Content type | Cache type                           | URLs | AVG lifetime | MIN lifetime | MAX lifetime |
+| :----------------- | :----------- | :----------------------------------- | :--- | :----------- | :----------- | :----------- |
+| crawler.siteone.io | HTML         | Cache-Control + ETag + Last-Modified | 50   | 60 min       | 60 min       | 60 min       |
+| crawler.siteone.io | Image        | Cache-Control + ETag + Last-Modified | 8    | 12 mon       | 12 mon       | 12 mon       |
+| ...                | ...          | ...                                  | ...  | ...          | ...          | ...          |
+
+### 3.12. Non-Unique Titles and Descriptions
+
+Two sections that report on duplicate page titles and meta descriptions across the crawled site.
+
+**TOP non-unique titles**
+
+Displays titles that appear on more than one page. If all titles are unique, displays "Nothing to report."
+
+**TOP non-unique descriptions**
+
+| Count | Description |
+| :---- | :---------- |
+| 2     |             |
+
+*   **Count:** Number of pages sharing the same title or description.
+*   **Description/Title:** The duplicated value. An empty value indicates pages with missing meta descriptions.
+
+### 3.13. Best Practices
 
 Summarizes results from various best practice checks.
 
-**Best practices (Example)**
+**Best practices**
 
 | Analysis name                            | OK  | Notice | Warning | Critical |
 | :--------------------------------------- | :-- | :----- | :------ | :------- |
-| Large inline SVGs (> 5120 B)             | 148 | 0      | 108     | 0        |
-| Invalid inline SVGs                      | 63  | 0      | 193     | 0        |
-| Heading structure                        | 0   | 47     | 0       | 0        |
-| ...                                      | ... | ...    | ...     | ...      |
+| Invalid inline SVGs                      | 34  | 0      | 0       | 0        |
+| DOM depth (> 30)                         | 58  | 0      | 0       | 0        |
+| Large inline SVGs (> 5120 B)             | 34  | 0      | 0       | 0        |
+| Heading structure                        | 55  | 0      | 53      | 0        |
+| Duplicate inline SVGs (> 5 and > 1024 B) | 34  | 0      | 0       | 0        |
+| Title uniqueness (> 10%)                 | 50  | 0      | 0       | 0        |
+| Description uniqueness (> 10%)           | 49  | 0      | 0       | 0        |
+| Brotli support                           | 0   | 0      | 50      | 0        |
+| WebP support                             | 1   | 0      | 0       | 0        |
+| AVIF support                             | 2   | 0      | 0       | 0        |
 
 *   **Analysis name:** The specific check performed.
 *   **OK / Notice / Warning / Critical:** Counts of URLs falling into each severity category for that check.
 
-### 3.12. Accessibility
+### 3.14. Accessibility
 
 Summarizes results from accessibility checks.
 
-**Accessibility (Example)**
+**Accessibility**
 
-| Analysis name                | OK   | Notice | Warning | Critical |
-| :--------------------------- | :--- | :----- | :------ | :------- |
-| Missing image alt attributes | 1419 | 0      | 2       | 0        |
-| Missing html lang attribute  | 0    | 0      | 0       | 1        |
-| ...                          | ...  | ...    | ...     | ...      |
+| Analysis name                | OK  | Notice | Warning | Critical |
+| :--------------------------- | :-- | :----- | :------ | :------- |
+| Missing html lang attribute  | 1   | 0      | 0       | 0        |
+| Missing aria labels          | 2   | 0      | 119     | 0        |
+| Missing roles                | 0   | 0      | 35      | 0        |
+| Missing image alt attributes | 6   | 0      | 1       | 0        |
 
 *   **Analysis name:** The specific accessibility check.
 *   **OK / Notice / Warning / Critical:** Counts for each severity level.
 
-### 3.13. Source Domains
+### 3.15. Source Domains
 
-Lists all domains from which resources were successfully crawled, with counts and size/time summaries per content type.
+Lists all domains from which resources were successfully crawled, with counts and size/time summaries per content type. The content type columns are dynamic and depend on the types of resources actually found during the crawl (e.g., HTML, Image, JS, CSS, Document). Only content types present in the crawl results are shown.
 
-**Source domains (Example)**
+**Source domains**
 
-| Domain             | Totals       | HTML       | Image      | JS          | CSS         | Document    | JSON      |
-| :----------------- | :----------- | :--------- | :--------- | :---------- | :---------- | :---------- | :-------- |
-| crawler.siteone.io | 67/30MB/6.2s | 48/12MB/4s | 11/18MB/2s | 4/13kB/54ms | 2/77kB/41ms | 1/135B/10ms | 1/36B/14ms |
+| Domain             | Totals       | HTML         | Image        | JS         | CSS         | Document  |
+| :----------------- | :----------- | :----------- | :----------- | :--------- | :---------- | :-------- |
+| crawler.siteone.io | 73/20MB/1.5s | 58/3MB/744ms | 8/18MB/773ms | 4/7kB/11ms | 2/64kB/12ms | 1/152B/2ms|
 
-### 3.14. Content Types
+Each cell in the content type columns contains three values separated by `/`: count of URLs, total size, and total download time.
 
-Summarizes crawled resources by content type.
+### 3.16. Content Types
 
-*   **Content types (General):** Groups by broad categories (HTML, Image, JS, CSS, etc.).
-*   **Content types (MIME types):** Groups by specific MIME types (e.g., `text/html`, `image/jpeg`, `application/javascript`).
+Summarizes crawled resources by content type in two tables.
 
-**Content types (General Example)**
+*   **Content types (General):** Groups by broad categories (HTML, Image, JS, CSS, Document, etc.).
+*   **Content types (MIME types):** Groups by specific MIME types (e.g., `text/html`, `image/gif`, `application/javascript`).
 
-| Content type | URLs | Total size | Total time | Avg time | Status 20x | Status 40x |
-| :----------- | :--- | :--------- | :--------- | :------- | :--------- | :--------- |
-| HTML         | 48   | 12 MB      | 4 s        | 84 ms    | 48         | 0          |
-| Image        | 11   | 18 MB      | 2 s        | 185 ms   | 11         | 0          |
-| ...          | ...  | ...        | ...        | ...      | ...        | ...        |
+Note: The status columns are dynamic and reflect the actual HTTP status code ranges encountered during the crawl. For example, if HTTP 429 responses are encountered, a `Status 42x` column will appear alongside the standard `Status 20x` and `Status 40x` columns.
 
-**Content types (MIME types Example)**
+**Content types (General)**
 
-| Content type           | URLs | Total size | Total time | Avg time | Status 20x | Status 40x |
-| :--------------------- | :--- | :--------- | :--------- | :------- | :--------- | :--------- |
-| text/html              | 45   | 2 MB       | 1.2 s      | 26 ms    | 45         | 0          |
-| application/javascript | 4    | 13 kB      | 54 ms      | 14 ms    | 4          | 0          |
-| ...                    | ...  | ...        | ...        | ...      | ...        | ...        |
+| Content type | URLs | Total size | Total time | Avg time | Status 20x | Status 40x | Status 42x |
+| :----------- | :--- | :--------- | :--------- | :------- | :--------- | :--------- | :--------- |
+| HTML         | 58   | 3 MB       | 744 ms     | 12 ms    | 50         | 1          | 7          |
+| Image        | 8    | 18 MB      | 773 ms     | 96 ms    | 8          | 0          | 0          |
+| JS           | 4    | 7 kB       | 11 ms      | 2 ms     | 4          | 0          | 0          |
+| CSS          | 2    | 64 kB      | 12 ms      | 6 ms     | 2          | 0          | 0          |
+| Document     | 1    | 152 B      | 2 ms       | 2 ms     | 1          | 0          | 0          |
 
-### 3.15. DNS Info
+**Content types (MIME types)**
 
-Shows the DNS resolution tree for the crawled domain(s) and the DNS server used. (Not a table format).
+| Content type           | URLs | Total size | Total time | Avg time | Status 20x | Status 40x | Status 42x |
+| :--------------------- | :--- | :--------- | :--------- | :------- | :--------- | :--------- | :--------- |
+| text/html              | 58   | 3 MB       | 744 ms     | 12 ms    | 50         | 1          | 7          |
+| application/javascript | 4    | 7 kB       | 11 ms      | 2 ms     | 4          | 0          | 0          |
+| image/gif              | 3    | 16 MB      | 671 ms     | 223 ms   | 3          | 0          | 0          |
+| text/css               | 2    | 64 kB      | 12 ms      | 6 ms     | 2          | 0          | 0          |
+| image/svg+xml          | 2    | 1 kB       | 5 ms       | 2 ms     | 2          | 0          | 0          |
+| image/avif             | 2    | 2 MB       | 82 ms      | 41 ms    | 2          | 0          | 0          |
+| image/webp             | 1    | 31 kB      | 14 ms      | 14 ms    | 1          | 0          | 0          |
+| text/plain             | 1    | 152 B      | 2 ms       | 2 ms     | 1          | 0          | 0          |
+
+### 3.17. DNS Info
+
+Shows the DNS resolution tree for the crawled domain(s) and the DNS server used. This section is not a table but a tree-formatted block.
 
 ```
 DNS info
 --------
 
-DNS resolving tree                                                    
+DNS resolving tree
 ------------------------------------------------------------------------
-crawler.siteone.io                                                    
-  IPv4: 86.49.167.242                                                 
-                                                                      
-DNS server: 10.255.255.254                                            
+crawler.siteone.io
+  IPv4: 86.49.167.242
+
+DNS server: 10.255.255.254
 ```
 
-### 3.16. Security
+### 3.18. Security
 
-Reports on the presence and configuration of important security-related HTTP headers.
+Reports on the presence and configuration of important security-related HTTP headers. Each header is checked and results are categorized into OK, Notice, Warning, or Critical. A recommendation is provided when issues are found.
 
-**Security (Example)**
+**Security**
 
-| Header                    | OK | Notice | Warning | Critical | Recommendation                                                                                             |
-| :------------------------ | :- | :----- | :------ | :------- | :--------------------------------------------------------------------------------------------------------- |
-| Strict-Transport-Security | 45 | 0      | 0       | 3        | Strict-Transport-Security header is not set. It enforces secure connections and protects against MITM attacks. |
-| X-XSS-Protection          | 45 | 0      | 0       | 3        | X-XSS-Protection header is not set. It enables browser's built-in defenses against XSS attacks.            |
-| ...                       | .. | ...    | ...     | ...      | ...                                                                                                        |
+| Header                    | OK | Notice | Warning | Critical | Recommendation                                                                      |
+| :------------------------ | :- | :----- | :------ | :------- | :---------------------------------------------------------------------------------- |
+| Content-Security-Policy   | 50 | 0      | 0       | 4        | Content-Security-Policy header is not set. It...prevents XSS attacks.               |
+| X-Frame-Options           | 0  | 54     | 0       | 0        | X-Frame-Options header is set to SAMEORIGIN wh...resource in a frame.               |
+| X-XSS-Protection          | 0  | 54     | 0       | 0        | X-XSS-Protection header is set but deprecated....urity-Policy instead.              |
+| Strict-Transport-Security | 54 | 0      | 0       | 0        |                                                                                     |
+| X-Content-Type-Options    | 54 | 0      | 0       | 0        |                                                                                     |
+| Referrer-Policy           | 54 | 0      | 0       | 0        |                                                                                     |
+| Feature-Policy            | 54 | 0      | 0       | 0        |                                                                                     |
+| Permissions-Policy        | 54 | 0      | 0       | 0        |                                                                                     |
+| Server                    | 54 | 0      | 0       | 0        | Server header is not set or empty. This is recommended.                             |
 
 *   **Header:** The security header being checked.
-*   **OK / Notice / Warning / Critical:** Counts based on the header's presence and configuration.
-*   **Recommendation:** Suggestion for improvement if issues are found.
+*   **OK / Notice / Warning / Critical:** Counts based on the header's presence and configuration. Note that X-XSS-Protection produces a "Notice" (deprecated) rather than a "Critical" when it is set, because the header itself is deprecated in favor of Content-Security-Policy.
+*   **Recommendation:** Suggestion for improvement if issues are found. Empty when no action is needed.
 
-### 3.17. Analysis Stats
+### 3.19. Analysis Stats
 
-Provides performance metrics for the crawler's internal analysis modules. Useful for debugging the crawler itself.
+Provides performance metrics for the crawler's internal analysis modules. Useful for debugging the crawler itself. The method names follow Rust naming conventions (e.g., `BestPracticeAnalyzer::checkHeadingStructure`, `AccessibilityAnalyzer::checkMissingAriaLabels`).
 
-**Analysis stats (Example)**
+**Analysis stats**
 
-| Class::method                               | Exec time | Exec count |
-| :------------------------------------------ | :-------- | :--------- |
-| Manager::parseDOMDocument                   | 707 ms    | 48         |
-| SslTlsAnalyzer::getTLSandSSLCertificateInfo | 215 ms    | 1          |
-| ...                                         | ...       | ...        |
+| Class::method                                        | Exec time | Exec count |
+| :--------------------------------------------------- | :-------- | :--------- |
+| SslTlsAnalyzer::getTLSandSSLCertificateInfo          | 259 ms    | 1          |
+| BestPracticeAnalyzer::checkHeadingStructure           | 47 ms     | 58         |
+| AccessibilityAnalyzer::checkMissingAriaLabels         | 45 ms     | 50         |
+| AccessibilityAnalyzer::checkMissingLabels             | 42 ms     | 50         |
+| AccessibilityAnalyzer::checkMissingRoles              | 39 ms     | 50         |
+| BestPracticeAnalyzer::checkMaxDOMDepth                | 36 ms     | 58         |
+| AccessibilityAnalyzer::checkMissingLang               | 36 ms     | 50         |
+| BestPracticeAnalyzer::checkNonClickablePhoneNumbers   | 24 ms     | 58         |
+| BestPracticeAnalyzer::checkInlineSvg                  | 11 ms     | 58         |
+| BestPracticeAnalyzer::checkMissingQuotesOnAttributes  | 3 ms      | 58         |
+| SeoAndOpenGraphAnalyzer::analyzeHeadings              | 2 ms      | 1          |
+| SecurityAnalyzer::checkHtmlSecurity                   | 1 ms      | 54         |
+| AccessibilityAnalyzer::checkImageAltAttributes        | 1 ms      | 50         |
+| SecurityAnalyzer::checkHeaders                        | 0 ms      | 54         |
+| SeoAndOpenGraphAnalyzer::analyzeSeo                   | 0 ms      | 1          |
+| SeoAndOpenGraphAnalyzer::analyzeOpenGraph             | 0 ms      | 1          |
+| BestPracticeAnalyzer::checkMetaDescriptionUniqueness  | 0 ms      | 1          |
+| BestPracticeAnalyzer::checkTitleUniqueness            | 0 ms      | 1          |
+| BestPracticeAnalyzer::checkBrotliSupport              | 0 ms      | 1          |
+| BestPracticeAnalyzer::checkWebpSupport                | 0 ms      | 1          |
+| BestPracticeAnalyzer::checkAvifSupport                | 0 ms      | 1          |
+
+*   **Class::method:** The analyzer class and specific check method.
+*   **Exec time:** Total execution time for all invocations of this method.
+*   **Exec count:** Number of times the method was invoked (typically once per analyzed URL or once for aggregate checks).
+
+### 3.20. Content Processor Stats
+
+Provides performance metrics for content processors that run during the crawl. These processors handle URL extraction and content transformation for different resource types.
+
+**Content processor stats**
+
+| Class::method                                             | Exec time | Exec count |
+| :-------------------------------------------------------- | :-------- | :--------- |
+| HtmlProcessor::findUrls                                   | 47 ms     | 58         |
+| NextJsProcessor::applyContentChangesBeforeUrlParsing      | 11 ms     | 64         |
+| JavaScriptProcessor::findUrls                             | 8 ms      | 62         |
+| AstroProcessor::findUrls                                  | 1 ms      | 62         |
+| CssProcessor::findUrls                                    | 1 ms      | 60         |
+| AstroProcessor::applyContentChangesBeforeUrlParsing       | 0 ms      | 62         |
+| NextJsProcessor::findUrls                                 | 0 ms      | 64         |
+| JavaScriptProcessor::applyContentChangesBeforeUrlParsing  | 0 ms      | 62         |
+| SvelteProcessor::applyContentChangesBeforeUrlParsing      | 0 ms      | 58         |
+| CssProcessor::applyContentChangesBeforeUrlParsing         | 0 ms      | 60         |
+| HtmlProcessor::applyContentChangesBeforeUrlParsing        | 0 ms      | 58         |
+| SvelteProcessor::findUrls                                 | 0 ms      | 58         |
+
+*   **Class::method:** The content processor class and specific method (`findUrls` for URL extraction, `applyContentChangesBeforeUrlParsing` for pre-processing transformations).
+*   **Exec time:** Total execution time for all invocations.
+*   **Exec count:** Number of times the method was invoked.
+
+### 3.21. Execution Summary
+
+A bordered summary block showing overall crawl statistics, printed between `===` separator lines.
+
+```
+==========================================================================
+Total execution time 9.2 s using 3 workers and 2048M memory limit (max used 109 MB)
+Total of 73 visited URLs with a total size of 20 MB and power of 7 reqs/s with download speed 2 MB/s
+Response times: AVG 21 ms MIN 3 ms MAX 345 ms TOTAL 1.5 s
+==========================================================================
+```
+
+*   **Total execution time:** Wall-clock time for the entire crawl, including the number of concurrent workers and memory usage.
+*   **Total of N visited URLs:** Count of all successfully visited URLs, total downloaded size, request throughput, and download speed.
+*   **Response times:** Average, minimum, maximum, and total response times across all URLs.
+
+### 3.22. Website Quality Score
+
+A visual box-drawing quality score display that rates the website across five weighted categories on a 0-10 scale. Each category shows a progress bar, numeric score, and a label (Excellent, Good, Fair, Poor, etc.).
+
+```
++=====================================================================+
+|                      WEBSITE QUALITY SCORE                          |
++=================================================================+
+|  Overall         #####################----   8.2/10  Good           |
++=================================================================+
+|  Performance     #########################  10.0/10  Excellent      |
+|  SEO             ########################-   9.5/10  Excellent      |
+|  Security        ###################------   7.5/10  Good           |
+|  Accessibility   #############------------   5.0/10  Fair           |
+|  Best Practices  ########################-   9.5/10  Excellent      |
++=====================================================================+
+```
+
+*(The actual output uses Unicode box-drawing characters and block characters for the progress bars.)*
+
+The five categories and their weights are:
+*   **Performance** (20%): Based on response times, error rates.
+*   **SEO** (20%): Based on titles, descriptions, headings, indexing.
+*   **Security** (25%): Based on security header presence and configuration.
+*   **Accessibility** (20%): Based on lang attributes, alt text, ARIA labels, roles.
+*   **Best Practices** (15%): Based on inline SVGs, heading structure, DOM depth, compression support.
+
+### 3.23. Summary
+
+A categorized list of findings using severity-level prefixes. Each finding is on its own line with an emoji indicator:
+
+*   **CRITICAL** (red circle): Serious issues requiring immediate attention (e.g., pages with critical security findings, skipped URLs).
+*   **WARNING** (warning sign): Issues that should be addressed (e.g., missing Brotli support, missing ARIA labels, skipped heading levels).
+*   **INFO** (fast-forward): Informational items (e.g., robots.txt status, external URL count, DNS IPv6 status, 404 notices).
+*   **OK** (green check): Positive findings confirming correct configuration (e.g., valid SSL certificate, no redirects, all titles unique).
+*   **NOTICE** (pin): Export notifications (e.g., text/JSON/HTML report save paths and timing).
+
+Example summary output:
+
+```
+Summary
+-------
+
+[CRITICAL] Skipped URLs - 95 skipped URLs found.
+[CRITICAL] Security - 4 pages(s) with critical finding(s).
+[WARNING] Latest SSL/TLS protocol TLSv1.3 is not supported. Ask your admin/provider to add TLSv1.3 support.
+[WARNING] 50 page(s) do not support Brotli compression.
+[WARNING] 49 page(s) with skipped heading levels.
+[WARNING] 1 page(s) without image alt attributes.
+[WARNING] 50 page(s) without aria labels.
+[WARNING] 50 page(s) without role attributes.
+[INFO] Loaded robots.txt for domain 'crawler.siteone.io': status code 200, size 152 B and took 24 ms.
+[INFO] External URLs - 89 external URL(s) found.
+[INFO] 404 NOTICE - 1 non-existent page(s) found.
+[INFO] DNS IPv6: domain crawler.siteone.io does not support IPv6 (DNS server: 10.255.255.254).
+[OK] Redirects - no redirects found.
+[OK] SSL/TLS certificate is valid until Mar 13 15:43:29 2027 GMT. Issued by ...
+[OK] Performance OK - all non-media URLs are faster than 3 seconds.
+[OK] HTTP headers - found 18 unique headers.
+[OK] All 50 unique title(s) are within the allowed 10% duplicity.
+...
+[NOTICE] Text report saved to '.../crawler.siteone.io.output.20260316-155513.txt' and took 0 ms.
+[NOTICE] JSON report saved to '.../crawler.siteone.io.output.20260316-155513.json' and took 0 ms.
+[NOTICE] HTML report saved to '.../crawler.siteone.io.report.20260316-155513.html' and took 1 ms.
+```
+
+*(The actual output uses emoji characters for the severity prefixes rather than bracketed labels.)*
 
 ## 4. Information Obtainable from Text Output
 
@@ -336,32 +629,35 @@ The text output provides a wealth of information about a website, including:
 *   **Crawl Overview:** Number of pages found, processed, and skipped.
 *   **Website Structure:** Implicitly through the list of crawled URLs and their relationships (via "Found at URL").
 *   **Link Health:** Identification of broken links (404s) and redirects.
-*   **External Dependencies:** List of external domains linked to or hosting resources (from Skipped URLs).
+*   **External Dependencies:** Full list of external URLs linked from the site, with page counts and source pages.
 *   **Performance Bottlenecks:** Identification of the slowest loading pages and resources.
 *   **Content Inventory:** Summary of different content types (HTML, images, scripts, stylesheets) and their sizes/load times.
-*   **Basic SEO Health:** Status of titles, descriptions, heading structures, and indexing directives.
+*   **Basic SEO Health:** Status of titles, descriptions, heading structures, indexing directives, and duplicate content.
 *   **OpenGraph Implementation:** Presence and content of OG tags for social sharing.
 *   **Server Configuration:** Insights into HTTP headers used, including caching and security headers.
 *   **Caching Strategy:** Effectiveness of caching policies across different content types and domains.
-*   **Security Posture:** Checks for essential security headers (HSTS, X-Frame-Options, etc.).
-*   **Accessibility Issues:** High-level view of common accessibility problems (missing alt text, lang attributes).
+*   **Security Posture:** Checks for essential security headers (HSTS, CSP, X-Frame-Options, etc.).
+*   **Accessibility Issues:** High-level view of common accessibility problems (missing alt text, lang attributes, ARIA labels, roles).
 *   **Best Practice Adherence:** Checks against common web development best practices.
 *   **SSL/TLS Certificate Status:** Validity and issuer details of the site's certificate.
+*   **Website Quality Score:** Numeric scores (0-10) across five quality categories with an overall rating.
+*   **Content Processor Performance:** Internal timing data for URL extraction and content processing.
 
 ## 5. Use Cases for Text Output
 
 The text output is valuable for various tasks:
 
-1.  **Quick Website Health Check:** Get a fast overview of major issues like 404s, slow pages, or critical security/accessibility warnings.
+1.  **Quick Website Health Check:** Get a fast overview of major issues like 404s, slow pages, or critical security/accessibility warnings via the Summary section.
 2.  **Identifying Broken Links:** Easily spot and locate 404 errors using the dedicated section.
 3.  **Performance Audit:** Identify the slowest URLs to prioritize optimization efforts.
 4.  **Basic SEO Audit:** Check for duplicate titles/descriptions and analyze heading structures.
-5.  **Security Header Review:** Quickly verify the presence of important security headers.
+5.  **Security Header Review:** Quickly verify the presence of important security headers and see deprecation notices.
 6.  **Caching Policy Verification:** Understand how caching is implemented across the site.
 7.  **Pre/Post Deployment Checks:** Compare outputs before and after changes to catch regressions.
 8.  **Generating Simple Reports:** Copy-paste relevant sections into emails or documents for concise reporting.
 9.  **Troubleshooting Crawl Issues:** Use skipped URLs and analysis stats to understand crawler behavior.
-10. **Command-Line Integration:** Process the text output with standard command-line tools (grep, awk, sed) for specific data extraction or automated checks in simple scripts.
+10. **Quality Scoring:** Use the Website Quality Score to track improvements over time across performance, SEO, security, accessibility, and best practices.
+11. **Command-Line Integration:** Process the text output with standard command-line tools (grep, awk, sed) for specific data extraction or automated checks in simple scripts.
 
 ## 6. Note on JSON Output
 
