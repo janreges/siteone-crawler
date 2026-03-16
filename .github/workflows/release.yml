@@ -57,6 +57,19 @@ jobs:
             artifact_suffix: win-arm64
             archive: zip
 
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            artifact_suffix: linux-musl-x64
+            archive: tar.gz
+            musl: true
+
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            artifact_suffix: linux-musl-arm64
+            archive: tar.gz
+            cross: true
+            musl: true
+
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -82,6 +95,10 @@ jobs:
       - name: Install cross (for cross-compilation)
         if: matrix.cross
         run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Install musl tools
+        if: matrix.musl && !matrix.cross
+        run: sudo apt-get install -y musl-tools
 
       - name: Update version in source
         shell: bash
@@ -227,7 +244,7 @@ jobs:
           fi
 
       - name: Build .deb package
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && !matrix.musl
         shell: bash
         run: |
           cargo install cargo-deb
@@ -235,7 +252,7 @@ jobs:
           echo "DEB_PATH=$(ls target/${{ matrix.target }}/debian/*.deb)" >> "$GITHUB_ENV"
 
       - name: Build .rpm package
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && !matrix.musl
         shell: bash
         run: |
           cargo install cargo-generate-rpm
@@ -245,14 +262,14 @@ jobs:
           echo "RPM_PATH=$(find target -name '*.rpm' -path '*/generate-rpm/*' | head -1)" >> "$GITHUB_ENV"
 
       - name: Upload .deb artifact
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && !matrix.musl
         uses: actions/upload-artifact@v7
         with:
           name: siteone-crawler-${{ matrix.artifact_suffix }}-deb
           path: ${{ env.DEB_PATH }}
 
       - name: Upload .rpm artifact
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && !matrix.musl
         uses: actions/upload-artifact@v7
         with:
           name: siteone-crawler-${{ matrix.artifact_suffix }}-rpm
@@ -265,11 +282,130 @@ jobs:
           name: siteone-crawler-${{ matrix.artifact_suffix }}
           path: ${{ env.ARTIFACT_PATH }}
 
-  release:
-    name: Create GitHub Release
+  # ─────────────────────────────────────────────────────────────────
+  # Build Alpine .apk packages from musl binaries
+  # ─────────────────────────────────────────────────────────────────
+  package-alpine:
+    name: Build Alpine .apk (${{ matrix.arch }})
     needs: build
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            artifact_suffix: linux-musl-x64
+          - arch: aarch64
+            artifact_suffix: linux-musl-arm64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Determine version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Download musl binary
+        uses: actions/download-artifact@v8
+        with:
+          name: siteone-crawler-${{ matrix.artifact_suffix }}
+          path: dist
+
+      - name: Extract binary
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          tar xzf "dist/siteone-crawler-v${VERSION}-${{ matrix.artifact_suffix }}.tar.gz" -C dist
+
+      - name: Setup Alpine
+        uses: jirutka/setup-alpine@v1
+        with:
+          arch: ${{ matrix.arch }}
+          packages: abuild
+
+      - name: Prepare signing key
+        shell: alpine.sh --root {0}
+        env:
+          ALPINE_RSA_KEY: ${{ secrets.ALPINE_RSA_PRIVATE_KEY }}
+          ALPINE_RSA_PUB: ${{ secrets.ALPINE_RSA_PUBLIC_KEY }}
+        run: |
+          BUILDER=runner
+
+          # Install signing key
+          mkdir -p /etc/apk/keys
+          printf '%s\n' "$ALPINE_RSA_PUB" > /etc/apk/keys/siteone.rsa.pub
+
+          # Setup abuild config for builder
+          mkdir -p "/home/$BUILDER/.abuild"
+          printf '%s\n' "$ALPINE_RSA_KEY" > "/home/$BUILDER/.abuild/siteone.rsa"
+          chmod 600 "/home/$BUILDER/.abuild/siteone.rsa"
+          cat > "/home/$BUILDER/.abuild/abuild.conf" << 'EOF'
+          PACKAGER_PRIVKEY="$HOME/.abuild/siteone.rsa"
+          EOF
+          chown -R "$BUILDER" "/home/$BUILDER/.abuild"
+
+          # Add user to abuild group
+          addgroup "$BUILDER" abuild
+
+      - name: Build .apk
+        shell: alpine.sh {0}
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          ARCH=$(uname -m)
+
+          # Prepare build directory
+          mkdir -p ~/build
+          cp "$GITHUB_WORKSPACE/dist/siteone-crawler/siteone-crawler" ~/build/
+          cp "$GITHUB_WORKSPACE/LICENSE" ~/build/ 2>/dev/null || true
+
+          # Create APKBUILD
+          cat > ~/build/APKBUILD << EOF
+          # Maintainer: Jan Reges <jan.reges@siteone.cz>
+          pkgname=siteone-crawler
+          pkgver=${VERSION}
+          pkgrel=1
+          pkgdesc="Website crawler and QA toolkit in Rust"
+          url="https://crawler.siteone.io/"
+          arch="${ARCH}"
+          license="MIT"
+          source=""
+          options="!check"
+
+          package() {
+              install -Dm755 "\$startdir/siteone-crawler" "\$pkgdir/usr/bin/siteone-crawler"
+              install -Dm644 "\$startdir/LICENSE" "\$pkgdir/usr/share/licenses/\$pkgname/LICENSE" 2>/dev/null || true
+          }
+          EOF
+
+          # Build the package
+          cd ~/build
+          abuild -d -P ~/packages
+
+          # Copy and rename to include arch (both arches produce the same filename)
+          mkdir -p "$GITHUB_WORKSPACE/apk-out"
+          for f in $(find ~/packages -name '*.apk'); do
+            BASENAME=$(basename "$f" .apk)
+            cp "$f" "$GITHUB_WORKSPACE/apk-out/${BASENAME}-${ARCH}.apk"
+          done
+
+      - name: Upload .apk artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: siteone-crawler-alpine-${{ matrix.arch }}
+          path: apk-out/*.apk
+
+  release:
+    name: Create GitHub Release
+    needs: [build, package-alpine]
+    runs-on: ubuntu-latest
+    if: always() && startsWith(github.ref, 'refs/tags/v') && needs.build.result == 'success'
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -298,6 +434,8 @@ jobs:
             |----------|-------------|------|
             | Linux | x64 | `siteone-crawler-v${{ steps.version.outputs.version }}-linux-x64.tar.gz` |
             | Linux | arm64 | `siteone-crawler-v${{ steps.version.outputs.version }}-linux-arm64.tar.gz` |
+            | Linux | x64 (musl/static) | `siteone-crawler-v${{ steps.version.outputs.version }}-linux-musl-x64.tar.gz` |
+            | Linux | arm64 (musl/static) | `siteone-crawler-v${{ steps.version.outputs.version }}-linux-musl-arm64.tar.gz` |
             | macOS | arm64 (Apple Silicon) | `siteone-crawler-v${{ steps.version.outputs.version }}-macos-arm64.tar.gz` |
             | macOS | x64 (Intel) | `siteone-crawler-v${{ steps.version.outputs.version }}-macos-x64.tar.gz` |
             | Windows | x64 | `siteone-crawler-v${{ steps.version.outputs.version }}-win-x64.zip` |
@@ -311,6 +449,8 @@ jobs:
             | Debian/Ubuntu (.deb) | arm64 | `siteone-crawler_${{ steps.version.outputs.version }}-1_arm64.deb` |
             | Fedora/RHEL (.rpm) | x64 | `siteone-crawler-${{ steps.version.outputs.version }}-1.x86_64.rpm` |
             | Fedora/RHEL (.rpm) | arm64 | `siteone-crawler-${{ steps.version.outputs.version }}-1.aarch64.rpm` |
+            | Alpine (.apk) | x64 | `siteone-crawler-${{ steps.version.outputs.version }}-r1-x86_64.apk` |
+            | Alpine (.apk) | arm64 | `siteone-crawler-${{ steps.version.outputs.version }}-r1-aarch64.apk` |
 
             ### Quick start
 
