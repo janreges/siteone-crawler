@@ -127,7 +127,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Formula/siteone-crawler.rb
-          git commit -m "Update siteone-crawler to v${{ steps.version.outputs.version }}"
+          git commit -m "chore: update siteone-crawler to v${{ steps.version.outputs.version }}"
           git push
 
   # ─────────────────────────────────────────────────────────────────
@@ -209,7 +209,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add bucket/siteone-crawler.json
-          git commit -m "Update siteone-crawler to v${{ steps.version.outputs.version }}"
+          git commit -m "chore: update siteone-crawler to v${{ steps.version.outputs.version }}"
           git push
 
   # ─────────────────────────────────────────────────────────────────
@@ -333,7 +333,7 @@ jobs:
           git config user.name "Jan Reges"
           git config user.email "jan.reges@siteone.cz"
           git add PKGBUILD .SRCINFO
-          git commit -m "Update to v${VERSION}"
+          git commit -m "chore: update siteone-crawler to v${VERSION}"
           git push
 
   # ─────────────────────────────────────────────────────────────────
@@ -350,15 +350,15 @@ jobs:
           TAG="${{ github.event.release.tag_name }}"
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
 
-      - name: Download .deb and .rpm from release
+      - name: Download .deb, .rpm and .apk from release
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           mkdir -p packages
           BASE_URL="https://github.com/${{ github.repository }}/releases/download/v${VERSION}"
-          # Download all .deb and .rpm assets from the release
-          for file in $(gh release view "v${VERSION}" --repo "${{ github.repository }}" --json assets -q '.assets[].name' | grep -E '\.(deb|rpm)$'); do
+          # Download all .deb, .rpm and .apk assets from the release
+          for file in $(gh release view "v${VERSION}" --repo "${{ github.repository }}" --json assets -q '.assets[].name' | grep -E '\.(deb|rpm|apk)$'); do
             echo "Downloading ${file} ..."
             curl -sfL "${BASE_URL}/${file}" -o "packages/${file}"
           done
@@ -387,4 +387,14 @@ jobs:
             [ -f "$rpm" ] || continue
             echo "Uploading $rpm ..."
             cloudsmith push rpm janreges/siteone-crawler/any-distro/any-version "$rpm"
+          done
+
+      - name: Upload .apk packages
+        env:
+          CLOUDSMITH_API_KEY: ${{ secrets.CLOUDSMITH_API_KEY }}
+        run: |
+          for apk in packages/*.apk; do
+            [ -f "$apk" ] || continue
+            echo "Uploading $apk ..."
+            cloudsmith push alpine janreges/siteone-crawler/alpine/any-version "$apk"
           done
