@@ -44,7 +44,7 @@ jobs:
       - name: Publish
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish --no-verify
+        run: cargo publish --no-verify --allow-dirty
 
   # ─────────────────────────────────────────────────────────────────
   # Update Homebrew tap
@@ -240,21 +240,17 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
           WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
         run: |
-          $urls = @(
-            "https://github.com/janreges/siteone-crawler/releases/download/v$env:VERSION/siteone-crawler-v$env:VERSION-win-x64.zip",
-            "https://github.com/janreges/siteone-crawler/releases/download/v$env:VERSION/siteone-crawler-v$env:VERSION-win-arm64.zip"
-          )
+          $url_x64 = "https://github.com/janreges/siteone-crawler/releases/download/v$env:VERSION/siteone-crawler-v$env:VERSION-win-x64.zip"
+          $url_arm64 = "https://github.com/janreges/siteone-crawler/releases/download/v$env:VERSION/siteone-crawler-v$env:VERSION-win-arm64.zip"
           # Try update first; if the package doesn't exist yet, fall back to new
-          $result = wingetcreate update JanReges.SiteOneCrawler `
+          wingetcreate update JanReges.SiteOneCrawler `
             --version $env:VERSION `
-            --urls $urls `
+            --urls $url_x64 $url_arm64 `
             --token $env:WINGET_TOKEN `
-            --submit 2>&1
+            --submit
           if ($LASTEXITCODE -ne 0) {
             Write-Host "Update failed, trying initial submission with 'new'..."
-            wingetcreate new `
-              --version $env:VERSION `
-              --urls $urls `
+            wingetcreate new $url_x64 $url_arm64 `
               --token $env:WINGET_TOKEN `
               --submit
           }
@@ -393,7 +389,7 @@ jobs:
           for deb in packages/*.deb; do
             [ -f "$deb" ] || continue
             echo "Uploading $deb ..."
-            cloudsmith push deb janreges/siteone-crawler/any-distro/any-version "$deb"
+            cloudsmith push deb janreges/siteone-crawler/any-distro/any-version "$deb" --republish
           done
 
       - name: Upload .rpm packages
@@ -403,7 +399,7 @@ jobs:
           for rpm in packages/*.rpm; do
             [ -f "$rpm" ] || continue
             echo "Uploading $rpm ..."
-            cloudsmith push rpm janreges/siteone-crawler/any-distro/any-version "$rpm"
+            cloudsmith push rpm janreges/siteone-crawler/any-distro/any-version "$rpm" --republish
           done
 
       - name: Upload .apk packages
@@ -413,5 +409,5 @@ jobs:
           for apk in packages/*.apk; do
             [ -f "$apk" ] || continue
             echo "Uploading $apk ..."
-            cloudsmith push alpine janreges/siteone-crawler/alpine/any-version "$apk"
+            cloudsmith push alpine janreges/siteone-crawler/alpine/any-version "$apk" --republish
           done
