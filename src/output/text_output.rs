@@ -68,7 +68,7 @@ impl TextOutput {
         print_to_output: bool,
         disable_animation: bool,
     ) -> Self {
-        let terminal_width = utils::get_console_width();
+        let terminal_width = utils::get_console_width().min(345);
         let compact_mode = terminal_width < 140;
 
         let mut extra_columns_width: usize = 0;
@@ -131,7 +131,7 @@ impl TextOutput {
         }
 
         let size = if let Some(url_col_size) = self.url_column_size {
-            url_col_size
+            url_col_size.min(184)
         } else {
             let status_type_time_size_cache_width: usize = 49;
             let free_reserve: usize = 5;
@@ -144,7 +144,7 @@ impl TextOutput {
                 .saturating_sub(self.extra_columns_from_analysis_width)
                 .saturating_sub(free_reserve);
 
-            url_column_size.max(20)
+            url_column_size.clamp(20, 184)
         };
 
         self.cached_url_column_size = Some(size);
@@ -352,13 +352,13 @@ impl Output for TextOutput {
                 .map(|s| s.as_str())
                 .unwrap_or("");
 
-            // For analysis results, we use the value as-is (colored output already applied)
+            // For analysis results, we use the value as-is (colored output already applied).
+            // Manual padding is needed because ANSI color codes would be counted by format!("{:<width$}").
             let truncated = extra_column.get_truncated_value(Some(value)).unwrap_or_default();
-            extra_headers_content.push_str(&format!(
-                " | {:<width$}",
-                truncated,
-                width = extra_column.get_length().max(4)
-            ));
+            let target_width = extra_column.get_length().max(4);
+            let visible_len = utils::remove_ansi_colors(&truncated).chars().count();
+            let padding = target_width.saturating_sub(visible_len);
+            extra_headers_content.push_str(&format!(" | {}{}", truncated, " ".repeat(padding)));
 
             // Show inline criticals/warnings if configured
             if self.show_inline_criticals && value.contains("[CRITICAL]") {
@@ -415,17 +415,21 @@ impl Output for TextOutput {
             String::new()
         };
 
+        // Manual ANSI-aware padding for url_display (truncation may add colored "…")
+        let url_visible_len = utils::remove_ansi_colors(&url_display).chars().count();
+        let url_padding = url_col_size.saturating_sub(url_visible_len);
+        let url_padded = format!("{}{}", url_display, " ".repeat(url_padding));
+
         let output = format!(
-            "{} {:<width$} | {} | {} | {} | {} | {} {}\n",
+            "{} {} | {} | {} | {} | {} | {}{}\n",
             progress_content,
-            url_display,
+            url_padded,
             colored_status,
             content_type_padded,
             colored_elapsed_time,
             colored_size,
             colored_cache,
             extra_headers_content,
-            width = url_col_size,
         );
 
         if !extra_new_line.is_empty() {

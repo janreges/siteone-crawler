@@ -478,13 +478,10 @@ impl SuperTable {
                     display_value = utils::truncate_in_two_thirds(&display_value, col_width, "\u{2026}", None);
                 }
 
-                if column.formatter_will_change_value_length {
-                    row_data.push(utils::mb_str_pad(&display_value, col_width, ' '));
-                } else {
-                    let stripped_len = utils::remove_ansi_colors(&display_value).chars().count();
-                    let padding = col_width.saturating_sub(stripped_len);
-                    row_data.push(format!("{}{}", display_value, " ".repeat(padding)));
-                }
+                // Always use ANSI-aware padding: truncation may add colored "…" to any column
+                let stripped_len = utils::remove_ansi_colors(&display_value).chars().count();
+                let padding = col_width.saturating_sub(stripped_len);
+                row_data.push(format!("{}{}", display_value, " ".repeat(padding)));
             }
             output.push_str(&row_data.join(" | "));
             output.push('\n');
