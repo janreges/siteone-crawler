@@ -377,7 +377,7 @@ jobs:
           arch="${ARCH}"
           license="MIT"
           source=""
-          options="!check"
+          options="!check !strip"
 
           package() {
               install -Dm755 "\$startdir/siteone-crawler" "\$pkgdir/usr/bin/siteone-crawler"
