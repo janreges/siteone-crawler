@@ -115,6 +115,18 @@ CLI options are defined in `options/core_options.rs` via `get_options()` which r
 - **Integration tests**: `tests/integration_crawl.rs` with shared helpers in `tests/common/mod.rs`
 - Network-dependent integration tests are `#[ignore]` — run explicitly with `--ignored`
 
+### Testing Complex Scenarios with Sample Websites
+
+The crawler has a built-in HTTP server (`--serve-offline=<dir>`) that can serve any local directory as a static website. This enables efficient local testing of edge cases without deploying a real site:
+
+1. Create a sample website directory, e.g. `./tmp/sample-website-xyz/`
+2. Add HTML files and assets simulating the desired scenario (spaces in filenames, special characters, redirect chains, broken links, specific heading structures, etc.)
+3. Start the built-in server: `./target/release/siteone-crawler --serve-offline=./tmp/sample-website-xyz/ --serve-port=8888`
+4. In another terminal, crawl the local site: `./target/release/siteone-crawler --url=http://127.0.0.1:8888/`
+5. Verify the crawler handles the scenario correctly (output, offline export, analysis results)
+
+This approach is useful for reproducing bug reports, testing regex edge cases (e.g. URLs with spaces, HTML entities, unusual attribute quoting), validating offline/markdown export for specific HTML structures, and any scenario that would be hard to find on a live website.
+
 ### Key Files
 
 - `src/engine/crawler.rs` (~1700 lines): Core crawl loop, URL queue management, HTML/content parsing

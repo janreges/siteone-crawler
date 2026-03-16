@@ -26,7 +26,7 @@ static HTML_EXT_REGEX: Lazy<Regex> = Lazy::new(|| {
 });
 
 static RE_A_HREF: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r#"(?is)<a[^>]*\shref=["']?([^#][^"'\s>]+)["'\s]?[^>]*>"#).unwrap());
+    Lazy::new(|| Regex::new(r#"(?is)<a[^>]*\shref=(?:["']([^"'#][^"']*)["']|([^\s>"'#][^\s>"']*))[^>]*>"#).unwrap());
 
 static RE_ESCAPED_HREF: Lazy<Regex> =
     Lazy::new(|| Regex::new(r#"(?i)href\\["'][:=]\\["'](https?://[^"'\\]+)\\["']"#).unwrap());
@@ -36,20 +36,22 @@ static RE_FONT_URL: Lazy<Regex> = Lazy::new(|| {
 });
 
 static RE_FONT_LINK: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r#"(?is)<link\s+[^>]*href=["']?([^"' ]+\.(eot|ttf|woff2|woff|otf)[^"' ]*)["']?[^>]*>"#).unwrap()
+    Regex::new(r#"(?is)<link\s+[^>]*href=(?:["']([^"']+\.(?:eot|ttf|woff2|woff|otf)[^"']*)["']|([^\s>"']+\.(?:eot|ttf|woff2|woff|otf)[^\s>"']*))[^>]*>"#).unwrap()
 });
 
 static RE_IMG_SRC: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r#"(?is)<img\s+[^>]*?src=["']?([^"'> ]+)["']?[^>]*>"#).unwrap());
+    Lazy::new(|| Regex::new(r#"(?is)<img\s+[^>]*?src=(?:["']([^"']+)["']|([^\s>"']+))[^>]*>"#).unwrap());
 
 static RE_IMG_DATA_SRC: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r#"(?is)<img\s+[^>]*?data-src=["']?([^"'> ]+)["']?[^>]*>"#).unwrap());
+    Lazy::new(|| Regex::new(r#"(?is)<img\s+[^>]*?data-src=(?:["']([^"']+)["']|([^\s>"']+))[^>]*>"#).unwrap());
 
-static RE_INPUT_SRC: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r#"(?is)<input\s+[^>]*?src=["']?([^"'> ]+\.[a-z0-9]{1,10})["']?[^>]*>"#).unwrap());
+static RE_INPUT_SRC: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"(?is)<input\s+[^>]*?src=(?:["']([^"']+\.[a-z0-9]{1,10})["']|([^\s>"']+\.[a-z0-9]{1,10}))[^>]*>"#)
+        .unwrap()
+});
 
 static RE_LINK_IMAGE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r#"(?is)<link\s+[^>]*?href=["']?([^"'> ]+\.(png|gif|jpg|jpeg|webp|avif|tif|bmp|svg|ico)(\?[^"' ]*|))["']?[^>]*>"#).unwrap()
+    Regex::new(r#"(?is)<link\s+[^>]*?href=(?:["']([^"']+\.(?:png|gif|jpg|jpeg|webp|avif|tif|bmp|svg|ico)(?:\?[^"']*)?)["']|([^\s>"']+\.(?:png|gif|jpg|jpeg|webp|avif|tif|bmp|svg|ico)(?:\?[^\s>"']*)?))[^>]*>"#).unwrap()
 });
 
 static RE_SOURCE_SRC: Lazy<Regex> =
@@ -68,16 +70,17 @@ static RE_IMAGESRCSET: Lazy<Regex> =
     Lazy::new(|| Regex::new(r#"(?is)<[a-z]+[^>]+imagesrcset=["']([^"']+)["']"#).unwrap());
 
 static RE_AUDIO_SRC: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r#"(?is)<audio\s+[^>]*?src=["']?([^"'> ]+)["']?[^>]*>"#).unwrap());
+    Lazy::new(|| Regex::new(r#"(?is)<audio\s+[^>]*?src=(?:["']([^"']+)["']|([^\s>"']+))[^>]*>"#).unwrap());
 
 static RE_VIDEO_SRC: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r#"(?is)<video\s+[^>]*?src=["']?([^"'> ]+)["']?[^>]*>"#).unwrap());
+    Lazy::new(|| Regex::new(r#"(?is)<video\s+[^>]*?src=(?:["']([^"']+)["']|([^\s>"']+))[^>]*>"#).unwrap());
 
 static RE_SCRIPT_SRC: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r#"(?is)<script\s+[^>]*?src=["']?([^"' ]+)["']?[^>]*>"#).unwrap());
+    Lazy::new(|| Regex::new(r#"(?is)<script\s+[^>]*?src=(?:["']([^"']+)["']|([^\s>"']+))[^>]*>"#).unwrap());
 
-static RE_LINK_JS: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r#"(?is)<link\s+[^>]*href=["']?([^"'> ]+\.(json|js)(\?[^"']*|))["']?[^>]*>"#).unwrap());
+static RE_LINK_JS: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"(?is)<link\s+[^>]*href=(?:["']([^"']+\.(?:json|js)(?:\?[^"']*)?)["']|([^\s>"']+\.(?:json|js)(?:\?[^\s>"']*)?))[^>]*>"#).unwrap()
+});
 
 static RE_DOT_SRC: Lazy<Regex> = Lazy::new(|| Regex::new(r#"(?is)\.src\s*=\s*["']([^"']+)["']"#).unwrap());
 
@@ -156,7 +159,7 @@ impl HtmlProcessor {
         // Standard <a href="..."> links
         let mut urls: Vec<String> = Vec::new();
         for caps in RE_A_HREF.captures_iter(html) {
-            if let Some(m) = caps.get(1) {
+            if let Some(m) = caps.get(1).or_else(|| caps.get(2)) {
                 urls.push(m.as_str().to_string());
             }
         }
@@ -204,7 +207,7 @@ impl HtmlProcessor {
         // <link href="...(font extensions)"
         let link_fonts: Vec<&str> = RE_FONT_LINK
             .captures_iter(html)
-            .filter_map(|caps| caps.get(1).map(|m| m.as_str()))
+            .filter_map(|caps| caps.get(1).or_else(|| caps.get(2)).map(|m| m.as_str()))
             .collect();
         found_urls.add_urls_from_text_array(&link_fonts, &source_url_str, UrlSource::LinkHref);
     }
@@ -216,28 +219,28 @@ impl HtmlProcessor {
         // <img src="..."
         let img_srcs: Vec<&str> = RE_IMG_SRC
             .captures_iter(html)
-            .filter_map(|caps| caps.get(1).map(|m| m.as_str()))
+            .filter_map(|caps| caps.get(1).or_else(|| caps.get(2)).map(|m| m.as_str()))
             .collect();
         found_urls.add_urls_from_text_array(&img_srcs, &source_url_str, UrlSource::ImgSrc);
 
         // <img data-src="..." (lazy loading)
         let data_srcs: Vec<&str> = RE_IMG_DATA_SRC
             .captures_iter(html)
-            .filter_map(|caps| caps.get(1).map(|m| m.as_str()))
+            .filter_map(|caps| caps.get(1).or_else(|| caps.get(2)).map(|m| m.as_str()))
             .collect();
         found_urls.add_urls_from_text_array(&data_srcs, &source_url_str, UrlSource::ImgSrc);
 
         // <input src="..."
         let input_srcs: Vec<&str> = RE_INPUT_SRC
             .captures_iter(html)
-            .filter_map(|caps| caps.get(1).map(|m| m.as_str()))
+            .filter_map(|caps| caps.get(1).or_else(|| caps.get(2)).map(|m| m.as_str()))
             .collect();
         found_urls.add_urls_from_text_array(&input_srcs, &source_url_str, UrlSource::InputSrc);
 
         // <link href="...(image extensions)"
         let link_imgs: Vec<&str> = RE_LINK_IMAGE
             .captures_iter(html)
-            .filter_map(|caps| caps.get(1).map(|m| m.as_str()))
+            .filter_map(|caps| caps.get(1).or_else(|| caps.get(2)).map(|m| m.as_str()))
             .collect();
         found_urls.add_urls_from_text_array(&link_imgs, &source_url_str, UrlSource::LinkHref);
 
@@ -300,7 +303,7 @@ impl HtmlProcessor {
         let source_url_str = source_url.get_full_url(true, false);
         let urls: Vec<&str> = RE_AUDIO_SRC
             .captures_iter(html)
-            .filter_map(|caps| caps.get(1).map(|m| m.as_str()))
+            .filter_map(|caps| caps.get(1).or_else(|| caps.get(2)).map(|m| m.as_str()))
             .collect();
         found_urls.add_urls_from_text_array(&urls, &source_url_str, UrlSource::AudioSrc);
     }
@@ -310,7 +313,7 @@ impl HtmlProcessor {
         let source_url_str = source_url.get_full_url(true, false);
         let urls: Vec<&str> = RE_VIDEO_SRC
             .captures_iter(html)
-            .filter_map(|caps| caps.get(1).map(|m| m.as_str()))
+            .filter_map(|caps| caps.get(1).or_else(|| caps.get(2)).map(|m| m.as_str()))
             .collect();
         found_urls.add_urls_from_text_array(&urls, &source_url_str, UrlSource::VideoSrc);
     }
@@ -322,14 +325,14 @@ impl HtmlProcessor {
         // <script src="..."
         let script_srcs: Vec<&str> = RE_SCRIPT_SRC
             .captures_iter(html)
-            .filter_map(|caps| caps.get(1).map(|m| m.as_str()))
+            .filter_map(|caps| caps.get(1).or_else(|| caps.get(2)).map(|m| m.as_str()))
             .collect();
         found_urls.add_urls_from_text_array(&script_srcs, &source_url_str, UrlSource::ScriptSrc);
 
         // <link href="...(json|js)"
         let link_js: Vec<&str> = RE_LINK_JS
             .captures_iter(html)
-            .filter_map(|caps| caps.get(1).map(|m| m.as_str()))
+            .filter_map(|caps| caps.get(1).or_else(|| caps.get(2)).map(|m| m.as_str()))
             .collect();
         found_urls.add_urls_from_text_array(&link_js, &source_url_str, UrlSource::LinkHref);
 
@@ -959,5 +962,173 @@ mod tests {
         let source = ParsedUrl::parse("https://example.com/", None);
         let result = processor.find_urls(html, &source);
         assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_spaces_in_quoted_img_src() {
+        let processor = HtmlProcessor::new(make_config());
+        let html = r#"<html><body><img src="/images/dir with spaces/file with spaces.png?ver=1.0"></body></html>"#;
+        let source = ParsedUrl::parse("https://example.com/", None);
+        let found = processor.find_urls(html, &source).unwrap();
+        let urls: Vec<&str> = found.get_urls().iter().map(|(_, u)| u.url.as_str()).collect();
+        assert!(
+            urls.iter()
+                .any(|u| u.contains("dir%20with%20spaces/file%20with%20spaces.png")),
+            "img src with spaces in quoted attribute should be captured. Found: {:?}",
+            urls
+        );
+    }
+
+    #[test]
+    fn test_spaces_in_quoted_a_href() {
+        let processor = HtmlProcessor::new(make_config());
+        let html = r#"<html><body><a href="/pages/page two.html">Link</a></body></html>"#;
+        let source = ParsedUrl::parse("https://example.com/", None);
+        let found = processor.find_urls(html, &source).unwrap();
+        let urls: Vec<&str> = found.get_urls().iter().map(|(_, u)| u.url.as_str()).collect();
+        assert!(
+            urls.iter().any(|u| u.contains("page%20two.html")),
+            "a href with spaces in quoted attribute should be captured. Found: {:?}",
+            urls
+        );
+    }
+
+    #[test]
+    fn test_spaces_in_quoted_script_src() {
+        let processor = HtmlProcessor::new(make_config());
+        let html = r#"<html><head><script src="/js/my script.js"></script></head></html>"#;
+        let source = ParsedUrl::parse("https://example.com/", None);
+        let found = processor.find_urls(html, &source).unwrap();
+        let urls: Vec<&str> = found.get_urls().iter().map(|(_, u)| u.url.as_str()).collect();
+        assert!(
+            urls.iter().any(|u| u.contains("my%20script.js")),
+            "script src with spaces in quoted attribute should be captured. Found: {:?}",
+            urls
+        );
+    }
+
+    #[test]
+    fn test_unquoted_src_still_works() {
+        let processor = HtmlProcessor::new(make_config());
+        let html = r#"<html><body><img src=logo.png></body></html>"#;
+        let source = ParsedUrl::parse("https://example.com/", None);
+        let found = processor.find_urls(html, &source).unwrap();
+        let urls: Vec<&str> = found.get_urls().iter().map(|(_, u)| u.url.as_str()).collect();
+        assert!(
+            urls.iter().any(|u| u.contains("logo.png")),
+            "unquoted img src should still be captured. Found: {:?}",
+            urls
+        );
+    }
+
+    #[test]
+    fn test_single_quoted_src_with_spaces() {
+        let processor = HtmlProcessor::new(make_config());
+        let html = r#"<html><body><img src='/images/dir with spaces/another file.jpg'></body></html>"#;
+        let source = ParsedUrl::parse("https://example.com/", None);
+        let found = processor.find_urls(html, &source).unwrap();
+        let urls: Vec<&str> = found.get_urls().iter().map(|(_, u)| u.url.as_str()).collect();
+        assert!(
+            urls.iter().any(|u| u.contains("another%20file.jpg")),
+            "single-quoted img src with spaces should be captured. Found: {:?}",
+            urls
+        );
+    }
+
+    #[test]
+    fn test_unquoted_href_no_spaces() {
+        let processor = HtmlProcessor::new(make_config());
+        let html = r#"<html><body><a href=/about>About</a></body></html>"#;
+        let source = ParsedUrl::parse("https://example.com/", None);
+        let found = processor.find_urls(html, &source).unwrap();
+        let urls: Vec<&str> = found.get_urls().iter().map(|(_, u)| u.url.as_str()).collect();
+        assert!(
+            urls.iter().any(|u| u.contains("/about")),
+            "unquoted a href should still be captured. Found: {:?}",
+            urls
+        );
+    }
+
+    #[test]
+    fn test_unquoted_script_src() {
+        let processor = HtmlProcessor::new(make_config());
+        let html = r#"<html><head><script src=app.js></script></head></html>"#;
+        let source = ParsedUrl::parse("https://example.com/", None);
+        let found = processor.find_urls(html, &source).unwrap();
+        let urls: Vec<&str> = found.get_urls().iter().map(|(_, u)| u.url.as_str()).collect();
+        assert!(
+            urls.iter().any(|u| u.contains("app.js")),
+            "unquoted script src should still be captured. Found: {:?}",
+            urls
+        );
+    }
+
+    #[test]
+    fn test_spaces_in_audio_video_src() {
+        let processor = HtmlProcessor::new(make_config());
+        let html = r#"<html><body>
+            <audio src="/media/my song.mp3"></audio>
+            <video src="/media/my video.mp4"></video>
+        </body></html>"#;
+        let source = ParsedUrl::parse("https://example.com/", None);
+        let found = processor.find_urls(html, &source).unwrap();
+        let urls: Vec<&str> = found.get_urls().iter().map(|(_, u)| u.url.as_str()).collect();
+        assert!(
+            urls.iter().any(|u| u.contains("my%20song.mp3")),
+            "audio src with spaces should be captured. Found: {:?}",
+            urls
+        );
+        assert!(
+            urls.iter().any(|u| u.contains("my%20video.mp4")),
+            "video src with spaces should be captured. Found: {:?}",
+            urls
+        );
+    }
+
+    #[test]
+    fn test_mixed_quoted_and_unquoted() {
+        let processor = HtmlProcessor::new(make_config());
+        let html = r#"<html><body>
+            <img src="/images/path with spaces/photo.jpg">
+            <img src=simple.png>
+            <img src='/another path/img.webp'>
+        </body></html>"#;
+        let source = ParsedUrl::parse("https://example.com/", None);
+        let found = processor.find_urls(html, &source).unwrap();
+        let urls: Vec<&str> = found.get_urls().iter().map(|(_, u)| u.url.as_str()).collect();
+        assert!(
+            urls.iter().any(|u| u.contains("path%20with%20spaces/photo.jpg")),
+            "double-quoted with spaces should work. Found: {:?}",
+            urls
+        );
+        assert!(
+            urls.iter().any(|u| u.contains("simple.png")),
+            "unquoted without spaces should work. Found: {:?}",
+            urls
+        );
+        assert!(
+            urls.iter().any(|u| u.contains("another%20path/img.webp")),
+            "single-quoted with spaces should work. Found: {:?}",
+            urls
+        );
+    }
+
+    #[test]
+    fn test_fragment_links_still_skipped() {
+        let processor = HtmlProcessor::new(make_config());
+        let html = r##"<html><body><a href="#section">Section</a><a href="/real-page">Real</a></body></html>"##;
+        let source = ParsedUrl::parse("https://example.com/", None);
+        let found = processor.find_urls(html, &source).unwrap();
+        let urls: Vec<&str> = found.get_urls().iter().map(|(_, u)| u.url.as_str()).collect();
+        assert!(
+            !urls.iter().any(|u| u == &"#section"),
+            "fragment-only links should still be skipped. Found: {:?}",
+            urls
+        );
+        assert!(
+            urls.iter().any(|u| u.contains("/real-page")),
+            "real page links should be captured. Found: {:?}",
+            urls
+        );
     }
 }
