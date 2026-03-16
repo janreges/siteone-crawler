@@ -44,7 +44,7 @@ jobs:
       - name: Publish
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish --no-verify --allow-dirty
+        run: cargo publish --no-verify --allow-dirty || echo "Already published (skipping)"
 
   # ─────────────────────────────────────────────────────────────────
   # Update Homebrew tap
@@ -132,6 +132,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Formula/siteone-crawler.rb
+          git diff --cached --quiet && echo "Formula already up to date" && exit 0
           git commit -m "chore: update siteone-crawler to v${{ steps.version.outputs.version }}"
           git push
 
@@ -251,8 +252,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             Write-Host "Update failed, trying initial submission with 'new'..."
             wingetcreate new $url_x64 $url_arm64 `
-              --token $env:WINGET_TOKEN `
-              --submit
+              --out manifests `
+              --token $env:WINGET_TOKEN
+            wingetcreate submit manifests `
+              --token $env:WINGET_TOKEN
           }
 
   # ─────────────────────────────────────────────────────────────────
