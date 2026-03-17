@@ -18,3 +18,4 @@ pub mod server;
 pub mod types;
 pub mod utils;
 pub mod version;
+pub mod wizard;

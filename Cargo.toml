@@ -50,6 +50,8 @@ ego-tree = "0.10"
 base64 = "0.22"
 dirs = "6"
 pulldown-cmark = "0.13.1"
+inquire = { version = "0.9", default-features = false, features = ["crossterm"] }
+crossterm = "0.29"
 
 [package.metadata.deb]
 maintainer = "Ján Regeš <jan.reges@siteone.cz>"

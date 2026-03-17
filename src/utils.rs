@@ -578,7 +578,14 @@ pub fn get_absolute_path(path: &str) -> String {
 }
 
 pub fn get_output_formatted_path(path: &str) -> String {
-    path.to_string()
+    #[cfg(windows)]
+    {
+        path.replace('/', "\\")
+    }
+    #[cfg(not(windows))]
+    {
+        path.to_string()
+    }
 }
 
 pub fn mb_str_pad(input: &str, pad_length: usize, pad_char: char) -> String {

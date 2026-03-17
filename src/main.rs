@@ -32,7 +32,19 @@ async fn main() {
         }
     }
 
-    let argv: Vec<String> = std::env::args().collect();
+    let mut argv: Vec<String> = std::env::args().collect();
+
+    // Interactive wizard: when no args given AND stdin/stdout are interactive TTYs,
+    // show a guided wizard instead of the error + help wall. (GitHub issue #93)
+    let launched_via_wizard = argv.len() == 1 && siteone_crawler::wizard::is_interactive_tty();
+    if launched_via_wizard {
+        match siteone_crawler::wizard::run_wizard() {
+            Ok(wizard_argv) => argv = wizard_argv,
+            Err(_) => {
+                std::process::exit(0);
+            }
+        }
+    }
 
     // Create initiator (parses CLI args, handles --help/--version)
     // On error: show ERROR, then help, then ERROR again
@@ -93,12 +105,28 @@ async fn main() {
     // Run the crawler
     match manager.run().await {
         Ok(exit_code) => {
+            if launched_via_wizard {
+                if let Some((dir, kind)) = siteone_crawler::wizard::offer_serve_after_export(&argv) {
+                    let serve_mode = if kind == "offline" {
+                        siteone_crawler::server::ServeMode::Offline
+                    } else {
+                        siteone_crawler::server::ServeMode::Markdown
+                    };
+                    siteone_crawler::server::run(std::path::PathBuf::from(&dir), serve_mode, serve_port, &serve_bind)
+                        .await;
+                } else {
+                    siteone_crawler::wizard::press_enter_to_exit();
+                }
+            }
             if exit_code != 0 {
                 std::process::exit(exit_code);
             }
         }
         Err(e) => {
             eprintln!("Crawler error: {}", e);
+            if launched_via_wizard {
+                siteone_crawler::wizard::press_enter_to_exit();
+            }
             std::process::exit(1);
         }
     }

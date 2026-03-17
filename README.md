@@ -7,7 +7,7 @@ SiteOne Crawler is a powerful and easy-to-use **website analyzer, cloner, and co
 **Discover the SiteOne Crawler advantage:**
 
 *   **Run Anywhere:** Single native binary for **🪟 Windows**, **🍎 macOS**, and **🐧 Linux** (x64 & arm64). No runtime dependencies.
-*   **Work Your Way:** Master the extensive **command-line interface** 📟 ([releases](https://github.com/janreges/siteone-crawler/releases), [▶️ video](https://www.youtube.com/watch?v=25T_yx13naA&list=PL9mElgTe-s1Csfg0jXWmDS0MHFN7Cpjwp)) for automation and power, or enjoy the intuitive **desktop GUI application** 💻 ([GUI app](https://github.com/janreges/siteone-crawler-gui), [▶️ video](https://www.youtube.com/watch?v=rFW8LNEVNdw)) for visual control.
+*   **Work Your Way:** Launch the binary without arguments for an **interactive wizard** 🧙 with 10 preset modes, use the extensive **command-line interface** 📟 ([releases](https://github.com/janreges/siteone-crawler/releases), [▶️ video](https://www.youtube.com/watch?v=25T_yx13naA&list=PL9mElgTe-s1Csfg0jXWmDS0MHFN7Cpjwp)) for automation and power, or enjoy the intuitive **desktop GUI application** 💻 ([GUI app](https://github.com/janreges/siteone-crawler-gui), [▶️ video](https://www.youtube.com/watch?v=rFW8LNEVNdw)) for visual control.
 *   **Rich Output Formats:** Interactive **HTML audit report** 📊 with sortable tables and quality scoring (0.0-10.0) (see [nextjs.org sample](https://crawler.siteone.io/html/2024-08-23/forever/cl8xw4r-fdag8wg-44dd.html)), detailed **JSON** for programmatic consumption, and human-readable **text** for terminal. Send HTML reports directly to your inbox via **built-in SMTP mailer** 📧.
 *   **CI/CD Integration:** Built-in **quality gate** (`--ci`) with configurable thresholds — exit code 10 on failure enables automated deployment blocking. Also useful for **cache warming** — crawling the entire site after deployment populates your reverse proxy/CDN cache.
 *   **Offline & Markdown Power:** Create complete **offline clones** 💾 for browsing without a server ([nextjs.org clone](https://crawler.siteone.io/examples-exports/nextjs.org/)) or convert entire websites into clean **Markdown** 📝 — perfect for backups, documentation, or feeding content to AI models ([examples](https://github.com/janreges/siteone-crawler-markdown-examples/)).
@@ -37,6 +37,7 @@ GIF animation of the crawler in action (also available as a [▶️ video](https
     * [🏔️ Alpine Linux (apk)](#️-alpine-linux-apk)
     * [🔨 Build from source](#-build-from-source)
 - [▶️ Usage](#️-usage)
+    * [Interactive wizard](#interactive-wizard)
     * [Basic example](#basic-example)
     * [CI/CD example](#cicd-example)
     * [Fully-featured example](#fully-featured-example)
@@ -276,10 +277,41 @@ cargo build --release
 
 ## ▶️ Usage
 
-To run the crawler, execute the `siteone-crawler` binary from the command line and provide the
-required arguments:
+### Interactive wizard
+
+Run the binary **without any arguments** and an interactive wizard will guide you through the
+configuration. Choose from 10 preset modes, enter the target URL, fine-tune settings with
+arrow keys, and the crawler starts immediately — no need to remember CLI flags.
+
+```
+? Choose a crawl mode:
+❯ Quick Audit               Fast site health overview — crawls all pages and assets
+  SEO Analysis               Extract titles, descriptions, keywords, and OpenGraph tags
+  Performance Test           Measure response times with cache disabled — find bottlenecks
+  Security Check             Check SSL/TLS, security headers, and redirects site-wide
+  Offline Clone              Download entire website with all assets for offline browsing
+  Markdown Export            Convert pages to Markdown for AI models or documentation
+  Stress Test                High-concurrency load test with cache-busting random params
+  Single Page                Deep analysis of a single URL — SEO, security, performance
+  Large Site Crawl           High-throughput HTML-only crawl for large sites (100k+ pages)
+  Custom                     Start from defaults and configure every option manually
+  ──────────────────────────────────────
+  Browse offline export      Serve a previously exported offline site via HTTP
+  Browse markdown export     Serve a previously exported markdown site via HTTP
+[↑↓ to move, enter to select, type to filter]
+```
+
+After selecting a preset and entering the URL, the wizard shows a settings form where you can
+adjust workers, timeout, content types, export options, and more. A configuration summary with the
+equivalent CLI command is displayed before the crawl starts — copy it for future use without the
+wizard.
+
+If existing offline or markdown exports are detected in `./tmp/`, the wizard also offers to
+**serve them via the built-in HTTP server** directly from the menu.
 
 ### Basic example
+
+To run the crawler from the command line, provide the required arguments:
 
 ```bash
 ./siteone-crawler --url=https://mydomain.tld/ --device=mobile
