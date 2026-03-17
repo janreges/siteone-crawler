@@ -92,10 +92,10 @@ impl ExtraColumn {
 
         let length = self.get_length();
         if self.truncate && value.chars().count() > length {
-            let truncated: String = value.chars().take(length).collect();
-            Some(format!("{}...", truncated.trim()))
+            let truncated: String = value.chars().take(length.saturating_sub(1)).collect();
+            Some(format!("{}…", truncated.trim()))
         } else {
-            Some(format!("{:<width$}", value, width = length))
+            Some(value.to_string())
         }
     }
 
@@ -365,7 +365,8 @@ mod tests {
     #[test]
     fn truncated_value_truncates_when_longer() {
         let col = ExtraColumn::new("X".to_string(), Some(3), true, None, None, None).unwrap();
-        assert_eq!(col.get_truncated_value(Some("Hello")), Some("Hel...".to_string()));
+        // Takes length-1 chars (2) and appends "…" → total 3 visible chars
+        assert_eq!(col.get_truncated_value(Some("Hello")), Some("He…".to_string()));
     }
 
     #[test]

@@ -414,11 +414,10 @@ impl Output for TextOutput {
             }
 
             let truncated = extra_column.get_truncated_value(Some(&value)).unwrap_or_default();
-            extra_headers_content.push_str(&format!(
-                " | {:<width$}",
-                truncated,
-                width = extra_column.get_length().max(4)
-            ));
+            let target_width = extra_column.get_length().max(4);
+            let visible_len = utils::remove_ansi_colors(&truncated).chars().count();
+            let padding = target_width.saturating_sub(visible_len);
+            extra_headers_content.push_str(&format!(" | {}{}", truncated, " ".repeat(padding)));
         }
 
         let mut url_display = url_for_table.clone();
