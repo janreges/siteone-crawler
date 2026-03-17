@@ -202,6 +202,7 @@ mod tests {
             timeout: 5,
             proxy: None,
             http_auth: None,
+            accept_invalid_certs: false,
             timezone: None,
             show_version_only: false,
             show_help_only: false,

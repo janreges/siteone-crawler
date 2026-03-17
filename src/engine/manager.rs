@@ -162,6 +162,7 @@ impl Manager {
             http_cache_dir,
             options.http_cache_compression,
             options.http_cache_ttl,
+            options.accept_invalid_certs,
         );
 
         // Create content processor manager and register processors
