@@ -87,6 +87,7 @@ pub struct CoreOptions {
     pub show_scheme_and_host: bool,
     pub do_not_truncate_url: bool,
     pub hide_progress_bar: bool,
+    pub hide_columns: Vec<String>,
     pub no_color: bool,
     pub force_color: bool,
     pub console_width: Option<i64>,
@@ -260,6 +261,7 @@ impl CoreOptions {
             show_scheme_and_host: false,
             do_not_truncate_url: false,
             hide_progress_bar: false,
+            hide_columns: Vec::new(),
             no_color: false,
             force_color: false,
             console_width: None,
@@ -576,6 +578,11 @@ impl CoreOptions {
             "hideProgressBar" => {
                 if let Some(b) = value.as_bool() {
                     self.hide_progress_bar = b;
+                }
+            }
+            "hideColumns" => {
+                if let Some(s) = value.as_str() {
+                    self.hide_columns = s.split(',').map(|c| c.trim().to_lowercase()).collect();
                 }
             }
             "noColor" => {
@@ -1332,6 +1339,11 @@ pub fn get_options() -> Options {
                 "--hide-progress-bar", Some("-hpb"), "hideProgressBar", OptionType::Bool, false,
                 "Suppress progress bar in output.",
                 Some("false"), false, false, None,
+            ),
+            CrawlerOption::new(
+                "--hide-columns", Some("-hc"), "hideColumns", OptionType::String, false,
+                "Hide specified columns from the progress table. Comma-separated list: type, time, size, cache.",
+                None, true, false, None,
             ),
             CrawlerOption::new(
                 "--no-color", Some("-nc"), "noColor", OptionType::Bool, false,
@@ -2611,6 +2623,7 @@ mod tests {
             show_scheme_and_host: false,
             do_not_truncate_url: false,
             hide_progress_bar: false,
+            hide_columns: Vec::new(),
             no_color: false,
             force_color: false,
             console_width: None,

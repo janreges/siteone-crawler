@@ -554,6 +554,7 @@ impl Manager {
                 options.url_column_size.map(|s| s as usize),
                 options.show_inline_criticals,
                 options.show_inline_warnings,
+                options.hide_columns.clone(),
                 options.workers as usize,
                 options.memory_limit.clone(),
                 options.output_type == OutputType::Text, // print_to_output

@@ -43,6 +43,7 @@ pub struct TextOutput {
     url_column_size: Option<usize>,
     show_inline_criticals: bool,
     show_inline_warnings: bool,
+    hide_columns: Vec<String>,
     workers: usize,
     memory_limit: String,
     disable_animation: bool,
@@ -63,6 +64,7 @@ impl TextOutput {
         url_column_size: Option<usize>,
         show_inline_criticals: bool,
         show_inline_warnings: bool,
+        hide_columns: Vec<String>,
         workers: usize,
         memory_limit: String,
         print_to_output: bool,
@@ -105,11 +107,34 @@ impl TextOutput {
             url_column_size,
             show_inline_criticals,
             show_inline_warnings,
+            hide_columns,
             workers,
             memory_limit,
             disable_animation,
             cached_url_column_size: None,
         }
+    }
+
+    fn is_column_hidden(&self, name: &str) -> bool {
+        self.hide_columns.iter().any(|c| c == name)
+    }
+
+    /// Width of hidden columns (to reclaim for URL column sizing).
+    fn hidden_columns_width(&self) -> usize {
+        let mut w = 0;
+        if self.is_column_hidden("type") {
+            w += 11;
+        } // "| Type     "
+        if self.is_column_hidden("time") {
+            w += 9;
+        } // "| Time   "
+        if self.is_column_hidden("size") {
+            w += 9;
+        } // "| Size   "
+        if self.is_column_hidden("cache") {
+            w += 9;
+        } // "| Cache  "
+        w
     }
 
     fn add_to_output(&mut self, output: &str) {
@@ -133,7 +158,7 @@ impl TextOutput {
         let size = if let Some(url_col_size) = self.url_column_size {
             url_col_size.min(184)
         } else {
-            let status_type_time_size_cache_width: usize = 49;
+            let status_type_time_size_cache_width: usize = 49usize.saturating_sub(self.hidden_columns_width());
             let free_reserve: usize = 5;
 
             let url_column_size = self
@@ -253,11 +278,19 @@ impl Output for TextOutput {
 
     fn add_table_header(&mut self) {
         let url_col_size = self.get_url_column_size();
-        let mut header = format!(
-            "{:<width$} | Status | Type     | Time   | Size   | Cache ",
-            "URL",
-            width = url_col_size
-        );
+        let mut header = format!("{:<width$} | Status", "URL", width = url_col_size);
+        if !self.is_column_hidden("type") {
+            header.push_str(" | Type    ");
+        }
+        if !self.is_column_hidden("time") {
+            header.push_str(" | Time  ");
+        }
+        if !self.is_column_hidden("size") {
+            header.push_str(" | Size  ");
+        }
+        if !self.is_column_hidden("cache") {
+            header.push_str(" | Cache ");
+        }
 
         if !self.hide_progress_bar {
             let progress_label = if self.compact_mode {
@@ -420,17 +453,20 @@ impl Output for TextOutput {
         let url_padding = url_col_size.saturating_sub(url_visible_len);
         let url_padded = format!("{}{}", url_display, " ".repeat(url_padding));
 
-        let output = format!(
-            "{} {} | {} | {} | {} | {} | {}{}\n",
-            progress_content,
-            url_padded,
-            colored_status,
-            content_type_padded,
-            colored_elapsed_time,
-            colored_size,
-            colored_cache,
-            extra_headers_content,
-        );
+        let mut output = format!("{} {} | {}", progress_content, url_padded, colored_status);
+        if !self.is_column_hidden("type") {
+            output.push_str(&format!(" | {}", content_type_padded));
+        }
+        if !self.is_column_hidden("time") {
+            output.push_str(&format!(" | {}", colored_elapsed_time));
+        }
+        if !self.is_column_hidden("size") {
+            output.push_str(&format!(" | {}", colored_size));
+        }
+        if !self.is_column_hidden("cache") {
+            output.push_str(&format!(" | {}", colored_cache));
+        }
+        output.push_str(&format!("{}\n", extra_headers_content));
 
         if !extra_new_line.is_empty() {
             let combined = format!("{}{}\n", output, extra_new_line.trim_end());

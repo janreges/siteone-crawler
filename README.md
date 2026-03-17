@@ -387,6 +387,7 @@ For a clearer list, I recommend going to the documentation: 🌐 https://crawler
 | `--do-not-truncate-url` | In the text output, long URLs are truncated by default to `--url-column-size` so the table does not<br>wrap due to long URLs. With this option, you can turn off the truncation. |
 | `--show-scheme-and-host` | On text output, show scheme and host also for origin domain URLs. |
 | `--hide-progress-bar` | Hide progress bar visible in text and JSON output for more compact view. |
+| `--hide-columns=<list>` | Hide specified columns from the progress table. Comma-separated list of column names:<br>`type`, `time`, `size`, `cache`. Example: `--hide-columns=cache` or `--hide-columns=cache,type`. |
 | `--no-color` | Disable colored output. |
 | `--force-color` | Force colored output regardless of support detection. |
 | `--show-inline-criticals` | Show criticals from the analyzer directly in the URL table. |
