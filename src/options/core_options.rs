@@ -304,10 +304,25 @@ impl CoreOptions {
             force_relative_urls: false,
 
             // file export settings (all 3 reports enabled by default)
-            output_html_report: Some(format!("{output_prefix}/%domain%.report.%datetime%.html")),
+            output_html_report: Some(
+                std::path::Path::new(&output_prefix)
+                    .join("%domain%.report.%datetime%.html")
+                    .to_string_lossy()
+                    .to_string(),
+            ),
             html_report_options: None,
-            output_json_file: Some(format!("{output_prefix}/%domain%.output.%datetime%.json")),
-            output_text_file: Some(format!("{output_prefix}/%domain%.output.%datetime%.txt")),
+            output_json_file: Some(
+                std::path::Path::new(&output_prefix)
+                    .join("%domain%.output.%datetime%.json")
+                    .to_string_lossy()
+                    .to_string(),
+            ),
+            output_text_file: Some(
+                std::path::Path::new(&output_prefix)
+                    .join("%domain%.output.%datetime%.txt")
+                    .to_string_lossy()
+                    .to_string(),
+            ),
             add_host_to_output_file: false,
             add_timestamp_to_output_file: false,
 
@@ -1608,10 +1623,11 @@ pub fn get_options() -> Options {
         vec![
             {
                 let prefix = default_output_prefix();
+                let sep = std::path::MAIN_SEPARATOR;
                 CrawlerOption::new(
                     "--output-html-report", None, "outputHtmlReport", OptionType::File, false,
                     "Save HTML report into that file. Set to empty '' to disable HTML report.",
-                    Some(&format!("{prefix}/%domain%.report.%datetime%.html")), true, false, None,
+                    Some(&format!("{prefix}{sep}%domain%.report.%datetime%.html")), true, false, None,
                 )
             },
             CrawlerOption::new(
@@ -1621,18 +1637,20 @@ pub fn get_options() -> Options {
             ),
             {
                 let prefix = default_output_prefix();
+                let sep = std::path::MAIN_SEPARATOR;
                 CrawlerOption::new(
                     "--output-json-file", None, "outputJsonFile", OptionType::File, false,
                     "Save report as JSON. Set to empty '' to disable JSON report.",
-                    Some(&format!("{prefix}/%domain%.output.%datetime%.json")), true, false, None,
+                    Some(&format!("{prefix}{sep}%domain%.output.%datetime%.json")), true, false, None,
                 )
             },
             {
                 let prefix = default_output_prefix();
+                let sep = std::path::MAIN_SEPARATOR;
                 CrawlerOption::new(
                     "--output-text-file", None, "outputTextFile", OptionType::File, false,
                     "Save output as TXT. Set to empty '' to disable TXT report.",
-                    Some(&format!("{prefix}/%domain%.output.%datetime%.txt")), true, false, None,
+                    Some(&format!("{prefix}{sep}%domain%.output.%datetime%.txt")), true, false, None,
                 )
             },
             CrawlerOption::new(
