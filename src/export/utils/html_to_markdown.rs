@@ -57,7 +57,7 @@ impl HtmlToMarkdownConverter {
             bullet_list_marker: "-".to_string(),
             code_block_fence: "```".to_string(),
             horizontal_rule: "* * *".to_string(),
-            heading_style: HeadingStyle::Setext,
+            heading_style: HeadingStyle::Atx,
             escape_mode: true,
             include_images: true,
             convert_tables: true,
@@ -265,6 +265,7 @@ impl HtmlToMarkdownConverter {
                     }
                     result_lines.push(String::new());
                     result_lines.push("</details>".to_string());
+                    result_lines.push(String::new()); // blank line required so next Markdown (e.g. heading) isn't swallowed into the HTML block
                 } else {
                     for line in block_lines {
                         result_lines.push(line.to_string());
@@ -1154,7 +1155,8 @@ mod tests {
 
     #[test]
     fn test_heading_setext() {
-        let converter = HtmlToMarkdownConverter::new("<h1>Title</h1>", vec![]);
+        let mut converter = HtmlToMarkdownConverter::new("<h1>Title</h1>", vec![]);
+        converter.set_heading_style(HeadingStyle::Setext);
         let md = converter.get_markdown();
         assert!(md.contains("Title\n====="));
     }

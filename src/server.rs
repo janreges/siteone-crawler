@@ -613,6 +613,7 @@ fn clean_markdown_artifacts(markdown: &str) -> String {
                         result.push(lines[k]);
                         k += 1;
                         if lines[k - 1].trim() == "</details>" {
+                            result.push(""); // blank line required so pulldown-cmark ends the HTML block
                             break;
                         }
                     }
