@@ -38,8 +38,9 @@ impl HttpClient {
         cache_dir: Option<String>,
         compression: bool,
         cache_ttl: Option<u64>,
+        accept_invalid_certs: bool,
     ) -> Self {
-        let client = Self::build_shared_client(&proxy);
+        let client = Self::build_shared_client(&proxy, accept_invalid_certs);
         Self {
             client,
             http_auth,
@@ -51,9 +52,9 @@ impl HttpClient {
 
     /// Build the shared reqwest::Client with proxy support.
     /// Timeout is set per-request, not on the shared client.
-    fn build_shared_client(proxy: &Option<String>) -> reqwest::Client {
+    fn build_shared_client(proxy: &Option<String>, accept_invalid_certs: bool) -> reqwest::Client {
         let mut builder = reqwest::Client::builder()
-            .danger_accept_invalid_certs(false)
+            .danger_accept_invalid_certs(accept_invalid_certs)
             .redirect(reqwest::redirect::Policy::none());
 
         if let Some(proxy_str) = proxy {
@@ -434,7 +435,7 @@ mod tests {
 
     #[test]
     fn test_cache_key_generation() {
-        let client = HttpClient::new(None, None, Some("/tmp/cache".to_string()), false, None);
+        let client = HttpClient::new(None, None, Some("/tmp/cache".to_string()), false, None, false);
         let args = vec![
             "example.com".to_string(),
             "443".to_string(),
@@ -448,11 +449,11 @@ mod tests {
 
     #[test]
     fn test_cache_file_path() {
-        let client = HttpClient::new(None, None, Some("/tmp/cache".to_string()), false, None);
+        let client = HttpClient::new(None, None, Some("/tmp/cache".to_string()), false, None, false);
         let path = client.get_cache_file_path("example.com-443/ab/abcdef");
         assert_eq!(path, Some("/tmp/cache/example.com-443/ab/abcdef.cache".to_string()));
 
-        let client_gz = HttpClient::new(None, None, Some("/tmp/cache".to_string()), true, None);
+        let client_gz = HttpClient::new(None, None, Some("/tmp/cache".to_string()), true, None, false);
         let path_gz = client_gz.get_cache_file_path("example.com-443/ab/abcdef");
         assert_eq!(
             path_gz,
@@ -462,7 +463,7 @@ mod tests {
 
     #[test]
     fn test_no_cache_when_disabled() {
-        let client = HttpClient::new(None, None, None, false, None);
+        let client = HttpClient::new(None, None, None, false, None, false);
         assert!(client.get_cache_file_path("any-key").is_none());
     }
 }

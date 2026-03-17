@@ -71,6 +71,7 @@ pub struct CoreOptions {
     pub timeout: i64,
     pub proxy: Option<String>,
     pub http_auth: Option<String>,
+    pub accept_invalid_certs: bool,
     pub timezone: Option<String>,
     pub show_version_only: bool,
     pub show_help_only: bool,
@@ -243,6 +244,7 @@ impl CoreOptions {
             timeout: 5,
             proxy: None,
             http_auth: None,
+            accept_invalid_certs: false,
             timezone: None,
             show_version_only: false,
             show_help_only: false,
@@ -507,6 +509,11 @@ impl CoreOptions {
             "httpAuth" => {
                 if let Some(s) = value.as_str() {
                     self.http_auth = Some(s.to_string());
+                }
+            }
+            "acceptInvalidCerts" => {
+                if let Some(b) = value.as_bool() {
+                    self.accept_invalid_certs = b;
                 }
             }
             "timezone" => {
@@ -1250,6 +1257,11 @@ pub fn get_options() -> Options {
                 "--http-auth", Some("-ha"), "httpAuth", OptionType::String, false,
                 "Basic HTTP authentication in `username:password` format.",
                 None, true, false, None,
+            ),
+            CrawlerOption::new(
+                "--accept-invalid-certs", Some("-aic"), "acceptInvalidCerts", OptionType::Bool, false,
+                "Accept invalid or incomplete SSL/TLS certificates (e.g. expired, self-signed, or missing intermediate CA). Use with caution.",
+                Some("false"), false, false, None,
             ),
             CrawlerOption::new(
                 "--help", Some("-h"), "showHelpOnly", OptionType::Bool, false,
@@ -2585,6 +2597,7 @@ mod tests {
             timeout: 5,
             proxy: None,
             http_auth: None,
+            accept_invalid_certs: false,
             timezone: None,
             show_version_only: false,
             show_help_only: false,
