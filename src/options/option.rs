@@ -350,7 +350,7 @@ impl CrawlerOption {
                 }
             }
             OptionType::Regex => {
-                if Regex::new(val).is_err() {
+                if fancy_regex::Regex::new(val).is_err() {
                     return Err(CrawlerError::Config(format!(
                         "Option {} ({}) must be valid PCRE regular expression",
                         display_name, val

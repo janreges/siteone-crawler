@@ -52,6 +52,7 @@ dirs = "6"
 pulldown-cmark = "0.13.1"
 inquire = { version = "0.9", default-features = false, features = ["crossterm"] }
 crossterm = "0.29"
+fancy-regex = "0.17"
 
 [package.metadata.deb]
 maintainer = "Ján Regeš <jan.reges@siteone.cz>"
