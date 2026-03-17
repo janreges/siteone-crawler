@@ -78,15 +78,17 @@ impl Analyzer for ExternalLinksAnalyzer {
             count_b.cmp(&count_a).then_with(|| a.get("url").cmp(&b.get("url")))
         });
 
+        let url_column_width = 60;
+
         let columns = vec![
             SuperTableColumn::new(
                 "url".to_string(),
                 "External URL".to_string(),
-                -1, // AUTO_WIDTH
+                url_column_width,
                 None,
                 None,
-                false,
-                false,
+                true,
+                true,
                 false,
                 true,
                 None,
@@ -106,11 +108,11 @@ impl Analyzer for ExternalLinksAnalyzer {
             SuperTableColumn::new(
                 "foundOn".to_string(),
                 "Found on URL (max 5)".to_string(),
-                -1, // AUTO_WIDTH
+                url_column_width,
                 None,
                 None,
-                false,
-                false,
+                true,
+                true,
                 false,
                 true,
                 None,

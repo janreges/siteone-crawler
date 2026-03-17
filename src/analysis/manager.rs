@@ -3,8 +3,6 @@
 
 use std::collections::HashMap;
 
-use regex::Regex;
-
 use crate::analysis::analyzer::Analyzer;
 use crate::analysis::result::url_analysis_result::UrlAnalysisResult;
 use crate::output::output::Output;
@@ -44,8 +42,8 @@ impl AnalysisManager {
     /// Supports PCRE-style delimited patterns (e.g., /security/i).
     pub fn filter_analyzers_by_regex(&mut self, filter_regex: &str) {
         let pattern = utils::extract_pcre_regex_pattern(filter_regex);
-        if let Ok(re) = Regex::new(&pattern) {
-            self.analyzers.retain(|a| re.is_match(a.get_name()));
+        if let Ok(re) = fancy_regex::Regex::new(&pattern) {
+            self.analyzers.retain(|a| re.is_match(a.get_name()).unwrap_or(true));
         }
     }
 
