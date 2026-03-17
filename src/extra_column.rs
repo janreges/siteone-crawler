@@ -180,6 +180,10 @@ impl ExtraColumn {
     fn extract_xpath(html: &str, xpath: &str, index: usize) -> Option<String> {
         let document = Html::parse_document(html);
 
+        // Strip /text() suffix — it's XPath shorthand for "get text content", which is the
+        // default behaviour when no attribute is requested. CSS selectors don't support text().
+        let xpath = xpath.strip_suffix("/text()").unwrap_or(xpath);
+
         // Detect if XPath ends with /@attribute — means we want an attribute value
         let (xpath_base, target_attr) = if let Some(idx) = xpath.rfind("/@") {
             (&xpath[..idx], Some(&xpath[idx + 2..]))
@@ -328,6 +332,23 @@ mod tests {
         .unwrap();
         let html = "<html><body><h1>Title</h1></body></html>";
         assert_eq!(col.extract_value(html), Some("Title".to_string()));
+    }
+
+    #[test]
+    fn extract_xpath_h1_with_text_suffix() {
+        // //h1/text() is a common XPath pattern — the /text() suffix must be stripped
+        // before CSS conversion since CSS selectors don't support text().
+        let col = ExtraColumn::new(
+            "X".to_string(),
+            None,
+            true,
+            Some("xpath".to_string()),
+            Some("//h1/text()".to_string()),
+            Some(0),
+        )
+        .unwrap();
+        let html = "<html><body><h1>My Heading</h1></body></html>";
+        assert_eq!(col.extract_value(html), Some("My Heading".to_string()));
     }
 
     #[test]
