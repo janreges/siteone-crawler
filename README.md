@@ -387,6 +387,7 @@ echo $?  # 0 = pass, 10 = fail
   --ignore-regex="/^.*\/downloads\/.*\.pdf$/i" \
   --analyzer-filter-regex="/^.*$/i" \
   --remove-query-params \
+  --keep-query-param=page \
   --add-random-query-params \
   --transform-url="live-site.com -> local-site.local" \
   --transform-url="/cdn\.live-site\.com/ -> local-site.local/cdn" \
@@ -491,6 +492,7 @@ For a clearer list, I recommend going to the documentation: 🌐 https://crawler
 | `--analyzer-filter-regex` | PCRE-compatible regular expression for filtering analyzers by name. |
 | `--accept-encoding=<val>` | Custom `Accept-Encoding` request header. Default is `gzip, deflate, br`. |
 | `--remove-query-params` | Remove query parameters from found URLs. |
+| `--keep-query-param=<name>` | Keep only the specified query parameter(s) in discovered URLs; all others are removed.<br>Can be specified multiple times. If `--remove-query-params` is also set, all parameters<br>are removed regardless. |
 | `--add-random-query-params` | Add random query parameters to each URL to bypass caches. |
 | `--transform-url=<from->to>` | Transform URLs before crawling. Use `from -> to` for simple replacement or `/regex/ -> replacement`.<br>Can be specified multiple times. |
 | `--force-relative-urls` | Normalize all discovered URLs matching the initial domain (incl. www variant and protocol<br>differences) to canonical form. Prevents duplicate files in offline export when the site<br>uses inconsistent URL formats (http/https, www/non-www). |

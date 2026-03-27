@@ -251,6 +251,7 @@ mod tests {
             analyzer_filter_regex: None,
             add_random_query_params: false,
             remove_query_params: false,
+            keep_query_params: Vec::new(),
             transform_url: Vec::new(),
             force_relative_urls: false,
             output_html_report: None,

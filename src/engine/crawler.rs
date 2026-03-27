@@ -1126,13 +1126,15 @@ impl Crawler {
                 absolute_url
             };
 
-            // Remove query params if configured
+            // Filter query params if configured
             let absolute_url = if options.remove_query_params {
                 if let Some(q_pos) = absolute_url.find('?') {
                     absolute_url[..q_pos].to_string()
                 } else {
                     absolute_url
                 }
+            } else if !options.keep_query_params.is_empty() {
+                filter_query_params(&absolute_url, &options.keep_query_params)
             } else {
                 absolute_url
             };
@@ -1859,6 +1861,28 @@ fn compile_domain_patterns(domains: &[String]) -> Vec<Regex> {
         .collect()
 }
 
+/// Filter query parameters in a URL, keeping only those whose names are in the allowlist.
+fn filter_query_params(url: &str, keep_params: &[String]) -> String {
+    if let Some(q_pos) = url.find('?') {
+        let base = &url[..q_pos];
+        let query_str = &url[q_pos + 1..];
+        let filtered: Vec<&str> = query_str
+            .split('&')
+            .filter(|pair| {
+                let name = pair.split('=').next().unwrap_or("");
+                !name.is_empty() && keep_params.iter().any(|k| k == name)
+            })
+            .collect();
+        if filtered.is_empty() {
+            base.to_string()
+        } else {
+            format!("{}?{}", base, filtered.join("&"))
+        }
+    } else {
+        url.to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2041,5 +2065,47 @@ mod tests {
         Crawler::normalize_url_to_initial(&mut url, &initial);
         assert_eq!(url.path, "/some/deep/path");
         assert_eq!(url.query.as_deref(), Some("q=1"));
+    }
+
+    #[test]
+    fn filter_query_params_keeps_specified() {
+        let keep = vec!["foo".to_string(), "baz".to_string()];
+        let result = filter_query_params("https://example.com/page?foo=1&bar=2&baz=3", &keep);
+        assert_eq!(result, "https://example.com/page?foo=1&baz=3");
+    }
+
+    #[test]
+    fn filter_query_params_removes_all_when_none_match() {
+        let keep = vec!["xyz".to_string()];
+        let result = filter_query_params("https://example.com/page?foo=1&bar=2", &keep);
+        assert_eq!(result, "https://example.com/page");
+    }
+
+    #[test]
+    fn filter_query_params_no_query_string() {
+        let keep = vec!["foo".to_string()];
+        let result = filter_query_params("https://example.com/page", &keep);
+        assert_eq!(result, "https://example.com/page");
+    }
+
+    #[test]
+    fn filter_query_params_keeps_param_without_value() {
+        let keep = vec!["debug".to_string()];
+        let result = filter_query_params("https://example.com/page?debug&foo=bar", &keep);
+        assert_eq!(result, "https://example.com/page?debug");
+    }
+
+    #[test]
+    fn filter_query_params_preserves_order() {
+        let keep = vec!["c".to_string(), "a".to_string()];
+        let result = filter_query_params("https://example.com/?a=1&b=2&c=3", &keep);
+        assert_eq!(result, "https://example.com/?a=1&c=3");
+    }
+
+    #[test]
+    fn filter_query_params_single_kept_param() {
+        let keep = vec!["id".to_string()];
+        let result = filter_query_params("https://example.com/page?id=42&session=abc&tracking=xyz", &keep);
+        assert_eq!(result, "https://example.com/page?id=42");
     }
 }

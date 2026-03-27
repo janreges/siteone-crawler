@@ -126,6 +126,7 @@ pub struct CoreOptions {
     pub analyzer_filter_regex: Option<String>,
     pub add_random_query_params: bool,
     pub remove_query_params: bool,
+    pub keep_query_params: Vec<String>,
     pub transform_url: Vec<String>,
     pub force_relative_urls: bool,
 
@@ -300,6 +301,7 @@ impl CoreOptions {
             analyzer_filter_regex: None,
             add_random_query_params: false,
             remove_query_params: false,
+            keep_query_params: Vec::new(),
             transform_url: Vec::new(),
             force_relative_urls: false,
 
@@ -768,6 +770,11 @@ impl CoreOptions {
             "removeQueryParams" => {
                 if let Some(b) = value.as_bool() {
                     self.remove_query_params = b;
+                }
+            }
+            "keepQueryParams" => {
+                if let Some(arr) = value.as_array() {
+                    self.keep_query_params = arr.clone();
                 }
             }
             "transformUrl" => {
@@ -1489,6 +1496,11 @@ pub fn get_options() -> Options {
                 "--remove-query-params", Some("-rqp"), "removeQueryParams", OptionType::Bool, false,
                 "Remove URL query parameters from crawled URLs.",
                 Some("false"), false, false, None,
+            ),
+            CrawlerOption::new(
+                "--keep-query-param", Some("-kqp"), "keepQueryParams", OptionType::String, true,
+                "Keep only the specified query parameter(s) in discovered URLs. All other query parameters are removed. Can be specified multiple times. Ignored when `--remove-query-params` is active.",
+                None, true, true, None,
             ),
             CrawlerOption::new(
                 "--add-random-query-params", Some("-arqp"), "addRandomQueryParams", OptionType::Bool, false,
@@ -2676,6 +2688,7 @@ mod tests {
             analyzer_filter_regex: None,
             add_random_query_params: false,
             remove_query_params: false,
+            keep_query_params: Vec::new(),
             transform_url: Vec::new(),
             force_relative_urls: false,
             output_html_report: None,
