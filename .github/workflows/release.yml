@@ -244,32 +244,40 @@ jobs:
           fi
 
       - name: Build .deb package
-        if: runner.os == 'Linux' && !matrix.musl
+        if: runner.os == 'Linux'
         shell: bash
         run: |
           cargo install cargo-deb
-          cargo deb --no-build --no-strip --target ${{ matrix.target }}
+          if [[ "${{ matrix.musl }}" == "true" ]]; then
+            cargo deb --no-build --no-strip --target ${{ matrix.target }} --variant static
+          else
+            cargo deb --no-build --no-strip --target ${{ matrix.target }}
+          fi
           echo "DEB_PATH=$(ls target/${{ matrix.target }}/debian/*.deb)" >> "$GITHUB_ENV"
 
       - name: Build .rpm package
-        if: runner.os == 'Linux' && !matrix.musl
+        if: runner.os == 'Linux'
         shell: bash
         run: |
           cargo install cargo-generate-rpm
           mkdir -p target/release
           cp "target/${{ matrix.target }}/release/siteone-crawler" target/release/
+          if [[ "${{ matrix.musl }}" == "true" ]]; then
+            # Override package name for static/musl variant
+            sed -i 's/^name = "siteone-crawler"$/name = "siteone-crawler-static"/' Cargo.toml
+          fi
           cargo generate-rpm --target ${{ matrix.target }}
           echo "RPM_PATH=$(find target -name '*.rpm' -path '*/generate-rpm/*' | head -1)" >> "$GITHUB_ENV"
 
       - name: Upload .deb artifact
-        if: runner.os == 'Linux' && !matrix.musl
+        if: runner.os == 'Linux'
         uses: actions/upload-artifact@v7
         with:
           name: siteone-crawler-${{ matrix.artifact_suffix }}-deb
           path: ${{ env.DEB_PATH }}
 
       - name: Upload .rpm artifact
-        if: runner.os == 'Linux' && !matrix.musl
+        if: runner.os == 'Linux'
         uses: actions/upload-artifact@v7
         with:
           name: siteone-crawler-${{ matrix.artifact_suffix }}-rpm
@@ -442,7 +450,7 @@ jobs:
             | Windows | x64 | `siteone-crawler-v${{ steps.version.outputs.version }}-win-x64.zip` |
             | Windows | arm64 | `siteone-crawler-v${{ steps.version.outputs.version }}-win-arm64.zip` |
 
-            ### Linux packages
+            ### Linux packages (glibc — best performance, requires glibc 2.39+)
 
             | Format | Architecture | File |
             |--------|-------------|------|
@@ -450,6 +458,15 @@ jobs:
             | Debian/Ubuntu (.deb) | arm64 | `siteone-crawler_${{ steps.version.outputs.version }}-1_arm64.deb` |
             | Fedora/RHEL (.rpm) | x64 | `siteone-crawler-${{ steps.version.outputs.version }}-1.x86_64.rpm` |
             | Fedora/RHEL (.rpm) | arm64 | `siteone-crawler-${{ steps.version.outputs.version }}-1.aarch64.rpm` |
+
+            ### Linux packages (musl/static — any Linux, ~50–80% slower)
+
+            | Format | Architecture | File |
+            |--------|-------------|------|
+            | Debian/Ubuntu (.deb) | x64 | `siteone-crawler-static_${{ steps.version.outputs.version }}-1_amd64.deb` |
+            | Debian/Ubuntu (.deb) | arm64 | `siteone-crawler-static_${{ steps.version.outputs.version }}-1_arm64.deb` |
+            | Fedora/RHEL (.rpm) | x64 | `siteone-crawler-static-${{ steps.version.outputs.version }}-1.x86_64.rpm` |
+            | Fedora/RHEL (.rpm) | arm64 | `siteone-crawler-static-${{ steps.version.outputs.version }}-1.aarch64.rpm` |
             | Alpine (.apk) | x64 | `siteone-crawler-${{ steps.version.outputs.version }}-r1-x86_64.apk` |
             | Alpine (.apk) | arm64 | `siteone-crawler-${{ steps.version.outputs.version }}-r1-aarch64.apk` |
 
@@ -465,8 +482,11 @@ jobs:
             ### Install via package manager
 
             ```bash
-            # Debian/Ubuntu
+            # Debian/Ubuntu (glibc — Ubuntu 24.04+, Debian 13+)
             sudo dpkg -i siteone-crawler_${{ steps.version.outputs.version }}-1_amd64.deb
+
+            # Debian/Ubuntu (static/musl — older distributions)
+            sudo dpkg -i siteone-crawler-static_${{ steps.version.outputs.version }}-1_amd64.deb
 
             # Fedora/RHEL
             sudo dnf install ./siteone-crawler-${{ steps.version.outputs.version }}-1.x86_64.rpm

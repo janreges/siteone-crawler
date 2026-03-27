@@ -223,6 +223,17 @@ The binary is self-contained — no runtime dependencies required.
 ./siteone-crawler --url=https://my.domain.tld
 ```
 
+**🐧 Linux binary variants:**
+
+For Linux, two binary variants are provided:
+
+| Variant | Compatibility | Performance |
+|---------|--------------|-------------|
+| **glibc** (primary) | Requires glibc 2.39+ (Ubuntu 24.04+, Debian 13+, Fedora 40+) | Full native performance |
+| **musl** (compatible) | Any Linux distribution (statically linked, no dependencies) | ~50–80% slower due to musl memory allocator |
+
+The **glibc** variant is recommended for current distributions — it offers the best performance. If you are running an older distribution (e.g. Ubuntu 22.04, Debian 12) and encounter a `GLIBC_2.xx not found` error, use the **musl** variant instead. The musl binary is fully statically linked and runs on any Linux system regardless of the installed glibc version. The performance difference is mainly noticeable during CPU-intensive operations like offline and markdown exports.
+
 **Note for macOS users**: In case that Mac refuses to start the crawler from your Download folder, move the entire folder with the Crawler **via the terminal** to another location, for example to the homefolder `~`.
 
 ### 🍺 Homebrew (macOS / Linux)
@@ -239,6 +250,12 @@ curl -1sLf 'https://dl.cloudsmith.io/public/janreges/siteone-crawler/setup.deb.s
 sudo apt-get install siteone-crawler
 ```
 
+> **Older distributions (Ubuntu 22.04, Debian 11/12, etc.):** If you get a `GLIBC_X.XX not found` error, install the statically linked variant instead:
+> ```bash
+> sudo apt-get install siteone-crawler-static
+> ```
+> See [Linux binary variants](#-pre-built-binaries) for details on the performance difference.
+
 ### 🎩 Fedora / RHEL (dnf)
 
 ```bash
@@ -246,12 +263,18 @@ curl -1sLf 'https://dl.cloudsmith.io/public/janreges/siteone-crawler/setup.rpm.s
 sudo dnf install siteone-crawler
 ```
 
+> **Older distributions:** If you get a `GLIBC_X.XX not found` error, use `sudo dnf install siteone-crawler-static` instead.
+> See [Linux binary variants](#-pre-built-binaries) for details.
+
 ### 🦎 openSUSE / SLES (zypper)
 
 ```bash
 curl -1sLf 'https://dl.cloudsmith.io/public/janreges/siteone-crawler/setup.rpm.sh' | sudo -E bash
 sudo zypper install siteone-crawler
 ```
+
+> **Older distributions:** If you get a `GLIBC_X.XX not found` error, use `sudo zypper install siteone-crawler-static` instead.
+> See [Linux binary variants](#-pre-built-binaries) for details.
 
 ### 🏔️ Alpine Linux (apk)
 
@@ -273,6 +296,20 @@ cargo build --release
 
 # Run
 ./target/release/siteone-crawler --url=https://my.domain.tld
+```
+
+**Build statically linked (musl) binary:**
+
+```bash
+# Install musl toolchain (Ubuntu/Debian)
+sudo apt-get install musl-tools
+rustup target add x86_64-unknown-linux-musl
+
+# Build static binary (no system dependencies)
+cargo build --release --target x86_64-unknown-linux-musl
+
+# Run — works on any Linux distribution
+./target/x86_64-unknown-linux-musl/release/siteone-crawler --url=https://my.domain.tld
 ```
 
 ## ▶️ Usage

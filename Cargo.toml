@@ -96,6 +96,18 @@ assets = [
     ["LICENSE", "usr/share/doc/siteone-crawler/", "644"],
 ]
 
+[package.metadata.deb.variants.static]
+name = "siteone-crawler-static"
+depends = ""
+conflicts = "siteone-crawler"
+provides = "siteone-crawler"
+extended-description = """\
+Statically linked (musl) variant of SiteOne Crawler for maximum Linux compatibility. \
+This version runs on any Linux distribution regardless of the installed glibc version. \
+Install this if the standard siteone-crawler package reports a 'GLIBC not found' error. \
+Note: ~50–80% slower than the glibc variant for CPU-intensive operations (offline and \
+markdown export) due to the musl memory allocator."""
+
 [package.metadata.generate-rpm]
 assets = [
     { source = "target/release/siteone-crawler", dest = "/usr/bin/siteone-crawler", mode = "0755" },
