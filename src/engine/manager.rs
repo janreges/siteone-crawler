@@ -342,6 +342,35 @@ impl Manager {
             out.end();
         }
 
+        // Save text/JSON report files after output is finalized (includes quality scores,
+        // CI gate result, and summary that were missing when run_exporters captured content)
+        if self.options.output_text_file.is_some() || self.options.output_json_file.is_some() {
+            let initial_host = Some(self.options.get_initial_host(false));
+            let mut file_exporter = FileExporter::new(
+                None,
+                None,
+                self.options.output_json_file.clone(),
+                self.options.output_text_file.clone(),
+                self.options.add_timestamp_to_output_file,
+                self.options.add_host_to_output_file,
+                initial_host,
+            );
+            if let Ok(out) = output.lock() {
+                if let Some(text) = out.get_output_text() {
+                    file_exporter.set_text_output_content(text);
+                }
+                if let Some(json) = out.get_json_content() {
+                    file_exporter.set_json_output_content(json);
+                }
+            }
+            if let Ok(st) = status.lock()
+                && let Ok(out) = output.lock()
+                && let Err(e) = file_exporter.export(&st, &**out)
+            {
+                eprintln!("Error saving text/JSON report files: {}", e);
+            }
+        }
+
         if ci_exit_code != 0 {
             ci_exit_code
         } else if no_pages_crawled {
@@ -434,29 +463,21 @@ impl Manager {
             }
         }
 
-        // 4. FileExporter (saves HTML/JSON/text report files)
+        // 4. FileExporter for HTML report only (text/JSON files are saved later in
+        //    run_post_crawl after quality scores and summary have been added to output)
         {
             let initial_host = Some(options.get_initial_host(false));
             let mut file_exporter = FileExporter::new(
                 options.output_html_report.clone(),
                 options.html_report_options.clone(),
-                options.output_json_file.clone(),
-                options.output_text_file.clone(),
+                None,
+                None,
                 options.add_timestamp_to_output_file,
                 options.add_host_to_output_file,
                 initial_host,
             );
             if let Some(ref content) = html_report_content {
                 file_exporter.set_html_report_content(content.clone());
-            }
-            // Get text and JSON output content from the output
-            if let Ok(out) = output.lock() {
-                if let Some(text) = out.get_output_text() {
-                    file_exporter.set_text_output_content(text);
-                }
-                if let Some(json) = out.get_json_content() {
-                    file_exporter.set_json_output_content(json);
-                }
             }
             if file_exporter.should_be_activated() {
                 exporters.push(Box::new(file_exporter));
