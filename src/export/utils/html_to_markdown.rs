@@ -44,6 +44,7 @@ impl HtmlToMarkdownConverter {
             html: html.to_string(),
             excluded_selectors,
             implicit_excluded_selectors: vec![
+                // Hidden elements
                 ".hidden".to_string(),
                 ".hide".to_string(),
                 ".invisible".to_string(),
@@ -51,6 +52,19 @@ impl HtmlToMarkdownConverter {
                 ".md\\:sl-hidden".to_string(),
                 ".lg\\:hidden".to_string(),
                 ".md\\:hidden".to_string(),
+                // Cookie consent banners
+                ".cookie-panel".to_string(),
+                ".cookie-banner".to_string(),
+                ".cookie-consent".to_string(),
+                ".cookie-notice".to_string(),
+                ".cookie-bar".to_string(),
+                "#cookie-banner".to_string(),
+                "#cookie-consent".to_string(),
+                "#cookie-notice".to_string(),
+                "#cookiebanner".to_string(),
+                "#CybotCookiebotDialog".to_string(),
+                ".cc-window".to_string(),
+                "#onetrust-banner-sdk".to_string(),
             ],
             strong_delimiter: "**".to_string(),
             em_delimiter: "*".to_string(),
