@@ -405,9 +405,11 @@ impl MarkdownExporter {
             md_content = re.replace_all(&md_content, "\n\n").to_string();
         }
 
-        // Trim special chars
+        // Trim special chars (only whitespace from start, all special chars from end
+        // to preserve markdown-significant characters like # headings and - lists at the start)
         md_content = md_content
-            .trim_matches(|c: char| c == '\n' || c == '\t' || c == ' ' || c == '-' || c == '#' || c == '*')
+            .trim_start_matches(|c: char| c == '\n' || c == '\t' || c == ' ')
+            .trim_end_matches(|c: char| c == '\n' || c == '\t' || c == ' ' || c == '-' || c == '#' || c == '*')
             .to_string();
 
         // Fix excessive whitespace
