@@ -364,8 +364,8 @@ impl MarkdownExporter {
                         }
                     }
 
-                    // Keep allowed extensions
-                    if ["md", "jpg", "png", "gif", "webp", "avif"].contains(&ext.as_str()) {
+                    // Keep page links and images (disable-files targets downloadable documents)
+                    if ["md", "html", "htm", "jpg", "png", "gif", "webp", "avif"].contains(&ext.as_str()) {
                         return caps[0].to_string();
                     }
 
