@@ -1308,4 +1308,164 @@ mod tests {
         assert!(md.contains("Content"));
         assert!(!md.contains("alert"));
     }
+
+    // --- Tests for aria-hidden and role=menu exclusion ---
+
+    #[test]
+    fn test_aria_hidden_excluded() {
+        let converter = HtmlToMarkdownConverter::new(
+            "<div><p>Visible</p><div aria-hidden=\"true\"><p>Hidden mega-menu</p></div></div>",
+            vec![],
+        );
+        let md = converter.get_markdown();
+        assert!(md.contains("Visible"));
+        assert!(!md.contains("Hidden mega-menu"));
+    }
+
+    #[test]
+    fn test_aria_hidden_children_excluded() {
+        let converter = HtmlToMarkdownConverter::new(
+            "<div><p>Content</p><nav aria-hidden=\"true\"><ul><li><a href=\"/\">Home</a></li><li><a href=\"/about\">About</a></li></ul></nav></div>",
+            vec![],
+        );
+        let md = converter.get_markdown();
+        assert!(md.contains("Content"));
+        assert!(!md.contains("Home"));
+        assert!(!md.contains("About"));
+    }
+
+    #[test]
+    fn test_role_menu_excluded() {
+        let converter = HtmlToMarkdownConverter::new(
+            "<div><p>Page content</p><ul role=\"menu\"><li>Menu Item 1</li><li>Menu Item 2</li></ul></div>",
+            vec![],
+        );
+        let md = converter.get_markdown();
+        assert!(md.contains("Page content"));
+        assert!(!md.contains("Menu Item"));
+    }
+
+    // --- Tests for block element spacing ---
+
+    #[test]
+    fn test_adjacent_divs_have_spacing() {
+        let converter = HtmlToMarkdownConverter::new(
+            "<div>text one</div><div>text two</div>",
+            vec![],
+        );
+        let md = converter.get_markdown();
+        assert!(!md.contains("text onetext two"), "Adjacent divs should not concatenate: {}", md);
+        assert!(md.contains("text one"));
+        assert!(md.contains("text two"));
+    }
+
+    #[test]
+    fn test_adjacent_sections_have_spacing() {
+        let converter = HtmlToMarkdownConverter::new(
+            "<section><p>First</p></section><section><p>Second</p></section>",
+            vec![],
+        );
+        let md = converter.get_markdown();
+        assert!(!md.contains("FirstSecond"), "Adjacent sections should not concatenate: {}", md);
+    }
+
+    #[test]
+    fn test_span_remains_inline() {
+        let converter = HtmlToMarkdownConverter::new(
+            "<p>Hello <span>world</span> test</p>",
+            vec![],
+        );
+        let md = converter.get_markdown();
+        assert!(md.contains("Hello world test"));
+    }
+
+    #[test]
+    fn test_nested_divs_no_excessive_whitespace() {
+        let converter = HtmlToMarkdownConverter::new(
+            "<div><div><div>deep text</div></div></div>",
+            vec![],
+        );
+        let md = converter.get_markdown();
+        assert!(md.contains("deep text"));
+        // Should not have more than two consecutive newlines after normalization
+        assert!(!md.contains("\n\n\n"), "Nested divs should not produce excessive newlines");
+    }
+
+    #[test]
+    fn test_empty_div_produces_no_output() {
+        let converter = HtmlToMarkdownConverter::new(
+            "<p>Before</p><div></div><p>After</p>",
+            vec![],
+        );
+        let md = converter.get_markdown();
+        assert!(md.contains("Before"));
+        assert!(md.contains("After"));
+    }
+
+    // --- Tests for aria-label fallback on links ---
+
+    #[test]
+    fn test_link_aria_label_fallback() {
+        let converter = HtmlToMarkdownConverter::new(
+            r#"<a href="https://facebook.com/page" aria-label="Facebook"><svg><path d="M0 0"/></svg></a>"#,
+            vec![],
+        );
+        let md = converter.get_markdown();
+        assert!(md.contains("[Facebook](https://facebook.com/page)"), "Should use aria-label: {}", md);
+    }
+
+    #[test]
+    fn test_link_visible_text_preferred_over_aria_label() {
+        let converter = HtmlToMarkdownConverter::new(
+            r#"<a href="https://example.com" aria-label="Aria Label">Visible Text</a>"#,
+            vec![],
+        );
+        let md = converter.get_markdown();
+        assert!(md.contains("[Visible Text](https://example.com)"));
+        assert!(!md.contains("Aria Label"));
+    }
+
+    #[test]
+    fn test_link_url_fallback_without_aria_label() {
+        let converter = HtmlToMarkdownConverter::new(
+            r#"<a href="https://example.com"><svg></svg></a>"#,
+            vec![],
+        );
+        let md = converter.get_markdown();
+        assert!(md.contains("[https://example.com](https://example.com)"), "Should fall back to URL: {}", md);
+    }
+
+    #[test]
+    fn test_link_empty_aria_label_falls_back_to_url() {
+        let converter = HtmlToMarkdownConverter::new(
+            r#"<a href="https://example.com" aria-label="  "><svg></svg></a>"#,
+            vec![],
+        );
+        let md = converter.get_markdown();
+        assert!(md.contains("[https://example.com](https://example.com)"), "Empty aria-label should fall back to URL: {}", md);
+    }
+
+    // --- Tests for cookie banner exclusion ---
+
+    #[test]
+    fn test_cookie_banner_excluded() {
+        let converter = HtmlToMarkdownConverter::new(
+            "<div><p>Content</p><div class=\"cookie-banner\"><p>We use cookies</p><button>Accept</button></div></div>",
+            vec![],
+        );
+        let md = converter.get_markdown();
+        assert!(md.contains("Content"));
+        assert!(!md.contains("cookies"));
+    }
+
+    #[test]
+    fn test_onetrust_banner_excluded() {
+        let converter = HtmlToMarkdownConverter::new(
+            "<div><p>Content</p><div id=\"onetrust-banner-sdk\"><p>Cookie preferences</p></div></div>",
+            vec![],
+        );
+        let md = converter.get_markdown();
+        assert!(md.contains("Content"));
+        assert!(!md.contains("Cookie preferences"));
+    }
 }
