@@ -398,6 +398,11 @@ impl MarkdownExporter {
             md_content = re.replace_all(&md_content, "").to_string();
         }
 
+        // Remove table rows where all cells are empty (e.g. after content removal)
+        if let Ok(re) = Regex::new(r"(?m)^\|\s*(\|\s*)+$\n?") {
+            md_content = re.replace_all(&md_content, "").to_string();
+        }
+
         // Remove empty lines in code blocks
         md_content = md_content.replace("\\\n\n  -", "\\\n  -");
 
