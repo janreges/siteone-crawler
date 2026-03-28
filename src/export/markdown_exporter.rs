@@ -392,6 +392,12 @@ impl MarkdownExporter {
             md_content = re.replace_all(&md_content, "").to_string();
         }
 
+        // Remove links where text is a bare filename (fallback from removed media like <video>)
+        // e.g. [some-page.html](some-page.md) — real link text never looks like a raw filename
+        if let Ok(re) = Regex::new(r"(?m)^\[([^\]\s]+\.html?)\]\([^\)]+\)\s*$\n?") {
+            md_content = re.replace_all(&md_content, "").to_string();
+        }
+
         // Remove empty lines in code blocks
         md_content = md_content.replace("\\\n\n  -", "\\\n  -");
 
