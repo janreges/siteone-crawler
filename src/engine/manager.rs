@@ -402,7 +402,7 @@ impl Manager {
             None
         };
 
-        // Build list of activated exporters
+        // Build list of activated exporters (excluding offline/markdown which run separately)
         let mut exporters: Vec<Box<dyn Exporter>> = Vec::new();
 
         // 1. SitemapExporter
@@ -418,8 +418,8 @@ impl Manager {
             }
         }
 
-        // 2. OfflineWebsiteExporter
-        {
+        // 2. OfflineWebsiteExporter — run separately to collect exported file paths
+        let offline_paths = {
             let mut offline = OfflineWebsiteExporter::new();
             offline.set_offline_export_directory(options.offline_export_dir.clone());
             offline.set_offline_export_store_only_url_regex(options.offline_export_store_only_url_regex.clone());
@@ -434,12 +434,20 @@ impl Manager {
             offline.set_initial_parsed_url(initial_parsed);
             offline.set_content_processor_manager(crawler.get_content_processor_manager().clone());
             if offline.should_be_activated() {
-                exporters.push(Box::new(offline));
+                if let (Ok(st), Ok(out)) = (status.lock(), output.lock())
+                    && let Err(e) = offline.export(&st, &**out)
+                {
+                    st.add_critical_to_summary(offline.get_name(), &format!("{} error: {}", offline.get_name(), e));
+                }
+                let paths = offline.get_exported_file_paths().clone();
+                if paths.is_empty() { None } else { Some(paths) }
+            } else {
+                None
             }
-        }
+        };
 
-        // 3. MarkdownExporter
-        {
+        // 3. MarkdownExporter — run separately to collect exported file paths
+        let markdown_paths = {
             let mut markdown = MarkdownExporter::new();
             markdown.set_markdown_export_directory(options.markdown_export_dir.clone());
             markdown.set_markdown_export_single_file(options.markdown_export_single_file.clone());
@@ -459,8 +467,23 @@ impl Manager {
             markdown.set_initial_url(options.url.clone());
             markdown.set_content_processor_manager(crawler.get_content_processor_manager().clone());
             if markdown.should_be_activated() {
-                exporters.push(Box::new(markdown));
+                if let (Ok(st), Ok(out)) = (status.lock(), output.lock())
+                    && let Err(e) = markdown.export(&st, &**out)
+                {
+                    st.add_critical_to_summary(markdown.get_name(), &format!("{} error: {}", markdown.get_name(), e));
+                }
+                let paths = markdown.get_exported_file_paths().clone();
+                if paths.is_empty() { None } else { Some(paths) }
+            } else {
+                None
             }
+        };
+
+        // Inject exported file paths into JSON output results
+        if (offline_paths.is_some() || markdown_paths.is_some())
+            && let Ok(mut out) = output.lock()
+        {
+            out.set_export_file_paths(offline_paths.as_ref(), markdown_paths.as_ref());
         }
 
         // 4. FileExporter for HTML report only (text/JSON files are saved later in
@@ -523,7 +546,7 @@ impl Manager {
             }
         }
 
-        // Run each activated exporter
+        // Run remaining activated exporters (sitemap, file, mailer, upload)
         for exporter in &mut exporters {
             if let (Ok(st), Ok(out)) = (status.lock(), output.lock())
                 && let Err(e) = exporter.export(&st, &**out)

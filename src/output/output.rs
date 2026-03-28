@@ -95,6 +95,16 @@ pub trait Output: Send + Sync {
     fn get_json_content(&self) -> Option<String> {
         None
     }
+
+    /// Inject export file paths into results (for JSON output).
+    /// `offline_paths` maps URL -> relative offline file path.
+    /// `markdown_paths` maps URL -> relative markdown file path.
+    fn set_export_file_paths(
+        &mut self,
+        _offline_paths: Option<&HashMap<String, String>>,
+        _markdown_paths: Option<&HashMap<String, String>>,
+    ) {
+    }
 }
 
 /// Basic crawl statistics, used by add_total_stats().

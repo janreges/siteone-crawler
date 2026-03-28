@@ -3,6 +3,7 @@
 //
 // Converts crawled HTML pages to Markdown format.
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -45,6 +46,8 @@ pub struct MarkdownExporter {
     ignore_regexes: Vec<String>,
     initial_url: String,
     content_processor_manager: Option<Arc<Mutex<ContentProcessorManager>>>,
+    /// Maps URL -> relative file path for successfully exported files
+    exported_file_paths: HashMap<String, String>,
 }
 
 impl Default for MarkdownExporter {
@@ -71,6 +74,7 @@ impl MarkdownExporter {
             ignore_regexes: Vec::new(),
             initial_url: String::new(),
             content_processor_manager: None,
+            exported_file_paths: HashMap::new(),
         }
     }
 
@@ -134,8 +138,13 @@ impl MarkdownExporter {
         self.content_processor_manager = Some(cpm);
     }
 
+    /// Get the mapping of URL -> relative file path for all successfully exported files.
+    pub fn get_exported_file_paths(&self) -> &HashMap<String, String> {
+        &self.exported_file_paths
+    }
+
     /// Store a file to the markdown export directory.
-    fn store_file(&self, visited_url: &VisitedUrl, status: &Status) -> CrawlerResult<()> {
+    fn store_file(&mut self, visited_url: &VisitedUrl, status: &Status) -> CrawlerResult<()> {
         let export_dir = self
             .markdown_export_directory
             .as_ref()
@@ -273,6 +282,15 @@ impl MarkdownExporter {
             // Normalize the markdown file
             self.normalize_markdown_file(&md_file_path);
         }
+
+        // Record the mapping — for HTML files, use the .md path
+        let final_relative_path = if sanitized_path.ends_with(".html") {
+            format!("{}md", &sanitized_path[..sanitized_path.len() - 4])
+        } else {
+            sanitized_path.clone()
+        };
+        self.exported_file_paths
+            .insert(visited_url.url.clone(), final_relative_path);
 
         Ok(())
     }

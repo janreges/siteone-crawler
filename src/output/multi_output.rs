@@ -142,6 +142,16 @@ impl Output for MultiOutput {
         }
     }
 
+    fn set_export_file_paths(
+        &mut self,
+        offline_paths: Option<&HashMap<String, String>>,
+        markdown_paths: Option<&HashMap<String, String>>,
+    ) {
+        for output in &mut self.outputs {
+            output.set_export_file_paths(offline_paths, markdown_paths);
+        }
+    }
+
     fn get_type(&self) -> OutputType {
         OutputType::Multi
     }

@@ -250,6 +250,32 @@ impl Output for JsonOutput {
         }
     }
 
+    fn set_export_file_paths(
+        &mut self,
+        offline_paths: Option<&HashMap<String, String>>,
+        markdown_paths: Option<&HashMap<String, String>>,
+    ) {
+        if let Some(Value::Array(results)) = self.json.get_mut("results") {
+            for result in results.iter_mut() {
+                if let Some(url) = result.get("url").and_then(|v| v.as_str()) {
+                    let url_owned = url.to_string();
+                    if let Some(paths) = offline_paths
+                        && let Some(path) = paths.get(&url_owned)
+                        && let Some(obj) = result.as_object_mut()
+                    {
+                        obj.insert("offlineFilePath".to_string(), Value::String(path.clone()));
+                    }
+                    if let Some(paths) = markdown_paths
+                        && let Some(path) = paths.get(&url_owned)
+                        && let Some(obj) = result.as_object_mut()
+                    {
+                        obj.insert("markdownFilePath".to_string(), Value::String(path.clone()));
+                    }
+                }
+            }
+        }
+    }
+
     fn get_type(&self) -> OutputType {
         OutputType::Json
     }
@@ -381,5 +407,105 @@ mod tests {
         output.add_quality_scores(&scores);
         let json = parse_json(&output);
         assert!(json.get("qualityScores").is_some());
+    }
+
+    fn add_sample_rows(output: &mut JsonOutput) {
+        output.add_table_header();
+        let headers = HashMap::new();
+        let extras = HashMap::new();
+        output.add_table_row(
+            &headers,
+            "https://example.com/",
+            200,
+            0.1,
+            5000,
+            1,
+            &extras,
+            "1/3",
+            0,
+            None,
+        );
+        output.add_table_row(
+            &headers,
+            "https://example.com/about",
+            200,
+            0.2,
+            3000,
+            1,
+            &extras,
+            "2/3",
+            0,
+            None,
+        );
+        output.add_table_row(
+            &headers,
+            "https://example.com/missing",
+            404,
+            0.05,
+            1000,
+            1,
+            &extras,
+            "3/3",
+            0,
+            None,
+        );
+    }
+
+    #[test]
+    fn export_file_paths_offline_only() {
+        let mut output = make_json_output();
+        add_sample_rows(&mut output);
+
+        let mut offline = HashMap::new();
+        offline.insert("https://example.com/".to_string(), "index.html".to_string());
+        offline.insert("https://example.com/about".to_string(), "about.html".to_string());
+
+        output.set_export_file_paths(Some(&offline), None);
+
+        let json = parse_json(&output);
+        let results = json["results"].as_array().unwrap();
+        assert_eq!(results[0]["offlineFilePath"], "index.html");
+        assert_eq!(results[1]["offlineFilePath"], "about.html");
+        assert!(results[2].get("offlineFilePath").is_none());
+        // No markdown paths
+        assert!(results[0].get("markdownFilePath").is_none());
+    }
+
+    #[test]
+    fn export_file_paths_both() {
+        let mut output = make_json_output();
+        add_sample_rows(&mut output);
+
+        let mut offline = HashMap::new();
+        offline.insert("https://example.com/".to_string(), "index.html".to_string());
+
+        let mut markdown = HashMap::new();
+        markdown.insert("https://example.com/".to_string(), "index.md".to_string());
+        markdown.insert("https://example.com/about".to_string(), "about.md".to_string());
+
+        output.set_export_file_paths(Some(&offline), Some(&markdown));
+
+        let json = parse_json(&output);
+        let results = json["results"].as_array().unwrap();
+        assert_eq!(results[0]["offlineFilePath"], "index.html");
+        assert_eq!(results[0]["markdownFilePath"], "index.md");
+        assert!(results[1].get("offlineFilePath").is_none());
+        assert_eq!(results[1]["markdownFilePath"], "about.md");
+        // 404 page has neither
+        assert!(results[2].get("offlineFilePath").is_none());
+        assert!(results[2].get("markdownFilePath").is_none());
+    }
+
+    #[test]
+    fn export_file_paths_none_changes_nothing() {
+        let mut output = make_json_output();
+        add_sample_rows(&mut output);
+
+        output.set_export_file_paths(None, None);
+
+        let json = parse_json(&output);
+        let results = json["results"].as_array().unwrap();
+        assert!(results[0].get("offlineFilePath").is_none());
+        assert!(results[0].get("markdownFilePath").is_none());
     }
 }

@@ -3,6 +3,7 @@
 //
 // Saves all crawled pages to local filesystem for offline browsing.
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -49,6 +50,8 @@ pub struct OfflineWebsiteExporter {
     is_domain_allowed_for_static_files: Option<Box<dyn Fn(&str) -> bool + Send + Sync>>,
     #[allow(clippy::type_complexity)]
     is_external_domain_allowed_for_crawling: Option<Box<dyn Fn(&str) -> bool + Send + Sync>>,
+    /// Maps URL -> relative file path for successfully exported files
+    exported_file_paths: HashMap<String, String>,
 }
 
 impl Default for OfflineWebsiteExporter {
@@ -73,6 +76,7 @@ impl OfflineWebsiteExporter {
             content_processor_manager: None,
             is_domain_allowed_for_static_files: None,
             is_external_domain_allowed_for_crawling: None,
+            exported_file_paths: HashMap::new(),
         }
     }
 
@@ -129,8 +133,13 @@ impl OfflineWebsiteExporter {
         self.is_external_domain_allowed_for_crawling = Some(crawling);
     }
 
+    /// Get the mapping of URL -> relative file path for all successfully exported files.
+    pub fn get_exported_file_paths(&self) -> &HashMap<String, String> {
+        &self.exported_file_paths
+    }
+
     /// Store a single file to the offline export directory.
-    fn store_file(&self, visited_url: &VisitedUrl, status: &Status, _output: &dyn Output) -> CrawlerResult<()> {
+    fn store_file(&mut self, visited_url: &VisitedUrl, status: &Status, _output: &dyn Output) -> CrawlerResult<()> {
         let export_dir = self
             .offline_export_directory
             .as_ref()
@@ -235,22 +244,30 @@ impl OfflineWebsiteExporter {
             status.add_notice_to_summary("offline-exporter-store-file-ignored", &message);
         }
 
-        if save_file && let Err(e) = fs::write(&store_file_path, &final_bytes) {
-            let has_extension = Regex::new(r"(?i)\.[a-z0-9\-]{1,15}$")
-                .map(|re| re.is_match(&store_file_path))
-                .unwrap_or(false);
+        if save_file {
+            match fs::write(&store_file_path, &final_bytes) {
+                Ok(()) => {
+                    self.exported_file_paths
+                        .insert(visited_url.url.clone(), sanitized_path.clone());
+                }
+                Err(e) => {
+                    let has_extension = Regex::new(r"(?i)\.[a-z0-9\-]{1,15}$")
+                        .map(|re| re.is_match(&store_file_path))
+                        .unwrap_or(false);
 
-            if has_extension && !self.ignore_store_file_error {
-                return Err(CrawlerError::Export(format!(
-                    "Cannot store file '{}': {}",
-                    store_file_path, e
-                )));
-            } else {
-                let message = format!(
-                    "Cannot store file '{}' (undefined extension). Original URL: {}",
-                    store_file_path, visited_url.url
-                );
-                status.add_notice_to_summary("offline-exporter-store-file-error", &message);
+                    if has_extension && !self.ignore_store_file_error {
+                        return Err(CrawlerError::Export(format!(
+                            "Cannot store file '{}': {}",
+                            store_file_path, e
+                        )));
+                    } else {
+                        let message = format!(
+                            "Cannot store file '{}' (undefined extension). Original URL: {}",
+                            store_file_path, visited_url.url
+                        );
+                        status.add_notice_to_summary("offline-exporter-store-file-error", &message);
+                    }
+                }
             }
         }
 
