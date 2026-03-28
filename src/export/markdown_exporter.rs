@@ -351,8 +351,10 @@ impl MarkdownExporter {
                 .replace_all(&md_content, |caps: &regex::Captures| {
                     let url = caps.get(2).map_or("", |m| m.as_str());
 
-                    // Skip http(s) URLs (was negative lookahead in original)
-                    if url.starts_with("http://") || url.starts_with("https://") {
+                    // Skip http(s), tel:, mailto: and other protocol URLs
+                    if url.starts_with("http://") || url.starts_with("https://")
+                        || url.starts_with("tel:") || url.starts_with("mailto:")
+                    {
                         return caps[0].to_string();
                     }
 
