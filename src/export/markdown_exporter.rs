@@ -336,6 +336,10 @@ impl MarkdownExporter {
             if let Ok(re) = Regex::new(r"!\[.*?\]\(.*?\)") {
                 md_content = re.replace_all(&md_content, "").to_string();
             }
+            // Normalize leading whitespace inside link text: [ text](url) → [text](url)
+            if let Ok(re) = Regex::new(r"\[\s+([^\]]+)\]\(") {
+                md_content = re.replace_all(&md_content, "[$1](").to_string();
+            }
         }
 
         // Disable files if configured
@@ -378,6 +382,11 @@ impl MarkdownExporter {
 
         // Remove empty links
         if let Ok(re) = Regex::new(r"\[[^\]]*\]\(\)") {
+            md_content = re.replace_all(&md_content, "").to_string();
+        }
+
+        // Remove empty list items (e.g. after disabling images and files)
+        if let Ok(re) = Regex::new(r"(?m)^\s*[-*+]\s*$\n?") {
             md_content = re.replace_all(&md_content, "").to_string();
         }
 
