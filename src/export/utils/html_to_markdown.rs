@@ -52,6 +52,9 @@ impl HtmlToMarkdownConverter {
                 ".md\\:sl-hidden".to_string(),
                 ".lg\\:hidden".to_string(),
                 ".md\\:hidden".to_string(),
+                // ARIA hidden and menu elements
+                "[aria-hidden='true']".to_string(),
+                "[role='menu']".to_string(),
                 // Cookie consent banners
                 ".cookie-panel".to_string(),
                 ".cookie-banner".to_string(),
