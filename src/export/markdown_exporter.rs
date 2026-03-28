@@ -1079,6 +1079,7 @@ fn extract_regex_pattern(input: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     #[test]
     fn test_should_be_activated() {
@@ -1110,5 +1111,199 @@ mod tests {
         let input = "[\n![image](src)](link)";
         let result = exporter.fix_multiline_images(input);
         assert_eq!(result, "[![image](src)](link)");
+    }
+
+    // --- Helper to test normalize_markdown_file via temp file ---
+
+    fn normalize(exporter: &MarkdownExporter, content: &str) -> String {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static COUNTER: AtomicUsize = AtomicUsize::new(0);
+        let id = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let path = format!("/tmp/siteone_test_normalize_{}.md", id);
+        fs::write(&path, content).unwrap();
+        exporter.normalize_markdown_file(&path);
+        let result = fs::read_to_string(&path).unwrap();
+        let _ = fs::remove_file(&path);
+        result
+    }
+
+    // --- Tests for d2f9e51: preserve heading markers when trimming ---
+
+    #[test]
+    fn test_trim_preserves_heading_at_start() {
+        let exporter = MarkdownExporter::new();
+        let result = normalize(&exporter, "# My Heading\n\nSome text.");
+        assert!(result.starts_with("# My Heading"), "Heading should be preserved at start: {:?}", result);
+    }
+
+    #[test]
+    fn test_trim_removes_special_chars_at_end() {
+        let exporter = MarkdownExporter::new();
+        let result = normalize(&exporter, "Some text\n\n---\n\n###\n\n");
+        assert!(!result.ends_with('#'));
+        assert!(!result.ends_with('-'));
+    }
+
+    // --- Tests for 2a07ac4: preserve .html/.htm in disable-files ---
+
+    #[test]
+    fn test_disable_files_preserves_html_links() {
+        let mut exporter = MarkdownExporter::new();
+        exporter.set_markdown_disable_files(true);
+        // Note: .html → .md conversion runs first, so page.html becomes page.md
+        let result = normalize(&exporter, "[Click here](page.html)\n[Download](doc.pdf)");
+        assert!(result.contains("[Click here](page.md)"), "Page links should be preserved (as .md): {:?}", result);
+        assert!(!result.contains("doc.pdf"), "PDF links should be removed: {:?}", result);
+    }
+
+    #[test]
+    fn test_disable_files_preserves_htm_links() {
+        let mut exporter = MarkdownExporter::new();
+        exporter.set_markdown_disable_files(true);
+        let result = normalize(&exporter, "[Page](old.htm)");
+        assert!(result.contains("[Page](old.htm)"), "HTM links should be preserved: {:?}", result);
+    }
+
+    #[test]
+    fn test_disable_files_preserves_md_links() {
+        let mut exporter = MarkdownExporter::new();
+        exporter.set_markdown_disable_files(true);
+        let result = normalize(&exporter, "[About](about.md)");
+        assert!(result.contains("[About](about.md)"), "MD links should be preserved: {:?}", result);
+    }
+
+    // --- Tests for 9a6df27: preserve tel: and mailto: links ---
+
+    #[test]
+    fn test_disable_files_preserves_tel_links() {
+        let mut exporter = MarkdownExporter::new();
+        exporter.set_markdown_disable_files(true);
+        let result = normalize(&exporter, "[Call us](tel:+420123456789)");
+        assert!(result.contains("[Call us](tel:+420123456789)"), "tel: links should be preserved: {:?}", result);
+    }
+
+    #[test]
+    fn test_disable_files_preserves_mailto_links() {
+        let mut exporter = MarkdownExporter::new();
+        exporter.set_markdown_disable_files(true);
+        let result = normalize(&exporter, "[Email](mailto:info@example.com)");
+        assert!(result.contains("[Email](mailto:info@example.com)"), "mailto: links should be preserved: {:?}", result);
+    }
+
+    #[test]
+    fn test_disable_files_preserves_https_links() {
+        let mut exporter = MarkdownExporter::new();
+        exporter.set_markdown_disable_files(true);
+        let result = normalize(&exporter, "Text\n\n[External](https://example.com/page)\n\nMore");
+        assert!(result.contains("[External](https://example.com/page)"), "HTTPS links should be preserved: {:?}", result);
+    }
+
+    #[test]
+    fn test_disable_files_removes_pdf() {
+        let mut exporter = MarkdownExporter::new();
+        exporter.set_markdown_disable_files(true);
+        let result = normalize(&exporter, "[Manual](manual.pdf)");
+        assert!(!result.contains("manual.pdf"), "PDF should be removed: {:?}", result);
+    }
+
+    // --- Tests for 8606edc: empty list items + link text whitespace ---
+
+    #[test]
+    fn test_empty_list_items_removed() {
+        let exporter = MarkdownExporter::new();
+        let result = normalize(&exporter, "Text\n\n- Item 1\n- \n- Item 2");
+        assert!(result.contains("Item 1"), "Item 1 should be present: {:?}", result);
+        assert!(result.contains("Item 2"), "Item 2 should be present: {:?}", result);
+    }
+
+    #[test]
+    fn test_disable_images_normalizes_link_whitespace() {
+        let mut exporter = MarkdownExporter::new();
+        exporter.set_markdown_disable_images(true);
+        let result = normalize(&exporter, "Text\n\n[ Some text](page.md)");
+        assert!(result.contains("[Some text](page.md)"), "Leading whitespace in link text should be removed: {:?}", result);
+    }
+
+    #[test]
+    fn test_disable_images_removes_standard_images() {
+        let mut exporter = MarkdownExporter::new();
+        exporter.set_markdown_disable_images(true);
+        let result = normalize(&exporter, "Text before\n\n![Alt text](image.png)\n\nText after");
+        assert!(!result.contains("![Alt text]"), "Images should be removed: {:?}", result);
+        assert!(result.contains("Text before"));
+        assert!(result.contains("Text after"));
+    }
+
+    // --- Tests for 9e1def9 + 274439e: orphaned filename links ---
+
+    #[test]
+    fn test_orphaned_filename_link_removed() {
+        let exporter = MarkdownExporter::new();
+        let result = normalize(&exporter, "## Heading\n\n[some-page.html](some-page.md)\n\nReal content");
+        assert!(!result.contains("some-page.html"), "Orphaned filename link should be removed: {:?}", result);
+        assert!(result.contains("Real content"));
+    }
+
+    #[test]
+    fn test_orphaned_filename_link_with_leading_whitespace() {
+        let exporter = MarkdownExporter::new();
+        let result = normalize(&exporter, "## Heading\n\n [my-page.html](my-page.md)\n\nContent");
+        assert!(!result.contains("my-page.html"), "Indented orphaned link should be removed: {:?}", result);
+    }
+
+    #[test]
+    fn test_real_link_text_not_removed() {
+        let exporter = MarkdownExporter::new();
+        // .html → .md conversion runs first
+        let result = normalize(&exporter, "[Click here](page.html)\n\nSome text");
+        assert!(result.contains("[Click here](page.md)"), "Links with real text should be kept: {:?}", result);
+    }
+
+    // --- Tests for b8511cc: empty table rows ---
+
+    #[test]
+    fn test_empty_table_rows_removed() {
+        let exporter = MarkdownExporter::new();
+        let result = normalize(&exporter, "| Header |\n| --- |\n| | |\n| Data |\n");
+        assert!(!result.contains("| | |"), "Empty table rows should be removed: {:?}", result);
+        assert!(result.contains("Data"));
+    }
+
+    #[test]
+    fn test_table_row_with_content_preserved() {
+        let exporter = MarkdownExporter::new();
+        let result = normalize(&exporter, "| Col1 | Col2 |\n| --- | --- |\n| A | B |\n");
+        assert!(result.contains("| A | B |"));
+    }
+
+    // --- Tests for move_content_before_main_heading_to_end ---
+
+    #[test]
+    fn test_move_content_before_h1() {
+        let mut exporter = MarkdownExporter::new();
+        exporter.set_markdown_move_content_before_h1_to_end(true);
+        let result = exporter.move_content_before_main_heading_to_end(
+            "Nav content\n\n# Main Title\n\nPage body"
+        );
+        assert!(result.starts_with("# Main Title"), "Should start with heading: {:?}", result);
+        assert!(result.contains("Nav content"));
+        assert!(result.contains("---"));
+    }
+
+    #[test]
+    fn test_move_content_disabled() {
+        let exporter = MarkdownExporter::new();
+        let input = "Nav content\n\n# Main Title\n\nPage body";
+        let result = exporter.move_content_before_main_heading_to_end(input);
+        assert_eq!(result, input, "Should return unchanged when disabled");
+    }
+
+    #[test]
+    fn test_move_content_nothing_before_h1() {
+        let mut exporter = MarkdownExporter::new();
+        exporter.set_markdown_move_content_before_h1_to_end(true);
+        let input = "# Title\n\nBody text";
+        let result = exporter.move_content_before_main_heading_to_end(input);
+        assert_eq!(result, input, "Should return unchanged when nothing before h1");
     }
 }
