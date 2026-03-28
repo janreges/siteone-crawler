@@ -421,9 +421,19 @@ impl HtmlToMarkdownConverter {
                     | "textarea" | "script" | "style" | "noscript" | "head" | "meta" | "link" | "iframe" | "frame" => {
                         String::new()
                     }
-                    // Container elements - process children
+                    // Block container elements - wrap with newlines to prevent text concatenation
                     "nav" | "header" | "footer" | "aside" | "article" | "section" | "main" | "figure"
-                    | "figcaption" | "div" | "span" => self.get_inner_markdown(node, document, excluded),
+                    | "figcaption" | "div" => {
+                        let inner = self.get_inner_markdown(node, document, excluded);
+                        let trimmed = inner.trim();
+                        if trimmed.is_empty() {
+                            String::new()
+                        } else {
+                            format!("\n\n{}\n\n", trimmed)
+                        }
+                    }
+                    // Inline container elements
+                    "span" => self.get_inner_markdown(node, document, excluded),
                     _ => self.get_inner_markdown(node, document, excluded),
                 }
             }
