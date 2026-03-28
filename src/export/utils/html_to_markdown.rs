@@ -566,7 +566,14 @@ impl HtmlToMarkdownConverter {
 
             let text = self.collapse_inline_whitespace(&self.get_inner_markdown(node, document, excluded));
 
-            let text = if text.is_empty() { href.clone() } else { text };
+            let text = if !text.is_empty() {
+                text
+            } else if let Some(aria_label) = el.attr("aria-label") {
+                let label = aria_label.trim().to_string();
+                if label.is_empty() { href.clone() } else { label }
+            } else {
+                href.clone()
+            };
 
             let title = el.attr("title").unwrap_or("").to_string();
 
