@@ -57,6 +57,7 @@ GIF animation of the crawler in action (also available as a [▶️ video](https
         + [SEO and OpenGraph analyzer](#seo-and-opengraph-analyzer)
         + [Slowest URL analyzer](#slowest-url-analyzer)
         + [Built-in HTTP server](#built-in-http-server)
+        + [HTML-to-Markdown conversion](#html-to-markdown-conversion)
         + [CI/CD settings](#cicd-settings)
 - [🏆 Quality Scoring](#-quality-scoring)
 - [🔄 CI/CD Integration](#-cicd-integration)
@@ -82,6 +83,7 @@ In short, the main benefits can be summarized in these points:
 - **📝 Website to markdown converter** - export the entire website to browsable text markdown (viewable on GitHub or any
   text editor), or generate a **single-file markdown** with smart header/footer deduplication — ideal for **feeding to AI
   tools**. Includes a **built-in web server** that renders markdown exports as styled HTML pages.
+  Also supports **standalone HTML-to-Markdown conversion** of local files (`--html-to-markdown`).
   See [markdown examples](https://github.com/janreges/siteone-crawler-markdown-examples/).
 - **🗺️ Sitemap generator** - allows you to generate `sitemap.xml` and `sitemap.txt` files with a list of all pages on your
   website
@@ -198,10 +200,18 @@ Built-in web server:
   pages with tables, dark/light mode, breadcrumb navigation, and accordion support — perfect for browsing and sharing
   the export locally or on a network
 
+Standalone HTML-to-Markdown conversion:
+
+- use `--html-to-markdown=<file>` to convert a **local HTML file** directly to Markdown without crawling any website
+- outputs clean Markdown to **stdout** (pipe-friendly) or to a file with `--html-to-markdown-output=<file>`
+- uses the same conversion pipeline as `--markdown-export-dir` — including all cleanup, accordion collapsing, code language detection, and implicit exclusions (cookie banners, `aria-hidden` elements, `role="menu"` dropdowns)
+- respects `--markdown-disable-images`, `--markdown-disable-files`, `--markdown-exclude-selector`, and `--markdown-move-content-before-h1-to-end`
+- does **not** rewrite links (`.html` → `.md`) since the file is standalone with no site context
+
 💡 Tip: you can push the exported markdown folder to your GitHub repository, where it will be automatically rendered as a browsable
 documentation. You can look at the [examples](https://github.com/janreges/siteone-crawler-markdown-examples/) of converted websites to markdown.
 
-See all available [markdown exporter options](#markdown-exporter-options).
+See all available [markdown exporter options](#markdown-exporter-options) and [HTML-to-Markdown conversion options](#html-to-markdown-conversion).
 
 ### 🗺️ Sitemap generator
 
@@ -639,6 +649,35 @@ Browse exported markdown or offline HTML files through a local web server with a
 
 # Browse offline export on custom port, accessible from network
 ./siteone-crawler --serve-offline=./exports/offline --serve-port=9000 --serve-bind-address=0.0.0.0
+```
+
+### HTML-to-Markdown conversion
+
+Convert a local HTML file to clean Markdown without crawling. Uses the same conversion pipeline as the markdown exporter.
+
+| Parameter | Description |
+|-----------|-------------|
+| `--html-to-markdown=<file>` | Convert a local HTML file to Markdown and print to stdout. No crawling is performed.<br>Respects `--markdown-disable-images`, `--markdown-disable-files`, `--markdown-move-content-before-h1-to-end`, and `--markdown-exclude-selector`. |
+| `--html-to-markdown-output=<file>` | Write the converted Markdown to a file instead of stdout. Requires `--html-to-markdown`. |
+
+**Examples:**
+
+```bash
+# Convert HTML file to Markdown (printed to stdout)
+./siteone-crawler --html-to-markdown=page.html
+
+# Convert and save to a file
+./siteone-crawler --html-to-markdown=page.html --html-to-markdown-output=page.md
+
+# Convert with options: remove images, exclude navigation, move header below h1
+./siteone-crawler --html-to-markdown=page.html \
+  --markdown-disable-images \
+  --markdown-exclude-selector=nav \
+  --markdown-move-content-before-h1-to-end
+
+# Pipe to other tools (e.g. clipboard, AI, wc)
+./siteone-crawler --html-to-markdown=page.html | pbcopy
+./siteone-crawler --html-to-markdown=page.html | wc -l
 ```
 
 ### CI/CD settings

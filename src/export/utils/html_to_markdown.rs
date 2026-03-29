@@ -1349,12 +1349,13 @@ mod tests {
 
     #[test]
     fn test_adjacent_divs_have_spacing() {
-        let converter = HtmlToMarkdownConverter::new(
-            "<div>text one</div><div>text two</div>",
-            vec![],
-        );
+        let converter = HtmlToMarkdownConverter::new("<div>text one</div><div>text two</div>", vec![]);
         let md = converter.get_markdown();
-        assert!(!md.contains("text onetext two"), "Adjacent divs should not concatenate: {}", md);
+        assert!(
+            !md.contains("text onetext two"),
+            "Adjacent divs should not concatenate: {}",
+            md
+        );
         assert!(md.contains("text one"));
         assert!(md.contains("text two"));
     }
@@ -1366,37 +1367,35 @@ mod tests {
             vec![],
         );
         let md = converter.get_markdown();
-        assert!(!md.contains("FirstSecond"), "Adjacent sections should not concatenate: {}", md);
+        assert!(
+            !md.contains("FirstSecond"),
+            "Adjacent sections should not concatenate: {}",
+            md
+        );
     }
 
     #[test]
     fn test_span_remains_inline() {
-        let converter = HtmlToMarkdownConverter::new(
-            "<p>Hello <span>world</span> test</p>",
-            vec![],
-        );
+        let converter = HtmlToMarkdownConverter::new("<p>Hello <span>world</span> test</p>", vec![]);
         let md = converter.get_markdown();
         assert!(md.contains("Hello world test"));
     }
 
     #[test]
     fn test_nested_divs_no_excessive_whitespace() {
-        let converter = HtmlToMarkdownConverter::new(
-            "<div><div><div>deep text</div></div></div>",
-            vec![],
-        );
+        let converter = HtmlToMarkdownConverter::new("<div><div><div>deep text</div></div></div>", vec![]);
         let md = converter.get_markdown();
         assert!(md.contains("deep text"));
         // Should not have more than two consecutive newlines after normalization
-        assert!(!md.contains("\n\n\n"), "Nested divs should not produce excessive newlines");
+        assert!(
+            !md.contains("\n\n\n"),
+            "Nested divs should not produce excessive newlines"
+        );
     }
 
     #[test]
     fn test_empty_div_produces_no_output() {
-        let converter = HtmlToMarkdownConverter::new(
-            "<p>Before</p><div></div><p>After</p>",
-            vec![],
-        );
+        let converter = HtmlToMarkdownConverter::new("<p>Before</p><div></div><p>After</p>", vec![]);
         let md = converter.get_markdown();
         assert!(md.contains("Before"));
         assert!(md.contains("After"));
@@ -1411,7 +1410,11 @@ mod tests {
             vec![],
         );
         let md = converter.get_markdown();
-        assert!(md.contains("[Facebook](https://facebook.com/page)"), "Should use aria-label: {}", md);
+        assert!(
+            md.contains("[Facebook](https://facebook.com/page)"),
+            "Should use aria-label: {}",
+            md
+        );
     }
 
     #[test]
@@ -1427,12 +1430,13 @@ mod tests {
 
     #[test]
     fn test_link_url_fallback_without_aria_label() {
-        let converter = HtmlToMarkdownConverter::new(
-            r#"<a href="https://example.com"><svg></svg></a>"#,
-            vec![],
-        );
+        let converter = HtmlToMarkdownConverter::new(r#"<a href="https://example.com"><svg></svg></a>"#, vec![]);
         let md = converter.get_markdown();
-        assert!(md.contains("[https://example.com](https://example.com)"), "Should fall back to URL: {}", md);
+        assert!(
+            md.contains("[https://example.com](https://example.com)"),
+            "Should fall back to URL: {}",
+            md
+        );
     }
 
     #[test]
@@ -1442,7 +1446,11 @@ mod tests {
             vec![],
         );
         let md = converter.get_markdown();
-        assert!(md.contains("[https://example.com](https://example.com)"), "Empty aria-label should fall back to URL: {}", md);
+        assert!(
+            md.contains("[https://example.com](https://example.com)"),
+            "Empty aria-label should fall back to URL: {}",
+            md
+        );
     }
 
     // --- Tests for cookie banner exclusion ---

@@ -93,6 +93,52 @@ async fn main() {
         return;
     }
 
+    // Check for html-to-markdown mode (standalone file conversion, no crawling)
+    if let Some(html_file) = initiator.get_options().html_to_markdown_file.clone() {
+        let options = initiator.get_options();
+        match siteone_crawler::export::markdown_exporter::convert_html_file_to_markdown(
+            &html_file,
+            options.markdown_exclude_selector.clone(),
+            options.markdown_disable_images,
+            options.markdown_disable_files,
+            options.markdown_move_content_before_h1_to_end,
+        ) {
+            Ok(markdown) => {
+                if let Some(output_path) = &options.html_to_markdown_output {
+                    if let Err(e) = std::fs::write(output_path, &markdown) {
+                        eprintln!(
+                            "{}",
+                            siteone_crawler::utils::get_color_text(
+                                &format!("ERROR: Cannot write output file '{}': {}", output_path, e),
+                                "red",
+                                false,
+                            )
+                        );
+                        std::process::exit(1);
+                    }
+                    eprintln!(
+                        "{}",
+                        siteone_crawler::utils::get_color_text(
+                            &format!("Markdown written to '{}'", output_path),
+                            "green",
+                            false,
+                        )
+                    );
+                } else {
+                    print!("{}", markdown);
+                }
+            }
+            Err(e) => {
+                eprintln!(
+                    "{}",
+                    siteone_crawler::utils::get_color_text(&format!("ERROR: {}", e), "red", false,)
+                );
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
     // Create manager from initiator
     let mut manager = match initiator.create_manager() {
         Ok(m) => m,

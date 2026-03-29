@@ -461,3 +461,212 @@ fn unknown_option_typo_without_value() {
         stderr
     );
 }
+
+// =========================================================================
+// --html-to-markdown: standalone HTML-to-Markdown conversion (no network)
+// =========================================================================
+
+#[test]
+fn html_to_markdown_basic_conversion() {
+    let tmp = TempDir::new("htm-convert");
+    let html_path = tmp.path.join("page.html");
+    std::fs::write(
+        &html_path,
+        "<html><body><h1>Hello World</h1><p>Paragraph with <strong>bold</strong> text.</p>\
+         <ul><li>Item 1</li><li>Item 2</li></ul></body></html>",
+    )
+    .unwrap();
+
+    let output = run_crawler(&[&format!("--html-to-markdown={}", html_path.display())]);
+    assert!(output.status.success(), "Should exit 0");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("# Hello World"), "Should contain h1: {}", stdout);
+    assert!(stdout.contains("**bold**"), "Should contain bold: {}", stdout);
+    assert!(stdout.contains("- Item 1"), "Should contain list: {}", stdout);
+    assert!(stdout.contains("- Item 2"), "Should contain list item 2: {}", stdout);
+}
+
+#[test]
+fn html_to_markdown_output_to_file() {
+    let tmp = TempDir::new("htm-output");
+    let html_path = tmp.path.join("input.html");
+    let md_path = tmp.path.join("output.md");
+    std::fs::write(&html_path, "<html><body><h1>Title</h1><p>Content</p></body></html>").unwrap();
+
+    let output = run_crawler(&[
+        &format!("--html-to-markdown={}", html_path.display()),
+        &format!("--html-to-markdown-output={}", md_path.display()),
+    ]);
+    assert!(output.status.success(), "Should exit 0");
+    assert!(md_path.exists(), "Output file should exist");
+
+    let md_content = std::fs::read_to_string(&md_path).unwrap();
+    assert!(
+        md_content.contains("# Title"),
+        "Output file should contain heading: {}",
+        md_content
+    );
+
+    // stdout should be empty (output went to file)
+    assert!(output.stdout.is_empty(), "stdout should be empty when writing to file");
+
+    // status message should be on stderr
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("Markdown written to"),
+        "stderr should contain success message: {}",
+        stderr
+    );
+}
+
+#[test]
+fn html_to_markdown_nonexistent_file() {
+    let output = run_crawler(&["--html-to-markdown=/tmp/siteone_nonexistent_file_12345.html"]);
+    assert_eq!(output.status.code(), Some(101), "Should exit 101 for nonexistent file");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("does not exist"),
+        "Error should mention file doesn't exist: {}",
+        stderr
+    );
+}
+
+#[test]
+fn html_to_markdown_with_disable_images() {
+    let tmp = TempDir::new("htm-no-img");
+    let html_path = tmp.path.join("page.html");
+    std::fs::write(
+        &html_path,
+        "<html><body><h1>Title</h1><img src=\"photo.jpg\" alt=\"Photo\"><p>Text</p></body></html>",
+    )
+    .unwrap();
+
+    let output = run_crawler(&[
+        &format!("--html-to-markdown={}", html_path.display()),
+        "--markdown-disable-images",
+    ]);
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(!stdout.contains("photo.jpg"), "Images should be removed: {}", stdout);
+    assert!(stdout.contains("# Title"));
+    assert!(stdout.contains("Text"));
+}
+
+#[test]
+fn html_to_markdown_preserves_original_links() {
+    let tmp = TempDir::new("htm-links");
+    let html_path = tmp.path.join("page.html");
+    std::fs::write(
+        &html_path,
+        r#"<html><body><h1>Title</h1><a href="/about.html">About</a>
+           <a href="https://example.com">External</a>
+           <a href="tel:+420123456">Call</a></body></html>"#,
+    )
+    .unwrap();
+
+    let output = run_crawler(&[&format!("--html-to-markdown={}", html_path.display())]);
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // Links should NOT be rewritten to .md (standalone mode)
+    assert!(
+        stdout.contains("/about.html"),
+        "HTML links should be preserved as-is: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("https://example.com"),
+        "External links preserved: {}",
+        stdout
+    );
+    assert!(stdout.contains("tel:+420123456"), "Tel links preserved: {}", stdout);
+}
+
+#[test]
+fn html_to_markdown_with_exclude_selector() {
+    let tmp = TempDir::new("htm-exclude");
+    let html_path = tmp.path.join("page.html");
+    std::fs::write(
+        &html_path,
+        "<html><body><h1>Title</h1><nav><a href=\"/\">Home</a></nav><p>Main content</p></body></html>",
+    )
+    .unwrap();
+
+    let output = run_crawler(&[
+        &format!("--html-to-markdown={}", html_path.display()),
+        "--markdown-exclude-selector=nav",
+    ]);
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Main content"), "Content should be present: {}", stdout);
+    assert!(!stdout.contains("Home"), "Nav should be excluded: {}", stdout);
+}
+
+#[test]
+fn html_to_markdown_aria_hidden_excluded() {
+    let tmp = TempDir::new("htm-aria");
+    let html_path = tmp.path.join("page.html");
+    std::fs::write(
+        &html_path,
+        r#"<html><body><h1>Title</h1>
+           <div aria-hidden="true"><p>Hidden mega menu</p></div>
+           <p>Visible content</p></body></html>"#,
+    )
+    .unwrap();
+
+    let output = run_crawler(&[&format!("--html-to-markdown={}", html_path.display())]);
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Visible content"));
+    assert!(
+        !stdout.contains("Hidden mega menu"),
+        "aria-hidden should be excluded: {}",
+        stdout
+    );
+}
+
+#[test]
+fn html_to_markdown_output_without_input_fails() {
+    let output = run_crawler(&["--html-to-markdown-output=/tmp/out.md"]);
+    assert_eq!(
+        output.status.code(),
+        Some(101),
+        "Should exit 101 when output is set without input"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("--html-to-markdown-output requires --html-to-markdown"),
+        "Should mention missing input: {}",
+        stderr
+    );
+}
+
+#[test]
+fn html_to_markdown_with_move_before_h1() {
+    let tmp = TempDir::new("htm-move-h1");
+    let html_path = tmp.path.join("page.html");
+    std::fs::write(
+        &html_path,
+        "<html><body><nav><a href=\"/\">Home</a><a href=\"/about\">About</a></nav>\
+         <h1>Main Title</h1><p>Page body</p></body></html>",
+    )
+    .unwrap();
+
+    let output = run_crawler(&[
+        &format!("--html-to-markdown={}", html_path.display()),
+        "--markdown-move-content-before-h1-to-end",
+    ]);
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.starts_with("# Main Title"),
+        "Should start with h1 heading: {}",
+        stdout
+    );
+    assert!(stdout.contains("Page body"));
+}

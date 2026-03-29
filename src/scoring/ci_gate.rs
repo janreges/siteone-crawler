@@ -314,6 +314,8 @@ mod tests {
             serve_offline_dir: None,
             serve_port: 8321,
             serve_bind_address: "127.0.0.1".to_string(),
+            html_to_markdown_file: None,
+            html_to_markdown_output: None,
             ci: true,
             ci_min_score: 5.0,
             ci_min_performance: Some(5.0),

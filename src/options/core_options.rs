@@ -212,6 +212,10 @@ pub struct CoreOptions {
     pub serve_port: i64,
     pub serve_bind_address: String,
 
+    // html-to-markdown converter mode (standalone, no crawl)
+    pub html_to_markdown_file: Option<String>,
+    pub html_to_markdown_output: Option<String>,
+
     // ci/cd settings
     pub ci: bool,
     pub ci_min_score: f64,
@@ -402,6 +406,9 @@ impl CoreOptions {
             serve_port: 8321,
             serve_bind_address: "127.0.0.1".to_string(),
 
+            html_to_markdown_file: None,
+            html_to_markdown_output: None,
+
             // ci/cd settings
             ci: false,
             ci_min_score: 5.0,
@@ -449,6 +456,27 @@ impl CoreOptions {
             if !options.is_explicitly_set("outputTextFile") {
                 core.output_text_file = None;
             }
+        }
+
+        // Warn if --html-to-markdown-output is set without --html-to-markdown
+        if core.html_to_markdown_output.is_some() && core.html_to_markdown_file.is_none() {
+            return Err(CrawlerError::Config(
+                "--html-to-markdown-output requires --html-to-markdown to be set.".to_string(),
+            ));
+        }
+
+        // In html-to-markdown mode, validate input file and return early
+        if let Some(ref html_file) = core.html_to_markdown_file {
+            if !std::path::Path::new(html_file).exists() {
+                return Err(CrawlerError::Config(format!(
+                    "HTML file '{}' does not exist.",
+                    html_file
+                )));
+            }
+            if !std::path::Path::new(html_file).is_file() {
+                return Err(CrawlerError::Config(format!("'{}' is not a file.", html_file)));
+            }
+            return Ok(core);
         }
 
         // In serve mode, skip normal crawl validation and return early
@@ -1175,6 +1203,16 @@ impl CoreOptions {
             "serveBindAddress" => {
                 if let Some(s) = value.as_str() {
                     self.serve_bind_address = s.to_string();
+                }
+            }
+            "htmlToMarkdownFile" => {
+                if let Some(s) = value.as_str() {
+                    self.html_to_markdown_file = Some(s.to_string());
+                }
+            }
+            "htmlToMarkdownOutput" => {
+                if let Some(s) = value.as_str() {
+                    self.html_to_markdown_output = Some(s.to_string());
                 }
             }
             _ => {
@@ -2319,6 +2357,16 @@ pub fn get_options() -> Options {
                 "Bind address for the built-in HTTP server. Default is 127.0.0.1 (localhost only). Use 0.0.0.0 to listen on all network interfaces.",
                 Some("127.0.0.1"), false, false, None,
             ),
+            CrawlerOption::new(
+                "--html-to-markdown", Some("-htm"), "htmlToMarkdownFile", OptionType::String, false,
+                "Convert a local HTML file to Markdown and print to stdout. Uses the same pipeline as --markdown-export-dir. Respects --markdown-disable-images, --markdown-disable-files, --markdown-move-content-before-h1-to-end, and --markdown-exclude-selector. No crawling is performed.",
+                None, true, false, None,
+            ),
+            CrawlerOption::new(
+                "--html-to-markdown-output", Some("-htmo"), "htmlToMarkdownOutput", OptionType::String, false,
+                "Output file path for --html-to-markdown. If not set, markdown is printed to stdout.",
+                None, true, false, None,
+            ),
         ],
     ));
 
@@ -2751,6 +2799,8 @@ mod tests {
             serve_offline_dir: None,
             serve_port: 8321,
             serve_bind_address: "127.0.0.1".to_string(),
+            html_to_markdown_file: None,
+            html_to_markdown_output: None,
             ci: false,
             ci_min_score: 5.0,
             ci_min_performance: Some(5.0),

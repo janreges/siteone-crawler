@@ -26,13 +26,15 @@ cargo fmt -- --check                              # format check
 ```bash
 ./target/release/siteone-crawler --url=https://example.com --single-page
 ./target/release/siteone-crawler --url=https://example.com --output=json --http-cache-dir=  # no cache
+./target/release/siteone-crawler --html-to-markdown=page.html                               # convert local HTML to markdown (stdout)
+./target/release/siteone-crawler --html-to-markdown=page.html --html-to-markdown-output=page.md  # convert to file
 ```
 
 ## Architecture
 
 ### Crawl Lifecycle (in order)
 
-1. **CLI Parsing** (`Initiator` → `CoreOptions::parse_argv()`): Parses 120+ CLI options, merges config file if present, validates. Exits with code 101 on error, code 2 on `--help`/`--version`.
+1. **CLI Parsing** (`Initiator` → `CoreOptions::parse_argv()`): Parses 120+ CLI options, merges config file if present, validates. Exits with code 101 on error, code 2 on `--help`/`--version`. Non-crawl utility modes (`--serve-markdown`, `--serve-offline`, `--html-to-markdown`) exit early in `main.rs` before creating the Manager.
 
 2. **Analyzer Registration** (`Initiator::register_analyzers()`): Creates all 15 analyzer instances (Accessibility, BestPractice, Caching, ContentType, DNS, ExternalLinks, Fastest, Headers, Page404, Redirects, Security, SeoAndOpenGraph, SkippedUrls, Slowest, SourceDomains, SslTls) and registers them with `AnalysisManager`. Some analyzers receive config from CLI options (e.g. `fastest_top_limit`, `max_heading_level`).
 
