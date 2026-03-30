@@ -270,6 +270,7 @@ mod tests {
             offline_export_no_auto_redirect_html: false,
             offline_export_preserve_url_structure: false,
             offline_export_preserve_urls: false,
+            offline_export_no_url_rewriting: false,
             replace_content: Vec::new(),
             replace_query_string: Vec::new(),
             offline_export_lowercase: false,

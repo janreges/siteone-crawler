@@ -119,6 +119,11 @@ impl ContentProcessor for NextJsProcessor {
         url: &ParsedUrl,
         _remove_unwanted_code: bool,
     ) {
+        // When no URL rewriting is requested, skip all NextJS path transformations
+        if self.config.offline_export_no_url_rewriting {
+            return;
+        }
+
         // Only process content containing _next
         if !content.to_lowercase().contains("_next") {
             return;

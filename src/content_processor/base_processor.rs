@@ -26,6 +26,7 @@ pub struct ProcessorConfig {
     pub compiled_ignore_regex: Vec<regex::Regex>,
     pub disable_astro_inline_modules: bool,
     pub offline_export_preserve_urls: bool,
+    pub offline_export_no_url_rewriting: bool,
     pub initial_url: ParsedUrl,
 }
 
@@ -46,6 +47,7 @@ impl ProcessorConfig {
             compiled_ignore_regex: Vec::new(),
             disable_astro_inline_modules: false,
             offline_export_preserve_urls: false,
+            offline_export_no_url_rewriting: false,
             initial_url,
         }
     }
@@ -94,7 +96,13 @@ pub fn convert_url_to_relative(
     initial_url: &ParsedUrl,
     attribute: Option<&str>,
     preserve_urls: bool,
+    no_url_rewriting: bool,
 ) -> String {
+    // No URL rewriting → return target URL completely unchanged
+    if no_url_rewriting {
+        return target_url.to_string();
+    }
+
     // If it's a data URI, anchor, or non-http scheme, return as-is
     if target_url.starts_with("data:")
         || target_url.starts_with("javascript:")
@@ -156,7 +164,14 @@ mod tests {
     #[test]
     fn decode_amp_entity_before_offline_conversion() {
         let base = ParsedUrl::parse("https://example.com/blog/", None);
-        let result = convert_url_to_relative(&base, "/style.css?v=1&amp;t=2", &initial_url(), Some("href"), false);
+        let result = convert_url_to_relative(
+            &base,
+            "/style.css?v=1&amp;t=2",
+            &initial_url(),
+            Some("href"),
+            false,
+            false,
+        );
         // &amp; must be decoded to & so the query hash matches what FoundUrl stored
         assert!(
             !result.contains("&amp;"),
@@ -167,7 +182,7 @@ mod tests {
     #[test]
     fn decode_numeric_entity_before_offline_conversion() {
         let base = ParsedUrl::parse("https://example.com/", None);
-        let result = convert_url_to_relative(&base, "/page?a=1&#38;b=2", &initial_url(), Some("href"), false);
+        let result = convert_url_to_relative(&base, "/page?a=1&#38;b=2", &initial_url(), Some("href"), false, false);
         assert!(
             !result.contains("&#38;"),
             "HTML entity &#38; should be decoded before conversion"
@@ -178,8 +193,8 @@ mod tests {
     fn preserve_trailing_ampersand() {
         // Trailing & in a query string should NOT be stripped (unlike in FoundUrl discovery)
         let base = ParsedUrl::parse("https://example.com/", None);
-        let a = convert_url_to_relative(&base, "/page?a=1&", &initial_url(), Some("href"), false);
-        let b = convert_url_to_relative(&base, "/page?a=1&b=", &initial_url(), Some("href"), false);
+        let a = convert_url_to_relative(&base, "/page?a=1&", &initial_url(), Some("href"), false, false);
+        let b = convert_url_to_relative(&base, "/page?a=1&b=", &initial_url(), Some("href"), false, false);
         // Both should produce different results (trailing & matters for hash)
         assert_ne!(a, b, "trailing & should be preserved, not stripped");
     }
@@ -187,14 +202,14 @@ mod tests {
     #[test]
     fn skip_data_uri() {
         let base = ParsedUrl::parse("https://example.com/", None);
-        let result = convert_url_to_relative(&base, "data:image/png;base64,abc", &initial_url(), None, false);
+        let result = convert_url_to_relative(&base, "data:image/png;base64,abc", &initial_url(), None, false, false);
         assert_eq!(result, "data:image/png;base64,abc");
     }
 
     #[test]
     fn skip_javascript_uri() {
         let base = ParsedUrl::parse("https://example.com/", None);
-        let result = convert_url_to_relative(&base, "javascript:void(0)", &initial_url(), None, false);
+        let result = convert_url_to_relative(&base, "javascript:void(0)", &initial_url(), None, false, false);
         assert_eq!(result, "javascript:void(0)");
     }
 
@@ -209,6 +224,7 @@ mod tests {
             &initial_url(),
             Some("href"),
             true,
+            false,
         );
         assert_eq!(result, "/designy/classic");
     }
@@ -216,14 +232,14 @@ mod tests {
     #[test]
     fn preserve_urls_same_domain_root_relative() {
         let base = ParsedUrl::parse("https://example.com/blog/post", None);
-        let result = convert_url_to_relative(&base, "/about", &initial_url(), Some("href"), true);
+        let result = convert_url_to_relative(&base, "/about", &initial_url(), Some("href"), true, false);
         assert_eq!(result, "/about");
     }
 
     #[test]
     fn preserve_urls_same_domain_relative() {
         let base = ParsedUrl::parse("https://example.com/blog/post", None);
-        let result = convert_url_to_relative(&base, "../images/logo.png", &initial_url(), Some("src"), true);
+        let result = convert_url_to_relative(&base, "../images/logo.png", &initial_url(), Some("src"), true, false);
         assert_eq!(result, "/images/logo.png");
     }
 
@@ -236,6 +252,7 @@ mod tests {
             &initial_url(),
             Some("href"),
             true,
+            false,
         );
         assert_eq!(result, "https://cdn.other.com/style.css");
     }
@@ -243,21 +260,94 @@ mod tests {
     #[test]
     fn preserve_urls_with_query_and_fragment() {
         let base = ParsedUrl::parse("https://example.com/", None);
-        let result = convert_url_to_relative(&base, "/page?key=val#section", &initial_url(), Some("href"), true);
+        let result = convert_url_to_relative(
+            &base,
+            "/page?key=val#section",
+            &initial_url(),
+            Some("href"),
+            true,
+            false,
+        );
         assert_eq!(result, "/page?key=val#section");
     }
 
     #[test]
     fn preserve_urls_data_uri_unchanged() {
         let base = ParsedUrl::parse("https://example.com/", None);
-        let result = convert_url_to_relative(&base, "data:image/png;base64,abc", &initial_url(), None, true);
+        let result = convert_url_to_relative(&base, "data:image/png;base64,abc", &initial_url(), None, true, false);
         assert_eq!(result, "data:image/png;base64,abc");
     }
 
     #[test]
     fn preserve_urls_mailto_unchanged() {
         let base = ParsedUrl::parse("https://example.com/", None);
-        let result = convert_url_to_relative(&base, "mailto:test@example.com", &initial_url(), None, true);
+        let result = convert_url_to_relative(&base, "mailto:test@example.com", &initial_url(), None, true, false);
         assert_eq!(result, "mailto:test@example.com");
+    }
+
+    // --- no_url_rewriting tests ---
+
+    #[test]
+    fn no_rewriting_absolute_url_unchanged() {
+        let base = ParsedUrl::parse("https://example.com/blog/post", None);
+        let result = convert_url_to_relative(
+            &base,
+            "https://example.com/designy/classic",
+            &initial_url(),
+            Some("href"),
+            false,
+            true,
+        );
+        assert_eq!(result, "https://example.com/designy/classic");
+    }
+
+    #[test]
+    fn no_rewriting_relative_url_unchanged() {
+        let base = ParsedUrl::parse("https://example.com/blog/post", None);
+        let result = convert_url_to_relative(&base, "../images/logo.png", &initial_url(), Some("src"), false, true);
+        assert_eq!(result, "../images/logo.png");
+    }
+
+    #[test]
+    fn no_rewriting_root_relative_unchanged() {
+        let base = ParsedUrl::parse("https://example.com/blog/post", None);
+        let result = convert_url_to_relative(&base, "/about", &initial_url(), Some("href"), false, true);
+        assert_eq!(result, "/about");
+    }
+
+    #[test]
+    fn no_rewriting_cross_domain_unchanged() {
+        let base = ParsedUrl::parse("https://example.com/page", None);
+        let result = convert_url_to_relative(
+            &base,
+            "https://cdn.other.com/style.css",
+            &initial_url(),
+            Some("href"),
+            false,
+            true,
+        );
+        assert_eq!(result, "https://cdn.other.com/style.css");
+    }
+
+    #[test]
+    fn no_rewriting_preserves_html_entities() {
+        let base = ParsedUrl::parse("https://example.com/", None);
+        let result = convert_url_to_relative(&base, "/page?a=1&amp;b=2", &initial_url(), Some("href"), false, true);
+        // With no_url_rewriting, even HTML entities are preserved verbatim
+        assert_eq!(result, "/page?a=1&amp;b=2");
+    }
+
+    #[test]
+    fn no_rewriting_with_query_and_fragment() {
+        let base = ParsedUrl::parse("https://example.com/", None);
+        let result = convert_url_to_relative(
+            &base,
+            "/page?key=val#section",
+            &initial_url(),
+            Some("href"),
+            false,
+            true,
+        );
+        assert_eq!(result, "/page?key=val#section");
     }
 }

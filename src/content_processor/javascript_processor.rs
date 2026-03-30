@@ -163,8 +163,8 @@ impl ContentProcessor for JavaScriptProcessor {
             *content = RE_CROSSORIGIN.replace_all(content, "_SiteOne_CO_").to_string();
         }
 
-        // When preserving URLs, skip webpack path transformations since paths remain root-relative
-        if self.config.offline_export_preserve_urls {
+        // When preserving URLs or disabling URL rewriting, skip webpack path transformations
+        if self.config.offline_export_preserve_urls || self.config.offline_export_no_url_rewriting {
             return;
         }
 

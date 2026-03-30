@@ -122,6 +122,7 @@ impl ContentProcessor for CssProcessor {
                     initial_url,
                     None,
                     self.config.offline_export_preserve_urls,
+                    self.config.offline_export_no_url_rewriting,
                 );
                 format!("url({}{}{})", quote, relative_url, quote)
             })

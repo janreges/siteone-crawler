@@ -582,6 +582,7 @@ impl HtmlProcessor {
                                 initial_url,
                                 Some(&attr_lower),
                                 self.config.offline_export_preserve_urls,
+                                self.config.offline_export_no_url_rewriting,
                             )
                         } else {
                             // URL with size descriptor (e.g., "url 2x")
@@ -594,6 +595,7 @@ impl HtmlProcessor {
                                 initial_url,
                                 Some(&attr_lower),
                                 self.config.offline_export_preserve_urls,
+                                self.config.offline_export_no_url_rewriting,
                             );
                             format!("{} {}", relative_url, size_part)
                         }
@@ -607,6 +609,7 @@ impl HtmlProcessor {
                     initial_url,
                     Some(attribute),
                     self.config.offline_export_preserve_urls,
+                    self.config.offline_export_no_url_rewriting,
                 );
 
                 // Handle component-url and renderer-url (Astro)
@@ -803,14 +806,18 @@ impl ContentProcessor for HtmlProcessor {
     ) {
         let base_url = url.get_full_url(true, false);
 
-        // Remove schema and host from full origin URLs
-        *content = self.remove_schema_and_host_from_full_origin_urls(url, content);
+        if !self.config.offline_export_no_url_rewriting {
+            // Remove schema and host from full origin URLs
+            *content = self.remove_schema_and_host_from_full_origin_urls(url, content);
+        }
 
         // Remove unwanted code from HTML
         *content = self.remove_unwanted_code_from_html(content);
 
-        // Update all paths to relative
-        *content = self.update_html_paths_to_relative(content, url);
+        if !self.config.offline_export_no_url_rewriting {
+            // Update all paths to relative
+            *content = self.update_html_paths_to_relative(content, url);
+        }
 
         // Meta redirects (e.g., in Astro projects)
         if let Some(caps) = RE_META_REFRESH.captures(content) {
@@ -825,6 +832,7 @@ impl ContentProcessor for HtmlProcessor {
                 &self.config.initial_url,
                 None,
                 self.config.offline_export_preserve_urls,
+                self.config.offline_export_no_url_rewriting,
             );
             *content = content.replace(full_match, &format!("{}{}{}", prefix, relative, suffix));
         }
@@ -842,7 +850,7 @@ impl ContentProcessor for HtmlProcessor {
 
         // Set JS variable and remove anchor listeners
         if self.config.scripts_enabled {
-            if !self.config.offline_export_preserve_urls {
+            if !self.config.offline_export_preserve_urls && !self.config.offline_export_no_url_rewriting {
                 *content = self.set_js_variable_with_url_depth(content, &base_url);
             }
             if self.config.remove_all_anchor_listeners || self.is_forced_to_remove_anchor_listeners(content) {
