@@ -116,7 +116,13 @@ impl ContentProcessor for CssProcessor {
                     return caps.get(0).map_or("", |m| m.as_str()).to_string();
                 }
 
-                let relative_url = convert_url_to_relative(url, found_url, initial_url, None);
+                let relative_url = convert_url_to_relative(
+                    url,
+                    found_url,
+                    initial_url,
+                    None,
+                    self.config.offline_export_preserve_urls,
+                );
                 format!("url({}{}{})", quote, relative_url, quote)
             })
             .to_string();

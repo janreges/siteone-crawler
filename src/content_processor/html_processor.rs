@@ -576,21 +576,38 @@ impl HtmlProcessor {
                         let trimmed = source.trim();
                         if !trimmed.contains(' ') {
                             // URL without size descriptor
-                            convert_url_to_relative(parsed_base_url, trimmed, initial_url, Some(&attr_lower))
+                            convert_url_to_relative(
+                                parsed_base_url,
+                                trimmed,
+                                initial_url,
+                                Some(&attr_lower),
+                                self.config.offline_export_preserve_urls,
+                            )
                         } else {
                             // URL with size descriptor (e.g., "url 2x")
                             let mut parts = trimmed.splitn(2, char::is_whitespace);
                             let url_part = parts.next().unwrap_or("");
                             let size_part = parts.next().unwrap_or("");
-                            let relative_url =
-                                convert_url_to_relative(parsed_base_url, url_part, initial_url, Some(&attr_lower));
+                            let relative_url = convert_url_to_relative(
+                                parsed_base_url,
+                                url_part,
+                                initial_url,
+                                Some(&attr_lower),
+                                self.config.offline_export_preserve_urls,
+                            );
                             format!("{} {}", relative_url, size_part)
                         }
                     })
                     .collect();
                 converted.join(", ")
             } else {
-                let mut converted = convert_url_to_relative(parsed_base_url, value, initial_url, Some(attribute));
+                let mut converted = convert_url_to_relative(
+                    parsed_base_url,
+                    value,
+                    initial_url,
+                    Some(attribute),
+                    self.config.offline_export_preserve_urls,
+                );
 
                 // Handle component-url and renderer-url (Astro)
                 if attribute == "component-url" || attribute == "renderer-url" {
@@ -802,7 +819,13 @@ impl ContentProcessor for HtmlProcessor {
             let meta_url = caps.get(2).map_or("", |m| m.as_str());
             let suffix = caps.get(3).map_or("", |m| m.as_str());
 
-            let relative = convert_url_to_relative(url, meta_url, &self.config.initial_url, None);
+            let relative = convert_url_to_relative(
+                url,
+                meta_url,
+                &self.config.initial_url,
+                None,
+                self.config.offline_export_preserve_urls,
+            );
             *content = content.replace(full_match, &format!("{}{}{}", prefix, relative, suffix));
         }
 
@@ -819,7 +842,9 @@ impl ContentProcessor for HtmlProcessor {
 
         // Set JS variable and remove anchor listeners
         if self.config.scripts_enabled {
-            *content = self.set_js_variable_with_url_depth(content, &base_url);
+            if !self.config.offline_export_preserve_urls {
+                *content = self.set_js_variable_with_url_depth(content, &base_url);
+            }
             if self.config.remove_all_anchor_listeners || self.is_forced_to_remove_anchor_listeners(content) {
                 *content = self.set_js_function_to_remove_all_anchor_listeners(content);
             }

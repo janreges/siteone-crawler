@@ -647,6 +647,7 @@ impl Manager {
         config.remove_all_anchor_listeners = options.remove_all_anchor_listeners;
         config.ignore_regex = options.ignore_regex.clone();
         config.disable_astro_inline_modules = options.disable_astro_inline_modules;
+        config.offline_export_preserve_urls = options.offline_export_preserve_urls;
         config.compile_ignore_regex();
 
         let mut cpm = ContentProcessorManager::new();

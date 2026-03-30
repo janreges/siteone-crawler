@@ -562,6 +562,7 @@ For a clearer list, I recommend going to the documentation: 🌐 https://crawler
 | `--offline-export-remove-unwanted-code=<1/0>` | Remove unwanted code for offline mode (analytics, social networks, etc.). Default is `1`. |
 | `--offline-export-no-auto-redirect-html` | Disable automatic creation of redirect HTML files for subfolders containing `index.html`. |
 | `--offline-export-preserve-url-structure` | Preserve the original URL path structure. E.g. `/about` is stored as `about/index.html`<br>instead of `about.html`. Useful for web server deployment where the clone should maintain<br>the same URL hierarchy as the original site. |
+| `--offline-export-preserve-urls` | Preserve original URL format in exported HTML/CSS/JS — same-domain links become root-relative (`/path`), cross-domain links stay absolute. Ideal for processing with [siteone-chunker](https://github.com/janreges/siteone-chunker) and RAG pipelines where links must resolve to the production website. |
 | `--replace-content=<val>` | Replace content in HTML/JS/CSS with `foo -> bar` or PCRE regexp.<br>Can be specified multiple times. |
 | `--replace-query-string=<val>` | Replace characters in query string filenames.<br>Can be specified multiple times. |
 | `--offline-export-lowercase` | Convert all filenames to lowercase for offline export. Useful for case-insensitive filesystems. |

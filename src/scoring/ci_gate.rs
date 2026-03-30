@@ -269,6 +269,7 @@ mod tests {
             offline_export_remove_unwanted_code: true,
             offline_export_no_auto_redirect_html: false,
             offline_export_preserve_url_structure: false,
+            offline_export_preserve_urls: false,
             replace_content: Vec::new(),
             replace_query_string: Vec::new(),
             offline_export_lowercase: false,

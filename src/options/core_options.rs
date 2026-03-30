@@ -150,6 +150,7 @@ pub struct CoreOptions {
     pub offline_export_remove_unwanted_code: bool,
     pub offline_export_no_auto_redirect_html: bool,
     pub offline_export_preserve_url_structure: bool,
+    pub offline_export_preserve_urls: bool,
     pub replace_content: Vec<String>,
     pub replace_query_string: Vec<String>,
     pub offline_export_lowercase: bool,
@@ -344,6 +345,7 @@ impl CoreOptions {
             offline_export_remove_unwanted_code: true,
             offline_export_no_auto_redirect_html: false,
             offline_export_preserve_url_structure: false,
+            offline_export_preserve_urls: false,
             replace_content: Vec::new(),
             replace_query_string: Vec::new(),
             offline_export_lowercase: false,
@@ -888,6 +890,11 @@ impl CoreOptions {
             "offlineExportPreserveUrlStructure" => {
                 if let Some(b) = value.as_bool() {
                     self.offline_export_preserve_url_structure = b;
+                }
+            }
+            "offlineExportPreserveUrls" => {
+                if let Some(b) = value.as_bool() {
+                    self.offline_export_preserve_urls = b;
                 }
             }
             "replaceContent" => {
@@ -1920,6 +1927,11 @@ pub fn get_options() -> Options {
                 Some("false"), false, false, None,
             ),
             CrawlerOption::new(
+                "--offline-export-preserve-urls", None, "offlineExportPreserveUrls", OptionType::Bool, false,
+                "Preserve original URL format in exported HTML/CSS/JS. Same-domain links become root-relative (/path), cross-domain links stay absolute. Useful when exported HTML is processed by tools that need production URLs.",
+                Some("false"), false, false, None,
+            ),
+            CrawlerOption::new(
                 "--replace-content", None, "replaceContent", OptionType::ReplaceContent, true,
                 "Replace HTML/JS/CSS content with `foo -> bar` or regexp in PREG format: `/card[0-9]/i -> card`",
                 None, true, true, None,
@@ -2754,6 +2766,7 @@ mod tests {
             offline_export_remove_unwanted_code: true,
             offline_export_no_auto_redirect_html: false,
             offline_export_preserve_url_structure: false,
+            offline_export_preserve_urls: false,
             replace_content: Vec::new(),
             replace_query_string: Vec::new(),
             offline_export_lowercase: false,
@@ -2985,5 +2998,14 @@ mod tests {
         opts.apply_option_value("offlineExportPreserveUrlStructure", &OptionValue::Bool(true))
             .unwrap();
         assert!(opts.offline_export_preserve_url_structure);
+    }
+
+    #[test]
+    fn apply_offline_export_preserve_urls() {
+        let mut opts = make_default_core_options();
+        assert!(!opts.offline_export_preserve_urls);
+        opts.apply_option_value("offlineExportPreserveUrls", &OptionValue::Bool(true))
+            .unwrap();
+        assert!(opts.offline_export_preserve_urls);
     }
 }
