@@ -18,11 +18,18 @@ static RE_BASE_HREF: Lazy<Regex> = Lazy::new(|| Regex::new(r#"(?is)<base[^>]+hre
 
 /// Static regexes for title/description/keywords extraction (Fix #12)
 static RE_TITLE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?is)<title[^>]*>([^<]*)</title>").unwrap());
+// Match either attribute order: name=...content=... or content=...name=...
 static RE_DESCRIPTION: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r#"(?is)<meta\s+[^>]*name=["']description["']\s+[^>]*content=["']([^"']+)["'][^>]*>"#).unwrap()
+    Regex::new(
+        r#"(?is)<meta\s+(?:[^>]*?name=["']description["'][^>]*?content=["']([^"']*)["']|[^>]*?content=["']([^"']*)["'][^>]*?name=["']description["'])[^>]*>"#,
+    )
+    .unwrap()
 });
 static RE_KEYWORDS: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r#"(?is)<meta\s+[^>]*name=["']keywords["']\s+[^>]*content=["']([^"']+)["'][^>]*>"#).unwrap()
+    Regex::new(
+        r#"(?is)<meta\s+(?:[^>]*?name=["']keywords["'][^>]*?content=["']([^"']*)["']|[^>]*?content=["']([^"']*)["'][^>]*?name=["']keywords["'])[^>]*>"#,
+    )
+    .unwrap()
 });
 static RE_DOM_COUNT: Lazy<Regex> = Lazy::new(|| Regex::new(r"<\w+").unwrap());
 
@@ -888,9 +895,9 @@ impl Crawler {
             result.insert("Title".to_string(), Self::decode_html_entities(title));
         }
 
-        // Extract Description
+        // Extract Description (content may appear before or after name="description")
         if let Some(caps) = RE_DESCRIPTION.captures(body) {
-            let desc = caps.get(1).map_or("", |m| m.as_str()).trim();
+            let desc = caps.get(1).or_else(|| caps.get(2)).map_or("", |m| m.as_str()).trim();
             result.insert("Description".to_string(), Self::decode_html_entities(desc));
         }
 
@@ -898,7 +905,7 @@ impl Crawler {
         if options.has_header_to_table("Keywords")
             && let Some(caps) = RE_KEYWORDS.captures(body)
         {
-            let keywords = caps.get(1).map_or("", |m| m.as_str()).trim();
+            let keywords = caps.get(1).or_else(|| caps.get(2)).map_or("", |m| m.as_str()).trim();
             result.insert("Keywords".to_string(), Self::decode_html_entities(keywords));
         }
 
@@ -1937,6 +1944,70 @@ mod tests {
         let html = r#"<base target="_blank" href="https://example.com/app/">"#;
         let caps = RE_BASE_HREF.captures(html).unwrap();
         assert_eq!(caps.get(1).unwrap().as_str(), "https://example.com/app/");
+    }
+
+    // =========================================================================
+    // Meta description / keywords regex tests (attribute order independence)
+    // =========================================================================
+
+    fn extract_desc(html: &str) -> Option<String> {
+        RE_DESCRIPTION.captures(html).map(|caps| {
+            caps.get(1)
+                .or_else(|| caps.get(2))
+                .map_or("", |m| m.as_str())
+                .trim()
+                .to_string()
+        })
+    }
+
+    fn extract_kw(html: &str) -> Option<String> {
+        RE_KEYWORDS.captures(html).map(|caps| {
+            caps.get(1)
+                .or_else(|| caps.get(2))
+                .map_or("", |m| m.as_str())
+                .trim()
+                .to_string()
+        })
+    }
+
+    #[test]
+    fn meta_description_name_first() {
+        let html = r#"<meta name="description" content="Hello world" />"#;
+        assert_eq!(extract_desc(html).as_deref(), Some("Hello world"));
+    }
+
+    #[test]
+    fn meta_description_content_first() {
+        let html =
+            r#"<meta content="Une description avec des caractères accentués: éèà" name="description" />"#;
+        assert_eq!(
+            extract_desc(html).as_deref(),
+            Some("Une description avec des caractères accentués: éèà")
+        );
+    }
+
+    #[test]
+    fn meta_description_single_quotes_content_first() {
+        let html = r#"<meta content='Single quoted' name='description'>"#;
+        assert_eq!(extract_desc(html).as_deref(), Some("Single quoted"));
+    }
+
+    #[test]
+    fn meta_description_extra_attrs_between() {
+        let html = r#"<meta data-foo="bar" content="Desc" lang="en" name="description">"#;
+        assert_eq!(extract_desc(html).as_deref(), Some("Desc"));
+    }
+
+    #[test]
+    fn meta_keywords_content_first() {
+        let html = r#"<meta content="rust, crawler, seo" name="keywords" />"#;
+        assert_eq!(extract_kw(html).as_deref(), Some("rust, crawler, seo"));
+    }
+
+    #[test]
+    fn meta_keywords_name_first() {
+        let html = r#"<meta name="keywords" content="foo, bar">"#;
+        assert_eq!(extract_kw(html).as_deref(), Some("foo, bar"));
     }
 
     // =========================================================================
