@@ -670,3 +670,76 @@ fn html_to_markdown_with_move_before_h1() {
     );
     assert!(stdout.contains("Page body"));
 }
+
+// =========================================================================
+// --url-list: crawl a bounded set of URLs from a file
+// =========================================================================
+
+#[test]
+fn url_list_nonexistent_file_exits_with_101() {
+    let output = run_crawler(&["--url-list=/nonexistent/path/urls.txt"]);
+    assert_eq!(
+        output.status.code(),
+        Some(101),
+        "Expected exit code 101 for nonexistent URL list file"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("/nonexistent/path/urls.txt"),
+        "Error should mention the file path, got: {}",
+        stderr
+    );
+}
+
+#[test]
+fn url_list_empty_file_exits_with_101() {
+    let tmp = TempDir::new("url-list-empty");
+    let list_path = tmp.path.join("urls.txt");
+    // Only blank lines and comments — no actual URLs.
+    std::fs::write(&list_path, "\n# just a comment\n\n   \n").unwrap();
+
+    let output = run_crawler(&[&format!("--url-list={}", list_path.display())]);
+    assert_eq!(
+        output.status.code(),
+        Some(101),
+        "Expected exit code 101 for empty URL list file"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("empty list") || stderr.contains("no URLs"),
+        "Error should mention empty list, got: {}",
+        stderr
+    );
+}
+
+#[test]
+#[ignore]
+fn url_list_crawls_listed_urls() {
+    let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+
+    let tmp = TempDir::new("url-list-crawl");
+    let list_path = tmp.path.join("urls.txt");
+    std::fs::write(
+        &list_path,
+        "# two known HTML pages on crawler.siteone.io\n\
+         https://crawler.siteone.io/\n\
+         https://crawler.siteone.io/introduction/overview/\n",
+    )
+    .unwrap();
+
+    let list_arg = format!("--url-list={}", list_path.display());
+    let mut args: Vec<&str> = vec![&list_arg, "--single-page", "--disable-all-assets", "--output=json"];
+    args.extend_from_slice(&GENTLE_FLAGS);
+    let json = run_crawler_json(&args);
+
+    // With --single-page and assets disabled, exactly the 2 listed HTML pages are crawled.
+    let total_urls = json["stats"]["totalUrls"].as_i64().expect("totalUrls");
+    assert_eq!(total_urls, 2, "Expected exactly 2 crawled URLs, got {}", total_urls);
+
+    let count_200 = json["stats"]["countByStatus"]
+        .as_object()
+        .and_then(|m| m.get("200"))
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
+    assert_eq!(count_200, 2, "Expected 2 successful pages, got {}", count_200);
+}

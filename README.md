@@ -39,6 +39,7 @@ GIF animation of the crawler in action (also available as a [▶️ video](https
 - [▶️ Usage](#️-usage)
     * [Interactive wizard](#interactive-wizard)
     * [Basic example](#basic-example)
+    * [URL list example](#url-list-example)
     * [CI/CD example](#cicd-example)
     * [Fully-featured example](#fully-featured-example)
     * [⚙️ Arguments](#️-arguments)
@@ -106,6 +107,9 @@ The following features are summarized in greater detail:
   which will be processed as a list of URLs. In sitemap-only mode, the crawler follows only URLs from
   the sitemap — it does not discover additional links from HTML pages. Gzip-compressed sitemaps (`*.xml.gz`)
   are fully supported, both as direct URLs and when referenced from sitemap index files.
+- with `--url-list=<file>` you can crawl a **bounded list of URLs** from a plain-text file (one URL per line).
+  The first URL in the file becomes the crawl base when `--url` is omitted. Combine it with `--single-page`
+  to crawl exactly the listed URLs without discovering additional links.
 - respects the HTML `<base href>` tag when resolving relative URLs on pages that use it.
 
 ### 🛠️ Dev/DevOps assistant
@@ -364,6 +368,15 @@ To run the crawler from the command line, provide the required arguments:
 ./siteone-crawler --url=https://mydomain.tld/ --device=mobile
 ```
 
+### URL list example
+
+Crawl exactly a bounded set of URLs listed in a file, without following any discovered links:
+
+```bash
+# urls.txt — one URL per line, blank lines and '#' comments ignored
+./siteone-crawler --url-list=urls.txt --single-page
+```
+
 ### CI/CD example
 
 ```bash
@@ -445,7 +458,8 @@ For a clearer list, I recommend going to the documentation: 🌐 https://crawler
 
 | Parameter | Description |
 |-----------|-------------|
-| `--url=<url>` | Required. HTTP or HTTPS URL address of the website or sitemap xml to be crawled.<br>Use quotation marks `''` if the URL contains query parameters. |
+| `--url=<url>` | Required (unless `--url-list` is used). HTTP or HTTPS URL address of the website or sitemap xml<br>to be crawled. Use quotation marks `''` if the URL contains query parameters. |
+| `--url-list=<file>` | Path to a plain-text file with one URL per line (blank lines and `#` comments are ignored).<br>When provided, `--url` is optional and the first URL in the file is used as the crawl base.<br>All listed URLs are seeded into the crawl queue. Combine with `--single-page` to crawl<br>exactly the listed URLs without following any discovered links.<br>Listed URLs are crawled directly: `robots.txt` and `--include-regex`/`--ignore-regex` do not apply to them. |
 | `--single-page` | Load only one page to which the URL is given (and its assets), but do not follow other pages. |
 | `--max-depth=<int>` | Maximum crawling depth (for pages, not assets). Default is `0` (no limit). `1` means `/about`<br>or `/about/`, `2` means `/about/contacts` etc. |
 | `--device=<val>` | Device type for choosing a predefined User-Agent. Ignored when `--user-agent` is defined.<br>Supported values: `desktop`, `mobile`, `tablet`. Default is `desktop`. |

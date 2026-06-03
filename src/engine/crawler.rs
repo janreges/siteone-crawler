@@ -216,6 +216,12 @@ impl Crawler {
         // Add initial URL to queue
         self.add_url_to_queue(&self.initial_parsed_url.clone(), None, UrlSource::InitUrl as i32);
 
+        // Seed additional URLs from --url-list (dedup is handled by the queue's URL key).
+        for url_str in &self.options.url_list_urls {
+            let parsed = ParsedUrl::parse(url_str, None);
+            self.add_url_to_queue(&parsed, None, UrlSource::UrlList as i32);
+        }
+
         // Print table header
         if let Ok(mut output) = self.output.lock() {
             output.add_table_header();
