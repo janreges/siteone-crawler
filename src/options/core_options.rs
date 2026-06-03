@@ -521,7 +521,7 @@ impl CoreOptions {
         // Validate required fields
         if core.url.is_empty() {
             return Err(CrawlerError::Config(
-                "Invalid or undefined --url parameter.".to_string(),
+                "Invalid or undefined input. Provide --url=<url> or --url-list=<file>.".to_string(),
             ));
         }
         if core.workers < 1 {
