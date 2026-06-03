@@ -25,6 +25,7 @@ pub enum UrlSource {
     JsUrl = 70,
     Redirect = 80,
     Sitemap = 90,
+    UrlList = 91,
 }
 
 impl UrlSource {
@@ -46,6 +47,7 @@ impl UrlSource {
             UrlSource::JsUrl => "js url",
             UrlSource::Redirect => "redirect",
             UrlSource::Sitemap => "sitemap",
+            UrlSource::UrlList => "url list",
         }
     }
 
@@ -67,6 +69,7 @@ impl UrlSource {
             70 => Some(UrlSource::JsUrl),
             80 => Some(UrlSource::Redirect),
             90 => Some(UrlSource::Sitemap),
+            91 => Some(UrlSource::UrlList),
             _ => None,
         }
     }

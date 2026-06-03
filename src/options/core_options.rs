@@ -64,6 +64,8 @@ impl StorageType {
 pub struct CoreOptions {
     // basic settings
     pub url: String,
+    pub url_list: Option<String>,
+    pub url_list_urls: Vec<String>,
     pub single_page: bool,
     pub max_depth: i64,
     pub device: DeviceType,
@@ -246,6 +248,8 @@ impl CoreOptions {
         let mut core = CoreOptions {
             // basic settings
             url: String::new(),
+            url_list: None,
+            url_list_urls: Vec::new(),
             single_page: false,
             max_depth: 0,
             device: DeviceType::Desktop,
@@ -490,6 +494,30 @@ impl CoreOptions {
             return Ok(core);
         }
 
+        // Process --url-list: read & parse the file, then optionally use the first
+        // URL as the crawl base when --url was not provided.
+        if let Some(ref path) = core.url_list {
+            if !std::path::Path::new(path).is_file() {
+                return Err(CrawlerError::Config(format!(
+                    "URL list file '{}' does not exist or is not a file.",
+                    path
+                )));
+            }
+            let content = std::fs::read_to_string(path)
+                .map_err(|e| CrawlerError::Config(format!("Cannot read URL list file '{}': {}", path, e)))?;
+            let urls = parse_line_list(&content);
+            if urls.is_empty() {
+                return Err(CrawlerError::Config(format!(
+                    "URL list file '{}' contains no URLs (empty list).",
+                    path
+                )));
+            }
+            if core.url.is_empty() {
+                core.url = urls[0].clone();
+            }
+            core.url_list_urls = urls;
+        }
+
         // Validate required fields
         if core.url.is_empty() {
             return Err(CrawlerError::Config(
@@ -527,6 +555,11 @@ impl CoreOptions {
             "url" => {
                 if let Some(s) = value.as_str() {
                     self.url = s.to_string();
+                }
+            }
+            "urlList" => {
+                if let Some(s) = value.as_str() {
+                    self.url_list = Some(s.to_string());
                 }
             }
             "singlePage" => {
@@ -1309,6 +1342,11 @@ pub fn get_options() -> Options {
             CrawlerOption::new(
                 "--url", Some("-u"), "url", OptionType::Url, false,
                 "Required URL. It can also be the URL to sitemap.xml. Enclose in quotes if URL contains query parameters.",
+                None, true, false, None,
+            ),
+            CrawlerOption::new(
+                "--url-list", None, "urlList", OptionType::String, false,
+                "Path to a plain-text file with one URL per line (blank lines and `#` comments ignored). When provided, --url is optional; the first URL in the file is used as the crawl base. All listed URLs are seeded into the crawl queue.",
                 None, true, false, None,
             ),
             CrawlerOption::new(
@@ -2420,13 +2458,22 @@ pub fn get_options() -> Options {
 fn read_config_file(path: &str) -> Result<Vec<String>, CrawlerError> {
     let content = std::fs::read_to_string(path)
         .map_err(|e| CrawlerError::Config(format!("Cannot read config file '{}': {}", path, e)))?;
-    let args: Vec<String> = content
+    Ok(parse_line_list(&content))
+}
+
+/// Parse a newline-delimited list (config files, --url-list): trim each line,
+/// drop blank lines and `#` comments. A leading UTF-8 BOM is stripped first —
+/// it is not whitespace, so `trim()` would leave it on the first entry and
+/// corrupt it (common in files saved on Windows).
+fn parse_line_list(content: &str) -> Vec<String> {
+    content
+        .strip_prefix('\u{feff}')
+        .unwrap_or(content)
         .lines()
         .map(|line| line.trim())
         .filter(|line| !line.is_empty() && !line.starts_with('#'))
         .map(|line| line.to_string())
-        .collect();
-    Ok(args)
+        .collect()
 }
 
 /// Load config from file: --config-file=PATH, ~/.siteone-crawler.conf, or /etc/siteone-crawler.conf.
@@ -2716,6 +2763,8 @@ mod tests {
     fn make_default_core_options() -> CoreOptions {
         CoreOptions {
             url: "https://test.com".to_string(),
+            url_list: None,
+            url_list_urls: Vec::new(),
             single_page: false,
             max_depth: 0,
             device: DeviceType::Desktop,
@@ -2876,6 +2925,14 @@ mod tests {
     }
 
     #[test]
+    fn apply_url_list_string() {
+        let mut opts = make_default_core_options();
+        opts.apply_option_value("urlList", &OptionValue::Str("urls.txt".into()))
+            .unwrap();
+        assert_eq!(opts.url_list, Some("urls.txt".to_string()));
+    }
+
+    #[test]
     fn apply_ci_min_score() {
         let mut opts = make_default_core_options();
         opts.apply_option_value("ciMinScore", &OptionValue::Float(7.5)).unwrap();
@@ -2975,6 +3032,21 @@ mod tests {
     fn read_config_file_nonexistent_returns_error() {
         let result = read_config_file("/nonexistent/path/config.conf");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_line_list_strips_leading_bom() {
+        // A UTF-8 BOM at the start must not leak into the first entry.
+        let content = "\u{feff}https://example.com/\nhttps://example.com/about\n";
+        let urls = parse_line_list(content);
+        assert_eq!(urls, vec!["https://example.com/", "https://example.com/about"]);
+    }
+
+    #[test]
+    fn parse_line_list_trims_and_filters() {
+        let content = "# comment\n\n  https://a.test/  \n  # indented comment\n  \nhttps://b.test/\n";
+        let urls = parse_line_list(content);
+        assert_eq!(urls, vec!["https://a.test/", "https://b.test/"]);
     }
 
     #[test]

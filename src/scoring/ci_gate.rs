@@ -195,6 +195,8 @@ mod tests {
     fn make_options() -> CoreOptions {
         CoreOptions {
             url: "https://test.com".to_string(),
+            url_list: None,
+            url_list_urls: Vec::new(),
             single_page: false,
             max_depth: 0,
             device: crate::types::DeviceType::Desktop,
