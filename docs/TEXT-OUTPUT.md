@@ -198,22 +198,34 @@ Lists URLs that returned a 404 Not Found status code.
 
 ### 3.7. SSL/TLS Info
 
-Provides details about the SSL/TLS certificate of the primary host. Includes the raw certificate output and raw protocol test output.
+Provides details about the SSL/TLS certificate of the primary host. The certificate is inspected and the supported protocol versions are probed entirely in pure Rust (rustls + x509-parser) — the crawler does **not** require `openssl`, `sh` or `timeout` to be installed on the host.
 
 **SSL/TLS info**
 
-| Info                   | Text                                                                                  |
-| :--------------------- | :------------------------------------------------------------------------------------ |
-| Issuer                 | C = BE, O = GlobalSign nv-sa, CN = GlobalSign GCC R6 AlphaSSL CA 2025                |
-| Subject                | CN = *.siteone.io                                                                     |
-| Valid from             | Feb  9 15:43:30 2026 GMT (VALID already 35 day(s))                                    |
-| Valid to               | Mar 13 15:43:29 2027 GMT (VALID still for 362 day(s))                                 |
-| Supported protocols    | TLSv1.2                                                                               |
-| RAW certificate output | `Certificate: Data: Version: 3 (0x2) ...` (truncated)                                 |
-| RAW protocols output   | `=== ssl2 === s_client: Unknown option: -ssl2 ...` (truncated)                         |
+| Info                      | Text                                                                                  |
+| :------------------------ | :------------------------------------------------------------------------------------ |
+| Issuer                    | C = BE, O = GlobalSign nv-sa, CN = GlobalSign GCC R6 AlphaSSL CA 2025                |
+| Subject                   | CN = *.siteone.io                                                                     |
+| Subject Alternative Names | *.siteone.io, siteone.io                                                              |
+| Valid from                | Feb  9 15:43:30 2026 GMT (VALID already 35 day(s))                                    |
+| Valid to                  | Mar 13 15:43:29 2027 GMT (VALID still for 362 day(s))                                 |
+| Serial number             | 01:23:45:67:89:ab:cd:ef                                                               |
+| Signature algorithm       | sha256WithRSAEncryption                                                               |
+| Public key                | RSA 2048 bits                                                                         |
+| SHA-256 fingerprint       | AB:CD:EF:...:01:23 (32 bytes)                                                         |
+| Supported protocols       | TLSv1.2, TLSv1.3                                                                      |
+| Trust                     | Trusted by system CA store                                                            |
 
-*   **Info:** The type of information (Issuer, Subject, Validity dates, Supported protocols).
-*   **Text:** The corresponding value for the information type. The RAW rows contain the full openssl output, which may span multiple lines and be truncated in the text output.
+*   **Info:** The type of information (Issuer, Subject, SANs, validity dates, certificate details, supported protocols, trust).
+*   **Text:** The corresponding value for the information type. Supported protocols lists every version from SSLv3 to TLS 1.3 that the server accepts (legacy/unsafe versions are also flagged in the summary). Trust reports whether the certificate chain validates against the system CA store.
+
+**Validated scenarios (inspired by [BadSSL.com](https://badssl.com/)).** The analyzer raises a summary finding for each of the conditions illustrated on BadSSL, and accentuates good configuration with green OK findings:
+
+*   **Negative (Critical/Warning):** expired or not‑yet‑valid certificate; hostname mismatch; self‑signed / untrusted root; weak signature algorithm anywhere in the chain (SHA‑1/MD5, incl. weak intermediates); weak public key (RSA < 2048‑bit, EC < 256‑bit, DSA); supported obsolete protocols (SSLv3 / TLS 1.0 / TLS 1.1); missing TLS 1.2/1.3; and a failed TLS handshake (the server may only offer obsolete protocols or cipher suites such as RC4, 3DES or weak Diffie‑Hellman, which this crawler refuses to speak).
+*   **Informational (Notice):** missing Common Name (CN); empty Subject (identity provided only via SANs).
+*   **Positive (OK):** trusted chain; strong signature algorithm (SHA‑256+/EdDSA); strong public key (RSA ≥ 2048 / EC ≥ 256); only modern TLS protocols (no SSLv3 / TLS 1.0 / TLS 1.1); TLS 1.3 supported.
+
+When the `--accept-invalid-certs` (`-aic`) flag is used, certificate problems (untrusted/expired/weak) are reported as Warnings instead of Criticals, since the operator has explicitly opted to accept them. Out of scope (require infrastructure the crawler intentionally avoids): certificate **revocation** (OCSP/CRL), Certificate Transparency (SCT) and active weak‑cipher/DH enumeration.
 
 ### 3.8. Performance Metrics (Fastest/Slowest URLs)
 

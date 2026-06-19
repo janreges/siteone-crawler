@@ -28,6 +28,7 @@ colored = "3"
 dashmap = "6"
 hickory-resolver = "0.25"
 rustls = { version = "0.23", features = ["ring"] }
+ring = "0.17"
 x509-parser = "0.18"
 lettre = { version = "0.11", default-features = false, features = ["tokio1-rustls-tls", "smtp-transport", "builder"] }
 flate2 = "1"

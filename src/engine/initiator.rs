@@ -28,7 +28,7 @@ use crate::analysis::accessibility_analyzer::AccessibilityAnalyzer;
 use crate::analysis::best_practice_analyzer::BestPracticeAnalyzer;
 use crate::analysis::security_analyzer::SecurityAnalyzer;
 use crate::analysis::seo_opengraph_analyzer::SeoAndOpenGraphAnalyzer;
-use crate::analysis::ssl_tls_analyzer::SslTlsAnalyzer;
+use crate::analysis::ssl_tls::SslTlsAnalyzer;
 
 pub struct Initiator {
     options: core_options::CoreOptions,
@@ -131,7 +131,11 @@ impl Initiator {
         analysis_manager.register_analyzer(Box::new(slowest));
 
         analysis_manager.register_analyzer(Box::new(SourceDomainsAnalyzer::new()));
-        analysis_manager.register_analyzer(Box::new(SslTlsAnalyzer::new()));
+
+        // SslTlsAnalyzer: accept_invalid_certs downgrades trust/expiry findings to warnings
+        let mut ssl_tls = SslTlsAnalyzer::new();
+        ssl_tls.set_config(options.accept_invalid_certs);
+        analysis_manager.register_analyzer(Box::new(ssl_tls));
     }
 
     /// Print help text.

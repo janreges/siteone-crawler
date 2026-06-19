@@ -185,9 +185,11 @@ fn score_security(summary: &Summary) -> CategoryScore {
     // SSL certificate issues
     for code in &[
         "ssl-certificate-connect",
-        "ssl-certificate-missing",
+        "ssl-tls-handshake-failed",
         "ssl-certificate-parse",
         "ssl-certificate-valid",
+        "ssl-weak-signature",
+        "ssl-weak-key",
     ] {
         if is_critical(summary, code) {
             deductions.push(Deduction {

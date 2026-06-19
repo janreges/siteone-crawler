@@ -386,6 +386,54 @@ fn crawl_siteone_single_page() {
 }
 
 // =========================================================================
+// 6b. SSL/TLS detection is pure-Rust (no openssl) and correct
+// =========================================================================
+
+#[test]
+#[ignore]
+fn ssl_tls_detection_is_pure_rust_and_correct() {
+    let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+
+    // crawler.siteone.io serves a valid, publicly-trusted cert that negotiates
+    // modern TLS. The SSL/TLS analyzer must detect this entirely in Rust
+    // (rustls + raw probe), with no dependency on the openssl/sh/timeout binaries.
+    let output = run_crawler(&[
+        "--url=https://crawler.siteone.io",
+        "--single-page",
+        "--output=text",
+        "--workers=2",
+        "--max-reqs-per-sec=5",
+        "--http-cache-dir=",
+    ]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Modern protocol(s) detected via rustls version-pinned handshakes.
+    assert!(
+        stdout.contains("TLSv1.2") || stdout.contains("TLSv1.3"),
+        "expected a modern TLS protocol in the SSL/TLS table"
+    );
+    // In-process trust verification against the system CA store.
+    assert!(
+        stdout.contains("Trusted by system CA store"),
+        "expected a trusted-chain verdict in the SSL/TLS table"
+    );
+    // The old openssl-missing false positive must NOT appear on a TLS 1.2-capable host.
+    assert!(
+        !stdout.contains("TLSv1.2 is not supported"),
+        "must not report TLS 1.2 as unsupported on a TLS 1.2-capable host"
+    );
+    // BadSSL-inspired positive accents on a well-configured host (modern TLS only, strong key).
+    assert!(
+        stdout.contains("Only modern TLS protocols are supported"),
+        "expected the modern-protocols OK finding on a host without legacy protocols"
+    );
+    assert!(
+        stdout.contains("strong public key"),
+        "expected the strong-public-key OK finding"
+    );
+}
+
+// =========================================================================
 // 7. --version and --help flags
 // =========================================================================
 
