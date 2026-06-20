@@ -230,6 +230,7 @@ impl Analyzer for ContentTypeAnalyzer {
     fn analyze(&mut self, status: &Status, output: &mut dyn Output) {
         self.add_content_type_super_table(status, output);
         self.add_content_type_raw_super_table(status, output);
+        check_page_weight(status);
     }
 
     fn should_be_activated(&self) -> bool {
@@ -498,6 +499,71 @@ fn build_content_type_columns() -> Vec<SuperTableColumn> {
             None,
         ),
     ]
+}
+
+/// Transfer-size budget per page (~2.4 MB ≈ HTTP Archive mobile median total bytes).
+const PAGE_SIZE_BUDGET_BYTES: i64 = 2_500_000;
+/// Request-count budget per page (≈ HTTP Archive mobile median requests).
+const PAGE_REQUEST_BUDGET: usize = 75;
+
+/// Roll up each internal HTML page's directly-referenced subresources (via source_uq_id) into a
+/// total transfer size and request count, and flag pages exceeding the HTTP Archive-derived budgets.
+/// Note: only DIRECT subresources are counted (nested CSS @import/font chains are attributed to the
+/// stylesheet, not the page), so this is a conservative lower bound.
+fn check_page_weight(status: &Status) {
+    let visited_urls = status.get_visited_urls();
+
+    // page uq_id -> (total bytes incl. the page itself, request count incl. the page itself)
+    let mut page_weight: HashMap<String, (i64, usize)> = HashMap::new();
+    for u in &visited_urls {
+        if u.content_type == ContentTypeId::Html && u.status_code == 200 && !u.is_external {
+            page_weight.entry(u.uq_id.clone()).or_insert((u.size.unwrap_or(0), 1));
+        }
+    }
+    if page_weight.is_empty() {
+        return;
+    }
+    for u in &visited_urls {
+        if u.status_code <= 0 {
+            continue;
+        }
+        if let Some(entry) = page_weight.get_mut(&u.source_uq_id) {
+            entry.0 += u.size.unwrap_or(0);
+            entry.1 += 1;
+        }
+    }
+
+    let over_size = page_weight
+        .values()
+        .filter(|(bytes, _)| *bytes > PAGE_SIZE_BUDGET_BYTES)
+        .count();
+    let over_requests = page_weight
+        .values()
+        .filter(|(_, count)| *count > PAGE_REQUEST_BUDGET)
+        .count();
+
+    if over_size > 0 {
+        status.add_warning_to_summary(
+            "page-weight-exceeded",
+            &format!(
+                "{} page(s) exceed the ~{} MB transfer-size budget",
+                over_size,
+                PAGE_SIZE_BUDGET_BYTES / 1_000_000
+            ),
+        );
+    } else {
+        status.add_ok_to_summary("page-weight-exceeded", "All pages are within the page-weight budget");
+    }
+
+    if over_requests > 0 {
+        status.add_notice_to_summary(
+            "page-requests-exceeded",
+            &format!(
+                "{} page(s) make more than {} requests",
+                over_requests, PAGE_REQUEST_BUDGET
+            ),
+        );
+    }
 }
 
 fn get_all_content_type_ids() -> Vec<ContentTypeId> {

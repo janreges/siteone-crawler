@@ -144,6 +144,19 @@ fn score_performance(summary: &Summary, stats: &BasicStats) -> CategoryScore {
         }
     }
 
+    // Pages over the transfer-size budget
+    if is_not_ok(summary, "page-weight-exceeded") {
+        let count = get_item_count(summary, "page-weight-exceeded").unwrap_or(1);
+        if count > 0 {
+            let pts = (count as f64 * 0.1).min(1.5);
+            deductions.push(
+                Deduction::new(format!("{} page(s) over the page-weight budget", count), round1(pts)).with_fix(
+                    "Reduce page weight: compress/resize images, defer or split JavaScript, and remove unused CSS.",
+                ),
+            );
+        }
+    }
+
     build_category("Performance", "performance", 0.20, deductions)
 }
 
@@ -781,6 +794,21 @@ mod tests {
         let scores = calculate_scores(&summary, &stats);
         let perf = scores.categories.iter().find(|c| c.code == "performance").unwrap();
         assert!((perf.score - 8.0).abs() < 0.001, "expected 8.0, got {}", perf.score);
+    }
+
+    #[test]
+    fn page_weight_over_budget_reduces_performance() {
+        let mut summary = Summary::new();
+        summary.add_item(Item::new(
+            "page-weight-exceeded".to_string(),
+            "5 page(s) exceed the budget".to_string(),
+            ItemStatus::Warning,
+        ));
+        let stats = make_basic_stats();
+        let scores = calculate_scores(&summary, &stats);
+        let perf = scores.categories.iter().find(|c| c.code == "performance").unwrap();
+        // 5 * 0.1 = 0.5 → 10.0 - 0.5 = 9.5
+        assert!((perf.score - 9.5).abs() < 0.001, "expected 9.5, got {}", perf.score);
     }
 
     #[test]
