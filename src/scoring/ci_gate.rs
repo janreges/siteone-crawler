@@ -126,18 +126,29 @@ pub fn evaluate(options: &CoreOptions, scores: &QualityScores, stats: &BasicStat
     }
 
     // Regression vs a baseline run: the overall score must not drop more than the allowed amount.
-    if let Some(baseline_path) = &options.ci_baseline
-        && let Some(baseline_score) = load_baseline_overall_score(baseline_path)
-    {
-        let max_drop = options.ci_max_score_drop.unwrap_or(0.0);
-        let drop = (baseline_score - scores.overall.score).max(0.0);
-        checks.push(CiCheck {
-            metric: "Overall score drop vs baseline".to_string(),
-            operator: "<=".to_string(),
-            threshold: max_drop,
-            actual: round1(drop),
-            passed: drop <= max_drop + 1e-9,
-        });
+    // A missing/unreadable baseline is loudly warned about (never silently skipped) so a
+    // misconfigured path can't produce a falsely-green gate.
+    if let Some(baseline_path) = &options.ci_baseline {
+        match load_baseline_overall_score(baseline_path) {
+            Some(baseline_score) => {
+                let max_drop = options.ci_max_score_drop.unwrap_or(0.0);
+                let drop = (baseline_score - scores.overall.score).max(0.0);
+                checks.push(CiCheck {
+                    metric: "Overall score drop vs baseline".to_string(),
+                    operator: "<=".to_string(),
+                    threshold: max_drop,
+                    actual: round1(drop),
+                    passed: drop <= max_drop + 1e-9,
+                });
+            }
+            None => {
+                eprintln!(
+                    "WARNING: --ci-baseline '{}' could not be read (missing file, not a --output=json \
+                     file, or no qualityScores.overall.score) — the regression check was SKIPPED.",
+                    baseline_path
+                );
+            }
+        }
     }
 
     // Average response time (optional)

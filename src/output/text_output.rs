@@ -531,7 +531,7 @@ impl Output for TextOutput {
         ));
 
         self.add_to_output(&format!(
-            "Response times: AVG {} MIN {} MAX {} TOTAL {}\n",
+            "Response times: AVG {} MIN {} MAX {} P90 {} TOTAL {}\n",
             utils::get_color_text(
                 &utils::get_formatted_duration(stats.total_requests_times_avg),
                 "magenta",
@@ -545,6 +545,11 @@ impl Output for TextOutput {
             utils::get_color_text(
                 &utils::get_formatted_duration(stats.total_requests_times_max),
                 "red",
+                false,
+            ),
+            utils::get_color_text(
+                &utils::get_formatted_duration(stats.total_requests_times_p90),
+                "yellow",
                 false,
             ),
             utils::get_color_text(

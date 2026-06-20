@@ -163,11 +163,12 @@ impl SecurityAnalyzer {
             Lazy::new(|| Regex::new(r#"(?i)<form[^>]*action=["']http://[^"']+["'][^>]*>"#).unwrap());
         static RE_IFRAME_HTTP: Lazy<Regex> =
             Lazy::new(|| Regex::new(r#"(?i)<iframe[^>]*src=["']http://[^"']+["'][^>]*>"#).unwrap());
-        // Active mixed content — script/stylesheet loaded over HTTP can fully MITM the page.
+        // Active mixed content — script over HTTP can fully MITM the page.
         static RE_SCRIPT_HTTP: Lazy<Regex> =
             Lazy::new(|| Regex::new(r#"(?i)<script[^>]*src=["']http://[^"']+["']"#).unwrap());
-        static RE_LINK_HTTP: Lazy<Regex> =
-            Lazy::new(|| Regex::new(r#"(?i)<link[^>]*href=["']http://[^"']+["']"#).unwrap());
+        // Whole <link> tags — only rel=stylesheet over HTTP is active content (rel=canonical/
+        // alternate/preconnect/icon over HTTP are not), so the `rel` is inspected separately below.
+        static RE_LINK_TAG: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)<link\b[^>]*>").unwrap());
         // Passive mixed content — images/media over HTTP (lower risk but still a warning).
         static RE_MEDIA_HTTP: Lazy<Regex> =
             Lazy::new(|| Regex::new(r#"(?i)<(?:img|audio|video|source)[^>]*src=["']http://[^"']+["']"#).unwrap());
@@ -187,10 +188,25 @@ impl SecurityAnalyzer {
             url_result.add_critical(finding.clone(), ANALYSIS_HEADERS, Some(vec![finding]));
         }
 
-        // Active mixed content (script/stylesheet over HTTP) — critical
-        for mat in RE_SCRIPT_HTTP.find_iter(html).chain(RE_LINK_HTTP.find_iter(html)) {
-            let finding = format!("Active mixed content loaded over HTTP detected in {}", mat.as_str());
+        // Active mixed content: <script src=http://> is always active content.
+        for mat in RE_SCRIPT_HTTP.find_iter(html) {
+            let finding = format!("Active mixed content (script over HTTP) detected in {}", mat.as_str());
             url_result.add_critical(finding.clone(), ANALYSIS_HEADERS, Some(vec![finding]));
+        }
+
+        // A <link> over HTTP is active content only when it is a stylesheet — other rel values
+        // (canonical/alternate/preconnect/icon) over HTTP are not active and must not be critical.
+        for mat in RE_LINK_TAG.find_iter(html) {
+            let tag_lower = mat.as_str().to_lowercase();
+            let is_http = tag_lower.contains("href=\"http://") || tag_lower.contains("href='http://");
+            let is_stylesheet = tag_lower.contains("rel=\"stylesheet\"") || tag_lower.contains("rel='stylesheet'");
+            if is_http && is_stylesheet {
+                let finding = format!(
+                    "Active mixed content (stylesheet over HTTP) detected in {}",
+                    mat.as_str()
+                );
+                url_result.add_critical(finding.clone(), ANALYSIS_HEADERS, Some(vec![finding]));
+            }
         }
 
         // Passive mixed content (image/media over HTTP) — warning
@@ -1046,6 +1062,39 @@ mod tests {
         analyzer.check_html_security(r#"<img src="http://example.test/x.png">"#, true, &mut result);
         assert!(!result.get_warning().is_empty());
         assert!(result.get_critical().is_empty());
+    }
+
+    #[test]
+    fn http_canonical_link_is_not_critical() {
+        // A rel=canonical (or alternate/preconnect/icon) over HTTP is not active content.
+        let mut analyzer = SecurityAnalyzer::new();
+        let mut result = UrlAnalysisResult::new();
+        analyzer.check_html_security(
+            r#"<link rel="canonical" href="http://example.test/x">"#,
+            true,
+            &mut result,
+        );
+        assert!(
+            result.get_critical().is_empty(),
+            "http canonical must not be critical: {:?}",
+            result.get_critical()
+        );
+    }
+
+    #[test]
+    fn http_stylesheet_link_is_critical() {
+        let mut analyzer = SecurityAnalyzer::new();
+        let mut result = UrlAnalysisResult::new();
+        analyzer.check_html_security(
+            r#"<link rel="stylesheet" href="http://example.test/s.css">"#,
+            true,
+            &mut result,
+        );
+        assert!(
+            !result.get_critical().is_empty(),
+            "http stylesheet must be critical: {:?}",
+            result.get_critical()
+        );
     }
 
     #[test]

@@ -67,9 +67,17 @@ impl SeoAndOpenGraphAnalyzer {
 
             let url_path_and_query = get_url_path_and_query(&visited_url.url);
             let mut url_result = SeoAndOpenGraphResult::new(visited_url.uq_id.clone(), url_path_and_query);
-            url_result.page_host = url::Url::parse(&visited_url.url)
-                .ok()
-                .and_then(|u| u.host_str().map(|s| s.to_string()));
+            if let Ok(parsed) = url::Url::parse(&visited_url.url) {
+                url_result.page_host = parsed.host_str().map(|s| s.to_string());
+                // Mark pages disallowed by robots.txt so they're excluded from on-page SEO checks.
+                if let Some(host) = parsed.host_str() {
+                    let port = parsed.port_or_known_default().unwrap_or(0);
+                    if let Some(robots) = status.get_robots_txt_content(parsed.scheme(), host, port) {
+                        url_result.denied_by_robots_txt =
+                            SeoAndOpenGraphResult::is_denied_by_robots_txt(&visited_url.url, &robots);
+                    }
+                }
+            }
 
             let document = Html::parse_document(&html_body);
             extract_seo_metadata(&document, &mut url_result);

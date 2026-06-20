@@ -9,6 +9,7 @@ use crate::components::super_table::SuperTable;
 use crate::components::super_table_column::SuperTableColumn;
 use crate::output::output::Output;
 use crate::result::status::Status;
+use crate::result::visited_url::{SOURCE_A_HREF, SOURCE_INIT_URL, SOURCE_REDIRECT, SOURCE_SITEMAP};
 use crate::types::ContentTypeId;
 use crate::utils;
 
@@ -506,6 +507,15 @@ const PAGE_SIZE_BUDGET_BYTES: i64 = 2_500_000;
 /// Request-count budget per page (≈ HTTP Archive mobile median requests).
 const PAGE_REQUEST_BUDGET: usize = 75;
 
+/// Whether a discovered URL is a true subresource of its source page (an asset), as opposed to a
+/// navigation link, redirect, initial URL or sitemap entry (which are separate pages, not assets).
+fn is_page_subresource(source_attr: i32) -> bool {
+    !matches!(
+        source_attr,
+        SOURCE_A_HREF | SOURCE_REDIRECT | SOURCE_INIT_URL | SOURCE_SITEMAP
+    )
+}
+
 /// Roll up each internal HTML page's directly-referenced subresources (via source_uq_id) into a
 /// total transfer size and request count, and flag pages exceeding the HTTP Archive-derived budgets.
 /// Note: only DIRECT subresources are counted (nested CSS @import/font chains are attributed to the
@@ -525,6 +535,11 @@ fn check_page_weight(status: &Status) {
     }
     for u in &visited_urls {
         if u.status_code <= 0 {
+            continue;
+        }
+        // Only true subresources count toward page weight (img/script/link/css/font/media). Skip
+        // navigation links, redirects, the initial URL and sitemap URLs — those are separate pages.
+        if !is_page_subresource(u.source_attr) {
             continue;
         }
         if let Some(entry) = page_weight.get_mut(&u.source_uq_id) {
@@ -581,4 +596,26 @@ fn get_all_content_type_ids() -> Vec<ContentTypeId> {
         ContentTypeId::Redirect,
         ContentTypeId::Other,
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::result::visited_url::{SOURCE_IMG_SRC, SOURCE_LINK_HREF, SOURCE_SCRIPT_SRC};
+
+    #[test]
+    fn nav_links_redirects_init_sitemap_are_not_subresources() {
+        // Regression for the page-weight bug: these must NOT count toward a page's weight.
+        assert!(!is_page_subresource(SOURCE_A_HREF));
+        assert!(!is_page_subresource(SOURCE_REDIRECT));
+        assert!(!is_page_subresource(SOURCE_INIT_URL));
+        assert!(!is_page_subresource(SOURCE_SITEMAP));
+    }
+
+    #[test]
+    fn assets_are_subresources() {
+        assert!(is_page_subresource(SOURCE_IMG_SRC));
+        assert!(is_page_subresource(SOURCE_SCRIPT_SRC));
+        assert!(is_page_subresource(SOURCE_LINK_HREF));
+    }
 }

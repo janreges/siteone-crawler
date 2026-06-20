@@ -1024,9 +1024,9 @@
         "text": "51 page(s) without aria labels"
       },
       {
-        "aplCode": "pages-without-roles",
+        "aplCode": "pages-without-main-landmark",
         "status": "WARNING",
-        "text": "51 page(s) without role attributes"
+        "text": "51 page(s) without a main landmark"
       },
       {
         "aplCode": "robots-txt-crawler.siteone.io",
