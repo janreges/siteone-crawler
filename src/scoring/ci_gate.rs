@@ -105,15 +105,17 @@ pub fn evaluate(options: &CoreOptions, scores: &QualityScores, stats: &BasicStat
     }
 
     // Forbidden finding codes — fail if any of the given apl_codes is present as a non-OK finding.
+    // A code also listed in --ci-ignore-code is suppressed here too (ignore = "accepted" wins).
     if !options.ci_fail_on_code.is_empty() {
         let present = options
             .ci_fail_on_code
             .iter()
             .filter(|code| {
-                summary
-                    .get_items()
-                    .iter()
-                    .any(|i| &i.apl_code == *code && !matches!(i.status, ItemStatus::Ok | ItemStatus::Info))
+                !options.ci_ignore_code.contains(code)
+                    && summary
+                        .get_items()
+                        .iter()
+                        .any(|i| &i.apl_code == *code && !matches!(i.status, ItemStatus::Ok | ItemStatus::Info))
             })
             .count();
         checks.push(CiCheck {
@@ -149,6 +151,9 @@ pub fn evaluate(options: &CoreOptions, scores: &QualityScores, stats: &BasicStat
                 );
             }
         }
+    } else if options.ci_max_score_drop.is_some() {
+        // --ci-max-score-drop is a no-op without a baseline; warn rather than silently ignore it.
+        eprintln!("WARNING: --ci-max-score-drop has no effect without --ci-baseline.");
     }
 
     // Average response time (optional)
@@ -724,16 +729,15 @@ mod tests {
     #[test]
     fn fail_on_code_fails_when_present() {
         let mut options = make_options();
-        options.ci_fail_on_code = vec!["seo-noindex-sitewide".to_string()];
-        // Ignore it for the critical count so we isolate the forbidden-code check.
-        options.ci_ignore_code = vec!["seo-noindex-sitewide".to_string()];
+        options.ci_fail_on_code = vec!["seo-noindex".to_string()];
         let scores = make_scores(8.0);
         let stats = make_stats(100);
         let mut summary = Summary::new();
+        // A Notice doesn't fail the critical/warning counts, so the gate fails only on fail-on-code.
         summary.add_item(Item::new(
-            "seo-noindex-sitewide".to_string(),
-            "Site-wide noindex".to_string(),
-            ItemStatus::Critical,
+            "seo-noindex".to_string(),
+            "noindex notice".to_string(),
+            ItemStatus::Notice,
         ));
         let result = evaluate(&options, &scores, &stats, &summary);
         assert!(!result.passed);
@@ -743,6 +747,24 @@ mod tests {
                 .iter()
                 .any(|c| c.metric == "Forbidden finding codes" && !c.passed)
         );
+    }
+
+    #[test]
+    fn ignore_code_suppresses_fail_on_code() {
+        // A code in both --ci-fail-on-code and --ci-ignore-code is suppressed (ignore wins).
+        let mut options = make_options();
+        options.ci_fail_on_code = vec!["seo-noindex".to_string()];
+        options.ci_ignore_code = vec!["seo-noindex".to_string()];
+        let scores = make_scores(8.0);
+        let stats = make_stats(100);
+        let mut summary = Summary::new();
+        summary.add_item(Item::new(
+            "seo-noindex".to_string(),
+            "noindex notice".to_string(),
+            ItemStatus::Notice,
+        ));
+        let result = evaluate(&options, &scores, &stats, &summary);
+        assert!(result.passed, "checks: {:?}", result.checks);
     }
 
     #[test]
