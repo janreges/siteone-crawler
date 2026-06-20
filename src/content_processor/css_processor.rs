@@ -123,6 +123,8 @@ impl ContentProcessor for CssProcessor {
                     None,
                     self.config.offline_export_preserve_urls,
                     self.config.offline_export_no_url_rewriting,
+                    self.config.is_domain_allowed_for_static_files.clone(),
+                    self.config.is_external_domain_allowed_for_crawling.clone(),
                 );
                 format!("url({}{}{})", quote, relative_url, quote)
             })

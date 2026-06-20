@@ -47,9 +47,9 @@ pub struct OfflineWebsiteExporter {
     initial_parsed_url: Option<ParsedUrl>,
     content_processor_manager: Option<Arc<Mutex<ContentProcessorManager>>>,
     #[allow(clippy::type_complexity)]
-    is_domain_allowed_for_static_files: Option<Box<dyn Fn(&str) -> bool + Send + Sync>>,
+    is_domain_allowed_for_static_files: Option<Arc<dyn Fn(&str) -> bool + Send + Sync>>,
     #[allow(clippy::type_complexity)]
-    is_external_domain_allowed_for_crawling: Option<Box<dyn Fn(&str) -> bool + Send + Sync>>,
+    is_external_domain_allowed_for_crawling: Option<Arc<dyn Fn(&str) -> bool + Send + Sync>>,
     /// Maps URL -> relative file path for successfully exported files
     exported_file_paths: HashMap<String, String>,
 }
@@ -126,8 +126,8 @@ impl OfflineWebsiteExporter {
 
     pub fn set_domain_callbacks(
         &mut self,
-        static_files: Box<dyn Fn(&str) -> bool + Send + Sync>,
-        crawling: Box<dyn Fn(&str) -> bool + Send + Sync>,
+        static_files: Arc<dyn Fn(&str) -> bool + Send + Sync>,
+        crawling: Arc<dyn Fn(&str) -> bool + Send + Sync>,
     ) {
         self.is_domain_allowed_for_static_files = Some(static_files);
         self.is_external_domain_allowed_for_crawling = Some(crawling);
@@ -341,7 +341,14 @@ impl OfflineWebsiteExporter {
             "href"
         };
 
-        let mut converter = OfflineUrlConverter::new(initial_url, base_url, target_url, None, None, Some(attribute));
+        let mut converter = OfflineUrlConverter::new(
+            initial_url,
+            base_url,
+            target_url,
+            self.is_domain_allowed_for_static_files.clone(),
+            self.is_external_domain_allowed_for_crawling.clone(),
+            Some(attribute),
+        );
         converter.set_preserve_url_structure(self.offline_export_preserve_url_structure);
 
         let relative_url = converter.convert_url_to_relative(false);

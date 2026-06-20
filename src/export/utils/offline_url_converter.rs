@@ -3,7 +3,7 @@
 //
 // Converts absolute URLs to relative paths for offline browsing.
 
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -63,9 +63,9 @@ pub struct OfflineUrlConverter {
     relative_target_url: ParsedUrl,
     target_url_source_attribute: Option<String>,
     #[allow(clippy::type_complexity)]
-    callback_is_domain_allowed_for_static_files: Option<Box<dyn Fn(&str) -> bool + Send + Sync>>,
+    callback_is_domain_allowed_for_static_files: Option<Arc<dyn Fn(&str) -> bool + Send + Sync>>,
     #[allow(clippy::type_complexity)]
-    callback_is_external_domain_allowed_for_crawling: Option<Box<dyn Fn(&str) -> bool + Send + Sync>>,
+    callback_is_external_domain_allowed_for_crawling: Option<Arc<dyn Fn(&str) -> bool + Send + Sync>>,
     target_domain_relation: TargetDomainRelation,
     preserve_url_structure: bool,
 }
@@ -76,8 +76,8 @@ impl OfflineUrlConverter {
         initial_url: ParsedUrl,
         base_url: ParsedUrl,
         target_url: ParsedUrl,
-        callback_is_domain_allowed_for_static_files: Option<Box<dyn Fn(&str) -> bool + Send + Sync>>,
-        callback_is_external_domain_allowed_for_crawling: Option<Box<dyn Fn(&str) -> bool + Send + Sync>>,
+        callback_is_domain_allowed_for_static_files: Option<Arc<dyn Fn(&str) -> bool + Send + Sync>>,
+        callback_is_external_domain_allowed_for_crawling: Option<Arc<dyn Fn(&str) -> bool + Send + Sync>>,
         attribute: Option<&str>,
     ) -> Self {
         let relative_target_url = target_url.clone();
@@ -594,10 +594,10 @@ mod tests {
         };
         let target_url = ParsedUrl::parse(target, base_url_ref);
 
-        let allowed_static: Box<dyn Fn(&str) -> bool + Send + Sync> =
-            Box::new(|domain: &str| matches!(domain, "cdn.siteone.io" | "cdn.webflow.com" | "nextjs.org"));
-        let allowed_crawling: Box<dyn Fn(&str) -> bool + Send + Sync> =
-            Box::new(|domain: &str| matches!(domain, "svelte.dev" | "nextjs.org"));
+        let allowed_static: Arc<dyn Fn(&str) -> bool + Send + Sync> =
+            Arc::new(|domain: &str| matches!(domain, "cdn.siteone.io" | "cdn.webflow.com" | "nextjs.org"));
+        let allowed_crawling: Arc<dyn Fn(&str) -> bool + Send + Sync> =
+            Arc::new(|domain: &str| matches!(domain, "svelte.dev" | "nextjs.org"));
 
         OfflineUrlConverter::new(
             initial_url,
@@ -1096,6 +1096,93 @@ mod tests {
     }
 
     // =========================================================================
+    // Issue #101: downloaded external/CDN assets must be rewritten to the
+    // local offline copy when their domain is allowed for static files.
+    // =========================================================================
+
+    /// Convert a URL using the supplied allowed-static-files domains.
+    /// The matcher mirrors the crawler's wildcard semantics (`*` → `.*`).
+    fn convert_with_allowed_static(
+        initial: &str,
+        base: &str,
+        target: &str,
+        attribute: Option<&str>,
+        allowed_static_domains: &[&str],
+    ) -> String {
+        let initial_url = ParsedUrl::parse(initial, None);
+        let base_url = ParsedUrl::parse(base, None);
+        let base_url_ref = if target.starts_with("//")
+            || target.starts_with("http")
+            || target.starts_with('#')
+            || target.starts_with('?')
+        {
+            None
+        } else {
+            Some(&base_url)
+        };
+        let target_url = ParsedUrl::parse(target, base_url_ref);
+
+        // Build wildcard-aware matchers (same rule as crawler::compile_domain_patterns).
+        let patterns: Vec<Regex> = allowed_static_domains
+            .iter()
+            .filter_map(|d| Regex::new(&format!("^{}$", regex::escape(d).replace(r"\*", ".*"))).ok())
+            .collect();
+        let allowed_static: Arc<dyn Fn(&str) -> bool + Send + Sync> =
+            Arc::new(move |domain: &str| patterns.iter().any(|re| re.is_match(domain)));
+        // Nothing is allowed for whole-domain crawling in these tests.
+        let allowed_crawling: Arc<dyn Fn(&str) -> bool + Send + Sync> = Arc::new(|_| false);
+
+        let mut converter = OfflineUrlConverter::new(
+            initial_url,
+            base_url,
+            target_url,
+            Some(allowed_static),
+            Some(allowed_crawling),
+            attribute,
+        );
+        converter.convert_url_to_relative(true)
+    }
+
+    #[test]
+    fn issue101_allowed_external_asset_is_rewritten_to_local() {
+        // CSS asset on an allowed CDN domain → rewritten to the local "_host/..." copy.
+        let result = convert_with_allowed_static(
+            "https://siteone.io/",
+            "https://siteone.io/",
+            "https://cdn.jsdelivr.net/npm/pkg/dist/style.css",
+            Some("href"),
+            &["cdn.jsdelivr.net"],
+        );
+        assert_eq!(result, "_cdn.jsdelivr.net/npm/pkg/dist/style.css");
+    }
+
+    #[test]
+    fn issue101_nonallowed_external_asset_stays_absolute() {
+        // Same asset but the domain is NOT allowed → keep the original absolute URL.
+        let result = convert_with_allowed_static(
+            "https://siteone.io/",
+            "https://siteone.io/",
+            "https://cdn.jsdelivr.net/npm/pkg/dist/style.css",
+            Some("href"),
+            &["cdn.other-allowed.net"],
+        );
+        assert_eq!(result, "https://cdn.jsdelivr.net/npm/pkg/dist/style.css");
+    }
+
+    #[test]
+    fn issue101_wildcard_allowed_external_asset_is_rewritten() {
+        // Wildcard allowed domain (*.example.com) → subdomain asset is rewritten locally.
+        let result = convert_with_allowed_static(
+            "https://siteone.io/",
+            "https://siteone.io/",
+            "https://cdn.example.com/assets/app.js",
+            Some("src"),
+            &["*.example.com"],
+        );
+        assert_eq!(result, "_cdn.example.com/assets/app.js");
+    }
+
+    // =========================================================================
     // sanitizeFilePath (UTF-8 subset)
     // =========================================================================
 
@@ -1226,8 +1313,8 @@ mod tests {
         let base_url_for_ref = ParsedUrl::parse(base, None);
         let target_url = ParsedUrl::parse(target, Some(&base_url_for_ref));
 
-        let false_cb1: Box<dyn Fn(&str) -> bool + Send + Sync> = Box::new(|_| false);
-        let false_cb2: Box<dyn Fn(&str) -> bool + Send + Sync> = Box::new(|_| false);
+        let false_cb1: Arc<dyn Fn(&str) -> bool + Send + Sync> = Arc::new(|_| false);
+        let false_cb2: Arc<dyn Fn(&str) -> bool + Send + Sync> = Arc::new(|_| false);
 
         let mut converter = OfflineUrlConverter::new(
             initial_url,
@@ -1284,8 +1371,8 @@ mod tests {
         let base_url = ParsedUrl::parse(base, None);
         let target_url = ParsedUrl::parse(target, None);
 
-        let false_cb1: Box<dyn Fn(&str) -> bool + Send + Sync> = Box::new(|_| false);
-        let false_cb2: Box<dyn Fn(&str) -> bool + Send + Sync> = Box::new(|_| false);
+        let false_cb1: Arc<dyn Fn(&str) -> bool + Send + Sync> = Arc::new(|_| false);
+        let false_cb2: Arc<dyn Fn(&str) -> bool + Send + Sync> = Arc::new(|_| false);
 
         let mut converter = OfflineUrlConverter::new(
             initial_url,
@@ -1403,8 +1490,8 @@ mod tests {
         let base_url = ParsedUrl::parse(base, None);
         let target_url = ParsedUrl::parse(target, None);
 
-        let false_cb1: Box<dyn Fn(&str) -> bool + Send + Sync> = Box::new(|_| false);
-        let false_cb2: Box<dyn Fn(&str) -> bool + Send + Sync> = Box::new(|_| false);
+        let false_cb1: Arc<dyn Fn(&str) -> bool + Send + Sync> = Arc::new(|_| false);
+        let false_cb2: Arc<dyn Fn(&str) -> bool + Send + Sync> = Arc::new(|_| false);
 
         let mut converter = OfflineUrlConverter::new(
             initial_url,

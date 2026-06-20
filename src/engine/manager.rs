@@ -10,7 +10,7 @@ use std::time::Instant;
 use crate::analysis::manager::AnalysisManager;
 use crate::components::super_table::SuperTable;
 use crate::content_processor::astro_processor::AstroProcessor;
-use crate::content_processor::base_processor::ProcessorConfig;
+use crate::content_processor::base_processor::{DomainAllowFn, ProcessorConfig};
 use crate::content_processor::css_processor::CssProcessor;
 use crate::content_processor::html_processor::HtmlProcessor;
 use crate::content_processor::javascript_processor::JavaScriptProcessor;
@@ -18,7 +18,7 @@ use crate::content_processor::manager::{ContentProcessorManager, SUPER_TABLE_CON
 use crate::content_processor::nextjs_processor::NextJsProcessor;
 use crate::content_processor::svelte_processor::SvelteProcessor;
 use crate::content_processor::xml_processor::XmlProcessor;
-use crate::engine::crawler::Crawler;
+use crate::engine::crawler::{Crawler, compile_domain_patterns};
 use crate::engine::http_client::HttpClient;
 use crate::engine::parsed_url::ParsedUrl;
 use crate::error::{CrawlerError, CrawlerResult};
@@ -433,6 +433,8 @@ impl Manager {
             let initial_parsed = ParsedUrl::parse(&options.url, None);
             offline.set_initial_parsed_url(initial_parsed);
             offline.set_content_processor_manager(crawler.get_content_processor_manager().clone());
+            let (static_cb, crawling_cb) = Self::build_domain_allow_callbacks(options);
+            offline.set_domain_callbacks(static_cb, crawling_cb);
             if offline.should_be_activated() {
                 if let (Ok(st), Ok(out)) = (status.lock(), output.lock())
                     && let Err(e) = offline.export(&st, &**out)
@@ -631,6 +633,39 @@ impl Manager {
         }
     }
 
+    /// Build domain-allow predicates used by the offline exporter / content processors so that
+    /// downloaded external assets are rewritten to their local copies (issue #101).
+    ///
+    /// Returns `(is_domain_allowed_for_static_files, is_external_domain_allowed_for_crawling)`.
+    /// The closures mirror the crawler's own matching rules (wildcard `*` support, www/non-www
+    /// equivalence, initial-host always allowed for crawling).
+    fn build_domain_allow_callbacks(options: &CoreOptions) -> (DomainAllowFn, DomainAllowFn) {
+        let initial_host = ParsedUrl::parse(&options.url, None).host.unwrap_or_default();
+
+        let static_patterns = compile_domain_patterns(&options.allowed_domains_for_external_files);
+        let static_cb: DomainAllowFn =
+            Arc::new(move |domain: &str| static_patterns.iter().any(|re| re.is_match(domain)));
+
+        let crawling_patterns = compile_domain_patterns(&options.allowed_domains_for_crawling);
+        let crawling_initial_host = initial_host.clone();
+        let crawling_cb: DomainAllowFn = Arc::new(move |domain: &str| {
+            if domain == crawling_initial_host {
+                return true;
+            }
+            // www/non-www equivalence (mirrors Crawler::hosts_are_www_equivalent)
+            let a = domain.strip_prefix("www.").unwrap_or(domain);
+            let b = crawling_initial_host
+                .strip_prefix("www.")
+                .unwrap_or(&crawling_initial_host);
+            if a == b {
+                return true;
+            }
+            crawling_patterns.iter().any(|re| re.is_match(domain))
+        });
+
+        (static_cb, crawling_cb)
+    }
+
     /// Create and register all content processors
     fn create_content_processor_manager(options: &CoreOptions) -> ContentProcessorManager {
         let initial_url = ParsedUrl::parse(&options.url, None);
@@ -649,6 +684,9 @@ impl Manager {
         config.disable_astro_inline_modules = options.disable_astro_inline_modules;
         config.offline_export_preserve_urls = options.offline_export_preserve_urls;
         config.offline_export_no_url_rewriting = options.offline_export_no_url_rewriting;
+        let (static_cb, crawling_cb) = Self::build_domain_allow_callbacks(options);
+        config.is_domain_allowed_for_static_files = Some(static_cb);
+        config.is_external_domain_allowed_for_crawling = Some(crawling_cb);
         config.compile_ignore_regex();
 
         let mut cpm = ContentProcessorManager::new();

@@ -583,6 +583,8 @@ impl HtmlProcessor {
                                 Some(&attr_lower),
                                 self.config.offline_export_preserve_urls,
                                 self.config.offline_export_no_url_rewriting,
+                                self.config.is_domain_allowed_for_static_files.clone(),
+                                self.config.is_external_domain_allowed_for_crawling.clone(),
                             )
                         } else {
                             // URL with size descriptor (e.g., "url 2x")
@@ -596,6 +598,8 @@ impl HtmlProcessor {
                                 Some(&attr_lower),
                                 self.config.offline_export_preserve_urls,
                                 self.config.offline_export_no_url_rewriting,
+                                self.config.is_domain_allowed_for_static_files.clone(),
+                                self.config.is_external_domain_allowed_for_crawling.clone(),
                             );
                             format!("{} {}", relative_url, size_part)
                         }
@@ -610,6 +614,8 @@ impl HtmlProcessor {
                     Some(attribute),
                     self.config.offline_export_preserve_urls,
                     self.config.offline_export_no_url_rewriting,
+                    self.config.is_domain_allowed_for_static_files.clone(),
+                    self.config.is_external_domain_allowed_for_crawling.clone(),
                 );
 
                 // Handle component-url and renderer-url (Astro)
@@ -833,6 +839,8 @@ impl ContentProcessor for HtmlProcessor {
                 None,
                 self.config.offline_export_preserve_urls,
                 self.config.offline_export_no_url_rewriting,
+                self.config.is_domain_allowed_for_static_files.clone(),
+                self.config.is_external_domain_allowed_for_crawling.clone(),
             );
             *content = content.replace(full_match, &format!("{}{}{}", prefix, relative, suffix));
         }

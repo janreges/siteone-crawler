@@ -3,13 +3,18 @@
 //
 // Provides shared utility methods used by all content processors.
 
+use std::sync::Arc;
+
 use crate::engine::parsed_url::ParsedUrl;
 use crate::export::utils::offline_url_converter::OfflineUrlConverter;
 use crate::types::ContentTypeId;
 
+/// Predicate that decides whether a domain is allowed (for static files / crawling).
+pub type DomainAllowFn = Arc<dyn Fn(&str) -> bool + Send + Sync>;
+
 /// Configuration extracted from CoreOptions, shared across processors.
 /// This avoids each processor needing a reference to the full crawler.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ProcessorConfig {
     pub single_page: bool,
     pub single_foreign_page: bool,
@@ -28,6 +33,44 @@ pub struct ProcessorConfig {
     pub offline_export_preserve_urls: bool,
     pub offline_export_no_url_rewriting: bool,
     pub initial_url: ParsedUrl,
+    /// Returns true if the given host is allowed for downloading static files
+    /// (`--allowed-domain-for-external-files`). Used by offline export so that
+    /// downloaded external/CDN assets are rewritten to their local copies.
+    pub is_domain_allowed_for_static_files: Option<DomainAllowFn>,
+    /// Returns true if the given host is allowed for whole-domain crawling
+    /// (`--allowed-domain-for-crawling`).
+    pub is_external_domain_allowed_for_crawling: Option<DomainAllowFn>,
+}
+
+impl std::fmt::Debug for ProcessorConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ProcessorConfig")
+            .field("single_page", &self.single_page)
+            .field("single_foreign_page", &self.single_foreign_page)
+            .field("max_depth", &self.max_depth)
+            .field("files_enabled", &self.files_enabled)
+            .field("images_enabled", &self.images_enabled)
+            .field("scripts_enabled", &self.scripts_enabled)
+            .field("styles_enabled", &self.styles_enabled)
+            .field("fonts_enabled", &self.fonts_enabled)
+            .field("disable_javascript", &self.disable_javascript)
+            .field("remove_all_anchor_listeners", &self.remove_all_anchor_listeners)
+            .field("ignore_regex", &self.ignore_regex)
+            .field("compiled_ignore_regex", &self.compiled_ignore_regex)
+            .field("disable_astro_inline_modules", &self.disable_astro_inline_modules)
+            .field("offline_export_preserve_urls", &self.offline_export_preserve_urls)
+            .field("offline_export_no_url_rewriting", &self.offline_export_no_url_rewriting)
+            .field("initial_url", &self.initial_url)
+            .field(
+                "is_domain_allowed_for_static_files",
+                &self.is_domain_allowed_for_static_files.is_some(),
+            )
+            .field(
+                "is_external_domain_allowed_for_crawling",
+                &self.is_external_domain_allowed_for_crawling.is_some(),
+            )
+            .finish()
+    }
 }
 
 impl ProcessorConfig {
@@ -49,6 +92,8 @@ impl ProcessorConfig {
             offline_export_preserve_urls: false,
             offline_export_no_url_rewriting: false,
             initial_url,
+            is_domain_allowed_for_static_files: None,
+            is_external_domain_allowed_for_crawling: None,
         }
     }
 
@@ -90,6 +135,7 @@ fn normalize_path(path: &str) -> String {
 
 /// Convert a URL to a relative path for offline use.
 /// When `preserve_urls` is true, same-domain links become root-relative and cross-domain links stay absolute.
+#[allow(clippy::too_many_arguments)]
 pub fn convert_url_to_relative(
     base_url: &ParsedUrl,
     target_url: &str,
@@ -97,6 +143,8 @@ pub fn convert_url_to_relative(
     attribute: Option<&str>,
     preserve_urls: bool,
     no_url_rewriting: bool,
+    is_domain_allowed_for_static_files: Option<DomainAllowFn>,
+    is_external_domain_allowed_for_crawling: Option<DomainAllowFn>,
 ) -> String {
     // No URL rewriting → return target URL completely unchanged
     if no_url_rewriting {
@@ -145,8 +193,8 @@ pub fn convert_url_to_relative(
         initial_url.clone(),
         base_url.clone(),
         parsed_target,
-        None,
-        None,
+        is_domain_allowed_for_static_files,
+        is_external_domain_allowed_for_crawling,
         attribute,
     );
 
@@ -171,6 +219,8 @@ mod tests {
             Some("href"),
             false,
             false,
+            None,
+            None,
         );
         // &amp; must be decoded to & so the query hash matches what FoundUrl stored
         assert!(
@@ -182,7 +232,16 @@ mod tests {
     #[test]
     fn decode_numeric_entity_before_offline_conversion() {
         let base = ParsedUrl::parse("https://example.com/", None);
-        let result = convert_url_to_relative(&base, "/page?a=1&#38;b=2", &initial_url(), Some("href"), false, false);
+        let result = convert_url_to_relative(
+            &base,
+            "/page?a=1&#38;b=2",
+            &initial_url(),
+            Some("href"),
+            false,
+            false,
+            None,
+            None,
+        );
         assert!(
             !result.contains("&#38;"),
             "HTML entity &#38; should be decoded before conversion"
@@ -193,8 +252,26 @@ mod tests {
     fn preserve_trailing_ampersand() {
         // Trailing & in a query string should NOT be stripped (unlike in FoundUrl discovery)
         let base = ParsedUrl::parse("https://example.com/", None);
-        let a = convert_url_to_relative(&base, "/page?a=1&", &initial_url(), Some("href"), false, false);
-        let b = convert_url_to_relative(&base, "/page?a=1&b=", &initial_url(), Some("href"), false, false);
+        let a = convert_url_to_relative(
+            &base,
+            "/page?a=1&",
+            &initial_url(),
+            Some("href"),
+            false,
+            false,
+            None,
+            None,
+        );
+        let b = convert_url_to_relative(
+            &base,
+            "/page?a=1&b=",
+            &initial_url(),
+            Some("href"),
+            false,
+            false,
+            None,
+            None,
+        );
         // Both should produce different results (trailing & matters for hash)
         assert_ne!(a, b, "trailing & should be preserved, not stripped");
     }
@@ -202,14 +279,32 @@ mod tests {
     #[test]
     fn skip_data_uri() {
         let base = ParsedUrl::parse("https://example.com/", None);
-        let result = convert_url_to_relative(&base, "data:image/png;base64,abc", &initial_url(), None, false, false);
+        let result = convert_url_to_relative(
+            &base,
+            "data:image/png;base64,abc",
+            &initial_url(),
+            None,
+            false,
+            false,
+            None,
+            None,
+        );
         assert_eq!(result, "data:image/png;base64,abc");
     }
 
     #[test]
     fn skip_javascript_uri() {
         let base = ParsedUrl::parse("https://example.com/", None);
-        let result = convert_url_to_relative(&base, "javascript:void(0)", &initial_url(), None, false, false);
+        let result = convert_url_to_relative(
+            &base,
+            "javascript:void(0)",
+            &initial_url(),
+            None,
+            false,
+            false,
+            None,
+            None,
+        );
         assert_eq!(result, "javascript:void(0)");
     }
 
@@ -225,6 +320,8 @@ mod tests {
             Some("href"),
             true,
             false,
+            None,
+            None,
         );
         assert_eq!(result, "/designy/classic");
     }
@@ -232,14 +329,23 @@ mod tests {
     #[test]
     fn preserve_urls_same_domain_root_relative() {
         let base = ParsedUrl::parse("https://example.com/blog/post", None);
-        let result = convert_url_to_relative(&base, "/about", &initial_url(), Some("href"), true, false);
+        let result = convert_url_to_relative(&base, "/about", &initial_url(), Some("href"), true, false, None, None);
         assert_eq!(result, "/about");
     }
 
     #[test]
     fn preserve_urls_same_domain_relative() {
         let base = ParsedUrl::parse("https://example.com/blog/post", None);
-        let result = convert_url_to_relative(&base, "../images/logo.png", &initial_url(), Some("src"), true, false);
+        let result = convert_url_to_relative(
+            &base,
+            "../images/logo.png",
+            &initial_url(),
+            Some("src"),
+            true,
+            false,
+            None,
+            None,
+        );
         assert_eq!(result, "/images/logo.png");
     }
 
@@ -253,6 +359,8 @@ mod tests {
             Some("href"),
             true,
             false,
+            None,
+            None,
         );
         assert_eq!(result, "https://cdn.other.com/style.css");
     }
@@ -267,6 +375,8 @@ mod tests {
             Some("href"),
             true,
             false,
+            None,
+            None,
         );
         assert_eq!(result, "/page?key=val#section");
     }
@@ -274,14 +384,32 @@ mod tests {
     #[test]
     fn preserve_urls_data_uri_unchanged() {
         let base = ParsedUrl::parse("https://example.com/", None);
-        let result = convert_url_to_relative(&base, "data:image/png;base64,abc", &initial_url(), None, true, false);
+        let result = convert_url_to_relative(
+            &base,
+            "data:image/png;base64,abc",
+            &initial_url(),
+            None,
+            true,
+            false,
+            None,
+            None,
+        );
         assert_eq!(result, "data:image/png;base64,abc");
     }
 
     #[test]
     fn preserve_urls_mailto_unchanged() {
         let base = ParsedUrl::parse("https://example.com/", None);
-        let result = convert_url_to_relative(&base, "mailto:test@example.com", &initial_url(), None, true, false);
+        let result = convert_url_to_relative(
+            &base,
+            "mailto:test@example.com",
+            &initial_url(),
+            None,
+            true,
+            false,
+            None,
+            None,
+        );
         assert_eq!(result, "mailto:test@example.com");
     }
 
@@ -297,6 +425,8 @@ mod tests {
             Some("href"),
             false,
             true,
+            None,
+            None,
         );
         assert_eq!(result, "https://example.com/designy/classic");
     }
@@ -304,14 +434,23 @@ mod tests {
     #[test]
     fn no_rewriting_relative_url_unchanged() {
         let base = ParsedUrl::parse("https://example.com/blog/post", None);
-        let result = convert_url_to_relative(&base, "../images/logo.png", &initial_url(), Some("src"), false, true);
+        let result = convert_url_to_relative(
+            &base,
+            "../images/logo.png",
+            &initial_url(),
+            Some("src"),
+            false,
+            true,
+            None,
+            None,
+        );
         assert_eq!(result, "../images/logo.png");
     }
 
     #[test]
     fn no_rewriting_root_relative_unchanged() {
         let base = ParsedUrl::parse("https://example.com/blog/post", None);
-        let result = convert_url_to_relative(&base, "/about", &initial_url(), Some("href"), false, true);
+        let result = convert_url_to_relative(&base, "/about", &initial_url(), Some("href"), false, true, None, None);
         assert_eq!(result, "/about");
     }
 
@@ -325,6 +464,8 @@ mod tests {
             Some("href"),
             false,
             true,
+            None,
+            None,
         );
         assert_eq!(result, "https://cdn.other.com/style.css");
     }
@@ -332,7 +473,16 @@ mod tests {
     #[test]
     fn no_rewriting_preserves_html_entities() {
         let base = ParsedUrl::parse("https://example.com/", None);
-        let result = convert_url_to_relative(&base, "/page?a=1&amp;b=2", &initial_url(), Some("href"), false, true);
+        let result = convert_url_to_relative(
+            &base,
+            "/page?a=1&amp;b=2",
+            &initial_url(),
+            Some("href"),
+            false,
+            true,
+            None,
+            None,
+        );
         // With no_url_rewriting, even HTML entities are preserved verbatim
         assert_eq!(result, "/page?a=1&amp;b=2");
     }
@@ -347,6 +497,8 @@ mod tests {
             Some("href"),
             false,
             true,
+            None,
+            None,
         );
         assert_eq!(result, "/page?key=val#section");
     }

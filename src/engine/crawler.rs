@@ -1851,7 +1851,7 @@ fn rand_simple() -> u64 {
 }
 
 /// Pre-compile domain wildcard patterns into regex (e.g. "*.example.com" → "^.*\.example\.com$")
-fn compile_domain_patterns(domains: &[String]) -> Vec<Regex> {
+pub(crate) fn compile_domain_patterns(domains: &[String]) -> Vec<Regex> {
     domains
         .iter()
         .filter_map(|d| {
