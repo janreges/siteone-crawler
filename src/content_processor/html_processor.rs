@@ -137,6 +137,11 @@ static RE_SCRIPT_BLOCK: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?is)<script[^>]
 static RE_SOCNET_IFRAME: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(?is)<iframe[^>]*(facebook\.com|twitter\.com|linkedin\.com)[^>]*>.*?</iframe>").unwrap());
 
+// Matches an HTML comment block `<!-- ... -->` (non-greedy, spanning newlines).
+// Used only for URL extraction when `--ignore-html-comments` is set — the stored/
+// exported content is never modified by this.
+static RE_HTML_COMMENT: Lazy<Regex> = Lazy::new(|| Regex::new(r"<!--[\s\S]*?-->").unwrap());
+
 pub struct HtmlProcessor {
     config: ProcessorConfig,
     debug_mode: bool,
@@ -762,6 +767,17 @@ impl ContentProcessor for HtmlProcessor {
     fn find_urls(&self, content: &str, source_url: &ParsedUrl) -> Option<FoundUrls> {
         let mut found_urls = FoundUrls::new();
 
+        // When --ignore-html-comments is set, strip `<!-- ... -->` regions before URL
+        // extraction so commented links are not crawled or reported as broken.
+        // This only affects extraction here — the stored/exported content is untouched.
+        let stripped;
+        let content: &str = if self.config.ignore_html_comments && content.contains("<!--") {
+            stripped = RE_HTML_COMMENT.replace_all(content, "");
+            stripped.as_ref()
+        } else {
+            content
+        };
+
         if !self.config.single_page {
             self.find_href_urls(content, source_url, &mut found_urls);
         }
@@ -1150,6 +1166,48 @@ mod tests {
         assert!(
             urls.iter().any(|u| u.contains("another%20path/img.webp")),
             "single-quoted with spaces should work. Found: {:?}",
+            urls
+        );
+    }
+
+    #[test]
+    fn test_ignore_html_comments() {
+        // With the flag enabled, links inside <!-- ... --> must NOT be extracted.
+        let mut config = make_config();
+        config.ignore_html_comments = true;
+        let processor = HtmlProcessor::new(config);
+        let html = r#"<!-- <a href="/commented">x</a> --> <a href="/real">y</a>"#;
+        let source = ParsedUrl::parse("https://example.com/", None);
+        let found = processor.find_urls(html, &source).unwrap();
+        let urls: Vec<&str> = found.get_urls().iter().map(|(_, u)| u.url.as_str()).collect();
+        assert!(
+            urls.iter().any(|u| u.contains("/real")),
+            "non-commented link should be captured. Found: {:?}",
+            urls
+        );
+        assert!(
+            !urls.iter().any(|u| u.contains("/commented")),
+            "commented link should NOT be captured when ignore_html_comments is set. Found: {:?}",
+            urls
+        );
+    }
+
+    #[test]
+    fn test_html_comments_included_by_default() {
+        // With the flag disabled (default), both links are extracted.
+        let processor = HtmlProcessor::new(make_config());
+        let html = r#"<!-- <a href="/commented">x</a> --> <a href="/real">y</a>"#;
+        let source = ParsedUrl::parse("https://example.com/", None);
+        let found = processor.find_urls(html, &source).unwrap();
+        let urls: Vec<&str> = found.get_urls().iter().map(|(_, u)| u.url.as_str()).collect();
+        assert!(
+            urls.iter().any(|u| u.contains("/real")),
+            "non-commented link should be captured. Found: {:?}",
+            urls
+        );
+        assert!(
+            urls.iter().any(|u| u.contains("/commented")),
+            "commented link should be captured by default. Found: {:?}",
             urls
         );
     }

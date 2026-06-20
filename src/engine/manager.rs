@@ -684,6 +684,7 @@ impl Manager {
         config.disable_astro_inline_modules = options.disable_astro_inline_modules;
         config.offline_export_preserve_urls = options.offline_export_preserve_urls;
         config.offline_export_no_url_rewriting = options.offline_export_no_url_rewriting;
+        config.ignore_html_comments = options.ignore_html_comments;
         let (static_cb, crawling_cb) = Self::build_domain_allow_callbacks(options);
         config.is_domain_allowed_for_static_files = Some(static_cb);
         config.is_external_domain_allowed_for_crawling = Some(crawling_cb);

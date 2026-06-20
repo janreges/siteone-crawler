@@ -108,6 +108,7 @@ pub struct CoreOptions {
     pub resolve: Vec<String>,
     pub websocket_server: Option<String>,
     pub ignore_robots_txt: bool,
+    pub ignore_html_comments: bool,
     pub allowed_domains_for_external_files: Vec<String>,
     pub allowed_domains_for_crawling: Vec<String>,
     pub single_foreign_page: bool,
@@ -289,6 +290,7 @@ impl CoreOptions {
             resolve: Vec::new(),
             websocket_server: None,
             ignore_robots_txt: false,
+            ignore_html_comments: false,
             allowed_domains_for_external_files: Vec::new(),
             allowed_domains_for_crawling: Vec::new(),
             single_foreign_page: false,
@@ -712,6 +714,11 @@ impl CoreOptions {
             "ignoreRobotsTxt" => {
                 if let Some(b) = value.as_bool() {
                     self.ignore_robots_txt = b;
+                }
+            }
+            "ignoreHtmlComments" => {
+                if let Some(b) = value.as_bool() {
+                    self.ignore_html_comments = b;
                 }
             }
             "allowedDomainsForExternalFiles" => {
@@ -1572,6 +1579,11 @@ pub fn get_options() -> Options {
             CrawlerOption::new(
                 "--ignore-robots-txt", Some("-irt"), "ignoreRobotsTxt", OptionType::Bool, false,
                 "Should robots.txt content be ignored? Useful for crawling an otherwise private/unindexed site.",
+                Some("false"), false, false, None,
+            ),
+            CrawlerOption::new(
+                "--ignore-html-comments", Some("-ihc"), "ignoreHtmlComments", OptionType::Bool, false,
+                "Ignore URLs found inside HTML comments (<!-- ... -->), which search engines also ignore, so commented links are not crawled or reported as broken.",
                 Some("false"), false, false, None,
             ),
             CrawlerOption::new(
@@ -2742,6 +2754,7 @@ mod tests {
             resolve: Vec::new(),
             websocket_server: None,
             ignore_robots_txt: false,
+            ignore_html_comments: false,
             allowed_domains_for_external_files: Vec::new(),
             allowed_domains_for_crawling: Vec::new(),
             single_foreign_page: false,
@@ -3029,5 +3042,14 @@ mod tests {
         opts.apply_option_value("offlineExportNoUrlRewriting", &OptionValue::Bool(true))
             .unwrap();
         assert!(opts.offline_export_no_url_rewriting);
+    }
+
+    #[test]
+    fn apply_ignore_html_comments() {
+        let mut opts = make_default_core_options();
+        assert!(!opts.ignore_html_comments);
+        opts.apply_option_value("ignoreHtmlComments", &OptionValue::Bool(true))
+            .unwrap();
+        assert!(opts.ignore_html_comments);
     }
 }

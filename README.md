@@ -507,6 +507,7 @@ For a clearer list, I recommend going to the documentation: 🌐 https://crawler
 | `--transform-url=<from->to>` | Transform URLs before crawling. Use `from -> to` for simple replacement or `/regex/ -> replacement`.<br>Can be specified multiple times. |
 | `--force-relative-urls` | Normalize all discovered URLs matching the initial domain (incl. www variant and protocol<br>differences) to canonical form. Prevents duplicate files in offline export when the site<br>uses inconsistent URL formats (http/https, www/non-www). |
 | `--ignore-robots-txt` | Ignore robots.txt content. |
+| `--ignore-html-comments` | Ignore URLs found inside HTML comments (`<!-- ... -->`), which search engines also<br>ignore, so commented links are not crawled or reported as broken. |
 | `--http-cache-dir=<dir>` | Cache dir for HTTP responses. Disable with `--http-cache-dir='off'` or `--no-cache`.<br>Default is `~/.cache/siteone-crawler/http-cache` (XDG-compliant, respects `$XDG_CACHE_HOME`). |
 | `--http-cache-compression` | Enable compression for HTTP cache storage. |
 | `--http-cache-ttl=<val>` | TTL for HTTP cache entries (e.g. `1h`, `7d`, `30m`). Use `0` for infinite. Default is `24h`. |

@@ -233,6 +233,7 @@ mod tests {
             resolve: Vec::new(),
             websocket_server: None,
             ignore_robots_txt: false,
+            ignore_html_comments: false,
             allowed_domains_for_external_files: Vec::new(),
             allowed_domains_for_crawling: Vec::new(),
             single_foreign_page: false,
