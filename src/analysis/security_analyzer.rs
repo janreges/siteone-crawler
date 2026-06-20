@@ -887,3 +887,65 @@ impl Analyzer for SecurityAnalyzer {
         self.base.get_exec_counts()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::utils;
+
+    #[test]
+    fn set_cookie_multi_cookie_evaluated_independently() {
+        // Regression: two Set-Cookie response headers used to be merged with ", " by
+        // get_flat_response_headers while check_set_cookie split on '\n', so only the first
+        // cookie was ever evaluated. Each cookie must now be checked on its own.
+        let mut analyzer = SecurityAnalyzer::new();
+
+        // As collected by the HTTP client: two separate Set-Cookie headers. The first is fully
+        // hardened, the second is missing both Secure and HttpOnly.
+        let mut raw_headers: HashMap<String, Vec<String>> = HashMap::new();
+        raw_headers.insert(
+            HEADER_SET_COOKIE.to_string(),
+            vec![
+                "session=abc; Secure; HttpOnly; SameSite=Lax".to_string(),
+                "tracking=xyz".to_string(),
+            ],
+        );
+        let flat = utils::get_flat_response_headers(&raw_headers);
+
+        let mut result = UrlAnalysisResult::new();
+        analyzer.check_set_cookie(&flat, true, &mut result);
+
+        let criticals = result.get_critical();
+        // The insecure second cookie must trigger a critical (missing Secure on HTTPS).
+        assert!(
+            criticals.iter().any(|c| c.contains("tracking")),
+            "expected a critical for the insecure 'tracking' cookie, got: {:?}",
+            criticals
+        );
+        // The hardened first cookie must not be flagged as insecure.
+        assert!(
+            !criticals.iter().any(|c| c.contains("session")),
+            "the hardened 'session' cookie must not be flagged, got: {:?}",
+            criticals
+        );
+    }
+
+    #[test]
+    fn set_cookie_single_cookie_with_comma_in_expires() {
+        // A single Set-Cookie whose value contains ", " (Expires date) must not be split apart.
+        let mut analyzer = SecurityAnalyzer::new();
+        let mut raw_headers: HashMap<String, Vec<String>> = HashMap::new();
+        raw_headers.insert(
+            HEADER_SET_COOKIE.to_string(),
+            vec!["id=1; Expires=Wed, 09 Jun 2027 10:18:14 GMT; Secure; HttpOnly; SameSite=Lax".to_string()],
+        );
+        let flat = utils::get_flat_response_headers(&raw_headers);
+
+        let mut result = UrlAnalysisResult::new();
+        analyzer.check_set_cookie(&flat, true, &mut result);
+
+        // Fully hardened cookie → no critical/warning findings despite the comma in Expires.
+        assert!(result.get_critical().is_empty(), "got: {:?}", result.get_critical());
+        assert!(result.get_warning().is_empty(), "got: {:?}", result.get_warning());
+    }
+}

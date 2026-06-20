@@ -779,7 +779,20 @@ pub fn add_class_to_html_images(html: &str, class_name: &str) -> String {
 pub fn get_flat_response_headers(
     headers: &std::collections::HashMap<String, Vec<String>>,
 ) -> std::collections::HashMap<String, String> {
-    headers.iter().map(|(k, v)| (k.clone(), v.join(", "))).collect()
+    headers
+        .iter()
+        .map(|(k, v)| {
+            // Set-Cookie must NOT be merged with ", ": cookie values legitimately contain
+            // ", " (e.g. in the Expires date), and multiple Set-Cookie headers have to stay
+            // individually parseable. Join them with '\n', which the security analyzer splits on.
+            let separator = if k.eq_ignore_ascii_case("set-cookie") {
+                "\n"
+            } else {
+                ", "
+            };
+            (k.clone(), v.join(separator))
+        })
+        .collect()
 }
 
 /// Returns peak resident memory usage (VmHWM) in bytes by reading /proc/self/status.
@@ -804,6 +817,27 @@ pub fn get_peak_memory_usage() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // -- get_flat_response_headers --
+
+    #[test]
+    fn flat_headers_set_cookie_joined_by_newline() {
+        use std::collections::HashMap;
+        let mut headers: HashMap<String, Vec<String>> = HashMap::new();
+        headers.insert(
+            "set-cookie".to_string(),
+            vec!["a=1; Secure".to_string(), "b=2; HttpOnly".to_string()],
+        );
+        headers.insert(
+            "cache-control".to_string(),
+            vec!["public".to_string(), "max-age=3600".to_string()],
+        );
+        let flat = get_flat_response_headers(&headers);
+        // Multiple Set-Cookie headers must stay individually parseable (newline-separated).
+        assert_eq!(flat.get("set-cookie").unwrap(), "a=1; Secure\nb=2; HttpOnly");
+        // Other repeated headers keep the standard ", " join.
+        assert_eq!(flat.get("cache-control").unwrap(), "public, max-age=3600");
+    }
 
     // -- get_formatted_size --
 
