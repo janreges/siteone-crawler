@@ -233,10 +233,9 @@ impl SuperTable {
         output.push_str("</thead>");
         output.push_str("<tbody>");
 
-        let mut counter = 1usize;
         let mut max_rows_reached = false;
 
-        for row in &self.data {
+        for (counter, row) in (1usize..).zip(self.data.iter()) {
             if let Some(max) = self.max_rows
                 && counter > max
             {
@@ -336,7 +335,6 @@ impl SuperTable {
                 ));
             }
             output.push_str("</tr>");
-            counter += 1;
         }
 
         if self.data.is_empty() {

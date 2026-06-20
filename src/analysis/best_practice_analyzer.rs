@@ -665,7 +665,7 @@ impl BestPracticeAnalyzer {
 
         // Build top non-unique titles table
         let mut sorted_counts: Vec<(&str, usize)> = counts.into_iter().collect();
-        sorted_counts.sort_by(|a, b| b.1.cmp(&a.1));
+        sorted_counts.sort_by_key(|c| std::cmp::Reverse(c.1));
 
         let mut top_titles_data: Vec<HashMap<String, String>> = Vec::new();
         for (title, count) in sorted_counts.iter().take(10) {
@@ -789,7 +789,7 @@ impl BestPracticeAnalyzer {
         }
 
         let mut sorted_counts: Vec<(&str, usize)> = counts.into_iter().collect();
-        sorted_counts.sort_by(|a, b| b.1.cmp(&a.1));
+        sorted_counts.sort_by_key(|c| std::cmp::Reverse(c.1));
 
         let mut top_desc_data: Vec<HashMap<String, String>> = Vec::new();
         for (desc, count) in sorted_counts.iter().take(10) {
