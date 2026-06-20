@@ -315,12 +315,12 @@ fn score_accessibility(summary: &Summary) -> CategoryScore {
         &mut per_url_total,
     );
 
-    // Invalid HTML
+    // HTML structural issues (duplicate id / dangling ARIA or label references)
     per_url_deduct(
         summary,
         "pages-with-invalid-html",
         0.3,
-        "page(s) with invalid HTML",
+        "page(s) with HTML structural issues",
         &mut deductions,
         &mut per_url_total,
     );

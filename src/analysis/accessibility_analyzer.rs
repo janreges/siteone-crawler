@@ -25,6 +25,7 @@ const ANALYSIS_MISSING_FORM_LABELS: &str = "Missing form labels";
 const ANALYSIS_MISSING_ARIA_LABELS: &str = "Missing aria labels";
 const ANALYSIS_MISSING_ROLES: &str = "Missing roles";
 const ANALYSIS_MISSING_LANG_ATTRIBUTE: &str = "Missing html lang attribute";
+const ANALYSIS_HTML_STRUCTURE: &str = "HTML structural issues";
 
 const SUPER_TABLE_ACCESSIBILITY: &str = "accessibility";
 
@@ -32,7 +33,8 @@ pub struct AccessibilityAnalyzer {
     base: BaseAnalyzer,
     stats: AnalyzerStats,
 
-    pages_with_invalid_html: usize,
+    /// Pages with parser-impact structural defects (duplicate id, dangling ARIA/`for` references).
+    pages_with_structural_issues: usize,
     pages_without_image_alt_attributes: usize,
     pages_without_form_labels: usize,
     pages_without_aria_labels: usize,
@@ -51,7 +53,7 @@ impl AccessibilityAnalyzer {
         Self {
             base: BaseAnalyzer::new(),
             stats: AnalyzerStats::new(),
-            pages_with_invalid_html: 0,
+            pages_with_structural_issues: 0,
             pages_without_image_alt_attributes: 0,
             pages_without_form_labels: 0,
             pages_without_aria_labels: 0,
@@ -316,14 +318,96 @@ impl AccessibilityAnalyzer {
         }
     }
 
+    /// Detect parser-impact structural defects that actually break a11y / scripting / navigation:
+    /// duplicate `id` values and dangling IDREF references (aria-labelledby/-describedby/-controls/
+    /// -owns and `<label for>`). These are statically detectable and far more meaningful than a raw
+    /// "is the whole document W3C-valid" count, which Google itself says is not a reliable signal.
+    fn check_html_structure(&mut self, html: &str, result: &mut UrlAnalysisResult) {
+        let document = Html::parse_document(html);
+
+        // Collect all ids and their occurrence counts (id is case-sensitive per the HTML spec).
+        let id_selector = match Selector::parse("[id]") {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        let mut id_counts: HashMap<String, usize> = HashMap::new();
+        for el in document.select(&id_selector) {
+            if let Some(id) = el.value().attr("id") {
+                let id = id.trim();
+                if !id.is_empty() {
+                    *id_counts.entry(id.to_string()).or_insert(0) += 1;
+                }
+            }
+        }
+
+        let mut issues: Vec<String> = Vec::new();
+
+        // Duplicate ids: break label[for], aria references, in-page anchors and getElementById.
+        let mut duplicate_ids: Vec<String> = id_counts
+            .iter()
+            .filter(|&(_, &count)| count > 1)
+            .map(|(id, &count)| format!("Duplicate id=\"{}\" used {}x", id, count))
+            .collect();
+        duplicate_ids.sort();
+        issues.extend(duplicate_ids);
+
+        // Dangling ARIA IDREF references → silently produce no accessible name.
+        let idref_attrs = ["aria-labelledby", "aria-describedby", "aria-controls", "aria-owns"];
+        for attr in &idref_attrs {
+            if let Ok(sel) = Selector::parse(&format!("[{}]", attr)) {
+                for el in document.select(&sel) {
+                    if let Some(val) = el.value().attr(attr) {
+                        for token in val.split_whitespace() {
+                            if !id_counts.contains_key(token) {
+                                issues.push(format!("{}=\"{}\" references missing id \"{}\"", attr, val, token));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // <label for> pointing at a non-existent control.
+        if let Ok(sel) = Selector::parse("label[for]") {
+            for el in document.select(&sel) {
+                if let Some(val) = el.value().attr("for") {
+                    let val = val.trim();
+                    if !val.is_empty() && !id_counts.contains_key(val) {
+                        issues.push(format!("<label for=\"{}\"> references missing id", val));
+                    }
+                }
+            }
+        }
+
+        if !issues.is_empty() {
+            for issue in &issues {
+                self.stats.add_warning(ANALYSIS_HTML_STRUCTURE, Some(issue));
+            }
+            result.add_warning(
+                format!(
+                    "{} HTML structural issue(s) (duplicate id / broken ARIA or label reference)",
+                    issues.len()
+                ),
+                ANALYSIS_HTML_STRUCTURE,
+                Some(issues),
+            );
+            self.pages_with_structural_issues += 1;
+        } else {
+            self.stats.add_ok(ANALYSIS_HTML_STRUCTURE, None);
+        }
+    }
+
     fn set_findings_to_summary(&self, status: &Status) {
-        if self.pages_with_invalid_html > 0 {
-            status.add_critical_to_summary(
+        if self.pages_with_structural_issues > 0 {
+            status.add_warning_to_summary(
                 "pages-with-invalid-html",
-                &format!("{} page(s) with invalid HTML", self.pages_with_invalid_html),
+                &format!(
+                    "{} page(s) with HTML structural issues (duplicate id / broken ARIA references)",
+                    self.pages_with_structural_issues
+                ),
             );
         } else {
-            status.add_ok_to_summary("pages-with-invalid-html", "All pages have valid HTML");
+            status.add_ok_to_summary("pages-with-invalid-html", "No HTML structural issues found");
         }
 
         if self.pages_without_image_alt_attributes > 0 {
@@ -537,6 +621,11 @@ impl Analyzer for AccessibilityAnalyzer {
         self.base
             .measure_exec_time("AccessibilityAnalyzer", "checkMissingLang", s);
 
+        let s = Instant::now();
+        self.check_html_structure(html, &mut result);
+        self.base
+            .measure_exec_time("AccessibilityAnalyzer", "checkHtmlStructure", s);
+
         Some(result)
     }
 
@@ -611,5 +700,56 @@ fn normalize_tag_for_dedup(element: &scraper::ElementRef) -> String {
         format!("<{}>", name)
     } else {
         format!("<{} {}>", name, attrs.join(" "))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn run_structure_check(html: &str) -> (usize, UrlAnalysisResult) {
+        let mut analyzer = AccessibilityAnalyzer::new();
+        let mut result = UrlAnalysisResult::new();
+        analyzer.check_html_structure(html, &mut result);
+        (analyzer.pages_with_structural_issues, result)
+    }
+
+    #[test]
+    fn structure_flags_duplicate_id() {
+        let html = r#"<html><body><div id="x"></div><span id="x"></span></body></html>"#;
+        let (pages, result) = run_structure_check(html);
+        assert_eq!(pages, 1);
+        assert!(
+            result.get_warning().iter().any(|w| w.contains("structural")),
+            "got: {:?}",
+            result.get_warning()
+        );
+    }
+
+    #[test]
+    fn structure_flags_dangling_aria_reference() {
+        let html = r#"<html><body><button aria-labelledby="missing">x</button></body></html>"#;
+        let (pages, result) = run_structure_check(html);
+        assert_eq!(pages, 1);
+        assert!(!result.get_warning().is_empty());
+    }
+
+    #[test]
+    fn structure_flags_dangling_label_for() {
+        let html = r#"<html><body><label for="nope">Name</label></body></html>"#;
+        let (pages, _result) = run_structure_check(html);
+        assert_eq!(pages, 1);
+    }
+
+    #[test]
+    fn structure_clean_html_has_no_issues() {
+        // Unique ids, label[for] and aria-labelledby both resolve to real ids.
+        let html = r#"<html><body>
+            <label for="email">Email</label><input id="email">
+            <section aria-labelledby="hdr"></section><h2 id="hdr">Title</h2>
+        </body></html>"#;
+        let (pages, result) = run_structure_check(html);
+        assert_eq!(pages, 0);
+        assert!(result.get_warning().is_empty(), "got: {:?}", result.get_warning());
     }
 }
