@@ -2536,7 +2536,7 @@ pub fn get_options() -> Options {
                 OptionType::Bool,
                 false,
                 "Print GitHub Actions error annotations for failed CI checks.",
-                None,
+                Some("false"),
                 false,
                 false,
                 None,
