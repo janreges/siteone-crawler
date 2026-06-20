@@ -90,18 +90,54 @@ pub fn evaluate(options: &CoreOptions, scores: &QualityScores, stats: &BasicStat
         .sum();
     checks.push(check_max("5xx errors", count_5xx as f64, options.ci_max_5xx as f64));
 
-    // Critical findings
-    let criticals = summary.get_count_by_item_status(ItemStatus::Critical) as f64;
+    // Critical findings (excluding any explicitly ignored finding codes)
+    let criticals = count_status_excluding(summary, ItemStatus::Critical, &options.ci_ignore_code) as f64;
     checks.push(check_max(
         "Critical findings",
         criticals,
         options.ci_max_criticals as f64,
     ));
 
-    // Warning findings (optional)
+    // Warning findings (optional, excluding any explicitly ignored finding codes)
     if let Some(max_warnings) = options.ci_max_warnings {
-        let warnings = summary.get_count_by_item_status(ItemStatus::Warning) as f64;
+        let warnings = count_status_excluding(summary, ItemStatus::Warning, &options.ci_ignore_code) as f64;
         checks.push(check_max("Warning findings", warnings, max_warnings as f64));
+    }
+
+    // Forbidden finding codes — fail if any of the given apl_codes is present as a non-OK finding.
+    if !options.ci_fail_on_code.is_empty() {
+        let present = options
+            .ci_fail_on_code
+            .iter()
+            .filter(|code| {
+                summary
+                    .get_items()
+                    .iter()
+                    .any(|i| &i.apl_code == *code && !matches!(i.status, ItemStatus::Ok | ItemStatus::Info))
+            })
+            .count();
+        checks.push(CiCheck {
+            metric: "Forbidden finding codes".to_string(),
+            operator: "<=".to_string(),
+            threshold: 0.0,
+            actual: present as f64,
+            passed: present == 0,
+        });
+    }
+
+    // Regression vs a baseline run: the overall score must not drop more than the allowed amount.
+    if let Some(baseline_path) = &options.ci_baseline
+        && let Some(baseline_score) = load_baseline_overall_score(baseline_path)
+    {
+        let max_drop = options.ci_max_score_drop.unwrap_or(0.0);
+        let drop = (baseline_score - scores.overall.score).max(0.0);
+        checks.push(CiCheck {
+            metric: "Overall score drop vs baseline".to_string(),
+            operator: "<=".to_string(),
+            threshold: max_drop,
+            actual: round1(drop),
+            passed: drop <= max_drop + 1e-9,
+        });
     }
 
     // Average response time (optional)
@@ -183,6 +219,26 @@ fn find_category_score(scores: &QualityScores, code: &str) -> f64 {
         .find(|c| c.code == code)
         .map(|c| c.score)
         .unwrap_or(0.0)
+}
+
+/// Count summary items of a given status, excluding any whose apl_code is in `ignore`.
+fn count_status_excluding(summary: &Summary, status: ItemStatus, ignore: &[String]) -> usize {
+    summary
+        .get_items()
+        .iter()
+        .filter(|i| i.status == status && !ignore.iter().any(|c| c == &i.apl_code))
+        .count()
+}
+
+/// Load the overall quality score from a previously emitted JSON output (baseline).
+fn load_baseline_overall_score(path: &str) -> Option<f64> {
+    let content = std::fs::read_to_string(path).ok()?;
+    let json: serde_json::Value = serde_json::from_str(&content).ok()?;
+    json.get("qualityScores")?.get("overall")?.get("score")?.as_f64()
+}
+
+fn round1(v: f64) -> f64 {
+    (v * 10.0).round() / 10.0
 }
 
 #[cfg(test)]
@@ -336,6 +392,10 @@ mod tests {
             ci_min_pages: 0,
             ci_min_assets: 0,
             ci_min_documents: 0,
+            ci_baseline: None,
+            ci_max_score_drop: None,
+            ci_fail_on_code: Vec::new(),
+            ci_ignore_code: Vec::new(),
         }
     }
 
@@ -578,5 +638,46 @@ mod tests {
         let result = evaluate(&options, &scores, &stats, &summary);
         assert!(!result.passed);
         assert!(result.checks.iter().any(|c| c.metric == "Documents" && !c.passed));
+    }
+
+    #[test]
+    fn ignore_code_excludes_from_criticals() {
+        let mut options = make_options();
+        options.ci_ignore_code = vec!["accepted-issue".to_string()];
+        let scores = make_scores(8.0);
+        let stats = make_stats(100);
+        let mut summary = Summary::new();
+        summary.add_item(Item::new(
+            "accepted-issue".to_string(),
+            "Known/accepted critical".to_string(),
+            ItemStatus::Critical,
+        ));
+        let result = evaluate(&options, &scores, &stats, &summary);
+        // The only critical is ignored, so the gate passes.
+        assert!(result.passed, "checks: {:?}", result.checks);
+    }
+
+    #[test]
+    fn fail_on_code_fails_when_present() {
+        let mut options = make_options();
+        options.ci_fail_on_code = vec!["seo-noindex-sitewide".to_string()];
+        // Ignore it for the critical count so we isolate the forbidden-code check.
+        options.ci_ignore_code = vec!["seo-noindex-sitewide".to_string()];
+        let scores = make_scores(8.0);
+        let stats = make_stats(100);
+        let mut summary = Summary::new();
+        summary.add_item(Item::new(
+            "seo-noindex-sitewide".to_string(),
+            "Site-wide noindex".to_string(),
+            ItemStatus::Critical,
+        ));
+        let result = evaluate(&options, &scores, &stats, &summary);
+        assert!(!result.passed);
+        assert!(
+            result
+                .checks
+                .iter()
+                .any(|c| c.metric == "Forbidden finding codes" && !c.passed)
+        );
     }
 }

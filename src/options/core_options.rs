@@ -237,6 +237,10 @@ pub struct CoreOptions {
     pub ci_min_pages: i64,
     pub ci_min_assets: i64,
     pub ci_min_documents: i64,
+    pub ci_baseline: Option<String>,
+    pub ci_max_score_drop: Option<f64>,
+    pub ci_fail_on_code: Vec<String>,
+    pub ci_ignore_code: Vec<String>,
 }
 
 impl CoreOptions {
@@ -435,6 +439,10 @@ impl CoreOptions {
             ci_min_pages: 10,
             ci_min_assets: 10,
             ci_min_documents: 0,
+            ci_baseline: None,
+            ci_max_score_drop: None,
+            ci_fail_on_code: Vec::new(),
+            ci_ignore_code: Vec::new(),
         };
 
         // Populate from option groups
@@ -1263,6 +1271,26 @@ impl CoreOptions {
             "ciMinDocuments" => {
                 if let Some(n) = value.as_int() {
                     self.ci_min_documents = n;
+                }
+            }
+            "ciBaseline" => {
+                if let Some(s) = value.as_str() {
+                    self.ci_baseline = Some(s.to_string());
+                }
+            }
+            "ciMaxScoreDrop" => {
+                if let Some(n) = value.as_float() {
+                    self.ci_max_score_drop = Some(n);
+                }
+            }
+            "ciFailOnCode" => {
+                if let Some(arr) = value.as_array() {
+                    self.ci_fail_on_code = arr.clone();
+                }
+            }
+            "ciIgnoreCode" => {
+                if let Some(arr) = value.as_array() {
+                    self.ci_ignore_code = arr.clone();
                 }
             }
             "serveMarkdownDirectory" => {
@@ -2427,6 +2455,54 @@ pub fn get_options() -> Options {
                 false,
                 None,
             ),
+            CrawlerOption::new(
+                "--ci-baseline",
+                None,
+                "ciBaseline",
+                OptionType::File,
+                false,
+                "Path to a previous JSON output used as a baseline for regression checks.",
+                None,
+                true,
+                false,
+                None,
+            ),
+            CrawlerOption::new(
+                "--ci-max-score-drop",
+                None,
+                "ciMaxScoreDrop",
+                OptionType::Float,
+                false,
+                "Maximum allowed drop of the overall score vs the --ci-baseline run.",
+                None,
+                true,
+                false,
+                None,
+            ),
+            CrawlerOption::new(
+                "--ci-fail-on-code",
+                None,
+                "ciFailOnCode",
+                OptionType::String,
+                true,
+                "Fail the build if any of these finding codes is present. Can be specified multiple times.",
+                None,
+                true,
+                true,
+                None,
+            ),
+            CrawlerOption::new(
+                "--ci-ignore-code",
+                None,
+                "ciIgnoreCode",
+                OptionType::String,
+                true,
+                "Ignore these finding codes when counting criticals/warnings. Can be specified multiple times.",
+                None,
+                true,
+                true,
+                None,
+            ),
         ],
     ));
 
@@ -2936,6 +3012,10 @@ mod tests {
             ci_min_pages: 10,
             ci_min_assets: 10,
             ci_min_documents: 0,
+            ci_baseline: None,
+            ci_max_score_drop: None,
+            ci_fail_on_code: Vec::new(),
+            ci_ignore_code: Vec::new(),
         }
     }
 
@@ -3006,7 +3086,7 @@ mod tests {
         let group = options.get_group(GROUP_CI_CD_SETTINGS);
         assert!(group.is_some());
         let group = group.unwrap();
-        assert_eq!(group.options.len(), 15);
+        assert_eq!(group.options.len(), 19);
     }
 
     // ---- Duration parsing tests ----
