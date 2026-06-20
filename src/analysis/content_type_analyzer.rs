@@ -559,20 +559,20 @@ fn check_page_weight(status: &Status) {
 
     if over_size > 0 {
         status.add_warning_to_summary(
-            "page-weight-exceeded",
+            "pages-weight-exceeded",
             &format!(
-                "{} page(s) exceed the ~{} MB transfer-size budget",
+                "{} page(s) exceed the ~{:.1} MB transfer-size budget",
                 over_size,
-                PAGE_SIZE_BUDGET_BYTES / 1_000_000
+                PAGE_SIZE_BUDGET_BYTES as f64 / 1_000_000.0
             ),
         );
     } else {
-        status.add_ok_to_summary("page-weight-exceeded", "All pages are within the page-weight budget");
+        status.add_ok_to_summary("pages-weight-exceeded", "All pages are within the page-weight budget");
     }
 
     if over_requests > 0 {
         status.add_notice_to_summary(
-            "page-requests-exceeded",
+            "pages-requests-exceeded",
             &format!(
                 "{} page(s) make more than {} requests",
                 over_requests, PAGE_REQUEST_BUDGET

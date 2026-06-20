@@ -145,8 +145,8 @@ fn score_performance(summary: &Summary, stats: &BasicStats) -> CategoryScore {
     }
 
     // Pages over the transfer-size budget
-    if is_not_ok(summary, "page-weight-exceeded") {
-        let count = get_item_count(summary, "page-weight-exceeded").unwrap_or(1);
+    if is_not_ok(summary, "pages-weight-exceeded") {
+        let count = get_item_count(summary, "pages-weight-exceeded").unwrap_or(1);
         if count > 0 {
             let pts = (count as f64 * 0.1).min(1.5);
             deductions.push(
@@ -234,6 +234,7 @@ fn score_seo(summary: &Summary, stats: &BasicStats) -> CategoryScore {
             let pts = (count as f64 * 0.15).min(MAX_PER_TYPE_DEDUCTION);
             let remaining = MAX_PER_URL_DEDUCTION - per_url_total;
             let pts = pts.min(remaining).max(0.0);
+            per_url_total += pts;
             deductions.push(
                 Deduction::new(format!("{} redirect(s) found", count), round1(pts))
                     .with_fix("Link directly to final URLs to avoid redirect hops (update internal links to the canonical target)."),
@@ -576,6 +577,13 @@ fn per_url_deduct(
     }
 }
 
+// Note on Notice-level findings: several findings are emitted at Notice severity on purpose and are
+// NOT scored or CI-counted — they are informational only (e.g. seo-canonical-missing, seo-noindex,
+// seo-title-length, seo-meta-description-missing/-length, static-assets-short-cache,
+// pages-requests-exceeded). `is_not_ok` below DOES treat Notice as scoreable, so the scorer simply
+// doesn't reference those codes; the security path uses `is_warning_or_above` to skip Notices
+// entirely. Such findings can still be enforced explicitly via `--ci-fail-on-code`.
+
 /// Check if a summary item is not OK (Warning, Critical, or Notice).
 fn is_not_ok(summary: &Summary, apl_code: &str) -> bool {
     summary
@@ -800,7 +808,7 @@ mod tests {
     fn page_weight_over_budget_reduces_performance() {
         let mut summary = Summary::new();
         summary.add_item(Item::new(
-            "page-weight-exceeded".to_string(),
+            "pages-weight-exceeded".to_string(),
             "5 page(s) exceed the budget".to_string(),
             ItemStatus::Warning,
         ));
