@@ -4,7 +4,6 @@
 use std::collections::HashMap;
 use std::time::Instant;
 
-use regex::Regex;
 use scraper::{Html, Selector};
 
 use crate::analysis::analyzer::Analyzer;
@@ -62,26 +61,30 @@ impl AccessibilityAnalyzer {
         }
     }
 
-    fn check_image_alt_attributes(&mut self, html: &str, result: &mut UrlAnalysisResult) {
-        use once_cell::sync::Lazy;
-        static RE_IMG: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)<img[^>]+>").unwrap());
-        let img_re = &*RE_IMG;
+    fn check_image_alt_attributes(&mut self, document: &Html, result: &mut UrlAnalysisResult) {
+        let img_selector = match Selector::parse("img") {
+            Ok(s) => s,
+            Err(_) => return,
+        };
 
         let mut bad_images: Vec<String> = Vec::new();
         let mut found_count = 0usize;
 
-        for mat in img_re.find_iter(html) {
+        for img in document.select(&img_selector) {
             found_count += 1;
-            let img = mat.as_str();
-            let img_lower = img.to_lowercase();
-
-            // Only a completely missing alt attribute is a defect. An explicit alt="" is the
-            // VALID decorative pattern per WCAG 1.1.1 and must NOT be flagged.
-            if !img_lower.contains(" alt=") {
-                bad_images.push(img.to_string());
-                self.stats.add_warning(ANALYSIS_MISSING_IMAGE_ALT_ATTRIBUTES, Some(img));
+            // Only a completely missing alt attribute is a defect. An explicit alt="" is the VALID
+            // decorative pattern per WCAG 1.1.1 and must NOT be flagged. Using the parsed DOM avoids
+            // the regex pitfalls (e.g. " alt=" appearing inside another attribute value).
+            if img.value().attr("alt").is_none() {
+                let tag = get_opening_tag_html(&img);
+                self.stats
+                    .add_warning(ANALYSIS_MISSING_IMAGE_ALT_ATTRIBUTES, Some(&tag));
+                bad_images.push(tag);
             } else {
-                self.stats.add_ok(ANALYSIS_MISSING_IMAGE_ALT_ATTRIBUTES, Some(img));
+                self.stats.add_ok(
+                    ANALYSIS_MISSING_IMAGE_ALT_ATTRIBUTES,
+                    Some(&normalize_tag_for_dedup(&img)),
+                );
             }
         }
 
@@ -101,9 +104,7 @@ impl AccessibilityAnalyzer {
         }
     }
 
-    fn check_missing_labels(&mut self, html: &str, result: &mut UrlAnalysisResult) {
-        let document = Html::parse_document(html);
-
+    fn check_missing_labels(&mut self, document: &Html, result: &mut UrlAnalysisResult) {
         // Controls that need a programmatic label. Buttons/submit/reset/image derive their name
         // from value=/alt=, so they are excluded here.
         let input_selector = match Selector::parse(
@@ -121,7 +122,7 @@ impl AccessibilityAnalyzer {
             // A control is considered labeled by ANY of: <label for=id>, a wrapping <label>,
             // aria-label, aria-labelledby, or title. The old check only looked at label[for],
             // producing false positives for the very common wrapping-label pattern.
-            if input_is_labeled(input, &document) {
+            if input_is_labeled(input, document) {
                 self.stats.add_ok(ANALYSIS_MISSING_FORM_LABELS, Some(&dedup_key));
             } else {
                 inputs_without_labels.push(get_opening_tag_html(input));
@@ -148,9 +149,7 @@ impl AccessibilityAnalyzer {
         }
     }
 
-    fn check_missing_aria_labels(&mut self, html: &str, result: &mut UrlAnalysisResult) {
-        let document = Html::parse_document(html);
-
+    fn check_missing_aria_labels(&mut self, document: &Html, result: &mut UrlAnalysisResult) {
         // Flag interactive elements that have NO accessible name at all (icon-only links/buttons
         // with no text, aria-label, title or nested image alt). A link/button with visible text
         // already has an accessible name and must NOT be flagged — that was the old false positive
@@ -192,9 +191,7 @@ impl AccessibilityAnalyzer {
         }
     }
 
-    fn check_missing_roles(&mut self, html: &str, result: &mut UrlAnalysisResult) {
-        let document = Html::parse_document(html);
-
+    fn check_missing_roles(&mut self, document: &Html, result: &mut UrlAnalysisResult) {
         // Native landmark elements (<nav>/<main>/<header>/...) already expose implicit ARIA roles,
         // so flagging them for not having an explicit role= was a false positive (ARIA rule #1:
         // prefer native semantics). Instead flag the genuinely useful signal: the page exposes no
@@ -225,9 +222,7 @@ impl AccessibilityAnalyzer {
         }
     }
 
-    fn check_missing_lang(&mut self, html: &str, result: &mut UrlAnalysisResult) {
-        let document = Html::parse_document(html);
-
+    fn check_missing_lang(&mut self, document: &Html, result: &mut UrlAnalysisResult) {
         let html_selector = match Selector::parse("html") {
             Ok(s) => s,
             Err(_) => return,
@@ -277,9 +272,7 @@ impl AccessibilityAnalyzer {
     /// duplicate `id` values and dangling IDREF references (aria-labelledby/-describedby/-controls/
     /// -owns and `<label for>`). These are statically detectable and far more meaningful than a raw
     /// "is the whole document W3C-valid" count, which Google itself says is not a reliable signal.
-    fn check_html_structure(&mut self, html: &str, result: &mut UrlAnalysisResult) {
-        let document = Html::parse_document(html);
-
+    fn check_html_structure(&mut self, document: &Html, result: &mut UrlAnalysisResult) {
         // Collect all ids and their occurrence counts (id is case-sensitive per the HTML spec).
         let id_selector = match Selector::parse("[id]") {
             Ok(s) => s,
@@ -306,16 +299,24 @@ impl AccessibilityAnalyzer {
         duplicate_ids.sort();
         issues.extend(duplicate_ids);
 
-        // Dangling ARIA IDREF references → silently produce no accessible name.
+        // Dangling ARIA IDREF references → silently produce no accessible name. One issue line per
+        // element/attribute (listing all missing ids) rather than one per missing token.
         let idref_attrs = ["aria-labelledby", "aria-describedby", "aria-controls", "aria-owns"];
         for attr in &idref_attrs {
             if let Ok(sel) = Selector::parse(&format!("[{}]", attr)) {
                 for el in document.select(&sel) {
                     if let Some(val) = el.value().attr(attr) {
-                        for token in val.split_whitespace() {
-                            if !id_counts.contains_key(token) {
-                                issues.push(format!("{}=\"{}\" references missing id \"{}\"", attr, val, token));
-                            }
+                        let missing: Vec<&str> = val
+                            .split_whitespace()
+                            .filter(|token| !id_counts.contains_key(*token))
+                            .collect();
+                        if !missing.is_empty() {
+                            issues.push(format!(
+                                "{}=\"{}\" references missing id(s): {}",
+                                attr,
+                                val,
+                                missing.join(", ")
+                            ));
                         }
                     }
                 }
@@ -552,35 +553,37 @@ impl Analyzer for AccessibilityAnalyzer {
         }
 
         let html = body?;
+        // Parse the document once and share it across all checks (was parsed 6× before).
+        let document = Html::parse_document(html);
         let mut result = UrlAnalysisResult::new();
 
         let s = Instant::now();
-        self.check_image_alt_attributes(html, &mut result);
+        self.check_image_alt_attributes(&document, &mut result);
         self.base
             .measure_exec_time("AccessibilityAnalyzer", "checkImageAltAttributes", s);
 
         let s = Instant::now();
-        self.check_missing_labels(html, &mut result);
+        self.check_missing_labels(&document, &mut result);
         self.base
             .measure_exec_time("AccessibilityAnalyzer", "checkMissingLabels", s);
 
         let s = Instant::now();
-        self.check_missing_aria_labels(html, &mut result);
+        self.check_missing_aria_labels(&document, &mut result);
         self.base
             .measure_exec_time("AccessibilityAnalyzer", "checkMissingAriaLabels", s);
 
         let s = Instant::now();
-        self.check_missing_roles(html, &mut result);
+        self.check_missing_roles(&document, &mut result);
         self.base
             .measure_exec_time("AccessibilityAnalyzer", "checkMissingRoles", s);
 
         let s = Instant::now();
-        self.check_missing_lang(html, &mut result);
+        self.check_missing_lang(&document, &mut result);
         self.base
             .measure_exec_time("AccessibilityAnalyzer", "checkMissingLang", s);
 
         let s = Instant::now();
-        self.check_html_structure(html, &mut result);
+        self.check_html_structure(&document, &mut result);
         self.base
             .measure_exec_time("AccessibilityAnalyzer", "checkHtmlStructure", s);
 
@@ -706,9 +709,11 @@ fn input_is_labeled(input: &scraper::ElementRef, document: &Html) -> bool {
     }
     if let Some(id) = v.attr("id") {
         let id = id.trim();
+        // Match label[for] by string comparison rather than building a selector from the (untrusted)
+        // id, which would fail for ids containing quotes or selector metacharacters.
         if !id.is_empty()
-            && let Ok(sel) = Selector::parse(&format!("label[for='{}']", id))
-            && document.select(&sel).next().is_some()
+            && let Ok(sel) = Selector::parse("label[for]")
+            && document.select(&sel).any(|l| l.value().attr("for") == Some(id))
         {
             return true;
         }
@@ -731,7 +736,7 @@ mod tests {
     fn run_structure_check(html: &str) -> (usize, UrlAnalysisResult) {
         let mut analyzer = AccessibilityAnalyzer::new();
         let mut result = UrlAnalysisResult::new();
-        analyzer.check_html_structure(html, &mut result);
+        analyzer.check_html_structure(&Html::parse_document(html), &mut result);
         (analyzer.pages_with_structural_issues, result)
     }
 
@@ -778,7 +783,7 @@ mod tests {
     fn decorative_empty_alt_is_not_flagged() {
         let mut analyzer = AccessibilityAnalyzer::new();
         let mut result = UrlAnalysisResult::new();
-        analyzer.check_image_alt_attributes(r#"<img src="x.png" alt="">"#, &mut result);
+        analyzer.check_image_alt_attributes(&Html::parse_document(r#"<img src="x.png" alt="">"#), &mut result);
         assert!(
             result.get_warning().is_empty(),
             "decorative alt=\"\" must be OK: {:?}",
@@ -790,7 +795,7 @@ mod tests {
     fn missing_alt_is_flagged() {
         let mut analyzer = AccessibilityAnalyzer::new();
         let mut result = UrlAnalysisResult::new();
-        analyzer.check_image_alt_attributes(r#"<img src="x.png">"#, &mut result);
+        analyzer.check_image_alt_attributes(&Html::parse_document(r#"<img src="x.png">"#), &mut result);
         assert!(!result.get_warning().is_empty());
     }
 
@@ -798,7 +803,10 @@ mod tests {
     fn text_link_has_accessible_name() {
         let mut analyzer = AccessibilityAnalyzer::new();
         let mut result = UrlAnalysisResult::new();
-        analyzer.check_missing_aria_labels(r#"<html><body><a href="/x">Read more</a></body></html>"#, &mut result);
+        analyzer.check_missing_aria_labels(
+            &Html::parse_document(r#"<html><body><a href="/x">Read more</a></body></html>"#),
+            &mut result,
+        );
         assert!(
             result.get_warning().is_empty(),
             "text link must not be flagged: {:?}",
@@ -810,7 +818,10 @@ mod tests {
     fn icon_only_link_without_name_is_flagged() {
         let mut analyzer = AccessibilityAnalyzer::new();
         let mut result = UrlAnalysisResult::new();
-        analyzer.check_missing_aria_labels(r#"<html><body><a href="/x"><svg></svg></a></body></html>"#, &mut result);
+        analyzer.check_missing_aria_labels(
+            &Html::parse_document(r#"<html><body><a href="/x"><svg></svg></a></body></html>"#),
+            &mut result,
+        );
         assert_eq!(analyzer.pages_without_aria_labels, 1);
         assert!(!result.get_warning().is_empty());
     }
@@ -820,7 +831,7 @@ mod tests {
         let mut analyzer = AccessibilityAnalyzer::new();
         let mut result = UrlAnalysisResult::new();
         analyzer.check_missing_aria_labels(
-            r#"<html><body><a href="/x" aria-label="Home"><svg></svg></a></body></html>"#,
+            &Html::parse_document(r#"<html><body><a href="/x" aria-label="Home"><svg></svg></a></body></html>"#),
             &mut result,
         );
         assert_eq!(analyzer.pages_without_aria_labels, 0);
@@ -831,7 +842,7 @@ mod tests {
         let mut analyzer = AccessibilityAnalyzer::new();
         let mut result = UrlAnalysisResult::new();
         analyzer.check_missing_labels(
-            r#"<html><body><label>Name <input type="text"></label></body></html>"#,
+            &Html::parse_document(r#"<html><body><label>Name <input type="text"></label></body></html>"#),
             &mut result,
         );
         assert!(
@@ -845,8 +856,29 @@ mod tests {
     fn unlabeled_input_is_flagged() {
         let mut analyzer = AccessibilityAnalyzer::new();
         let mut result = UrlAnalysisResult::new();
-        analyzer.check_missing_labels(r#"<html><body><input type="text" name="q"></body></html>"#, &mut result);
+        analyzer.check_missing_labels(
+            &Html::parse_document(r#"<html><body><input type="text" name="q"></body></html>"#),
+            &mut result,
+        );
         assert_eq!(analyzer.pages_without_form_labels, 1);
+    }
+
+    #[test]
+    fn label_for_with_special_char_id_is_accepted() {
+        // An id with ':' would break a selector built from it; matched by string comparison instead.
+        let mut analyzer = AccessibilityAnalyzer::new();
+        let mut result = UrlAnalysisResult::new();
+        analyzer.check_missing_labels(
+            &Html::parse_document(
+                r#"<html><body><label for="a:b">X</label><input id="a:b" type="text"></body></html>"#,
+            ),
+            &mut result,
+        );
+        assert!(
+            result.get_warning().is_empty(),
+            "label[for] with a special-char id must be accepted: {:?}",
+            result.get_warning()
+        );
     }
 
     #[test]
@@ -854,12 +886,18 @@ mod tests {
         // <nav> without explicit role must NOT be flagged; missing <main> IS the new signal.
         let mut analyzer = AccessibilityAnalyzer::new();
         let mut result = UrlAnalysisResult::new();
-        analyzer.check_missing_roles(r#"<html><body><nav>links</nav></body></html>"#, &mut result);
+        analyzer.check_missing_roles(
+            &Html::parse_document(r#"<html><body><nav>links</nav></body></html>"#),
+            &mut result,
+        );
         assert_eq!(analyzer.pages_without_main_landmark, 1, "no <main> should be flagged");
 
         let mut analyzer2 = AccessibilityAnalyzer::new();
         let mut result2 = UrlAnalysisResult::new();
-        analyzer2.check_missing_roles(r#"<html><body><main>content</main></body></html>"#, &mut result2);
+        analyzer2.check_missing_roles(
+            &Html::parse_document(r#"<html><body><main>content</main></body></html>"#),
+            &mut result2,
+        );
         assert_eq!(analyzer2.pages_without_main_landmark, 0, "page with <main> is OK");
         assert!(result2.get_warning().is_empty());
     }
