@@ -408,7 +408,7 @@ impl OfflineUrlConverter {
                     use md5::{Digest, Md5};
                     let mut hasher = Md5::new();
                     hasher.update(basename.as_bytes());
-                    format!("{:x}", hasher.finalize())
+                    crate::utils::to_lower_hex(hasher.finalize())
                 };
                 let short_hash = &hash[..10.min(hash.len())];
                 result = result.replace(&basename, &format!("{}.{}", short_hash, ext));
@@ -509,7 +509,7 @@ impl OfflineUrlConverter {
                 use md5::{Digest, Md5};
                 let mut hasher = Md5::new();
                 hasher.update(decoded.as_bytes());
-                format!("{:x}", hasher.finalize())
+                crate::utils::to_lower_hex(hasher.finalize())
             };
             hash[..10.min(hash.len())].to_string()
         }

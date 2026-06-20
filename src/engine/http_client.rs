@@ -401,7 +401,7 @@ impl HttpClient {
         for arg in args {
             hasher.update(arg.as_bytes());
         }
-        let md5 = format!("{:x}", hasher.finalize());
+        let md5 = crate::utils::to_lower_hex(hasher.finalize());
         let ext_suffix = extension.map(|e| format!(".{}", e)).unwrap_or_default();
         format!("{}-{}/{}/{}{}", host, port, &md5[..2], md5, ext_suffix)
     }

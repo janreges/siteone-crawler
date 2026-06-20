@@ -1625,7 +1625,7 @@ impl Crawler {
         let relevant_parts = url.get_full_url(true, false);
         let mut hasher = Md5::new();
         hasher.update(relevant_parts.as_bytes());
-        format!("{:x}", hasher.finalize())
+        crate::utils::to_lower_hex(hasher.finalize())
     }
 
     /// Check if URL points to a sitemap.xml or sitemap.xml.gz file
@@ -1639,7 +1639,7 @@ impl Crawler {
         let full_url = url.get_full_url(true, false);
         let mut hasher = Md5::new();
         hasher.update(full_url.as_bytes());
-        let hash = format!("{:x}", hasher.finalize());
+        let hash = crate::utils::to_lower_hex(hasher.finalize());
         hash[..8].to_string()
     }
 

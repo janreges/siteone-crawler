@@ -50,6 +50,18 @@ pub fn extract_pcre_regex_pattern(s: &str) -> String {
     s.to_string()
 }
 
+/// Lowercase hex encoding (2 digits per byte, no separators) of arbitrary bytes.
+/// Used for md5 digests after the RustCrypto 0.11 output type dropped `LowerHex`.
+pub fn to_lower_hex(bytes: impl AsRef<[u8]>) -> String {
+    use std::fmt::Write;
+    let bytes = bytes.as_ref();
+    let mut s = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        let _ = write!(s, "{:02x}", b);
+    }
+    s
+}
+
 static FORCED_CONSOLE_WIDTH: RwLock<Option<usize>> = RwLock::new(None);
 
 pub const IMG_SRC_TRANSPARENT_1X1_GIF: &str =

@@ -200,7 +200,7 @@ impl BestPracticeAnalyzer {
             use md5::{Digest, Md5};
             let mut hasher = Md5::new();
             hasher.update(svg_trimmed.as_bytes());
-            let svg_hash = format!("{:x}", hasher.finalize());
+            let svg_hash = crate::utils::to_lower_hex(hasher.finalize());
 
             // Check inline SVG size
             if size > self.max_inline_svg_size {

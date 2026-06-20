@@ -166,7 +166,7 @@ impl OfflineWebsiteExporter {
                             let full_url = parsed.get_full_url(true, false);
                             let mut hasher = Md5::new();
                             hasher.update(full_url.as_bytes());
-                            let hash = format!("{:x}", hasher.finalize());
+                            let hash = crate::utils::to_lower_hex(hasher.finalize());
                             let uq_id = hash[..8].to_string();
                             status.get_url_body_text(&uq_id)
                         };

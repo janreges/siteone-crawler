@@ -63,7 +63,7 @@ impl AnalyzerStats {
             let mut hasher = Md5::new();
             hasher.update(s.trim().as_bytes());
             let result = hasher.finalize();
-            format!("{:x}", result)[..10].to_string()
+            crate::utils::to_lower_hex(result)[..10].to_string()
         });
 
         let map = match severity {

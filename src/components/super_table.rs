@@ -666,5 +666,5 @@ fn generate_unique_id() -> String {
     let mut hasher = Md5::new();
     hasher.update(nanos.to_string().as_bytes());
     let result = hasher.finalize();
-    format!("t{}", &format!("{:x}", result)[..6])
+    format!("t{}", &crate::utils::to_lower_hex(result)[..6])
 }

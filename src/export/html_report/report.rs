@@ -2112,7 +2112,7 @@ fn aggregate_detail_key(severity: &str, detail: &str) -> String {
 
     let mut hasher = Md5::new();
     hasher.update(clean_detail.as_bytes());
-    let hash = format!("{:x}", hasher.finalize());
+    let hash = crate::utils::to_lower_hex(hasher.finalize());
     format!("{} | {}", severity, hash)
 }
 

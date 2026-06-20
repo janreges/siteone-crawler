@@ -61,7 +61,7 @@ impl Default for FoundUrls {
 fn md5_hex(input: &str) -> String {
     let mut hasher = Md5::new();
     hasher.update(input.as_bytes());
-    format!("{:x}", hasher.finalize())
+    crate::utils::to_lower_hex(hasher.finalize())
 }
 
 /// Check if URL is valid for crawling. Ignored are:

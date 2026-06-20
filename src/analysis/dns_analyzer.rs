@@ -44,7 +44,8 @@ impl DnsAnalyzer {
             rt.block_on(async {
                 let resolver = Resolver::builder_tokio()
                     .map_err(|e| format!("Failed to create DNS resolver: {}", e))?
-                    .build();
+                    .build()
+                    .map_err(|e| format!("Failed to build DNS resolver: {}", e))?;
 
                 let mut resolved_domains = vec![domain_owned.clone()];
                 let mut ipv4_addresses = Vec::new();
@@ -52,8 +53,8 @@ impl DnsAnalyzer {
 
                 // Resolve CNAME records
                 if let Ok(cname_response) = resolver.lookup(domain_owned.as_str(), RecordType::CNAME).await {
-                    for record in cname_response.iter() {
-                        let cname_str = record.to_string().trim_end_matches('.').to_string();
+                    for record in cname_response.answers() {
+                        let cname_str = record.data.to_string().trim_end_matches('.').to_string();
                         if !resolved_domains.contains(&cname_str) {
                             resolved_domains.push(cname_str);
                         }
@@ -62,8 +63,8 @@ impl DnsAnalyzer {
 
                 // Resolve A records (IPv4)
                 if let Ok(ipv4_response) = resolver.lookup(domain_owned.as_str(), RecordType::A).await {
-                    for record in ipv4_response.iter() {
-                        let ip_str = record.to_string();
+                    for record in ipv4_response.answers() {
+                        let ip_str = record.data.to_string();
                         if !ip_str.is_empty() {
                             ipv4_addresses.push(ip_str);
                         }
@@ -72,8 +73,8 @@ impl DnsAnalyzer {
 
                 // Resolve AAAA records (IPv6)
                 if let Ok(ipv6_response) = resolver.lookup(domain_owned.as_str(), RecordType::AAAA).await {
-                    for record in ipv6_response.iter() {
-                        let ip_str = record.to_string();
+                    for record in ipv6_response.answers() {
+                        let ip_str = record.data.to_string();
                         if !ip_str.is_empty() {
                             ipv6_addresses.push(ip_str);
                         }

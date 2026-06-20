@@ -117,7 +117,7 @@ impl AstroProcessor {
             for inline_module in &inline_modules {
                 let mut hasher = Md5::new();
                 hasher.update(inline_module.as_bytes());
-                let module_md5 = format!("{:x}", hasher.finalize());
+                let module_md5 = crate::utils::to_lower_hex(hasher.finalize());
                 if already_included.contains(&module_md5) {
                     continue;
                 }
