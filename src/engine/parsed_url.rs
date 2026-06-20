@@ -355,7 +355,12 @@ impl ParsedUrl {
                 if base.path.ends_with('/') {
                     url = format!("{}{}", base.path, url);
                 } else {
-                    url = format!("{}{}", parent_path(&base.path), url);
+                    let dir = parent_path(&base.path);
+                    if dir == "/" {
+                        url = format!("/{}", url);
+                    } else {
+                        url = format!("{}/{}", dir, url);
+                    }
                 }
             } else if url.starts_with('/') && !url.starts_with("//") {
                 // Absolute path /xyz/abc
@@ -593,6 +598,16 @@ mod tests {
         let base = ParsedUrl::parse("https://example.com/dir/page", None);
         let relative = ParsedUrl::parse("./other", Some(&base));
         assert_eq!(relative.path, "/dir/other");
+    }
+
+    #[test]
+    fn test_relative_url_from_file_base_keeps_separator() {
+        let base = ParsedUrl::parse("https://example.com/VirtualYarrowStalks/VirtualYarrowStalks.htm", None);
+        let rel = ParsedUrl::parse("navbar.js", Some(&base));
+        assert_eq!(rel.path, "/VirtualYarrowStalks/navbar.js");
+        let base_root = ParsedUrl::parse("https://example.com/page.htm", None);
+        let rel_root = ParsedUrl::parse("x.js", Some(&base_root));
+        assert_eq!(rel_root.path, "/x.js");
     }
 
     #[test]
