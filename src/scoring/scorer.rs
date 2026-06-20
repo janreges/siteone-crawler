@@ -408,6 +408,15 @@ fn score_best_practices(summary: &Summary) -> CategoryScore {
         });
     }
 
+    // AVIF support — smaller deduction than WebP. AVIF is the most modern image format;
+    // a site already serving WebP only loses a little for not adopting AVIF yet.
+    if is_not_ok(summary, "avif-support") {
+        deductions.push(Deduction {
+            reason: "No AVIF image support".to_string(),
+            points: 0.1,
+        });
+    }
+
     build_category("Best Practices", "best-practices", 0.15, deductions, per_url_total)
 }
 
@@ -619,5 +628,36 @@ mod tests {
         let stats = make_basic_stats();
         let scores = calculate_scores(&summary, &stats);
         assert!(scores.overall.score < 10.0);
+    }
+
+    #[test]
+    fn avif_support_warning_reduces_best_practices() {
+        // A site without AVIF loses a small 0.1 from Best Practices (separate from WebP).
+        let summary = make_summary_with_items(vec![("avif-support", ItemStatus::Warning)]);
+        let stats = make_basic_stats();
+        let scores = calculate_scores(&summary, &stats);
+        let bp = scores.categories.iter().find(|c| c.code == "best-practices").unwrap();
+        assert!(
+            (bp.score - 9.9).abs() < 0.001,
+            "expected 10.0 - 0.1 = 9.9, got {}",
+            bp.score
+        );
+    }
+
+    #[test]
+    fn webp_and_avif_both_missing_stack() {
+        // No modern image format at all: -0.3 (WebP) + -0.1 (AVIF) = -0.4.
+        let summary = make_summary_with_items(vec![
+            ("webp-support", ItemStatus::Warning),
+            ("avif-support", ItemStatus::Warning),
+        ]);
+        let stats = make_basic_stats();
+        let scores = calculate_scores(&summary, &stats);
+        let bp = scores.categories.iter().find(|c| c.code == "best-practices").unwrap();
+        assert!(
+            (bp.score - 9.6).abs() < 0.001,
+            "expected 10.0 - 0.4 = 9.6, got {}",
+            bp.score
+        );
     }
 }
