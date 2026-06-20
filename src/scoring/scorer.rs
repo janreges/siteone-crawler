@@ -47,36 +47,52 @@ pub fn calculate_scores(summary: &Summary, basic_stats: &BasicStats) -> QualityS
 fn score_performance(summary: &Summary, stats: &BasicStats) -> CategoryScore {
     let mut deductions = Vec::new();
 
+    const FIX_RESPONSE_TIME: &str =
+        "Reduce server response time: enable server-side caching and a CDN, and optimize backend/database queries.";
+    const FIX_SLOW_URLS: &str = "Speed up the URLs in the 'Slowest' table: add caching, compression and smaller payloads for the heaviest endpoints.";
+
     // Average response time
     if stats.total_requests_times_avg > 1.0 {
-        deductions.push(Deduction {
-            reason: format!(
-                "Average response time {:.0}ms > 1000ms",
-                stats.total_requests_times_avg * 1000.0
-            ),
-            points: 1.0,
-        });
+        deductions.push(
+            Deduction::new(
+                format!(
+                    "Average response time {:.0}ms > 1000ms",
+                    stats.total_requests_times_avg * 1000.0
+                ),
+                1.0,
+            )
+            .with_fix(FIX_RESPONSE_TIME),
+        );
     } else if stats.total_requests_times_avg > 0.5 {
-        deductions.push(Deduction {
-            reason: format!(
-                "Average response time {:.0}ms > 500ms",
-                stats.total_requests_times_avg * 1000.0
-            ),
-            points: 0.5,
-        });
+        deductions.push(
+            Deduction::new(
+                format!(
+                    "Average response time {:.0}ms > 500ms",
+                    stats.total_requests_times_avg * 1000.0
+                ),
+                0.5,
+            )
+            .with_fix(FIX_RESPONSE_TIME),
+        );
     }
 
     // Slowest single response (from BasicStats — covers all resource types)
     if stats.total_requests_times_max > 5.0 {
-        deductions.push(Deduction {
-            reason: format!("Slowest response {:.1}s > 5.0s", stats.total_requests_times_max),
-            points: 1.0,
-        });
+        deductions.push(
+            Deduction::new(
+                format!("Slowest response {:.1}s > 5.0s", stats.total_requests_times_max),
+                1.0,
+            )
+            .with_fix(FIX_SLOW_URLS),
+        );
     } else if stats.total_requests_times_max > 3.0 {
-        deductions.push(Deduction {
-            reason: format!("Slowest response {:.1}s > 3.0s", stats.total_requests_times_max),
-            points: 0.5,
-        });
+        deductions.push(
+            Deduction::new(
+                format!("Slowest response {:.1}s > 3.0s", stats.total_requests_times_max),
+                0.5,
+            )
+            .with_fix(FIX_SLOW_URLS),
+        );
     }
 
     // Slow URLs count (from slowest analyzer summary)
@@ -84,10 +100,8 @@ fn score_performance(summary: &Summary, stats: &BasicStats) -> CategoryScore {
         let count = get_item_count(summary, "slowUrls").unwrap_or(1);
         if count > 0 {
             let pts = (count as f64 * 0.3).min(MAX_PER_URL_DEDUCTION);
-            deductions.push(Deduction {
-                reason: format!("{} slow URL(s) detected", count),
-                points: round1(pts),
-            });
+            deductions
+                .push(Deduction::new(format!("{} slow URL(s) detected", count), round1(pts)).with_fix(FIX_SLOW_URLS));
         }
     }
 
@@ -104,6 +118,7 @@ fn score_seo(summary: &Summary, stats: &BasicStats) -> CategoryScore {
         "pages-without-h1",
         0.3,
         "page(s) without <h1>",
+        "Add exactly one <h1> per page that describes its main topic.",
         &mut deductions,
         &mut per_url_total,
     );
@@ -114,6 +129,7 @@ fn score_seo(summary: &Summary, stats: &BasicStats) -> CategoryScore {
         "pages-with-multiple-h1",
         0.2,
         "page(s) with multiple <h1>",
+        "Keep a single <h1> per page; demote the others to <h2>/<h3>.",
         &mut deductions,
         &mut per_url_total,
     );
@@ -125,10 +141,10 @@ fn score_seo(summary: &Summary, stats: &BasicStats) -> CategoryScore {
         let remaining = MAX_PER_URL_DEDUCTION - per_url_total;
         let pts = pts.min(remaining).max(0.0);
         per_url_total += pts;
-        deductions.push(Deduction {
-            reason: "Non-unique page titles detected".to_string(),
-            points: round1(pts),
-        });
+        deductions
+            .push(Deduction::new("Non-unique page titles detected", round1(pts)).with_fix(
+                "Give every page a unique, descriptive <title> (avoid reusing the same title across pages).",
+            ));
     }
 
     // Meta description uniqueness
@@ -138,10 +154,10 @@ fn score_seo(summary: &Summary, stats: &BasicStats) -> CategoryScore {
         let remaining = MAX_PER_URL_DEDUCTION - per_url_total;
         let pts = pts.min(remaining).max(0.0);
         per_url_total += pts;
-        deductions.push(Deduction {
-            reason: "Non-unique meta descriptions detected".to_string(),
-            points: round1(pts),
-        });
+        deductions.push(
+            Deduction::new("Non-unique meta descriptions detected", round1(pts))
+                .with_fix("Write a unique meta description per page summarizing its content (~50-160 chars)."),
+        );
     }
 
     // 404 pages — use status code count from BasicStats for accuracy
@@ -153,10 +169,10 @@ fn score_seo(summary: &Summary, stats: &BasicStats) -> CategoryScore {
             6..=20 => 1.5,
             _ => 2.0,
         };
-        deductions.push(Deduction {
-            reason: format!("{} page(s) returned 404", count_404),
-            points: pts,
-        });
+        deductions.push(
+            Deduction::new(format!("{} page(s) returned 404", count_404), pts)
+                .with_fix("Fix or redirect the broken links causing 404s (see the 404 table for source pages)."),
+        );
     }
 
     // Redirects
@@ -166,10 +182,10 @@ fn score_seo(summary: &Summary, stats: &BasicStats) -> CategoryScore {
             let pts = (count as f64 * 0.15).min(MAX_PER_TYPE_DEDUCTION);
             let remaining = MAX_PER_URL_DEDUCTION - per_url_total;
             let pts = pts.min(remaining).max(0.0);
-            deductions.push(Deduction {
-                reason: format!("{} redirect(s) found", count),
-                points: round1(pts),
-            });
+            deductions.push(
+                Deduction::new(format!("{} redirect(s) found", count), round1(pts))
+                    .with_fix("Link directly to final URLs to avoid redirect hops (update internal links to the canonical target)."),
+            );
         }
     }
 
@@ -189,28 +205,27 @@ fn score_security(summary: &Summary) -> CategoryScore {
         "ssl-weak-key",
     ] {
         if is_critical(summary, code) {
-            deductions.push(Deduction {
-                reason: "SSL/TLS certificate issue".to_string(),
-                points: 3.0,
-            });
+            deductions.push(Deduction::new("SSL/TLS certificate issue", 3.0).with_fix(
+                "Fix the TLS certificate: install a valid, trusted chain with a strong key and signature algorithm.",
+            ));
             break;
         }
     }
 
     // SSL certificate validity period
     if is_critical(summary, "ssl-certificate-valid-to") {
-        deductions.push(Deduction {
-            reason: "SSL certificate expired or expiring soon".to_string(),
-            points: 0.5,
-        });
+        deductions.push(
+            Deduction::new("SSL certificate expired or expiring soon", 0.5)
+                .with_fix("Renew the TLS certificate before expiry; automate renewal (e.g. ACME/Let's Encrypt)."),
+        );
     }
 
     // Unsafe SSL protocols
     if is_critical(summary, "ssl-protocol-unsafe") || is_warning(summary, "ssl-protocol-unsafe") {
-        deductions.push(Deduction {
-            reason: "Insecure TLS protocol versions supported".to_string(),
-            points: 1.0,
-        });
+        deductions.push(
+            Deduction::new("Insecure TLS protocol versions supported", 1.0)
+                .with_fix("Disable SSLv3/TLS 1.0/1.1 on the server; allow only TLS 1.2 and TLS 1.3."),
+        );
     }
 
     // Security headers — graduated scale based on affected page count
@@ -225,10 +240,11 @@ fn score_security(summary: &Summary) -> CategoryScore {
             11..=50 => 3.0,
             _ => 3.5,
         };
-        deductions.push(Deduction {
-            reason: format!("{} page(s) with critical security findings", count),
-            points: pts,
-        });
+        deductions.push(
+            Deduction::new(format!("{} page(s) with critical security findings", count), pts).with_fix(
+                "Add the missing security headers (CSP, HSTS, X-Content-Type-Options) and harden cookies (Secure/HttpOnly/SameSite).",
+            ),
+        );
     } else if is_warning_or_above(summary, "security") {
         let count = get_item_count(summary, "security").unwrap_or(1);
         let pts = match count {
@@ -239,10 +255,11 @@ fn score_security(summary: &Summary) -> CategoryScore {
             4..=10 => 1.25,
             _ => 1.5,
         };
-        deductions.push(Deduction {
-            reason: format!("{} page(s) with security warnings", count),
-            points: pts,
-        });
+        deductions.push(
+            Deduction::new(format!("{} page(s) with security warnings", count), pts).with_fix(
+                "Review the Security table and add the recommended headers/cookie flags for the affected pages.",
+            ),
+        );
     }
 
     build_category("Security", "security", 0.25, deductions)
@@ -256,10 +273,10 @@ fn score_accessibility(summary: &Summary) -> CategoryScore {
     if is_not_ok(summary, "pages-without-lang") {
         let count = get_item_count(summary, "pages-without-lang").unwrap_or(1);
         let pts = if count > 0 { 1.5 } else { 0.0 };
-        deductions.push(Deduction {
-            reason: format!("{} page(s) without lang attribute", count),
-            points: pts,
-        });
+        deductions.push(
+            Deduction::new(format!("{} page(s) without lang attribute", count), pts)
+                .with_fix("Add a valid lang attribute to <html> (e.g. <html lang=\"en\">) on every page."),
+        );
     }
 
     // Missing image alt attributes
@@ -268,6 +285,7 @@ fn score_accessibility(summary: &Summary) -> CategoryScore {
         "pages-without-image-alt-attributes",
         0.5,
         "page(s) without image alt attributes",
+        "Add a descriptive alt to informative images; use alt=\"\" for purely decorative ones.",
         &mut deductions,
         &mut per_url_total,
     );
@@ -278,6 +296,7 @@ fn score_accessibility(summary: &Summary) -> CategoryScore {
         "pages-without-form-labels",
         0.5,
         "page(s) without form labels",
+        "Associate every form control with a <label> (for=id or wrapping) or an aria-label.",
         &mut deductions,
         &mut per_url_total,
     );
@@ -288,6 +307,7 @@ fn score_accessibility(summary: &Summary) -> CategoryScore {
         "pages-with-skipped-heading-levels",
         0.1,
         "page(s) with skipped heading levels",
+        "Use heading levels in order (don't jump from <h2> to <h4>).",
         &mut deductions,
         &mut per_url_total,
     );
@@ -298,6 +318,7 @@ fn score_accessibility(summary: &Summary) -> CategoryScore {
         "pages-without-aria-labels",
         0.3,
         "page(s) without aria labels",
+        "Give icon-only links/buttons an accessible name via aria-label or visually-hidden text.",
         &mut deductions,
         &mut per_url_total,
     );
@@ -308,6 +329,7 @@ fn score_accessibility(summary: &Summary) -> CategoryScore {
         "pages-without-main-landmark",
         0.15,
         "page(s) without a main landmark",
+        "Wrap the primary content in a single <main> element (or role=\"main\").",
         &mut deductions,
         &mut per_url_total,
     );
@@ -318,6 +340,7 @@ fn score_accessibility(summary: &Summary) -> CategoryScore {
         "pages-with-invalid-html",
         0.3,
         "page(s) with HTML structural issues",
+        "Make every id unique and ensure aria-labelledby/-describedby and label[for] reference existing ids.",
         &mut deductions,
         &mut per_url_total,
     );
@@ -335,6 +358,7 @@ fn score_best_practices(summary: &Summary) -> CategoryScore {
         "pages-with-duplicated-svgs",
         0.3,
         "page(s) with duplicated inline SVGs",
+        "Deduplicate repeated inline SVGs via <use href=\"#id\"> or an external sprite.",
         &mut deductions,
         &mut per_url_total,
     );
@@ -345,6 +369,7 @@ fn score_best_practices(summary: &Summary) -> CategoryScore {
         "pages-with-large-svgs",
         0.2,
         "page(s) with large inline SVGs",
+        "Move large inline SVGs to cacheable external files or optimize them (e.g. SVGO).",
         &mut deductions,
         &mut per_url_total,
     );
@@ -355,6 +380,7 @@ fn score_best_practices(summary: &Summary) -> CategoryScore {
         "pages-with-invalid-svgs",
         0.2,
         "page(s) with invalid inline SVGs",
+        "Fix malformed inline SVG markup so it parses as valid XML.",
         &mut deductions,
         &mut per_url_total,
     );
@@ -365,6 +391,7 @@ fn score_best_practices(summary: &Summary) -> CategoryScore {
         "pages-with-missing-quotes",
         0.2,
         "page(s) with missing quotes",
+        "Quote all HTML attribute values to avoid parsing ambiguity.",
         &mut deductions,
         &mut per_url_total,
     );
@@ -375,6 +402,7 @@ fn score_best_practices(summary: &Summary) -> CategoryScore {
         "pages-with-deep-dom",
         0.5,
         "page(s) with deep DOM",
+        "Flatten deeply nested markup to reduce DOM depth and improve rendering performance.",
         &mut deductions,
         &mut per_url_total,
     );
@@ -385,33 +413,34 @@ fn score_best_practices(summary: &Summary) -> CategoryScore {
         "pages-with-non-clickable-phone-numbers",
         0.3,
         "page(s) with non-clickable phone numbers",
+        "Wrap phone numbers in tel: links (<a href=\"tel:+...\">) so they are tappable on mobile.",
         &mut deductions,
         &mut per_url_total,
     );
 
     // Brotli support
     if is_not_ok(summary, "brotli-support") {
-        deductions.push(Deduction {
-            reason: "No Brotli compression support".to_string(),
-            points: 0.5,
-        });
+        deductions.push(
+            Deduction::new("No Brotli compression support", 0.5)
+                .with_fix("Enable Brotli (or at least gzip) compression for text assets on the server/CDN."),
+        );
     }
 
     // WebP support
     if is_not_ok(summary, "webp-support") {
-        deductions.push(Deduction {
-            reason: "No WebP image support".to_string(),
-            points: 0.3,
-        });
+        deductions.push(
+            Deduction::new("No WebP image support", 0.3)
+                .with_fix("Serve images in a modern format (WebP or AVIF) for better compression."),
+        );
     }
 
     // AVIF support — smaller deduction than WebP. AVIF is the most modern image format;
     // a site already serving WebP only loses a little for not adopting AVIF yet.
     if is_not_ok(summary, "avif-support") {
-        deductions.push(Deduction {
-            reason: "No AVIF image support".to_string(),
-            points: 0.1,
-        });
+        deductions.push(
+            Deduction::new("No AVIF image support", 0.1)
+                .with_fix("Consider AVIF for the best image compression (alongside or instead of WebP)."),
+        );
     }
 
     build_category("Best Practices", "best-practices", 0.15, deductions)
@@ -436,12 +465,14 @@ fn build_category(name: &str, code: &str, weight: f64, deductions: Vec<Deduction
     }
 }
 
-/// Apply a per-URL deduction with per-type sub-cap and total cap.
+/// Apply a per-URL deduction with per-type sub-cap and total cap. `fix` is a short remediation hint.
+#[allow(clippy::too_many_arguments)]
 fn per_url_deduct(
     summary: &Summary,
     apl_code: &str,
     points_per_url: f64,
     description: &str,
+    fix: &str,
     deductions: &mut Vec<Deduction>,
     per_url_total: &mut f64,
 ) {
@@ -457,10 +488,7 @@ fn per_url_deduct(
                 .min(MAX_PER_TYPE_DEDUCTION)
                 .min(remaining);
             *per_url_total += pts;
-            deductions.push(Deduction {
-                reason: format!("{} {}", count, description),
-                points: round1(pts),
-            });
+            deductions.push(Deduction::new(format!("{} {}", count, description), round1(pts)).with_fix(fix));
         }
     }
 }
@@ -622,6 +650,21 @@ mod tests {
         let stats = make_basic_stats();
         let scores = calculate_scores(&summary, &stats);
         assert!(scores.overall.score < 10.0);
+    }
+
+    #[test]
+    fn deductions_include_remediation_fix() {
+        // Every triggered deduction should carry an actionable "how to fix" hint.
+        let summary = make_summary_with_items(vec![("pages-without-h1", ItemStatus::Warning)]);
+        let stats = make_basic_stats();
+        let scores = calculate_scores(&summary, &stats);
+        let seo = scores.categories.iter().find(|c| c.code == "seo").unwrap();
+        assert!(
+            seo.deductions
+                .iter()
+                .any(|d| d.fix.as_deref().is_some_and(|f| !f.is_empty())),
+            "SEO deductions should carry a non-empty fix hint"
+        );
     }
 
     #[test]

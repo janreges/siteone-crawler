@@ -26,6 +26,24 @@ pub struct CategoryScore {
 pub struct Deduction {
     pub reason: String,
     pub points: f64,
+    /// Short, actionable remediation hint ("how to fix"). Serialized to JSON and shown in reports.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fix: Option<String>,
+}
+
+impl Deduction {
+    pub fn new(reason: impl Into<String>, points: f64) -> Self {
+        Self {
+            reason: reason.into(),
+            points,
+            fix: None,
+        }
+    }
+
+    pub fn with_fix(mut self, fix: impl Into<String>) -> Self {
+        self.fix = Some(fix.into());
+        self
+    }
 }
 
 impl CategoryScore {
