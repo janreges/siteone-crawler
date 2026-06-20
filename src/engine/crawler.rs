@@ -1978,8 +1978,7 @@ mod tests {
 
     #[test]
     fn meta_description_content_first() {
-        let html =
-            r#"<meta content="Une description avec des caractères accentués: éèà" name="description" />"#;
+        let html = r#"<meta content="Une description avec des caractères accentués: éèà" name="description" />"#;
         assert_eq!(
             extract_desc(html).as_deref(),
             Some("Une description avec des caractères accentués: éèà")
