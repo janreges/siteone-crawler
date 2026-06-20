@@ -46,7 +46,6 @@ pub fn calculate_scores(summary: &Summary, basic_stats: &BasicStats) -> QualityS
 
 fn score_performance(summary: &Summary, stats: &BasicStats) -> CategoryScore {
     let mut deductions = Vec::new();
-    let mut per_url_total = 0.0;
 
     // Average response time
     if stats.total_requests_times_avg > 1.0 {
@@ -85,7 +84,6 @@ fn score_performance(summary: &Summary, stats: &BasicStats) -> CategoryScore {
         let count = get_item_count(summary, "slowUrls").unwrap_or(1);
         if count > 0 {
             let pts = (count as f64 * 0.3).min(MAX_PER_URL_DEDUCTION);
-            per_url_total += pts;
             deductions.push(Deduction {
                 reason: format!("{} slow URL(s) detected", count),
                 points: round1(pts),
@@ -93,7 +91,7 @@ fn score_performance(summary: &Summary, stats: &BasicStats) -> CategoryScore {
         }
     }
 
-    build_category("Performance", "performance", 0.20, deductions, per_url_total)
+    build_category("Performance", "performance", 0.20, deductions)
 }
 
 fn score_seo(summary: &Summary, stats: &BasicStats) -> CategoryScore {
@@ -168,7 +166,6 @@ fn score_seo(summary: &Summary, stats: &BasicStats) -> CategoryScore {
             let pts = (count as f64 * 0.15).min(MAX_PER_TYPE_DEDUCTION);
             let remaining = MAX_PER_URL_DEDUCTION - per_url_total;
             let pts = pts.min(remaining).max(0.0);
-            per_url_total += pts;
             deductions.push(Deduction {
                 reason: format!("{} redirect(s) found", count),
                 points: round1(pts),
@@ -176,7 +173,7 @@ fn score_seo(summary: &Summary, stats: &BasicStats) -> CategoryScore {
         }
     }
 
-    build_category("SEO", "seo", 0.20, deductions, per_url_total)
+    build_category("SEO", "seo", 0.20, deductions)
 }
 
 fn score_security(summary: &Summary) -> CategoryScore {
@@ -248,7 +245,7 @@ fn score_security(summary: &Summary) -> CategoryScore {
         });
     }
 
-    build_category("Security", "security", 0.25, deductions, 0.0)
+    build_category("Security", "security", 0.25, deductions)
 }
 
 fn score_accessibility(summary: &Summary) -> CategoryScore {
@@ -325,7 +322,7 @@ fn score_accessibility(summary: &Summary) -> CategoryScore {
         &mut per_url_total,
     );
 
-    build_category("Accessibility", "accessibility", 0.20, deductions, per_url_total)
+    build_category("Accessibility", "accessibility", 0.20, deductions)
 }
 
 fn score_best_practices(summary: &Summary) -> CategoryScore {
@@ -417,18 +414,15 @@ fn score_best_practices(summary: &Summary) -> CategoryScore {
         });
     }
 
-    build_category("Best Practices", "best-practices", 0.15, deductions, per_url_total)
+    build_category("Best Practices", "best-practices", 0.15, deductions)
 }
 
 // ---- Helpers ----
 
-fn build_category(
-    name: &str,
-    code: &str,
-    weight: f64,
-    deductions: Vec<Deduction>,
-    _per_url_total: f64,
-) -> CategoryScore {
+fn build_category(name: &str, code: &str, weight: f64, deductions: Vec<Deduction>) -> CategoryScore {
+    // Per-URL rules are individually capped inside per_url_deduct (MAX_PER_TYPE_DEDUCTION) and the
+    // running per-URL budget (MAX_PER_URL_DEDUCTION); site-wide/bucketed rules contribute their
+    // fixed points. The category score is the remaining budget after summing all deductions.
     let fixed_total: f64 = deductions.iter().map(|d| d.points).sum();
     let score = round1((10.0 - fixed_total).clamp(0.0, 10.0));
 
