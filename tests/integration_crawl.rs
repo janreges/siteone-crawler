@@ -761,6 +761,63 @@ fn url_list_empty_file_exits_with_101() {
 }
 
 #[test]
+fn url_list_all_invalid_urls_exits_with_101() {
+    let tmp = TempDir::new("url-list-invalid");
+    let list_path = tmp.path.join("urls.txt");
+    // Non-empty lines, but none is an absolute http(s) URL.
+    std::fs::write(&list_path, "notaurl\n/relative/path\nexample.com/no-scheme\n").unwrap();
+
+    let output = run_crawler(&[&format!("--url-list={}", list_path.display())]);
+    assert_eq!(
+        output.status.code(),
+        Some(101),
+        "Expected exit code 101 when the URL list has no valid http(s) URLs"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("no valid http(s) URLs"),
+        "Error should mention there are no valid URLs, got: {}",
+        stderr
+    );
+    assert!(
+        stderr.contains("skipped"),
+        "Invalid lines should be reported as skipped, got: {}",
+        stderr
+    );
+}
+
+#[test]
+fn url_list_all_invalid_with_explicit_url_does_not_fail_config() {
+    // When --url is provided, an all-invalid --url-list must NOT abort with a
+    // config error (101): the skipped lines are warned about and the crawl
+    // proceeds with --url. Here --url points at a closed local port, so the
+    // crawl runs but finds no pages (exit 3) — crucially NOT 101.
+    let tmp = TempDir::new("url-list-invalid-with-url");
+    let list_path = tmp.path.join("urls.txt");
+    std::fs::write(&list_path, "notaurl\n/relative\n").unwrap();
+
+    let output = run_crawler(&[
+        "--url=http://127.0.0.1:9/",
+        &format!("--url-list={}", list_path.display()),
+        &format!("--output-html-report={}", tmp.path.join("r.html").display()),
+        "--single-page",
+        "--timeout=2",
+        "--http-cache-dir=",
+    ]);
+    assert_ne!(
+        output.status.code(),
+        Some(101),
+        "With --url set, an all-invalid url-list must not be a config error (101)"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("skipped"),
+        "Invalid lines should still be reported as skipped, got: {}",
+        stderr
+    );
+}
+
+#[test]
 #[ignore]
 fn url_list_crawls_listed_urls() {
     let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());

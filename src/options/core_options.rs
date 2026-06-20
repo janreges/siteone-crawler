@@ -505,17 +505,43 @@ impl CoreOptions {
             }
             let content = std::fs::read_to_string(path)
                 .map_err(|e| CrawlerError::Config(format!("Cannot read URL list file '{}': {}", path, e)))?;
-            let urls = parse_line_list(&content);
-            if urls.is_empty() {
+            let all = parse_line_list(&content);
+            if all.is_empty() {
                 return Err(CrawlerError::Config(format!(
                     "URL list file '{}' contains no URLs (empty list).",
                     path
                 )));
             }
-            if core.url.is_empty() {
-                core.url = urls[0].clone();
+            // Keep only absolute http(s) URLs and report the rest, instead of
+            // silently dropping them later during the crawl. Relative or
+            // scheme-less lines cannot be resolved from a flat list.
+            let (urls, invalid): (Vec<String>, Vec<String>) = all.into_iter().partition(|u| is_http_url(u));
+            if !invalid.is_empty() {
+                let sample = invalid.iter().take(3).cloned().collect::<Vec<_>>().join(", ");
+                eprintln!(
+                    "Warning: --url-list '{}': skipped {} line(s) that are not absolute http(s) URLs (e.g. {}).",
+                    path,
+                    invalid.len(),
+                    sample
+                );
             }
-            core.url_list_urls = urls;
+            if urls.is_empty() {
+                // The list yielded nothing usable. Only fail hard if there is also
+                // no explicit --url to fall back on; otherwise proceed with --url
+                // alone (the skipped lines were already reported above).
+                if core.url.is_empty() {
+                    return Err(CrawlerError::Config(format!(
+                        "URL list file '{}' contains no valid http(s) URLs.",
+                        path
+                    )));
+                }
+            } else {
+                // The base URL (when --url is omitted) is the first valid http(s) entry.
+                if core.url.is_empty() {
+                    core.url = urls[0].clone();
+                }
+                core.url_list_urls = urls;
+            }
         }
 
         // Validate required fields
@@ -2461,6 +2487,12 @@ fn read_config_file(path: &str) -> Result<Vec<String>, CrawlerError> {
     Ok(parse_line_list(&content))
 }
 
+/// Whether `s` is an absolute http(s) URL — the only scheme the crawler fetches.
+fn is_http_url(s: &str) -> bool {
+    let l = s.trim_start().to_ascii_lowercase();
+    l.starts_with("http://") || l.starts_with("https://")
+}
+
 /// Parse a newline-delimited list (config files, --url-list): trim each line,
 /// drop blank lines and `#` comments. A leading UTF-8 BOM is stripped first —
 /// it is not whitespace, so `trim()` would leave it on the first entry and
@@ -3047,6 +3079,18 @@ mod tests {
         let content = "# comment\n\n  https://a.test/  \n  # indented comment\n  \nhttps://b.test/\n";
         let urls = parse_line_list(content);
         assert_eq!(urls, vec!["https://a.test/", "https://b.test/"]);
+    }
+
+    #[test]
+    fn is_http_url_accepts_only_absolute_http_urls() {
+        assert!(is_http_url("http://example.com/"));
+        assert!(is_http_url("https://example.com/a"));
+        assert!(is_http_url("HTTPS://EXAMPLE.COM"));
+        assert!(!is_http_url("example.com/x"));
+        assert!(!is_http_url("/path"));
+        assert!(!is_http_url("ftp://example.com"));
+        assert!(!is_http_url("notaurl"));
+        assert!(!is_http_url(""));
     }
 
     #[test]
