@@ -241,6 +241,8 @@ pub struct CoreOptions {
     pub ci_max_score_drop: Option<f64>,
     pub ci_fail_on_code: Vec<String>,
     pub ci_ignore_code: Vec<String>,
+    pub ci_junit_file: Option<String>,
+    pub ci_github_annotations: bool,
 }
 
 impl CoreOptions {
@@ -443,6 +445,8 @@ impl CoreOptions {
             ci_max_score_drop: None,
             ci_fail_on_code: Vec::new(),
             ci_ignore_code: Vec::new(),
+            ci_junit_file: None,
+            ci_github_annotations: false,
         };
 
         // Populate from option groups
@@ -1291,6 +1295,16 @@ impl CoreOptions {
             "ciIgnoreCode" => {
                 if let Some(arr) = value.as_array() {
                     self.ci_ignore_code = arr.clone();
+                }
+            }
+            "ciJunitFile" => {
+                if let Some(s) = value.as_str() {
+                    self.ci_junit_file = Some(s.to_string());
+                }
+            }
+            "ciGithubAnnotations" => {
+                if let Some(b) = value.as_bool() {
+                    self.ci_github_annotations = b;
                 }
             }
             "serveMarkdownDirectory" => {
@@ -2503,6 +2517,30 @@ pub fn get_options() -> Options {
                 true,
                 None,
             ),
+            CrawlerOption::new(
+                "--ci-junit-file",
+                None,
+                "ciJunitFile",
+                OptionType::File,
+                false,
+                "Write the CI gate result as a JUnit XML report to this file.",
+                None,
+                true,
+                false,
+                None,
+            ),
+            CrawlerOption::new(
+                "--ci-github-annotations",
+                None,
+                "ciGithubAnnotations",
+                OptionType::Bool,
+                false,
+                "Print GitHub Actions error annotations for failed CI checks.",
+                None,
+                false,
+                false,
+                None,
+            ),
         ],
     ));
 
@@ -3016,6 +3054,8 @@ mod tests {
             ci_max_score_drop: None,
             ci_fail_on_code: Vec::new(),
             ci_ignore_code: Vec::new(),
+            ci_junit_file: None,
+            ci_github_annotations: false,
         }
     }
 
@@ -3086,7 +3126,7 @@ mod tests {
         let group = options.get_group(GROUP_CI_CD_SETTINGS);
         assert!(group.is_some());
         let group = group.unwrap();
-        assert_eq!(group.options.len(), 19);
+        assert_eq!(group.options.len(), 21);
     }
 
     // ---- Duration parsing tests ----

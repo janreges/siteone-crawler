@@ -241,6 +241,57 @@ fn round1(v: f64) -> f64 {
     (v * 10.0).round() / 10.0
 }
 
+fn xml_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
+}
+
+/// Render the CI gate result as a JUnit XML test report (renders in GitLab/Jenkins/GitHub etc.).
+pub fn to_junit_xml(result: &CiGateResult) -> String {
+    let failures = result.checks.iter().filter(|c| !c.passed).count();
+    let mut xml = String::new();
+    xml.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+    xml.push_str(&format!(
+        "<testsuite name=\"siteone-crawler\" tests=\"{}\" failures=\"{}\">\n",
+        result.checks.len(),
+        failures
+    ));
+    for check in &result.checks {
+        let name = xml_escape(&check.metric);
+        if check.passed {
+            xml.push_str(&format!("  <testcase name=\"{}\" classname=\"ci-gate\"/>\n", name));
+        } else {
+            let msg = xml_escape(&format!(
+                "{} (expected {} {}, actual {})",
+                check.metric, check.operator, check.threshold, check.actual
+            ));
+            xml.push_str(&format!("  <testcase name=\"{}\" classname=\"ci-gate\">\n", name));
+            xml.push_str(&format!("    <failure message=\"{}\"></failure>\n", msg));
+            xml.push_str("  </testcase>\n");
+        }
+    }
+    xml.push_str("</testsuite>\n");
+    xml
+}
+
+/// GitHub Actions workflow-command lines for each failed check (rendered inline in the PR checks).
+pub fn github_annotations(result: &CiGateResult) -> Vec<String> {
+    result
+        .checks
+        .iter()
+        .filter(|c| !c.passed)
+        .map(|c| {
+            format!(
+                "::error title=CI Gate::{} (expected {} {}, actual {})",
+                c.metric, c.operator, c.threshold, c.actual
+            )
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -396,6 +447,8 @@ mod tests {
             ci_max_score_drop: None,
             ci_fail_on_code: Vec::new(),
             ci_ignore_code: Vec::new(),
+            ci_junit_file: None,
+            ci_github_annotations: false,
         }
     }
 
@@ -679,5 +732,30 @@ mod tests {
                 .iter()
                 .any(|c| c.metric == "Forbidden finding codes" && !c.passed)
         );
+    }
+
+    #[test]
+    fn junit_xml_contains_failure_for_failed_check() {
+        let options = make_options();
+        let scores = make_scores(3.0); // below min overall → fails
+        let stats = make_stats(100);
+        let summary = Summary::new();
+        let result = evaluate(&options, &scores, &stats, &summary);
+        let xml = to_junit_xml(&result);
+        assert!(xml.contains("<testsuite"));
+        assert!(xml.contains("<failure"));
+        assert!(xml.contains("Overall score"));
+    }
+
+    #[test]
+    fn github_annotations_for_failed_checks() {
+        let options = make_options();
+        let scores = make_scores(3.0);
+        let stats = make_stats(100);
+        let summary = Summary::new();
+        let result = evaluate(&options, &scores, &stats, &summary);
+        let annotations = github_annotations(&result);
+        assert!(!annotations.is_empty());
+        assert!(annotations.iter().all(|a| a.starts_with("::error")));
     }
 }

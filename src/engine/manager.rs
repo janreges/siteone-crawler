@@ -321,6 +321,20 @@ impl Manager {
                 if let Ok(mut out) = output.lock() {
                     out.add_ci_gate_result(&ci_result);
                 }
+
+                // Machine-readable CI artifacts
+                if let Some(junit_path) = &self.options.ci_junit_file {
+                    let xml = ci_gate::to_junit_xml(&ci_result);
+                    if let Err(e) = std::fs::write(junit_path, xml) {
+                        eprintln!("Failed to write JUnit report to {}: {}", junit_path, e);
+                    }
+                }
+                let in_github_actions = std::env::var("GITHUB_ACTIONS").map(|v| v == "true").unwrap_or(false);
+                if self.options.ci_github_annotations || in_github_actions {
+                    for line in ci_gate::github_annotations(&ci_result) {
+                        println!("{}", line);
+                    }
+                }
             }
 
             if let Ok(mut out) = output.lock() {
