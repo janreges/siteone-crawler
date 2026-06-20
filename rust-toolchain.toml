@@ -1,0 +1,10 @@
+# Pin the exact toolchain so local development and CI use the same compiler and
+# the same Clippy lint set. This prevents "passes locally, fails in CI" drift
+# (e.g. a new stable Clippy introducing lints on unchanged code).
+#
+# Bump this deliberately (and run `cargo clippy -- -D warnings` + tests) when you
+# want a newer compiler. Note: this is the *build* toolchain; the supported
+# minimum (MSRV) is declared separately as `rust-version` in Cargo.toml.
+[toolchain]
+channel = "1.96.0"
+components = ["rustfmt", "clippy"]
