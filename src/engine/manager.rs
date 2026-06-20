@@ -282,6 +282,7 @@ impl Manager {
                 total_requests_times_avg: basic_stats.total_requests_times_avg,
                 total_requests_times_min: basic_stats.total_requests_times_min,
                 total_requests_times_max: basic_stats.total_requests_times_max,
+                total_requests_times_p90: basic_stats.total_requests_times_p90,
                 count_by_status: basic_stats.count_by_status.clone(),
                 count_by_content_type: basic_stats.count_by_content_type.clone(),
             };
@@ -304,6 +305,7 @@ impl Manager {
                 total_requests_times_avg: basic_stats.total_requests_times_avg,
                 total_requests_times_min: basic_stats.total_requests_times_min,
                 total_requests_times_max: basic_stats.total_requests_times_max,
+                total_requests_times_p90: basic_stats.total_requests_times_p90,
                 count_by_status: basic_stats.count_by_status.clone(),
                 count_by_content_type: basic_stats.count_by_content_type.clone(),
             };

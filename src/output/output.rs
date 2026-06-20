@@ -119,6 +119,7 @@ pub struct BasicStats {
     pub total_requests_times_avg: f64,
     pub total_requests_times_min: f64,
     pub total_requests_times_max: f64,
+    pub total_requests_times_p90: f64,
     pub count_by_status: BTreeMap<i32, usize>,
     pub count_by_content_type: BTreeMap<i32, usize>,
 }

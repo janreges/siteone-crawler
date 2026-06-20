@@ -201,6 +201,7 @@ impl Output for JsonOutput {
             "totalRequestsTimesAvg": stats.total_requests_times_avg,
             "totalRequestsTimesMin": stats.total_requests_times_min,
             "totalRequestsTimesMax": stats.total_requests_times_max,
+            "totalRequestsTimesP90": stats.total_requests_times_p90,
             "countByStatus": count_by_status,
         });
         self.json.insert("stats".to_string(), stats_json);

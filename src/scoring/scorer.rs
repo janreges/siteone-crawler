@@ -76,6 +76,32 @@ fn score_performance(summary: &Summary, stats: &BasicStats) -> CategoryScore {
         );
     }
 
+    // 90th-percentile HTML document response time — tail latency users actually feel, fairer than
+    // the all-asset average which is skewed by large images/videos.
+    if stats.total_requests_times_p90 > 1.0 {
+        deductions.push(
+            Deduction::new(
+                format!(
+                    "90th percentile HTML response time {:.0}ms > 1000ms",
+                    stats.total_requests_times_p90 * 1000.0
+                ),
+                0.5,
+            )
+            .with_fix(FIX_RESPONSE_TIME),
+        );
+    } else if stats.total_requests_times_p90 > 0.6 {
+        deductions.push(
+            Deduction::new(
+                format!(
+                    "90th percentile HTML response time {:.0}ms > 600ms",
+                    stats.total_requests_times_p90 * 1000.0
+                ),
+                0.25,
+            )
+            .with_fix(FIX_RESPONSE_TIME),
+        );
+    }
+
     // Slowest single response (from BasicStats — covers all resource types)
     if stats.total_requests_times_max > 5.0 {
         deductions.push(
@@ -755,6 +781,16 @@ mod tests {
         let scores = calculate_scores(&summary, &stats);
         let perf = scores.categories.iter().find(|c| c.code == "performance").unwrap();
         assert!((perf.score - 8.0).abs() < 0.001, "expected 8.0, got {}", perf.score);
+    }
+
+    #[test]
+    fn high_p90_html_response_reduces_performance() {
+        let mut stats = make_basic_stats();
+        stats.total_requests_times_p90 = 1.5;
+        let summary = make_empty_summary();
+        let scores = calculate_scores(&summary, &stats);
+        let perf = scores.categories.iter().find(|c| c.code == "performance").unwrap();
+        assert!(perf.score < 10.0);
     }
 
     #[test]

@@ -7,7 +7,18 @@ use std::time::Instant;
 use serde::{Deserialize, Serialize};
 
 use crate::result::visited_url::VisitedUrl;
+use crate::types::ContentTypeId;
 use crate::utils;
+
+/// 90th-percentile value of a slice (nearest-rank). Returns 0.0 for an empty slice.
+fn percentile(values: &mut [f64], p: usize) -> f64 {
+    if values.is_empty() {
+        return 0.0;
+    }
+    values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let rank = ((p as f64 / 100.0) * (values.len() - 1) as f64).round() as usize;
+    (values[rank.min(values.len() - 1)] * 1000.0).round() / 1000.0
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BasicStats {
@@ -19,6 +30,9 @@ pub struct BasicStats {
     pub total_requests_times_avg: f64,
     pub total_requests_times_min: f64,
     pub total_requests_times_max: f64,
+    /// 90th-percentile response time of HTML documents (a fairer "what users feel" proxy than the
+    /// all-asset average, which is skewed by large images/videos). Falls back to all URLs if no HTML.
+    pub total_requests_times_p90: f64,
     pub count_by_status: BTreeMap<i32, usize>,
     pub count_by_content_type: BTreeMap<i32, usize>,
 }
@@ -34,6 +48,7 @@ impl BasicStats {
         total_requests_times_avg: f64,
         total_requests_times_min: f64,
         total_requests_times_max: f64,
+        total_requests_times_p90: f64,
         count_by_status: BTreeMap<i32, usize>,
         count_by_content_type: BTreeMap<i32, usize>,
     ) -> Self {
@@ -46,6 +61,7 @@ impl BasicStats {
             total_requests_times_avg,
             total_requests_times_min,
             total_requests_times_max,
+            total_requests_times_p90,
             count_by_status,
             count_by_content_type,
         }
@@ -85,6 +101,17 @@ impl BasicStats {
         let total_requests_times_min = (min_time.unwrap_or(0.0) * 1000.0).round() / 1000.0;
         let total_requests_times_max = (max_time.unwrap_or(0.0) * 1000.0).round() / 1000.0;
 
+        // p90 over HTML documents (fairer "what users feel" proxy); fall back to all URLs if none.
+        let mut html_times: Vec<f64> = visited_urls
+            .iter()
+            .filter(|u| u.content_type == ContentTypeId::Html && u.status_code == 200)
+            .map(|u| u.request_time)
+            .collect();
+        if html_times.is_empty() {
+            html_times = visited_urls.iter().map(|u| u.request_time).collect();
+        }
+        let total_requests_times_p90 = percentile(&mut html_times, 90);
+
         Self {
             total_execution_time,
             total_urls,
@@ -94,6 +121,7 @@ impl BasicStats {
             total_requests_times_avg,
             total_requests_times_min,
             total_requests_times_max,
+            total_requests_times_p90,
             count_by_status,
             count_by_content_type,
         }
@@ -127,6 +155,10 @@ impl BasicStats {
             "<tr><td>Requests - max time</td><td>{}</td></tr>",
             utils::get_formatted_duration(self.total_requests_times_max)
         ));
+        html.push_str(&format!(
+            "<tr><td>Requests - p90 time (HTML docs)</td><td>{}</td></tr>",
+            utils::get_formatted_duration(self.total_requests_times_p90)
+        ));
         html.push_str("<tr><td>Requests by status</td><td>");
         for (status_code, count) in &self.count_by_status {
             let colored = utils::get_colored_status_code(*status_code, 0);
@@ -137,5 +169,28 @@ impl BasicStats {
         html.push_str("</table>");
 
         html
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn percentile_p90_nearest_rank() {
+        let mut v: Vec<f64> = (1..=10).map(|n| n as f64).collect();
+        assert_eq!(percentile(&mut v, 90), 9.0);
+    }
+
+    #[test]
+    fn percentile_empty_is_zero() {
+        let mut v: Vec<f64> = vec![];
+        assert_eq!(percentile(&mut v, 90), 0.0);
+    }
+
+    #[test]
+    fn percentile_single_value() {
+        let mut v = vec![0.42];
+        assert_eq!(percentile(&mut v, 90), 0.42);
     }
 }
