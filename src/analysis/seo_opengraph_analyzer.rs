@@ -518,7 +518,12 @@ impl SeoAndOpenGraphAnalyzer {
                 (Some(canon), Some(host)) => url::Url::parse(canon.trim())
                     .ok()
                     .and_then(|u| u.host_str().map(|h| h.to_string()))
-                    .map(|canon_host| !canon_host.eq_ignore_ascii_case(host))
+                    .map(|canon_host| {
+                        // Treat "www." as equivalent to the apex domain (www-canonicalization is a
+                        // common deliberate pattern) to avoid noisy mismatches.
+                        let strip_www = |h: &str| h.strip_prefix("www.").unwrap_or(h).to_lowercase();
+                        strip_www(&canon_host) != strip_www(host)
+                    })
                     .unwrap_or(false),
                 _ => false,
             })
@@ -543,8 +548,10 @@ impl SeoAndOpenGraphAnalyzer {
 
         // --- Robots noindex ---
         if noindex_count > 0 {
-            // A site-wide noindex is almost always an accidental deploy bug.
-            if total >= 3 && (noindex_count as f64) / (total as f64) >= 0.8 {
+            // A site-wide noindex is almost always an accidental deploy bug. Require a reasonably
+            // large crawl (>=10 pages) before raising the critical, so small/partial crawls or
+            // faceted sections with many intentionally-noindexed pages don't trip it falsely.
+            if total >= 10 && (noindex_count as f64) / (total as f64) >= 0.8 {
                 status.add_critical_to_summary(
                     "seo-noindex-sitewide",
                     &format!(
