@@ -993,26 +993,59 @@ impl Analyzer for SecurityAnalyzer {
     }
 }
 
-/// Detect well-known CSP weaknesses that largely defeat its XSS protection.
+/// Detect well-known CSP weaknesses that largely defeat its XSS protection. Analyzed per directive
+/// so that a `'nonce-'`/`'sha…-'` token (which makes modern browsers ignore `'unsafe-inline'`) is
+/// not falsely flagged, and so a `'unsafe-inline'` substring inside e.g. a report path doesn't match.
 fn csp_weaknesses(csp: &str) -> Vec<&'static str> {
     let lower = csp.to_lowercase();
-    let mut weaknesses = Vec::new();
-    if lower.contains("unsafe-inline") {
-        weaknesses.push("'unsafe-inline'");
-    }
-    if lower.contains("unsafe-eval") {
-        weaknesses.push("'unsafe-eval'");
-    }
-    // A bare '*' source in a fetch directive allows loading from anywhere.
-    let has_wildcard = lower.split(';').any(|directive| {
+    let mut unsafe_inline = false;
+    let mut unsafe_eval = false;
+    let mut wildcard = false;
+
+    for directive in lower.split(';') {
         let mut parts = directive.split_whitespace();
         let name = parts.next().unwrap_or("");
-        matches!(
+        let tokens: Vec<&str> = parts.collect();
+
+        // A nonce or hash in the same directive makes browsers ignore 'unsafe-inline' (CSP3).
+        let has_nonce_or_hash = tokens.iter().any(|t| {
+            t.starts_with("'nonce-")
+                || t.starts_with("'sha256-")
+                || t.starts_with("'sha384-")
+                || t.starts_with("'sha512-")
+        });
+        if tokens.contains(&"'unsafe-inline'") && !has_nonce_or_hash {
+            unsafe_inline = true;
+        }
+        if tokens.contains(&"'unsafe-eval'") {
+            unsafe_eval = true;
+        }
+        // A bare '*' source in an executable/fetch directive allows loading from anywhere.
+        if matches!(
             name,
-            "default-src" | "script-src" | "object-src" | "style-src" | "frame-src" | "connect-src"
-        ) && parts.any(|p| p == "*")
-    });
-    if has_wildcard {
+            "default-src"
+                | "script-src"
+                | "object-src"
+                | "style-src"
+                | "frame-src"
+                | "connect-src"
+                | "worker-src"
+                | "child-src"
+                | "manifest-src"
+        ) && tokens.contains(&"*")
+        {
+            wildcard = true;
+        }
+    }
+
+    let mut weaknesses = Vec::new();
+    if unsafe_inline {
+        weaknesses.push("'unsafe-inline'");
+    }
+    if unsafe_eval {
+        weaknesses.push("'unsafe-eval'");
+    }
+    if wildcard {
         weaknesses.push("a wildcard '*' source");
     }
     weaknesses
@@ -1036,6 +1069,23 @@ mod tests {
     #[test]
     fn strong_csp_has_no_weaknesses() {
         assert!(csp_weaknesses("default-src 'self'; object-src 'none'; base-uri 'self'").is_empty());
+    }
+
+    #[test]
+    fn csp_nonce_suppresses_unsafe_inline() {
+        // A nonce in the same directive makes browsers ignore 'unsafe-inline' → not a weakness.
+        assert!(csp_weaknesses("script-src 'nonce-abc123' 'unsafe-inline'").is_empty());
+    }
+
+    #[test]
+    fn csp_wildcard_worker_src_is_flagged() {
+        assert!(csp_weaknesses("worker-src *").iter().any(|w| w.contains("wildcard")));
+    }
+
+    #[test]
+    fn csp_unsafe_inline_substring_in_path_not_flagged() {
+        // 'unsafe-inline' as part of a report path must not be treated as the keyword.
+        assert!(csp_weaknesses("default-src 'self'; report-uri /unsafe-inline-report").is_empty());
     }
 
     #[test]

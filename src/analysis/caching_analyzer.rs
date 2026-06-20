@@ -12,6 +12,7 @@ use crate::result::status::Status;
 use crate::result::visited_url::{
     CACHE_TYPE_HAS_NO_CACHE, CACHE_TYPE_HAS_NO_STORE, CACHE_TYPE_NO_CACHE_HEADERS, VisitedUrl,
 };
+use crate::types::ContentTypeId;
 use crate::utils;
 
 /// One day in seconds — assets cached for less than this revalidate too often to help repeat visits.
@@ -192,7 +193,13 @@ impl CachingAnalyzer {
         let mut short_cache = 0usize;
 
         for u in &visited_urls {
-            if u.status_code != 200 || u.is_external || !u.is_static_file() {
+            // Dynamic JSON/XML endpoints are commonly (and correctly) uncacheable (no-store), so they
+            // are excluded here to avoid false "uncacheable static asset" findings.
+            if u.status_code != 200
+                || u.is_external
+                || !u.is_static_file()
+                || matches!(u.content_type, ContentTypeId::Json | ContentTypeId::Xml)
+            {
                 continue;
             }
             total_static += 1;
