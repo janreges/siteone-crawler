@@ -22,8 +22,8 @@ use crate::utils;
 
 const ANALYSIS_MISSING_IMAGE_ALT_ATTRIBUTES: &str = "Missing image alt attributes";
 const ANALYSIS_MISSING_FORM_LABELS: &str = "Missing form labels";
-const ANALYSIS_MISSING_ARIA_LABELS: &str = "Missing aria labels";
-const ANALYSIS_MISSING_ROLES: &str = "Missing roles";
+const ANALYSIS_UNNAMED_INTERACTIVE: &str = "Unnamed links/buttons";
+const ANALYSIS_MAIN_LANDMARK: &str = "Missing main landmark";
 const ANALYSIS_MISSING_LANG_ATTRIBUTE: &str = "Missing html lang attribute";
 const ANALYSIS_HTML_STRUCTURE: &str = "HTML structural issues";
 
@@ -38,7 +38,7 @@ pub struct AccessibilityAnalyzer {
     pages_without_image_alt_attributes: usize,
     pages_without_form_labels: usize,
     pages_without_aria_labels: usize,
-    pages_without_roles: usize,
+    pages_without_main_landmark: usize,
     pages_without_lang: usize,
 }
 
@@ -57,7 +57,7 @@ impl AccessibilityAnalyzer {
             pages_without_image_alt_attributes: 0,
             pages_without_form_labels: 0,
             pages_without_aria_labels: 0,
-            pages_without_roles: 0,
+            pages_without_main_landmark: 0,
             pages_without_lang: 0,
         }
     }
@@ -75,7 +75,9 @@ impl AccessibilityAnalyzer {
             let img = mat.as_str();
             let img_lower = img.to_lowercase();
 
-            if !img_lower.contains(" alt=") || img_lower.contains(" alt=\"\"") || img_lower.contains(" alt=''") {
+            // Only a completely missing alt attribute is a defect. An explicit alt="" is the
+            // VALID decorative pattern per WCAG 1.1.1 and must NOT be flagged.
+            if !img_lower.contains(" alt=") {
                 bad_images.push(img.to_string());
                 self.stats.add_warning(ANALYSIS_MISSING_IMAGE_ALT_ATTRIBUTES, Some(img));
             } else {
@@ -102,44 +104,44 @@ impl AccessibilityAnalyzer {
     fn check_missing_labels(&mut self, html: &str, result: &mut UrlAnalysisResult) {
         let document = Html::parse_document(html);
 
-        let input_selector = match Selector::parse("input:not([type='hidden'])") {
+        // Controls that need a programmatic label. Buttons/submit/reset/image derive their name
+        // from value=/alt=, so they are excluded here.
+        let input_selector = match Selector::parse(
+            "input:not([type='hidden']):not([type='submit']):not([type='button']):not([type='reset']):not([type='image']), select, textarea",
+        ) {
             Ok(s) => s,
             Err(_) => return,
         };
-        let label_selector_fn =
-            |id: &str| -> Option<Selector> { Selector::parse(&format!("label[for='{}']", id)).ok() };
 
         let inputs: Vec<_> = document.select(&input_selector).collect();
         let mut inputs_without_labels: Vec<String> = Vec::new();
 
         for input in &inputs {
-            let input_html = get_opening_tag_html(input);
             let dedup_key = normalize_tag_for_dedup(input);
-            let id = input.value().attr("id");
-
-            if let Some(id_val) = id {
-                if let Some(label_sel) = label_selector_fn(id_val)
-                    && document.select(&label_sel).next().is_none()
-                {
-                    inputs_without_labels.push(input_html);
-                    self.stats.add_warning(ANALYSIS_MISSING_FORM_LABELS, Some(&dedup_key));
-                }
+            // A control is considered labeled by ANY of: <label for=id>, a wrapping <label>,
+            // aria-label, aria-labelledby, or title. The old check only looked at label[for],
+            // producing false positives for the very common wrapping-label pattern.
+            if input_is_labeled(input, &document) {
+                self.stats.add_ok(ANALYSIS_MISSING_FORM_LABELS, Some(&dedup_key));
             } else {
-                inputs_without_labels.push(input_html);
+                inputs_without_labels.push(get_opening_tag_html(input));
                 self.stats.add_warning(ANALYSIS_MISSING_FORM_LABELS, Some(&dedup_key));
             }
         }
 
         if !inputs_without_labels.is_empty() {
             result.add_warning(
-                format!("{} input(s) without associated <label>", inputs_without_labels.len()),
+                format!(
+                    "{} form control(s) without an accessible label",
+                    inputs_without_labels.len()
+                ),
                 ANALYSIS_MISSING_FORM_LABELS,
                 Some(inputs_without_labels),
             );
             self.pages_without_form_labels += 1;
         } else if !inputs.is_empty() {
             result.add_ok(
-                format!("All {} input(s) have associated 'label'", inputs.len()),
+                format!("All {} form control(s) have an accessible label", inputs.len()),
                 ANALYSIS_MISSING_FORM_LABELS,
                 None,
             );
@@ -149,83 +151,42 @@ impl AccessibilityAnalyzer {
     fn check_missing_aria_labels(&mut self, html: &str, result: &mut UrlAnalysisResult) {
         let document = Html::parse_document(html);
 
-        let mut critical_elements_without: Vec<String> = Vec::new();
-        let critical_selectors = ["input:not([type='hidden'])", "select", "textarea"];
+        // Flag interactive elements that have NO accessible name at all (icon-only links/buttons
+        // with no text, aria-label, title or nested image alt). A link/button with visible text
+        // already has an accessible name and must NOT be flagged — that was the old false positive
+        // where every <a>/<button> lacking aria-label was reported.
+        let mut unnamed: Vec<String> = Vec::new();
 
-        for sel_str in &critical_selectors {
+        for sel_str in &["a[href]", "button"] {
             let selector = match Selector::parse(sel_str) {
                 Ok(s) => s,
                 Err(_) => continue,
             };
-
             for element in document.select(&selector) {
-                let element_html = get_opening_tag_html(&element);
                 let dedup_key = normalize_tag_for_dedup(&element);
-
-                let has_aria_label = element.value().attr("aria-label").is_some();
-                let has_aria_labelledby = element.value().attr("aria-labelledby").is_some();
-
-                if !has_aria_label && !has_aria_labelledby {
-                    critical_elements_without.push(element_html);
-                    self.stats.add_critical(ANALYSIS_MISSING_ARIA_LABELS, Some(&dedup_key));
+                if element_has_accessible_name(&element) {
+                    self.stats.add_ok(ANALYSIS_UNNAMED_INTERACTIVE, Some(&dedup_key));
                 } else {
-                    self.stats.add_ok(ANALYSIS_MISSING_ARIA_LABELS, Some(&dedup_key));
+                    unnamed.push(get_opening_tag_html(&element));
+                    self.stats.add_warning(ANALYSIS_UNNAMED_INTERACTIVE, Some(&dedup_key));
                 }
             }
         }
 
-        let mut warning_elements_without: Vec<String> = Vec::new();
-        let warning_selectors = ["a", "button"];
-
-        for sel_str in &warning_selectors {
-            let selector = match Selector::parse(sel_str) {
-                Ok(s) => s,
-                Err(_) => continue,
-            };
-
-            for element in document.select(&selector) {
-                let element_html = get_opening_tag_html(&element);
-                let dedup_key = normalize_tag_for_dedup(&element);
-
-                let has_aria_label = element.value().attr("aria-label").is_some();
-                let has_aria_labelledby = element.value().attr("aria-labelledby").is_some();
-
-                if !has_aria_label && !has_aria_labelledby {
-                    warning_elements_without.push(element_html);
-                    self.stats.add_warning(ANALYSIS_MISSING_ARIA_LABELS, Some(&dedup_key));
-                } else {
-                    self.stats.add_ok(ANALYSIS_MISSING_ARIA_LABELS, Some(&dedup_key));
-                }
-            }
-        }
-
-        if !critical_elements_without.is_empty() {
-            result.add_critical(
-                format!(
-                    "{} form element(s) without defined 'aria-label' or 'aria-labelledby'",
-                    critical_elements_without.len()
-                ),
-                ANALYSIS_MISSING_ARIA_LABELS,
-                Some(critical_elements_without.clone()),
-            );
-        }
-        if !warning_elements_without.is_empty() {
+        if !unnamed.is_empty() {
             result.add_warning(
                 format!(
-                    "{} element(s) without defined 'aria-label' or 'aria-labelledby'",
-                    warning_elements_without.len()
+                    "{} link(s)/button(s) with no accessible name (icon-only without aria-label)",
+                    unnamed.len()
                 ),
-                ANALYSIS_MISSING_ARIA_LABELS,
-                Some(warning_elements_without.clone()),
+                ANALYSIS_UNNAMED_INTERACTIVE,
+                Some(unnamed),
             );
-        }
-
-        if !critical_elements_without.is_empty() || !warning_elements_without.is_empty() {
             self.pages_without_aria_labels += 1;
         } else {
             result.add_ok(
-                "All key interactive element(s) have defined 'aria-label' or 'aria-labelledby'".to_string(),
-                ANALYSIS_MISSING_ARIA_LABELS,
+                "All links and buttons expose an accessible name".to_string(),
+                ANALYSIS_UNNAMED_INTERACTIVE,
                 None,
             );
         }
@@ -234,39 +195,33 @@ impl AccessibilityAnalyzer {
     fn check_missing_roles(&mut self, html: &str, result: &mut UrlAnalysisResult) {
         let document = Html::parse_document(html);
 
-        let mut elements_without_roles: Vec<String> = Vec::new();
-        let elements_to_check = ["nav", "main", "aside", "header", "footer"];
+        // Native landmark elements (<nav>/<main>/<header>/...) already expose implicit ARIA roles,
+        // so flagging them for not having an explicit role= was a false positive (ARIA rule #1:
+        // prefer native semantics). Instead flag the genuinely useful signal: the page exposes no
+        // main landmark at all, which breaks "skip to content" and screen-reader navigation.
+        let has_main = ["main", "[role='main']"].iter().any(|sel_str| {
+            Selector::parse(sel_str)
+                .ok()
+                .map(|sel| document.select(&sel).next().is_some())
+                .unwrap_or(false)
+        });
 
-        for sel_str in &elements_to_check {
-            let selector = match Selector::parse(sel_str) {
-                Ok(s) => s,
-                Err(_) => continue,
-            };
-
-            for element in document.select(&selector) {
-                if element.value().attr("role").is_some() {
-                    continue;
-                }
-                let element_html = get_opening_tag_html(&element);
-                let dedup_key = normalize_tag_for_dedup(&element);
-                elements_without_roles.push(element_html);
-                self.stats.add_warning(ANALYSIS_MISSING_ROLES, Some(&dedup_key));
-            }
-        }
-
-        if !elements_without_roles.is_empty() {
-            result.add_warning(
-                format!("{} element(s) without defined 'role'", elements_without_roles.len()),
-                ANALYSIS_MISSING_ROLES,
-                Some(elements_without_roles),
-            );
-            self.pages_without_roles += 1;
-        } else {
+        if has_main {
+            self.stats.add_ok(ANALYSIS_MAIN_LANDMARK, Some("<main>"));
             result.add_ok(
-                "All key element(s) have defined 'role'".to_string(),
-                ANALYSIS_MISSING_ROLES,
+                "Document exposes a main landmark.".to_string(),
+                ANALYSIS_MAIN_LANDMARK,
                 None,
             );
+        } else {
+            self.stats
+                .add_warning(ANALYSIS_MAIN_LANDMARK, Some("<main> or role=\"main\""));
+            result.add_warning(
+                "Document has no main landmark (<main> or role=\"main\").".to_string(),
+                ANALYSIS_MAIN_LANDMARK,
+                Some(vec!["No <main> element or role=\"main\" found.".to_string()]),
+            );
+            self.pages_without_main_landmark += 1;
         }
     }
 
@@ -437,19 +392,22 @@ impl AccessibilityAnalyzer {
         if self.pages_without_aria_labels > 0 {
             status.add_warning_to_summary(
                 "pages-without-aria-labels",
-                &format!("{} page(s) without aria labels", self.pages_without_aria_labels),
+                &format!(
+                    "{} page(s) with unnamed links/buttons (icon-only without aria-label)",
+                    self.pages_without_aria_labels
+                ),
             );
         } else {
-            status.add_ok_to_summary("pages-without-aria-labels", "All pages have aria labels");
+            status.add_ok_to_summary("pages-without-aria-labels", "All links/buttons have an accessible name");
         }
 
-        if self.pages_without_roles > 0 {
+        if self.pages_without_main_landmark > 0 {
             status.add_warning_to_summary(
-                "pages-without-roles",
-                &format!("{} page(s) without role attributes", self.pages_without_roles),
+                "pages-without-main-landmark",
+                &format!("{} page(s) without a main landmark", self.pages_without_main_landmark),
             );
         } else {
-            status.add_ok_to_summary("pages-without-roles", "All pages have role attributes");
+            status.add_ok_to_summary("pages-without-main-landmark", "All pages expose a main landmark");
         }
 
         if self.pages_without_lang > 0 {
@@ -703,6 +661,69 @@ fn normalize_tag_for_dedup(element: &scraper::ElementRef) -> String {
     }
 }
 
+fn attr_non_empty(attr: Option<&str>) -> bool {
+    attr.map(|s| !s.trim().is_empty()).unwrap_or(false)
+}
+
+/// Pragmatic static approximation of "does this link/button expose an accessible name?".
+/// Covers aria-label, aria-labelledby, title, visible text, and nested labelling content
+/// (img alt, svg <title>, descendant aria-label/title). A subset of the WAI name computation,
+/// good enough to avoid the false positive of flagging text links/buttons as unnamed.
+fn element_has_accessible_name(element: &scraper::ElementRef) -> bool {
+    let v = element.value();
+    if attr_non_empty(v.attr("aria-label"))
+        || attr_non_empty(v.attr("aria-labelledby"))
+        || attr_non_empty(v.attr("title"))
+    {
+        return true;
+    }
+    if !element.text().collect::<String>().trim().is_empty() {
+        return true;
+    }
+    if let Ok(sel) = Selector::parse("img[alt], svg title, [aria-label], [title]") {
+        for child in element.select(&sel) {
+            let cv = child.value();
+            match cv.name() {
+                "img" if attr_non_empty(cv.attr("alt")) => return true,
+                "title" if !child.text().collect::<String>().trim().is_empty() => return true,
+                _ if attr_non_empty(cv.attr("aria-label")) || attr_non_empty(cv.attr("title")) => return true,
+                _ => {}
+            }
+        }
+    }
+    false
+}
+
+/// Is a form control labeled by any accepted mechanism: aria-label/-labelledby/title on the
+/// control, an explicit <label for=id>, or a wrapping <label>…<input>…</label>?
+fn input_is_labeled(input: &scraper::ElementRef, document: &Html) -> bool {
+    let v = input.value();
+    if attr_non_empty(v.attr("aria-label"))
+        || attr_non_empty(v.attr("aria-labelledby"))
+        || attr_non_empty(v.attr("title"))
+    {
+        return true;
+    }
+    if let Some(id) = v.attr("id") {
+        let id = id.trim();
+        if !id.is_empty()
+            && let Ok(sel) = Selector::parse(&format!("label[for='{}']", id))
+            && document.select(&sel).next().is_some()
+        {
+            return true;
+        }
+    }
+    // Implicit wrapping <label>
+    for ancestor in input.ancestors() {
+        if let Some(el) = scraper::ElementRef::wrap(ancestor)
+            && el.value().name() == "label"
+        {
+            return true;
+        }
+    }
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -751,5 +772,95 @@ mod tests {
         let (pages, result) = run_structure_check(html);
         assert_eq!(pages, 0);
         assert!(result.get_warning().is_empty(), "got: {:?}", result.get_warning());
+    }
+
+    #[test]
+    fn decorative_empty_alt_is_not_flagged() {
+        let mut analyzer = AccessibilityAnalyzer::new();
+        let mut result = UrlAnalysisResult::new();
+        analyzer.check_image_alt_attributes(r#"<img src="x.png" alt="">"#, &mut result);
+        assert!(
+            result.get_warning().is_empty(),
+            "decorative alt=\"\" must be OK: {:?}",
+            result.get_warning()
+        );
+    }
+
+    #[test]
+    fn missing_alt_is_flagged() {
+        let mut analyzer = AccessibilityAnalyzer::new();
+        let mut result = UrlAnalysisResult::new();
+        analyzer.check_image_alt_attributes(r#"<img src="x.png">"#, &mut result);
+        assert!(!result.get_warning().is_empty());
+    }
+
+    #[test]
+    fn text_link_has_accessible_name() {
+        let mut analyzer = AccessibilityAnalyzer::new();
+        let mut result = UrlAnalysisResult::new();
+        analyzer.check_missing_aria_labels(r#"<html><body><a href="/x">Read more</a></body></html>"#, &mut result);
+        assert!(
+            result.get_warning().is_empty(),
+            "text link must not be flagged: {:?}",
+            result.get_warning()
+        );
+    }
+
+    #[test]
+    fn icon_only_link_without_name_is_flagged() {
+        let mut analyzer = AccessibilityAnalyzer::new();
+        let mut result = UrlAnalysisResult::new();
+        analyzer.check_missing_aria_labels(r#"<html><body><a href="/x"><svg></svg></a></body></html>"#, &mut result);
+        assert_eq!(analyzer.pages_without_aria_labels, 1);
+        assert!(!result.get_warning().is_empty());
+    }
+
+    #[test]
+    fn icon_link_with_aria_label_is_ok() {
+        let mut analyzer = AccessibilityAnalyzer::new();
+        let mut result = UrlAnalysisResult::new();
+        analyzer.check_missing_aria_labels(
+            r#"<html><body><a href="/x" aria-label="Home"><svg></svg></a></body></html>"#,
+            &mut result,
+        );
+        assert_eq!(analyzer.pages_without_aria_labels, 0);
+    }
+
+    #[test]
+    fn wrapping_label_is_accepted() {
+        let mut analyzer = AccessibilityAnalyzer::new();
+        let mut result = UrlAnalysisResult::new();
+        analyzer.check_missing_labels(
+            r#"<html><body><label>Name <input type="text"></label></body></html>"#,
+            &mut result,
+        );
+        assert!(
+            result.get_warning().is_empty(),
+            "wrapping label must be accepted: {:?}",
+            result.get_warning()
+        );
+    }
+
+    #[test]
+    fn unlabeled_input_is_flagged() {
+        let mut analyzer = AccessibilityAnalyzer::new();
+        let mut result = UrlAnalysisResult::new();
+        analyzer.check_missing_labels(r#"<html><body><input type="text" name="q"></body></html>"#, &mut result);
+        assert_eq!(analyzer.pages_without_form_labels, 1);
+    }
+
+    #[test]
+    fn semantic_nav_not_flagged_but_missing_main_is() {
+        // <nav> without explicit role must NOT be flagged; missing <main> IS the new signal.
+        let mut analyzer = AccessibilityAnalyzer::new();
+        let mut result = UrlAnalysisResult::new();
+        analyzer.check_missing_roles(r#"<html><body><nav>links</nav></body></html>"#, &mut result);
+        assert_eq!(analyzer.pages_without_main_landmark, 1, "no <main> should be flagged");
+
+        let mut analyzer2 = AccessibilityAnalyzer::new();
+        let mut result2 = UrlAnalysisResult::new();
+        analyzer2.check_missing_roles(r#"<html><body><main>content</main></body></html>"#, &mut result2);
+        assert_eq!(analyzer2.pages_without_main_landmark, 0, "page with <main> is OK");
+        assert!(result2.get_warning().is_empty());
     }
 }

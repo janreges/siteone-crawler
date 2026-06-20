@@ -305,12 +305,12 @@ fn score_accessibility(summary: &Summary) -> CategoryScore {
         &mut per_url_total,
     );
 
-    // Missing roles (lower weight — semantic HTML provides implicit roles)
+    // Missing main landmark (no <main>/role=main — breaks screen-reader navigation)
     per_url_deduct(
         summary,
-        "pages-without-roles",
+        "pages-without-main-landmark",
         0.15,
-        "page(s) without role attributes",
+        "page(s) without a main landmark",
         &mut deductions,
         &mut per_url_total,
     );
