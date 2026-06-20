@@ -12,11 +12,14 @@ pub const ROBOTS_NOFOLLOW: i32 = 2;
 pub struct SeoAndOpenGraphResult {
     pub url_uq_id: String,
     pub url_path_and_query: String,
+    /// Host of the page itself, used to detect off-domain canonical links.
+    pub page_host: Option<String>,
 
     pub title: Option<String>,
     pub description: Option<String>,
     pub keywords: Option<String>,
     pub h1: Option<String>,
+    pub canonical: Option<String>,
 
     pub robots_index: Option<i32>,
     pub robots_follow: Option<i32>,
@@ -46,10 +49,12 @@ impl SeoAndOpenGraphResult {
         Self {
             url_uq_id,
             url_path_and_query,
+            page_host: None,
             title: None,
             description: None,
             keywords: None,
             h1: None,
+            canonical: None,
             robots_index: None,
             robots_follow: None,
             denied_by_robots_txt: false,

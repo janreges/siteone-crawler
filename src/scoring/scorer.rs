@@ -202,6 +202,37 @@ fn score_seo(summary: &Summary, stats: &BasicStats) -> CategoryScore {
         }
     }
 
+    // Missing <title> on indexable pages
+    per_url_deduct(
+        summary,
+        "seo-title-missing",
+        0.5,
+        "page(s) without a <title>",
+        "Add a unique, descriptive <title> to every indexable page.",
+        &mut deductions,
+        &mut per_url_total,
+    );
+
+    // Canonical pointing to a different host
+    per_url_deduct(
+        summary,
+        "seo-canonical-mismatch",
+        0.3,
+        "page(s) with an off-host canonical",
+        "Point rel=canonical at the page's own URL (or the correct same-site canonical).",
+        &mut deductions,
+        &mut per_url_total,
+    );
+
+    // Accidental site-wide noindex (catastrophic, common deploy bug)
+    if is_critical(summary, "seo-noindex-sitewide") {
+        deductions.push(
+            Deduction::new("Most pages are noindex (possible accidental site-wide noindex)", 3.0).with_fix(
+                "Remove the noindex robots meta/header from pages that should be indexed (check your deploy config).",
+            ),
+        );
+    }
+
     build_category("SEO", "seo", 0.20, deductions)
 }
 
@@ -724,5 +755,27 @@ mod tests {
         let scores = calculate_scores(&summary, &stats);
         let perf = scores.categories.iter().find(|c| c.code == "performance").unwrap();
         assert!((perf.score - 8.0).abs() < 0.001, "expected 8.0, got {}", perf.score);
+    }
+
+    #[test]
+    fn missing_title_reduces_seo() {
+        let summary = make_summary_with_items(vec![("seo-title-missing", ItemStatus::Warning)]);
+        let stats = make_basic_stats();
+        let scores = calculate_scores(&summary, &stats);
+        let seo = scores.categories.iter().find(|c| c.code == "seo").unwrap();
+        assert!(seo.score < 10.0);
+    }
+
+    #[test]
+    fn sitewide_noindex_is_critical_for_seo() {
+        let summary = make_summary_with_items(vec![("seo-noindex-sitewide", ItemStatus::Critical)]);
+        let stats = make_basic_stats();
+        let scores = calculate_scores(&summary, &stats);
+        let seo = scores.categories.iter().find(|c| c.code == "seo").unwrap();
+        assert!(
+            (seo.score - 7.0).abs() < 0.001,
+            "expected 10 - 3 = 7, got {}",
+            seo.score
+        );
     }
 }

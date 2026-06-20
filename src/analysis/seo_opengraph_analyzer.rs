@@ -67,6 +67,9 @@ impl SeoAndOpenGraphAnalyzer {
 
             let url_path_and_query = get_url_path_and_query(&visited_url.url);
             let mut url_result = SeoAndOpenGraphResult::new(visited_url.uq_id.clone(), url_path_and_query);
+            url_result.page_host = url::Url::parse(&visited_url.url)
+                .ok()
+                .and_then(|u| u.host_str().map(|s| s.to_string()));
 
             let document = Html::parse_document(&html_body);
             extract_seo_metadata(&document, &mut url_result);
@@ -423,6 +426,135 @@ impl SeoAndOpenGraphAnalyzer {
         output.add_super_table(&super_table);
         status.add_super_table_at_beginning(super_table);
     }
+
+    /// Emit on-page SEO quality findings (title/description/canonical/robots). noindex and
+    /// robots.txt-denied pages are intentionally excluded from the on-page checks to avoid false
+    /// positives on pages that are deliberately not indexed.
+    fn emit_seo_quality_findings(&self, url_results: &[SeoAndOpenGraphResult], status: &Status) {
+        let total = url_results.len();
+        if total == 0 {
+            return;
+        }
+
+        let indexable: Vec<&SeoAndOpenGraphResult> = url_results
+            .iter()
+            .filter(|r| r.robots_index != Some(ROBOTS_NOINDEX) && !r.denied_by_robots_txt)
+            .collect();
+        let noindex_count = total - indexable.len();
+
+        let is_blank = |s: &Option<String>| s.as_deref().map(|v| v.trim().is_empty()).unwrap_or(true);
+        let char_len = |s: &Option<String>| s.as_deref().map(|v| v.trim().chars().count()).unwrap_or(0);
+
+        // --- Title ---
+        let title_missing = indexable.iter().filter(|r| is_blank(&r.title)).count();
+        let title_bad_len = indexable
+            .iter()
+            .filter(|r| {
+                let len = char_len(&r.title);
+                len > 0 && !(10..=60).contains(&len)
+            })
+            .count();
+        if title_missing > 0 {
+            status.add_warning_to_summary(
+                "seo-title-missing",
+                &format!("{} page(s) without a <title>", title_missing),
+            );
+        } else {
+            status.add_ok_to_summary("seo-title-missing", "All indexable pages have a <title>");
+        }
+        if title_bad_len > 0 {
+            status.add_notice_to_summary(
+                "seo-title-length",
+                &format!(
+                    "{} page(s) with a title outside the recommended 10-60 characters",
+                    title_bad_len
+                ),
+            );
+        }
+
+        // --- Meta description ---
+        let desc_missing = indexable.iter().filter(|r| is_blank(&r.description)).count();
+        let desc_bad_len = indexable
+            .iter()
+            .filter(|r| {
+                let len = char_len(&r.description);
+                len > 0 && !(50..=160).contains(&len)
+            })
+            .count();
+        if desc_missing > 0 {
+            status.add_notice_to_summary(
+                "seo-meta-description-missing",
+                &format!("{} page(s) without a meta description", desc_missing),
+            );
+        } else {
+            status.add_ok_to_summary(
+                "seo-meta-description-missing",
+                "All indexable pages have a meta description",
+            );
+        }
+        if desc_bad_len > 0 {
+            status.add_notice_to_summary(
+                "seo-meta-description-length",
+                &format!(
+                    "{} page(s) with a meta description outside the recommended 50-160 characters",
+                    desc_bad_len
+                ),
+            );
+        }
+
+        // --- Canonical ---
+        let canonical_missing = indexable.iter().filter(|r| r.canonical.is_none()).count();
+        let canonical_mismatch = indexable
+            .iter()
+            .filter(|r| match (&r.canonical, &r.page_host) {
+                (Some(canon), Some(host)) => url::Url::parse(canon.trim())
+                    .ok()
+                    .and_then(|u| u.host_str().map(|h| h.to_string()))
+                    .map(|canon_host| !canon_host.eq_ignore_ascii_case(host))
+                    .unwrap_or(false),
+                _ => false,
+            })
+            .count();
+        if canonical_missing > 0 {
+            status.add_notice_to_summary(
+                "seo-canonical-missing",
+                &format!("{} page(s) without a rel=canonical link", canonical_missing),
+            );
+        } else {
+            status.add_ok_to_summary("seo-canonical-missing", "All indexable pages declare a canonical URL");
+        }
+        if canonical_mismatch > 0 {
+            status.add_warning_to_summary(
+                "seo-canonical-mismatch",
+                &format!(
+                    "{} page(s) with a canonical pointing to a different host",
+                    canonical_mismatch
+                ),
+            );
+        }
+
+        // --- Robots noindex ---
+        if noindex_count > 0 {
+            // A site-wide noindex is almost always an accidental deploy bug.
+            if total >= 3 && (noindex_count as f64) / (total as f64) >= 0.8 {
+                status.add_critical_to_summary(
+                    "seo-noindex-sitewide",
+                    &format!(
+                        "{} of {} crawled pages are noindex — possible accidental site-wide noindex",
+                        noindex_count, total
+                    ),
+                );
+            } else {
+                status.add_notice_to_summary(
+                    "seo-noindex",
+                    &format!(
+                        "{} page(s) are marked noindex (excluded from on-page SEO checks)",
+                        noindex_count
+                    ),
+                );
+            }
+        }
+    }
 }
 
 impl Analyzer for SeoAndOpenGraphAnalyzer {
@@ -459,6 +591,11 @@ impl Analyzer for SeoAndOpenGraphAnalyzer {
         self.analyze_headings(&url_results, status, output);
         self.base
             .measure_exec_time("SeoAndOpenGraphAnalyzer", "analyzeHeadings", s);
+
+        let s = Instant::now();
+        self.emit_seo_quality_findings(&url_results, status);
+        self.base
+            .measure_exec_time("SeoAndOpenGraphAnalyzer", "emitSeoQualityFindings", s);
     }
 
     fn should_be_activated(&self) -> bool {
@@ -543,6 +680,17 @@ fn extract_seo_metadata(document: &Html, result: &mut SeoAndOpenGraphResult) {
         }
         if content_lower.contains("nofollow") {
             result.robots_follow = Some(crate::analysis::result::seo_opengraph_result::ROBOTS_NOFOLLOW);
+        }
+    }
+
+    // Canonical link
+    if let Ok(sel) = Selector::parse("link[rel='canonical']")
+        && let Some(el) = document.select(&sel).next()
+        && let Some(href) = el.value().attr("href")
+    {
+        let href = href.trim();
+        if !href.is_empty() {
+            result.canonical = Some(href.to_string());
         }
     }
 }
@@ -787,4 +935,34 @@ fn headings_to_table_data(results: &[SeoAndOpenGraphResult]) -> Vec<HashMap<Stri
             row
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn extract(html: &str) -> SeoAndOpenGraphResult {
+        let doc = Html::parse_document(html);
+        let mut r = SeoAndOpenGraphResult::new("id".to_string(), "/p".to_string());
+        extract_seo_metadata(&doc, &mut r);
+        r
+    }
+
+    #[test]
+    fn extracts_canonical_link() {
+        let r = extract(r#"<html><head><link rel="canonical" href="https://example.com/p"></head></html>"#);
+        assert_eq!(r.canonical.as_deref(), Some("https://example.com/p"));
+    }
+
+    #[test]
+    fn no_canonical_link() {
+        let r = extract(r#"<html><head><title>x</title></head></html>"#);
+        assert!(r.canonical.is_none());
+    }
+
+    #[test]
+    fn extracts_robots_noindex() {
+        let r = extract(r#"<html><head><meta name="robots" content="noindex, nofollow"></head></html>"#);
+        assert_eq!(r.robots_index, Some(ROBOTS_NOINDEX));
+    }
 }
