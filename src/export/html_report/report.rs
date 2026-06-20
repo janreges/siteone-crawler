@@ -1940,9 +1940,95 @@ fn build_quality_scores_html(scores: &crate::scoring::quality_score::QualityScor
 
     html.push_str("</div>\n"); // end bars container
     html.push_str("</div>\n"); // end flex
+
+    // Fix first — impact-ranked list of what costs the most score, with remediation hints.
+    let mut all_deductions: Vec<(&str, &crate::scoring::quality_score::Deduction)> = Vec::new();
+    for cat in &scores.categories {
+        for d in &cat.deductions {
+            all_deductions.push((cat.name.as_str(), d));
+        }
+    }
+    all_deductions.sort_by(|a, b| b.1.points.partial_cmp(&a.1.points).unwrap_or(std::cmp::Ordering::Equal));
+
+    if !all_deductions.is_empty() {
+        html.push_str(
+            "<h4 class=\"qs-title\" style=\"font-size:15px;margin-top:24px;\">Fix first (highest score impact)</h4>\n",
+        );
+        html.push_str("<table style=\"width:100%;border-collapse:collapse;font-size:13px;\">\n");
+        html.push_str(concat!(
+            "<tr class=\"qs-cat-name\" style=\"text-align:left;\">",
+            "<th style=\"padding:6px 8px;\">Impact</th>",
+            "<th style=\"padding:6px 8px;\">Issue</th>",
+            "<th style=\"padding:6px 8px;\">Category</th>",
+            "<th style=\"padding:6px 8px;\">How to fix</th></tr>\n",
+        ));
+        for (cat_name, d) in all_deductions.iter().take(10) {
+            html.push_str(&format!(
+                concat!(
+                    "<tr>",
+                    "<td style=\"padding:6px 8px;color:#ef4444;font-weight:bold;white-space:nowrap;\">-{points:.1}</td>",
+                    "<td style=\"padding:6px 8px;\">{reason}</td>",
+                    "<td class=\"qs-cat-name\" style=\"padding:6px 8px;white-space:nowrap;\">{cat}</td>",
+                    "<td class=\"qs-cat-name\" style=\"padding:6px 8px;\">{fix}</td>",
+                    "</tr>\n",
+                ),
+                points = d.points,
+                reason = html_escape(&d.reason),
+                cat = html_escape(cat_name),
+                fix = html_escape(d.fix.as_deref().unwrap_or("")),
+            ));
+        }
+        html.push_str("</table>\n");
+    }
+
     html.push_str("</div>\n"); // end outer container
 
     html
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::scoring::quality_score::{CategoryScore, Deduction, QualityScores, score_label};
+
+    fn cat(name: &str, code: &str, score: f64, deductions: Vec<Deduction>) -> CategoryScore {
+        CategoryScore {
+            name: name.to_string(),
+            code: code.to_string(),
+            score,
+            label: score_label(score).to_string(),
+            weight: 0.2,
+            deductions,
+        }
+    }
+
+    #[test]
+    fn quality_scores_html_includes_fix_first_panel() {
+        let scores = QualityScores {
+            overall: cat("Overall", "overall", 8.0, vec![]),
+            categories: vec![cat(
+                "SEO",
+                "seo",
+                8.0,
+                vec![Deduction::new("5 page(s) without a <title>", 1.0).with_fix("Add a unique <title>.")],
+            )],
+        };
+        let html = build_quality_scores_html(&scores);
+        assert!(html.contains("Fix first"));
+        assert!(html.contains("without a"));
+        assert!(html.contains("Add a unique"));
+        assert!(html.contains("-1.0"));
+    }
+
+    #[test]
+    fn quality_scores_html_no_fix_first_when_clean() {
+        let scores = QualityScores {
+            overall: cat("Overall", "overall", 10.0, vec![]),
+            categories: vec![cat("SEO", "seo", 10.0, vec![])],
+        };
+        let html = build_quality_scores_html(&scores);
+        assert!(!html.contains("Fix first"));
+    }
 }
 
 ///   1. Inside <script>/<style> blocks: only replace "> <" with "> <"
