@@ -9,8 +9,39 @@ use crate::components::super_table::SuperTable;
 use crate::components::super_table_column::SuperTableColumn;
 use crate::output::output::Output;
 use crate::result::status::Status;
-use crate::result::visited_url::VisitedUrl;
+use crate::result::visited_url::{
+    CACHE_TYPE_HAS_NO_CACHE, CACHE_TYPE_HAS_NO_STORE, CACHE_TYPE_NO_CACHE_HEADERS, VisitedUrl,
+};
 use crate::utils;
+
+/// One day in seconds — assets cached for less than this revalidate too often to help repeat visits.
+const SHORT_CACHE_THRESHOLD_SECONDS: i64 = 86_400;
+
+/// Cache-effectiveness classification of a single static asset.
+#[derive(Debug, PartialEq, Eq)]
+enum CacheClass {
+    /// no-store or no caching headers at all → re-downloaded on every visit.
+    Uncacheable,
+    /// no-cache, a short max-age, or revalidate-only (ETag/Last-Modified without a lifetime).
+    ShortOrRevalidate,
+    /// Long-lived cache (>= 1 day), ideal for fingerprinted static assets.
+    LongLived,
+}
+
+/// Pure classification of a static asset's caching policy from its cache flags + lifetime.
+fn classify_static_cache(flags: u32, lifetime: Option<i64>) -> CacheClass {
+    if flags & CACHE_TYPE_HAS_NO_STORE != 0 || flags & CACHE_TYPE_NO_CACHE_HEADERS != 0 {
+        return CacheClass::Uncacheable;
+    }
+    if flags & CACHE_TYPE_HAS_NO_CACHE != 0 {
+        return CacheClass::ShortOrRevalidate;
+    }
+    match lifetime {
+        Some(l) if l >= SHORT_CACHE_THRESHOLD_SECONDS => CacheClass::LongLived,
+        // Some short lifetime, or only ETag/Last-Modified (no lifetime) → revalidates frequently.
+        _ => CacheClass::ShortOrRevalidate,
+    }
+}
 
 const SUPER_TABLE_CACHING_PER_CONTENT_TYPE: &str = "caching-per-content-type";
 const SUPER_TABLE_CACHING_PER_DOMAIN: &str = "caching-per-domain";
@@ -150,6 +181,55 @@ impl CachingAnalyzer {
         ]);
 
         columns
+    }
+
+    /// Classify internal static assets by cache effectiveness and emit summary findings.
+    /// Uncacheable assets feed the performance score; short-cache is informational (notice).
+    fn check_cache_effectiveness(&self, status: &Status) {
+        let visited_urls = status.get_visited_urls();
+        let mut total_static = 0usize;
+        let mut uncacheable = 0usize;
+        let mut short_cache = 0usize;
+
+        for u in &visited_urls {
+            if u.status_code != 200 || u.is_external || !u.is_static_file() {
+                continue;
+            }
+            total_static += 1;
+            match classify_static_cache(u.cache_type_flags, u.cache_lifetime) {
+                CacheClass::Uncacheable => uncacheable += 1,
+                CacheClass::ShortOrRevalidate => short_cache += 1,
+                CacheClass::LongLived => {}
+            }
+        }
+
+        if total_static == 0 {
+            return;
+        }
+
+        if uncacheable > 0 {
+            status.add_warning_to_summary(
+                "static-assets-uncacheable",
+                &format!(
+                    "{} static asset(s) are not cacheable (no-store or missing cache headers)",
+                    uncacheable
+                ),
+            );
+        } else {
+            status.add_ok_to_summary("static-assets-uncacheable", "All static assets are cacheable");
+        }
+
+        if short_cache > 0 {
+            status.add_notice_to_summary(
+                "static-assets-short-cache",
+                &format!(
+                    "{} static asset(s) use a short or revalidate-only cache policy (< 1 day)",
+                    short_cache
+                ),
+            );
+        } else {
+            status.add_ok_to_summary("static-assets-short-cache", "Static assets use long-lived caching");
+        }
     }
 }
 
@@ -292,6 +372,8 @@ impl Analyzer for CachingAnalyzer {
             output.add_super_table(&super_table);
             status.add_super_table_at_beginning(super_table);
         }
+
+        self.check_cache_effectiveness(status);
     }
 
     fn should_be_activated(&self) -> bool {
@@ -384,6 +466,59 @@ impl CacheStatWithDomain {
             self.stat.max_lifetime.map(|v| v.to_string()).unwrap_or_default(),
         );
         row
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::result::visited_url::{CACHE_TYPE_HAS_ETAG, CACHE_TYPE_HAS_IMMUTABLE, CACHE_TYPE_HAS_MAX_AGE};
+
+    #[test]
+    fn no_store_is_uncacheable() {
+        assert_eq!(
+            classify_static_cache(CACHE_TYPE_HAS_NO_STORE, Some(99_999_999)),
+            CacheClass::Uncacheable
+        );
+    }
+
+    #[test]
+    fn no_cache_headers_is_uncacheable() {
+        assert_eq!(
+            classify_static_cache(CACHE_TYPE_NO_CACHE_HEADERS, None),
+            CacheClass::Uncacheable
+        );
+    }
+
+    #[test]
+    fn long_max_age_immutable_is_long_lived() {
+        let flags = CACHE_TYPE_HAS_MAX_AGE | CACHE_TYPE_HAS_IMMUTABLE;
+        assert_eq!(classify_static_cache(flags, Some(31_536_000)), CacheClass::LongLived);
+    }
+
+    #[test]
+    fn short_lifetime_is_short_or_revalidate() {
+        assert_eq!(
+            classify_static_cache(CACHE_TYPE_HAS_MAX_AGE, Some(3_600)),
+            CacheClass::ShortOrRevalidate
+        );
+    }
+
+    #[test]
+    fn etag_without_lifetime_revalidates() {
+        // ETag/Last-Modified but no lifetime → revalidates on every load.
+        assert_eq!(
+            classify_static_cache(CACHE_TYPE_HAS_ETAG, None),
+            CacheClass::ShortOrRevalidate
+        );
+    }
+
+    #[test]
+    fn no_cache_directive_revalidates() {
+        assert_eq!(
+            classify_static_cache(CACHE_TYPE_HAS_NO_CACHE, Some(99_999_999)),
+            CacheClass::ShortOrRevalidate
+        );
     }
 }
 

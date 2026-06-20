@@ -105,6 +105,19 @@ fn score_performance(summary: &Summary, stats: &BasicStats) -> CategoryScore {
         }
     }
 
+    // Uncacheable static assets (re-downloaded on every visit — wasted repeat-visit bandwidth)
+    if is_not_ok(summary, "static-assets-uncacheable") {
+        let count = get_item_count(summary, "static-assets-uncacheable").unwrap_or(1);
+        if count > 0 {
+            let pts = (count as f64 * 0.05).min(2.0);
+            deductions.push(
+                Deduction::new(format!("{} static asset(s) not cacheable", count), round1(pts)).with_fix(
+                    "Serve fingerprinted static assets with Cache-Control: max-age=31536000, immutable; avoid no-store.",
+                ),
+            );
+        }
+    }
+
     build_category("Performance", "performance", 0.20, deductions)
 }
 
@@ -696,5 +709,20 @@ mod tests {
             "expected 10.0 - 0.4 = 9.6, got {}",
             bp.score
         );
+    }
+
+    #[test]
+    fn uncacheable_assets_reduce_performance() {
+        // 50 uncacheable static assets: 50 * 0.05 = 2.5, capped at 2.0 → 10.0 - 2.0 = 8.0.
+        let mut summary = Summary::new();
+        summary.add_item(Item::new(
+            "static-assets-uncacheable".to_string(),
+            "50 static asset(s) are not cacheable".to_string(),
+            ItemStatus::Warning,
+        ));
+        let stats = make_basic_stats();
+        let scores = calculate_scores(&summary, &stats);
+        let perf = scores.categories.iter().find(|c| c.code == "performance").unwrap();
+        assert!((perf.score - 8.0).abs() < 0.001, "expected 8.0, got {}", perf.score);
     }
 }
