@@ -716,6 +716,12 @@ Convert a local HTML file to clean Markdown without crawling. Uses the same conv
 | `--ci-min-pages=<int>` | Minimum number of HTML pages that must be found. Default is `10`. |
 | `--ci-min-assets=<int>` | Minimum number of assets (JS, CSS, images, fonts) that must be found. Default is `10`. |
 | `--ci-min-documents=<int>` | Minimum number of documents (PDF, etc.) that must be found. Default is `0` (not checked). |
+| `--ci-baseline=<file>` | Path to a previous `--output=json` file used as a baseline for regression checks. A missing/unreadable file is warned about (the check is skipped, not silently passed). |
+| `--ci-max-score-drop=<val>` | Maximum allowed drop of the overall score vs the `--ci-baseline` run. Default `0` (any drop fails). |
+| `--ci-fail-on-code=<code>` | Fail the build if a finding code (`aplCode`, e.g. `seo-noindex-sitewide`) is present. Can be specified multiple times. |
+| `--ci-ignore-code=<code>` | Ignore a finding code (`aplCode`, e.g. `pages-without-lang`) when counting criticals/warnings; also suppresses `--ci-fail-on-code`. Can be specified multiple times. |
+| `--ci-junit-file=<file>` | Write the CI gate result as a JUnit XML report (renders natively in GitLab/Jenkins/GitHub test reporters). |
+| `--ci-github-annotations` | Print GitHub Actions `::error` annotations for failed checks. Auto-enabled when `GITHUB_ACTIONS=true`. |
 
 **Default behavior with `--ci` alone:** overall score >= 5.0, each category score >= 5.0 (Performance, SEO, Security, Best Practices) and Accessibility >= 3.0, 404 errors <= 0, 5xx errors <= 0, critical findings <= 0, HTML pages >= 10, assets >= 10. File outputs (HTML, JSON, TXT reports) are not generated. To save reports in CI mode, specify the desired output explicitly, e.g. `--ci --output-html-report=report.html`.
 
@@ -768,7 +774,22 @@ The `--ci` flag enables a quality gate that evaluates configurable thresholds af
       --ci-min-score=7.0 \
       --ci-min-security=8.0 \
       --ci-max-404=0 \
-      --ci-max-5xx=0
+      --ci-max-5xx=0 \
+      --ci-junit-file=crawler-junit.xml \
+      --ci-github-annotations
+```
+
+`--ci-github-annotations` surfaces each failed check inline in the PR (and is auto-enabled under
+`GITHUB_ACTIONS=true`), while `--ci-junit-file` produces a JUnit report you can upload with a
+test-reporter action. To gate on **regressions** instead of absolute floors, keep a baseline JSON
+from the previous run and compare against it:
+
+```yaml
+- name: Check for quality regressions
+  run: |
+    ./siteone-crawler --url=https://staging.example.com --ci \
+      --ci-baseline=baseline.json --ci-max-score-drop=0.3 \
+      --output-json-file=current.json
 ```
 
 ### Example: GitLab CI

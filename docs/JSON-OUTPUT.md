@@ -176,6 +176,7 @@ Aggregate statistics about the entire crawl:
 *   `totalRequestsTimesAvg` (Float): Average request time in seconds.
 *   `totalRequestsTimesMin` (Float): Minimum request time in seconds.
 *   `totalRequestsTimesMax` (Float): Maximum request time in seconds.
+*   `totalRequestsTimesP90` (Float): 90th-percentile response time of HTML documents in seconds (a fairer "what users feel" proxy than the all-asset average; falls back to all URLs if no HTML pages).
 *   `countByStatus` (Object): An object mapping HTTP status codes to counts. Keys are status code strings (e.g., `"200"`, `"404"`, `"429"`), values are integers. Only status codes that were actually encountered appear as keys.
 
 ### 3.7. `summary` (Object)
@@ -335,12 +336,13 @@ This is a draft JSON schema based on the actual output. It may need refinement f
         "totalRequestsTimesAvg": { "type": "number" },
         "totalRequestsTimesMin": { "type": "number" },
         "totalRequestsTimesMax": { "type": "number" },
+        "totalRequestsTimesP90": { "type": "number" },
         "countByStatus": {
           "type": "object",
           "additionalProperties": { "type": "integer" }
         }
       },
-      "required": ["totalUrls", "totalSize", "totalSizeFormatted", "totalExecutionTime", "totalRequestsTimes", "totalRequestsTimesAvg", "totalRequestsTimesMin", "totalRequestsTimesMax", "countByStatus"]
+      "required": ["totalUrls", "totalSize", "totalSizeFormatted", "totalExecutionTime", "totalRequestsTimes", "totalRequestsTimesAvg", "totalRequestsTimesMin", "totalRequestsTimesMax", "totalRequestsTimesP90", "countByStatus"]
     },
     "summary": {
       "description": "Summary findings that feed into quality scoring.",
