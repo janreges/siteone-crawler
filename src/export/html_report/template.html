@@ -499,10 +499,10 @@
             display: none;
         }
 
-        table tr td.urlPathAndQuery, table tr td.url {
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
+        table tr td.url, table tr td.targetUrl, table tr td.sourceUqId, table tr td.urlPathAndQuery {
+            white-space: normal;
+            word-break: break-word;
+            overflow-wrap: anywhere;
         }
 
         table tr td.urlPathAndQuery {
