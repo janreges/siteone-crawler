@@ -39,7 +39,7 @@ jobs:
         run: sed -i "s/^version = .*/version = \"${VERSION}\"/" Cargo.toml
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.96.0
 
       - name: Publish
         env:
