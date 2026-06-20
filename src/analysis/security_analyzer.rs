@@ -36,6 +36,9 @@ const HEADER_PERMISSIONS_POLICY: &str = "permissions-policy";
 const HEADER_SERVER: &str = "server";
 const HEADER_X_POWERED_BY: &str = "x-powered-by";
 const HEADER_SET_COOKIE: &str = "set-cookie";
+const HEADER_CROSS_ORIGIN_OPENER_POLICY: &str = "cross-origin-opener-policy";
+const HEADER_CROSS_ORIGIN_EMBEDDER_POLICY: &str = "cross-origin-embedder-policy";
+const HEADER_CROSS_ORIGIN_RESOURCE_POLICY: &str = "cross-origin-resource-policy";
 
 const CHECKED_HEADERS: &[&str] = &[
     HEADER_ACCESS_CONTROL_ALLOW_ORIGIN,
@@ -50,6 +53,9 @@ const CHECKED_HEADERS: &[&str] = &[
     HEADER_SERVER,
     HEADER_X_POWERED_BY,
     HEADER_SET_COOKIE,
+    HEADER_CROSS_ORIGIN_OPENER_POLICY,
+    HEADER_CROSS_ORIGIN_EMBEDDER_POLICY,
+    HEADER_CROSS_ORIGIN_RESOURCE_POLICY,
 ];
 
 pub struct SecurityAnalyzer {
@@ -118,6 +124,30 @@ impl SecurityAnalyzer {
                 HEADER_SET_COOKIE => {
                     self.check_set_cookie(headers, is_https, url_result);
                 }
+                HEADER_CROSS_ORIGIN_OPENER_POLICY => {
+                    self.check_cross_origin_header(
+                        headers,
+                        HEADER_CROSS_ORIGIN_OPENER_POLICY,
+                        "Cross-Origin-Opener-Policy is not set. 'same-origin' isolates your browsing context from cross-origin popups (mitigates Spectre/XS-Leaks).",
+                        url_result,
+                    );
+                }
+                HEADER_CROSS_ORIGIN_EMBEDDER_POLICY => {
+                    self.check_cross_origin_header(
+                        headers,
+                        HEADER_CROSS_ORIGIN_EMBEDDER_POLICY,
+                        "Cross-Origin-Embedder-Policy is not set. 'require-corp' enables cross-origin isolation for powerful features.",
+                        url_result,
+                    );
+                }
+                HEADER_CROSS_ORIGIN_RESOURCE_POLICY => {
+                    self.check_cross_origin_header(
+                        headers,
+                        HEADER_CROSS_ORIGIN_RESOURCE_POLICY,
+                        "Cross-Origin-Resource-Policy is not set. 'same-origin' or 'same-site' blocks other sites from embedding this resource.",
+                        url_result,
+                    );
+                }
                 _ => {}
             }
         }
@@ -133,6 +163,14 @@ impl SecurityAnalyzer {
             Lazy::new(|| Regex::new(r#"(?i)<form[^>]*action=["']http://[^"']+["'][^>]*>"#).unwrap());
         static RE_IFRAME_HTTP: Lazy<Regex> =
             Lazy::new(|| Regex::new(r#"(?i)<iframe[^>]*src=["']http://[^"']+["'][^>]*>"#).unwrap());
+        // Active mixed content — script/stylesheet loaded over HTTP can fully MITM the page.
+        static RE_SCRIPT_HTTP: Lazy<Regex> =
+            Lazy::new(|| Regex::new(r#"(?i)<script[^>]*src=["']http://[^"']+["']"#).unwrap());
+        static RE_LINK_HTTP: Lazy<Regex> =
+            Lazy::new(|| Regex::new(r#"(?i)<link[^>]*href=["']http://[^"']+["']"#).unwrap());
+        // Passive mixed content — images/media over HTTP (lower risk but still a warning).
+        static RE_MEDIA_HTTP: Lazy<Regex> =
+            Lazy::new(|| Regex::new(r#"(?i)<(?:img|audio|video|source)[^>]*src=["']http://[^"']+["']"#).unwrap());
 
         // Check for form actions over non-secure HTTP
         for mat in RE_FORM_HTTP.find_iter(html) {
@@ -147,6 +185,18 @@ impl SecurityAnalyzer {
         for mat in RE_IFRAME_HTTP.find_iter(html) {
             let finding = format!("Iframe with non-secure HTTP detected in {}", mat.as_str());
             url_result.add_critical(finding.clone(), ANALYSIS_HEADERS, Some(vec![finding]));
+        }
+
+        // Active mixed content (script/stylesheet over HTTP) — critical
+        for mat in RE_SCRIPT_HTTP.find_iter(html).chain(RE_LINK_HTTP.find_iter(html)) {
+            let finding = format!("Active mixed content loaded over HTTP detected in {}", mat.as_str());
+            url_result.add_critical(finding.clone(), ANALYSIS_HEADERS, Some(vec![finding]));
+        }
+
+        // Passive mixed content (image/media over HTTP) — warning
+        for mat in RE_MEDIA_HTTP.find_iter(html) {
+            let finding = format!("Passive mixed content (media over HTTP) detected in {}", mat.as_str());
+            url_result.add_warning(finding.clone(), ANALYSIS_HEADERS, Some(vec![finding]));
         }
     }
 
@@ -407,9 +457,48 @@ impl SecurityAnalyzer {
                     .get_checked_header(HEADER_CONTENT_SECURITY_POLICY)
                     .set_finding(None, SEVERITY_CRITICAL, Some(rec));
             }
-            _ => {
+            Some(csp) => {
+                // A CSP is present, but 'unsafe-inline'/'unsafe-eval' or a wildcard source largely
+                // defeats its XSS protection, so it must not score as a perfect policy.
+                let weaknesses = csp_weaknesses(csp);
+                if weaknesses.is_empty() {
+                    self.result
+                        .get_checked_header(HEADER_CONTENT_SECURITY_POLICY)
+                        .set_finding(value_ref, SEVERITY_OK, None);
+                } else {
+                    let rec = format!(
+                        "Content-Security-Policy is set but weakened by {} which significantly reduces its XSS protection.",
+                        weaknesses.join(", ")
+                    );
+                    url_result.add_warning(rec.clone(), ANALYSIS_HEADERS, Some(vec![rec.clone()]));
+                    self.result
+                        .get_checked_header(HEADER_CONTENT_SECURITY_POLICY)
+                        .set_finding(value_ref, SEVERITY_WARNING, Some(&rec));
+                }
+            }
+        }
+    }
+
+    /// Generic checker for the Cross-Origin-* isolation headers (COOP/COEP/CORP). Absence is a
+    /// notice (these are less universal than CSP/HSTS); any value is treated as OK.
+    fn check_cross_origin_header(
+        &mut self,
+        headers: &HashMap<String, String>,
+        header_name: &'static str,
+        advice: &str,
+        url_result: &mut UrlAnalysisResult,
+    ) {
+        let value = Self::get_header_value(headers, header_name);
+        match value.as_deref() {
+            None => {
+                url_result.add_notice(advice.to_string(), ANALYSIS_HEADERS, Some(vec![advice.to_string()]));
                 self.result
-                    .get_checked_header(HEADER_CONTENT_SECURITY_POLICY)
+                    .get_checked_header(header_name)
+                    .set_finding(None, SEVERITY_NOTICE, Some(advice));
+            }
+            value_ref => {
+                self.result
+                    .get_checked_header(header_name)
                     .set_finding(value_ref, SEVERITY_OK, None);
             }
         }
@@ -888,10 +977,76 @@ impl Analyzer for SecurityAnalyzer {
     }
 }
 
+/// Detect well-known CSP weaknesses that largely defeat its XSS protection.
+fn csp_weaknesses(csp: &str) -> Vec<&'static str> {
+    let lower = csp.to_lowercase();
+    let mut weaknesses = Vec::new();
+    if lower.contains("unsafe-inline") {
+        weaknesses.push("'unsafe-inline'");
+    }
+    if lower.contains("unsafe-eval") {
+        weaknesses.push("'unsafe-eval'");
+    }
+    // A bare '*' source in a fetch directive allows loading from anywhere.
+    let has_wildcard = lower.split(';').any(|directive| {
+        let mut parts = directive.split_whitespace();
+        let name = parts.next().unwrap_or("");
+        matches!(
+            name,
+            "default-src" | "script-src" | "object-src" | "style-src" | "frame-src" | "connect-src"
+        ) && parts.any(|p| p == "*")
+    });
+    if has_wildcard {
+        weaknesses.push("a wildcard '*' source");
+    }
+    weaknesses
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::utils;
+
+    #[test]
+    fn csp_unsafe_inline_is_a_weakness() {
+        assert!(csp_weaknesses("default-src 'self'; script-src 'unsafe-inline'").contains(&"'unsafe-inline'"));
+    }
+
+    #[test]
+    fn csp_wildcard_source_is_a_weakness() {
+        assert!(csp_weaknesses("default-src *").iter().any(|w| w.contains("wildcard")));
+    }
+
+    #[test]
+    fn strong_csp_has_no_weaknesses() {
+        assert!(csp_weaknesses("default-src 'self'; object-src 'none'; base-uri 'self'").is_empty());
+    }
+
+    #[test]
+    fn missing_coop_is_a_notice() {
+        let mut analyzer = SecurityAnalyzer::new();
+        let headers: HashMap<String, String> = HashMap::new();
+        let mut result = UrlAnalysisResult::new();
+        analyzer.check_cross_origin_header(&headers, HEADER_CROSS_ORIGIN_OPENER_POLICY, "advice", &mut result);
+        assert!(!result.get_notice().is_empty());
+    }
+
+    #[test]
+    fn active_mixed_content_is_critical() {
+        let mut analyzer = SecurityAnalyzer::new();
+        let mut result = UrlAnalysisResult::new();
+        analyzer.check_html_security(r#"<script src="http://evil.example/x.js"></script>"#, true, &mut result);
+        assert!(!result.get_critical().is_empty(), "got: {:?}", result.get_critical());
+    }
+
+    #[test]
+    fn passive_mixed_content_is_warning_not_critical() {
+        let mut analyzer = SecurityAnalyzer::new();
+        let mut result = UrlAnalysisResult::new();
+        analyzer.check_html_security(r#"<img src="http://example.test/x.png">"#, true, &mut result);
+        assert!(!result.get_warning().is_empty());
+        assert!(result.get_critical().is_empty());
+    }
 
     #[test]
     fn set_cookie_multi_cookie_evaluated_independently() {
