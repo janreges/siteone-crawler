@@ -2,6 +2,30 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Core Working Principles
+
+Adapted from Andrej Karpathy's four CLAUDE.md principles — read these before touching code. They target reasoning failures (wrong assumptions, over-engineering, scope creep, weak success criteria), not formatting.
+
+1. **Think Before Coding** — *Don't assume. Don't hide confusion. Surface tradeoffs.*
+   - State assumptions explicitly; if uncertain, ask rather than guess.
+   - Present competing interpretations instead of silently picking one.
+   - Call out inconsistencies, confusion, and tradeoffs as you find them.
+
+2. **Simplicity First** — *Minimum code that solves the problem. Nothing speculative.*
+   - No features beyond what was asked.
+   - No abstractions for single-use code.
+   - No "flexibility" or configurability that wasn't requested.
+   - No error handling for scenarios that cannot occur.
+
+3. **Surgical Changes** — *Touch only what you must. Clean up only your own mess.*
+   - Match the surrounding style and conventions.
+   - Don't refactor unbroken adjacent code that's orthogonal to the task.
+   - Only remove what your change rendered obsolete.
+
+4. **Goal-Driven Execution** — *Define success criteria. Loop until verified.*
+   - Turn tasks into verifiable goals: "add validation" → "write tests, then make them pass"; "fix the bug" → "reproduce it in a test, then fix"; "refactor X" → "ensure tests pass before and after".
+   - Iterate against those criteria instead of asking for constant clarification.
+
 ## Setup After Clone
 
 ```bash
