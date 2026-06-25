@@ -76,40 +76,82 @@ impl SeoAndOpenGraphResult {
         }
     }
 
-    /// Check if URL is denied by robots.txt
-    pub fn is_denied_by_robots_txt(url_path_and_query: &str, robots_txt_content: &str) -> bool {
+    /// Check if a URL is denied by robots.txt for our crawler's user agent.
+    ///
+    /// Delegates to the shared [`RobotsTxt`](crate::engine::robots_txt::RobotsTxt) parser so the
+    /// SEO "Indexing" column uses the exact same rules as the crawler itself: user-agent scoping
+    /// (`*` / `SiteOne-Crawler`), `Allow:` overrides, and wildcard/`$`-anchor matching.
+    ///
+    /// Historically this did a naive global scan of every `Disallow:` line regardless of its
+    /// `User-agent:` block, so a single `Disallow: /` targeting another bot (e.g. GPTBot/CCBot)
+    /// flagged every page as denied — the v2.4.0 "all pages DENY" regression (issue #105).
+    pub fn is_denied_by_robots_txt(url: &str, robots_txt_content: &str) -> bool {
         if robots_txt_content.is_empty() {
             return false;
         }
+        !crate::engine::robots_txt::RobotsTxt::parse(robots_txt_content).is_allowed(url)
+    }
+}
 
-        // Remove query string from URL
-        let url_path = if let Some(pos) = url_path_and_query.find('?') {
-            &url_path_and_query[..pos]
-        } else {
-            url_path_and_query
-        };
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-        // Remove scheme and host from URL if present
-        let url_path = if url_path.contains("://") {
-            if let Ok(parsed) = url::Url::parse(url_path) {
-                parsed.path().to_string()
-            } else {
-                url_path.to_string()
-            }
-        } else {
-            url_path.to_string()
-        };
+    /// Regression test for the v2.4.0 SEO "Indexing" column reporting every page as
+    /// `DENY (robots.txt)` (issue #105). A `Disallow: /` under a *specific* bot's
+    /// user-agent block (e.g. GPTBot/CCBot) must not deny pages for our crawler — only
+    /// rules under `*` / `SiteOne-Crawler` apply.
+    #[test]
+    fn disallow_all_for_other_bot_does_not_deny_our_crawler() {
+        let robots = "\
+User-agent: GPTBot
+Disallow: /
 
-        for line in robots_txt_content.lines() {
-            let line = line.trim();
-            if let Some(disallowed_path) = line.strip_prefix("Disallow:") {
-                let disallowed_path = disallowed_path.trim();
-                if !disallowed_path.is_empty() && url_path.starts_with(disallowed_path) {
-                    return true;
-                }
-            }
-        }
+User-agent: CCBot
+Disallow: /
 
-        false
+User-agent: *
+Disallow: /checkout/cart
+";
+        // Normal pages stay allowed despite GPTBot/CCBot being fully blocked.
+        assert!(!SeoAndOpenGraphResult::is_denied_by_robots_txt(
+            "https://example.com/about",
+            robots
+        ));
+        assert!(!SeoAndOpenGraphResult::is_denied_by_robots_txt(
+            "https://example.com/",
+            robots
+        ));
+        // Paths disallowed for `*` are still correctly denied.
+        assert!(SeoAndOpenGraphResult::is_denied_by_robots_txt(
+            "https://example.com/checkout/cart",
+            robots
+        ));
+    }
+
+    /// `Allow:` rules must override a broader `Disallow:` (the naive scanner ignored them).
+    #[test]
+    fn allow_overrides_disallow() {
+        let robots = "\
+User-agent: *
+Disallow: /admin/
+Allow: /admin/public/
+";
+        assert!(SeoAndOpenGraphResult::is_denied_by_robots_txt(
+            "https://example.com/admin/secret",
+            robots
+        ));
+        assert!(!SeoAndOpenGraphResult::is_denied_by_robots_txt(
+            "https://example.com/admin/public/page",
+            robots
+        ));
+    }
+
+    #[test]
+    fn empty_robots_txt_denies_nothing() {
+        assert!(!SeoAndOpenGraphResult::is_denied_by_robots_txt(
+            "https://example.com/anything",
+            ""
+        ));
     }
 }
