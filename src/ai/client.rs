@@ -82,7 +82,9 @@ impl AiClient {
             if attempt > 0 {
                 tokio::time::sleep(Duration::from_secs(PARSE_RETRY_DELAY_SECS)).await;
             }
-            match self.complete(req, category).await {
+            // First attempt may use the cache; the retry bypasses the cache READ so it doesn't
+            // re-read the same malformed completion (which would make the retry pointless).
+            match self.complete_cached(req, None, category, attempt == 0).await {
                 Ok(completion) => match parse(&completion.text) {
                     Ok(value) => return Ok((value, completion)),
                     Err(e) => last_err = Some(CrawlerError::Other(format!("invalid response: {}", e))),
@@ -102,6 +104,20 @@ impl AiClient {
         extra_body_override: Option<&serde_json::Value>,
         category: &str,
     ) -> CrawlerResult<AiCompletion> {
+        self.complete_cached(req, extra_body_override, category, true).await
+    }
+
+    /// Like `complete_with`, but `use_cache = false` bypasses the cache READ so a fresh API call
+    /// is made. Used by the parse-retry — otherwise the retry would re-read the same malformed
+    /// cached completion and the second attempt would be pointless. A fresh result still overwrites
+    /// the cache entry.
+    async fn complete_cached(
+        &self,
+        req: &ChatRequest,
+        extra_body_override: Option<&serde_json::Value>,
+        category: &str,
+        use_cache: bool,
+    ) -> CrawlerResult<AiCompletion> {
         let extra_body = extra_body_override.or(self.config.extra_body.as_ref());
         let shaped = provider::shape_request(
             self.config.provider,
@@ -115,7 +131,7 @@ impl AiClient {
 
         // Cache key from URL + body only (no auth headers).
         let cache_key = self.cache_key(&shaped.url, &shaped.body);
-        if let Some(hit) = self.get_cached(&cache_key) {
+        if use_cache && let Some(hit) = self.get_cached(&cache_key) {
             let had_tokens = hit.usage.prompt_tokens > 0 || hit.usage.completion_tokens > 0;
             super::usage::record(
                 category,
