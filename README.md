@@ -28,6 +28,7 @@ GIF animation of the crawler in action (also available as a [▶️ video](https
     * [💾 Offline website generator](#-offline-website-generator)
     * [📝 Website to markdown converter](#-website-to-markdown-converter)
     * [🗺️ Sitemap generator](#️-sitemap-generator)
+    * [🤖 AI assistant (optional)](#-ai-assistant-optional)
 - [🚀 Installation](#-installation)
     * [📦 Pre-built binaries](#-pre-built-binaries)
     * [🍺 Homebrew (macOS / Linux)](#-homebrew-macos--linux)
@@ -60,6 +61,7 @@ GIF animation of the crawler in action (also available as a [▶️ video](https
         + [Built-in HTTP server](#built-in-http-server)
         + [HTML-to-Markdown conversion](#html-to-markdown-conversion)
         + [CI/CD settings](#cicd-settings)
+        + [🤖 AI assistant (optional)](#-ai-assistant-optional-1)
 - [🏆 Quality Scoring](#-quality-scoring)
 - [🔄 CI/CD Integration](#-cicd-integration)
 - [📄 Output Examples](#-output-examples)
@@ -221,6 +223,13 @@ See all available [markdown exporter options](#markdown-exporter-options) and [H
 
 - will help you create a `sitemap.xml` and `sitemap.txt` for your website
 - you can set the priority of individual pages based on the number of slashes in the URL
+
+### 🤖 AI assistant (optional)
+
+- optional, opt-in LLM integration — works with OpenAI, Anthropic, Google Gemini, and any OpenAI-compatible endpoint (vLLM, LiteLLM, MiniMax, Ollama, self-hosted)
+- AI SEO analysis with concrete title/description/keyword rewrites, [`llms.txt`](https://llmstxt.org/) generation, spelling/grammar checks, and your own custom policy prompts
+- smart page selection (ranks the most important pages) plus hard caps and a `--ai-dry-run` cost preview so it never blindly hits thousands of pages
+- safe API-key handling (env-var by default, redacted from logs) and no extra binary dependencies — see [🤖 AI assistant options](#-ai-assistant-optional-1)
 
 Don't hesitate and try it. You will love it as we do! ❤️
 
@@ -724,6 +733,153 @@ Convert a local HTML file to clean Markdown without crawling. Uses the same conv
 | `--ci-github-annotations` | Print GitHub Actions `::error` annotations for failed checks. Auto-enabled when `GITHUB_ACTIONS=true`. |
 
 **Default behavior with `--ci` alone:** overall score >= 5.0, each category score >= 5.0 (Performance, SEO, Security, Best Practices) and Accessibility >= 3.0, 404 errors <= 0, 5xx errors <= 0, critical findings <= 0, HTML pages >= 10, assets >= 10. File outputs (HTML, JSON, TXT reports) are not generated. To save reports in CI mode, specify the desired output explicitly, e.g. `--ci --output-html-report=report.html`.
+
+### 🤖 AI assistant (optional)
+
+The crawler can use an LLM to add **qualitative** analyses on top of the deterministic checks: AI SEO assessment with concrete title/description/keyword rewrites, `llms.txt` generation, spelling/grammar/weak-copy detection, and your own custom policy checks.
+
+AI is **strictly opt-in**: with no `--ai-*` flag, nothing changes — no environment variable is read, no AI code runs, zero cost. Pass at least one `--ai-*` flag (typically `--ai-provider`, `--ai-model`, and an endpoint) to enable it.
+
+Supported providers: `openai`, `anthropic`, `gemini`, and `openai-compatible` (vLLM, LiteLLM, MiniMax, LocalAI, Ollama, and any self-hosted OpenAI-compatible endpoint). The client is a thin wrapper over the crawler's own HTTP stack — **no extra dependencies**.
+
+**Quick start:**
+
+```bash
+# OpenAI-compatible (e.g. local vLLM) — SEO analysis of the 100 most important pages
+./siteone-crawler --url=https://example.com/ \
+  --ai-provider=openai-compatible --ai-endpoint=http://localhost:8000/v1 \
+  --ai-model=Qwen/Qwen3-32B --ai-actions=seo
+
+# OpenAI — SEO + llms.txt (key read from OPENAI_API_KEY by default)
+./siteone-crawler --url=https://example.com/ \
+  --ai-provider=openai --ai-model=gpt-5-mini --ai-actions=seo,llms-txt
+
+# Preview cost before spending anything
+./siteone-crawler --url=https://example.com/ \
+  --ai-provider=anthropic --ai-model=claude-sonnet-4-6 --ai-actions=seo --ai-dry-run
+```
+
+**Provider configuration:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `--ai-provider=<val>` | `openai`, `anthropic`, `gemini`, or `openai-compatible`. Enables the AI features. Default is `openai-compatible`. |
+| `--ai-endpoint=<url>` | Base API endpoint URL. **Required** for `openai-compatible`; optional override for the others. |
+| `--ai-model=<val>` | Model name, e.g. `MiniMax-M3`, `gpt-5-mini`, `claude-sonnet-4-6`, `gemini-2.5-pro`. Required when AI is enabled. |
+| `--ai-max-tokens=<int>` | Max output tokens per request. Default `32000`. Auto-mapped to `max_completion_tokens` for OpenAI reasoning models. Raise it further if you enable thinking/reasoning (which consumes output tokens). |
+| `--ai-use-max-completion-tokens` | Force `max_completion_tokens` instead of `max_tokens` (otherwise auto-detected). |
+| `--ai-temperature=<val>` | Sampling temperature. Default `0.0` (omitted automatically for OpenAI reasoning models). |
+| `--ai-extra-body=<json>` | JSON object deep-merged into the request body, overriding native fields. See [Thinking / reasoning](#thinking--reasoning) below. |
+| `--ai-synthesis-extra-body=<json>` | Like `--ai-extra-body` but applied ONLY to the final `summary` synthesis call — e.g. to enable thinking/reasoning just for the synthesis. See the `summary` action below. |
+
+**API key (security):** the key is resolved with the following precedence (first match wins). Prefer environment variables so the key never appears in process arguments, shell history, or logs — the crawler redacts `--ai-api-key=...` in the saved command and never serializes the key into JSON output or the response cache.
+
+1. `--ai-api-key-file=<file>` — read the first line of a file (safest for CI; `chmod 600`).
+2. `--ai-api-key=env:VARNAME` — read the named environment variable (indirection).
+3. `--ai-api-key=<value>` — raw value (**discouraged**: leaks into `ps`/history/logs).
+4. `--ai-api-key-env=<name>` — read the named environment variable.
+5. **Default:** the conventional variable for the provider — `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY`.
+
+**Actions** (`--ai-actions=`, comma-separated; default `seo,typos,summary` — the full report set). Enabling AI without specifying actions runs per-page SEO analysis, content (typos/grammar) checks, and the executive summary, all in the HTML report. `custom` (needs a prompt) and `llms-txt`/`llms-full` (extra files) are opt-in:
+
+| Action | What it does | Output |
+|--------|--------------|--------|
+| `seo` | Per-page SEO judgement with per-factor scores and recommended title/description/keywords. Complements the deterministic SEO analyzer. | "AI SEO analysis" table (text/JSON/HTML report) |
+| `llms-txt` | Curated [llms.txt](https://llmstxt.org/) index of the most important pages, with AI-written names and one-line summaries grouped by section. | `<dir>/<domain>.llms.txt` |
+| `llms-full` | `llms-full.txt` — the selected pages' full markdown concatenated under an AI preamble. | `<dir>/<domain>.llms-full.txt` |
+| `typos` | Language-aware spelling, grammar, and weak-copy detection with suggestions. Skips brand names, code, and identifiers. | "AI content issues" table |
+| `custom` | Runs your own prompt (`--ai-prompt-file` / `--ai-prompt`) against each page. | "AI custom check" table |
+| `summary` | AI **executive summary** of the whole site (see below). Synthesizes the deterministic analysis (security, accessibility, SEO, performance, infrastructure) into a prioritized list of recommendations. | "AI Insights & Recommendations" box on the HTML report Summary tab |
+
+> `llms.txt` / `llms-full.txt` are written next to `--markdown-export-dir` or `--offline-export-dir` if set, otherwise to `tmp/`.
+
+#### AI executive summary (`summary` action)
+
+`--ai-actions=summary` runs **after** the deterministic analysis and produces a visually styled box at the top of the HTML report's **Summary** tab, below the Website Quality Score. It works by evaluating five areas in parallel — security, accessibility, SEO, performance, infrastructure — each grounded in compact *aggregated* crawl data (never raw per-URL lists), then synthesizing one cross-area, prioritized list of up to 15 actionable recommendations (fewer for a clean site — never padded) with severity, impact, and evidence.
+
+Cost is **fixed at 6 LLM calls** (5 areas + 1 synthesis) regardless of site size — even for a 100,000-URL site — because only aggregates and a few capped top-N examples are sent (each area input stays well under 15 KB).
+
+```bash
+./siteone-crawler --url=https://example.com/ \
+  --ai-provider=openai --ai-model=gpt-5-mini --ai-actions=summary
+```
+
+Tip: the area evaluations are cheap and usually run best without thinking, but the final synthesis benefits from reasoning. Use `--ai-synthesis-extra-body` to enable thinking **only** for the synthesis call:
+
+```bash
+--ai-extra-body='{"chat_template_kwargs":{"enable_thinking":false}}' \
+--ai-synthesis-extra-body='{"chat_template_kwargs":{"enable_thinking":true}}'
+```
+
+(When you enable thinking, keep `--ai-max-tokens` generous — it defaults to `32000` — so reasoning does not truncate the JSON output.)
+
+**Page selection & cost control** — a site can have thousands of pages, so AI runs only on the most important ones:
+
+| Parameter | Description |
+|-----------|-------------|
+| `--ai-include=<regex>` | Only run AI on URLs matching this regex (repeatable). |
+| `--ai-exclude=<regex>` | Skip AI on URLs matching this regex (repeatable, wins over include). E.g. `--ai-exclude='/press/'` to skip a thousand press releases. |
+| `--ai-max-pages=<int>` | Hard cap on pages sent to the LLM. Default `100`. The highest-ranked (most important) pages are kept. This is the primary spend control. |
+| `--ai-dry-run` | Show which pages would be analyzed, the number of LLM calls, and an estimated input-token count, then exit **without any API call**. |
+
+Importance ranking favors the homepage, pages linked from it, shallow click-depth, hub/navigation pages, sitemap presence, and short URL paths. Only internal HTML pages with HTTP 200 are eligible.
+
+**Tuning:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `--ai-max-concurrency=<int>` | Maximum concurrent AI requests. Default `4`. |
+| `--ai-max-reqs-per-sec=<val>` | Rate limit for the LLM API (requests per second). |
+| `--ai-timeout=<int>` | Per-request timeout for AI calls in seconds. Default `180`. Raise it for slow reasoning models. |
+| `--ai-cache-dir=<dir>` | Directory for caching AI responses (content-addressed; re-runs are free). Default `tmp/ai-cache`. Empty value disables caching. |
+| `--ai-language=<code>` | Force content language (BCP-47, e.g. `cs`, `de`) for `typos`. Auto-detected otherwise. |
+| `--ai-seo-affects-score` | Let the AI SEO assessment apply a small capped deduction to the SEO quality score. **Off by default** — AI is advisory and never affects the `--ci` gate, keeping the score deterministic and reproducible. |
+
+#### Thinking / reasoning
+
+Thinking/reasoning is controlled via the universal `--ai-extra-body` JSON, which is deep-merged into the request (overriding native fields). This avoids a separate switch for every provider's differing convention:
+
+```bash
+# vLLM / Qwen (openai-compatible) — disable thinking
+--ai-extra-body='{"chat_template_kwargs":{"enable_thinking":false}}'
+
+# OpenAI reasoning effort
+--ai-extra-body='{"reasoning_effort":"minimal"}'
+
+# Anthropic extended thinking with a token budget
+--ai-extra-body='{"thinking":{"type":"enabled","budget_tokens":2048}}'
+
+# Google Gemini — disable thinking
+--ai-extra-body='{"generationConfig":{"thinkingConfig":{"thinkingBudget":0}}}'
+```
+
+For high-volume per-page analysis, thinking is usually unnecessary and increases cost/latency. Models that emit inline `<think>...</think>` (e.g. MiniMax M3) are handled automatically — the reasoning is stripped before parsing.
+
+#### Custom prompts
+
+`--ai-prompt-file=<file>` (or inline `--ai-prompt=<text>`) runs your prompt against each selected page. Reference page data with placeholders — the crawler injects each value **sanitized and wrapped in an XML data-boundary tag**, so a naive prompt is still injection-safe:
+
+`{{url}}`, `{{title}}`, `{{meta_description}}`, `{{meta_keywords}}`, `{{h1}}`, `{{headings}}`, `{{content_markdown}}`, `{{lang}}`.
+
+The model is instructed to return a JSON array of findings `{severity, label, message, location}`. Put your static instructions at the **top** of the prompt and reference `{{content_markdown}}` near the **bottom** to maximize provider prefix-cache reuse across pages.
+
+**Example** — EU advertising-compliance check (`compliance.txt`):
+
+```text
+You are an EU advertising-law compliance reviewer. Flag unsubstantiated superlatives
+("best", "cheapest", "#1"), health/financial claims without disclosure, and misleading
+urgency. Report each issue as a finding. Page content:
+
+{{content_markdown}}
+```
+
+```bash
+./siteone-crawler --url=https://example.com/ \
+  --ai-provider=openai --ai-model=gpt-5-mini \
+  --ai-actions=custom --ai-prompt-file=compliance.txt
+```
+
+> **Prompt-injection & privacy:** crawled content is wrapped in XML data tags with angle brackets escaped, and prompts instruct the model to treat it as data. Still, only send content you are comfortable sharing with the configured provider (providers may use prompt caching).
 
 ## 🏆 Quality Scoring
 
