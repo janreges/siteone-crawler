@@ -29,6 +29,7 @@ GIF animation of the crawler in action (also available as a [▶️ video](https
     * [📝 Website to markdown converter](#-website-to-markdown-converter)
     * [🗺️ Sitemap generator](#️-sitemap-generator)
     * [🤖 AI assistant (optional)](#-ai-assistant-optional)
+    * [🌐 Browser rendering (optional)](#-browser-rendering-optional)
 - [🚀 Installation](#-installation)
     * [📦 Pre-built binaries](#-pre-built-binaries)
     * [🍺 Homebrew (macOS / Linux)](#-homebrew-macos--linux)
@@ -62,6 +63,7 @@ GIF animation of the crawler in action (also available as a [▶️ video](https
         + [HTML-to-Markdown conversion](#html-to-markdown-conversion)
         + [CI/CD settings](#cicd-settings)
         + [🤖 AI assistant (optional)](#-ai-assistant-optional-1)
+        + [🌐 Browser rendering (optional)](#-browser-rendering-optional-1)
 - [🏆 Quality Scoring](#-quality-scoring)
 - [🔄 CI/CD Integration](#-cicd-integration)
 - [📄 Output Examples](#-output-examples)
@@ -233,6 +235,17 @@ See all available [markdown exporter options](#markdown-exporter-options) and [H
 
 Don't hesitate and try it. You will love it as we do! ❤️
 
+### 🌐 Browser rendering (optional)
+
+- optional, opt-in mode (`--browser`) that renders each page in a **real Chromium** via the Chrome DevTools Protocol, so **JavaScript / SPA sites** are crawled with their post-render DOM (client-side links, hydrated content, framework markup) — link extraction, offline export and markdown export then all see the rendered page
+- **screenshots** of every page — viewport (custom resolution) or **full-page** (entire scroll height), as PNG/JPG/WebP
+- **console / error diagnostics** per page — JavaScript console errors, uncaught exceptions, failed sub-requests (404/5xx), CSP/CORS/mixed-content violations — reported in a table and feedable to the AI assistant
+- **headless by default**, or `--browser-headful` to watch the browser open each page
+- **easiest possible setup, no Node.js**: it auto-detects an installed Chrome/Chromium/Edge/Brave, and if none is found it offers to download a `chrome-headless-shell` build — or point it at any browser with `--browser-path`
+- requires a **browser-enabled build** (the default binary does not include it — see [🔨 Build from source](#-build-from-source)) — see [🌐 Browser rendering (optional) usage & options](#-browser-rendering-optional-1)
+
+> **Limitations of browser mode** (by design): the browser loads sub-resources and runs page JS, so domain-scope/robots rules apply to the top document only; `--http-cache-dir` does not cache rendered bodies (the browser always fetches live), and each rendered HTML page is fetched twice (once for status/headers, once by the browser); HTTP auth/cookies are not forwarded to the browser; the auto-download trusts Google's CDN over TLS. `--proxy` and `--resolve` are forwarded to the browser, but `--resolve` is applied **host-only** in browser mode (Chrome's host-resolver-rules ignore the port), so per-port overrides for the same host aren't honored by the browser the way they are on the HTTP path.
+
 ## 🚀 Installation
 
 ### 📦 Pre-built binaries
@@ -308,7 +321,7 @@ sudo apk add siteone-crawler
 
 ### 🔨 Build from source
 
-Requires [Rust](https://www.rust-lang.org/tools/install) 1.85 or later.
+Requires [Rust](https://www.rust-lang.org/tools/install) 1.94 or later (see `rust-version` in `Cargo.toml`).
 
 ```bash
 git clone https://github.com/janreges/siteone-crawler.git
@@ -319,6 +332,18 @@ cargo build --release
 
 # Run
 ./target/release/siteone-crawler --url=https://my.domain.tld
+```
+
+**Build with browser rendering (`--browser`, screenshots, console diagnostics):**
+
+```bash
+# Adds the chromiumoxide (CDP) engine. The default build above does NOT include it,
+# and pre-built release binaries are the default (lean) build.
+cargo build --release --features browser
+
+# Then a browser (Chrome/Chromium/Edge/Brave) is detected automatically at runtime,
+# or downloaded on first use, or pointed at via --browser-path=<exe>.
+./target/release/siteone-crawler --url=https://my.spa.tld --browser --screenshots
 ```
 
 **Build statically linked (musl) binary:**
@@ -733,6 +758,48 @@ Convert a local HTML file to clean Markdown without crawling. Uses the same conv
 | `--ci-github-annotations` | Print GitHub Actions `::error` annotations for failed checks. Auto-enabled when `GITHUB_ACTIONS=true`. |
 
 **Default behavior with `--ci` alone:** overall score >= 5.0, each category score >= 5.0 (Performance, SEO, Security, Best Practices) and Accessibility >= 3.0, 404 errors <= 0, 5xx errors <= 0, critical findings <= 0, HTML pages >= 10, assets >= 10. File outputs (HTML, JSON, TXT reports) are not generated. To save reports in CI mode, specify the desired output explicitly, e.g. `--ci --output-html-report=report.html`.
+
+### 🌐 Browser rendering (optional)
+
+Render each page in a real Chromium (CDP) instead of a plain HTTP request. **Requires a browser-enabled build** (`cargo build --release --features browser`). With `--browser` off, the crawler behaves exactly as before.
+
+```bash
+# Crawl a JavaScript / SPA site with full browser rendering
+./siteone-crawler --url=https://my.spa.tld --browser
+
+# Capture a full-page screenshot of every page (PNG by default)
+./siteone-crawler --url=https://my.spa.tld --browser --screenshots --screenshot-mode=full-page
+
+# Watch it run in a visible window (one page at a time)
+./siteone-crawler --url=https://my.spa.tld --browser --browser-headful
+
+# Use a specific browser binary and wait until the network goes idle
+./siteone-crawler --url=https://my.spa.tld --browser --browser-path=/usr/bin/google-chrome --browser-wait=networkidle
+```
+
+Browser is auto-detected (Chrome/Chromium/Edge/Brave); if none is found you're offered a one-time `chrome-headless-shell` download (or pass `--browser-auto-download` for CI). Key options:
+
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `--browser` | off | Render pages in Chromium (requires browser-enabled build). |
+| `--browser-path=<exe>` | — | Explicit browser binary; skips detection/download. |
+| `--browser-headful` | off | Visible window (default is headless; renders one page at a time). |
+| `--browser-no-sandbox` | off | Add `--no-sandbox` (often required in Docker/CI/WSL/root; weakens isolation). |
+| `--browser-auto-download` | off | Pre-consent to downloading a browser in non-interactive/CI runs. |
+| `--browser-workers=<n>` | 3 | Concurrent rendered pages (separate from `--workers`). |
+| `--browser-wait=<mode>` | `networkidle` | Readiness: `load`, `domcontentloaded`, or `networkidle`. |
+| `--browser-wait-extra=<ms>` | 0 | Extra settle delay after the wait condition. |
+| `--browser-timeout=<sec>` | 30 | Hard navigation+render timeout per page. |
+| `--browser-render-all` | off | Render every URL (default: only HTML documents; assets via HTTP). |
+| `--screenshots` | off | Capture a screenshot of every rendered page (requires `--browser`). |
+| `--screenshots-dir=<dir>` | `tmp/screenshots/` | Output directory for screenshots. |
+| `--screenshot-mode=<m>` | `viewport` | `viewport` (set resolution) or `full-page` (full scroll height). |
+| `--screenshot-viewport=<WxH>` | `1920x1080` | Render/viewport size. |
+| `--screenshot-format=<f>` | `png` | `png`, `jpg`, or `webp`. |
+| `--screenshot-quality=<1-100>` | 80 | Quality for `jpg`/`webp`. |
+| `--console-max-messages` / `--console-msg-max-chars` / `--console-total-max-kb` | 100 / 200 / 128 | Size limits for the console diagnostics passed to the AI assistant. |
+
+Captured console/JS/network/security diagnostics appear in a "Browser issues" table and are also exposed (size-bounded) to the AI assistant via the `{{browser_diagnostics}}` placeholder in `--ai-prompt` / `--ai-prompt-file` (the `custom` AI action) — e.g. ask the model to triage the console/network errors.
 
 ### 🤖 AI assistant (optional)
 

@@ -43,6 +43,11 @@ cargo test --test integration_crawl -- --ignored --test-threads=1  # network int
 cargo test scoring::ci_gate::tests::all_checks_pass  # run a single test by name
 cargo clippy -- -D warnings                       # lint (CI enforces zero warnings)
 cargo fmt -- --check                              # format check
+
+# Browser rendering feature (optional `--browser` mode; pulls in chromiumoxide/CDP)
+cargo build --release --features browser          # build with browser rendering
+cargo test --features browser                     # run tests with the feature compiled in
+cargo clippy --features browser -- -D warnings    # lint the feature-gated code
 ```
 
 ## Quick Run
@@ -60,9 +65,9 @@ cargo fmt -- --check                              # format check
 
 1. **CLI Parsing** (`Initiator` → `CoreOptions::parse_argv()`): Parses 120+ CLI options, merges config file if present, validates. Exits with code 101 on error, code 2 on `--help`/`--version`. Non-crawl utility modes (`--serve-markdown`, `--serve-offline`, `--html-to-markdown`) exit early in `main.rs` before creating the Manager.
 
-2. **Analyzer Registration** (`Initiator::register_analyzers()`): Creates all 15 analyzer instances (Accessibility, BestPractice, Caching, ContentType, DNS, ExternalLinks, Fastest, Headers, Page404, Redirects, Security, SeoAndOpenGraph, SkippedUrls, Slowest, SourceDomains, SslTls) and registers them with `AnalysisManager`. Some analyzers receive config from CLI options (e.g. `fastest_top_limit`, `max_heading_level`).
+2. **Analyzer Registration** (`Initiator::register_analyzers()`): Creates all 17 analyzer instances (Accessibility, BestPractice, BrowserConsole, Caching, ContentType, DNS, ExternalLinks, Fastest, Headers, Page404, Redirects, Security, SeoAndOpenGraph, SkippedUrls, Slowest, SourceDomains, SslTls) and registers them with `AnalysisManager`. Some analyzers receive config from CLI options (e.g. `fastest_top_limit`, `max_heading_level`); `BrowserConsole` is active only in `--browser` mode.
 
-3. **Manager Setup** (`Manager::run()`): Creates `Status` (result storage), `Output` (text/json/multi), `HttpClient` (with optional proxy, auth, cache), `ContentProcessorManager` (HTML, CSS, JS, XML, Astro, Next.js, Svelte processors), and the `Crawler` instance.
+3. **Manager Setup** (`Manager::run()`): Creates `Status` (result storage), `Output` (text/json/multi), `HttpClient` (with optional proxy, auth, cache), `ContentProcessorManager` (HTML, CSS, JS, XML, Astro, Next.js, Svelte processors), and the `Crawler` instance. The crawl loop fetches through an `Arc<dyn Fetcher>` (`src/engine/fetcher.rs`): by default the `HttpClient`; with the `browser` feature + `--browser`, a `BrowserRenderer` that renders each HTML page in Chromium and returns the same `HttpResponse` (plus `browser_diagnostics`). Everything downstream is unchanged.
 
 4. **Robots.txt Fetch** (`Crawler::fetch_robots_txt()`): Before crawling starts, fetches and parses `/robots.txt` from the initial domain. Respects `--ignore-robots-txt` option.
 
@@ -161,6 +166,9 @@ This approach is useful for reproducing bug reports, testing regex edge cases (e
 - `src/export/html_report/report.rs`: HTML report generation with embedded template
 - `src/scoring/scorer.rs`: Quality score calculation from summary findings
 - `src/scoring/ci_gate.rs`: CI/CD threshold evaluation
+- `src/engine/fetcher.rs`: `Fetcher` trait — the single seam the crawl loop fetches through; `HttpClient` (direct HTTP) and `BrowserRenderer` both implement it
+- `src/browser/` (feature `browser`): `BrowserRenderer` (renderer.rs), Chromium detection/download/launch (launcher.rs), CDP diagnostics collection (diagnostics.rs), screenshots (screenshot.rs). `diagnostics.rs` data types are always compiled so `HttpResponse` can carry an inert `Option<BrowserDiagnostics>`
+- `src/analysis/browser_console_analyzer.rs`: reports browser console/JS/network/security diagnostics (the browser-mode analyzer; active only in `--browser` mode)
 
 ### Edition & Rust Version
 
