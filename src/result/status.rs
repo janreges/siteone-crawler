@@ -56,6 +56,9 @@ pub struct Status {
 
     /// Skipped URLs (transferred from crawler after crawling)
     skipped_urls: Mutex<Vec<SkippedUrlEntry>>,
+
+    /// Pre-rendered HTML of the optional AI executive report summary (the `summary` AI action).
+    ai_report_summary_html: Mutex<Option<String>>,
 }
 
 /// Entry for a skipped URL stored in Status
@@ -94,7 +97,20 @@ impl Status {
             visited_url_to_analysis_result: Mutex::new(HashMap::new()),
             robots_txt_content: RwLock::new(HashMap::new()),
             skipped_urls: Mutex::new(Vec::new()),
+            ai_report_summary_html: Mutex::new(None),
         }
+    }
+
+    /// Store the pre-rendered HTML of the AI executive report summary.
+    pub fn set_ai_report_summary_html(&self, html: String) {
+        if let Ok(mut slot) = self.ai_report_summary_html.lock() {
+            *slot = Some(html);
+        }
+    }
+
+    /// Get the pre-rendered HTML of the AI executive report summary, if generated.
+    pub fn get_ai_report_summary_html(&self) -> Option<String> {
+        self.ai_report_summary_html.lock().ok().and_then(|s| s.clone())
     }
 
     pub fn add_visited_url(
@@ -308,6 +324,24 @@ impl Status {
         F: FnOnce(&[SuperTable]) -> R,
     {
         self.super_tables_at_beginning.lock().ok().map(|tables| f(&tables))
+    }
+
+    /// Collect the data rows of all stored super tables matching `apl_code` (from both the
+    /// beginning and end groups). Used by the AI report-summary extractor.
+    pub fn get_super_table_rows(&self, apl_code: &str) -> Vec<std::collections::HashMap<String, String>> {
+        let mut rows = Vec::new();
+        let mut collect = |tables: &[SuperTable]| {
+            for t in tables.iter().filter(|t| t.apl_code == apl_code) {
+                rows.extend(t.get_data().iter().cloned());
+            }
+        };
+        if let Ok(tables) = self.super_tables_at_beginning.lock() {
+            collect(&tables);
+        }
+        if let Ok(tables) = self.super_tables_at_end.lock() {
+            collect(&tables);
+        }
+        rows
     }
 
     pub fn with_super_tables_at_beginning_mut<F, R>(&self, f: F) -> Option<R>

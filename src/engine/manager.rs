@@ -208,15 +208,20 @@ impl Manager {
         // Run the crawler
         crawler.run().await?;
 
+        // Optional AI phase (post-crawl, before analyzers/exporters). Fail-soft.
+        if options.ai_enabled {
+            crate::ai::runner::run_ai(options.as_ref(), crawler.get_status(), crawler.get_output()).await;
+        }
+
         // Post-crawl: run analyzers
-        let exit_code = self.run_post_crawl(&crawler);
+        let exit_code = self.run_post_crawl(&crawler).await;
 
         Ok(exit_code)
     }
 
     /// Run post-crawl analysis and produce final output.
     /// Returns exit code: 0 = success, 3 = no pages crawled, 10 = CI gate failed.
-    fn run_post_crawl(&mut self, crawler: &Crawler) -> i32 {
+    async fn run_post_crawl(&mut self, crawler: &Crawler) -> i32 {
         let status = crawler.get_status();
         let output = crawler.get_output();
         let analysis_manager = crawler.get_analysis_manager();
@@ -259,6 +264,25 @@ impl Manager {
             }
             if let Ok(st) = status.lock() {
                 st.add_super_table_at_end(super_table);
+            }
+        }
+
+        // Optional AI executive summary (after analyzers populate findings/tables, before the
+        // HTML report is generated so the AI box can be embedded in the Summary tab).
+        if self.options.ai_enabled && self.options.ai_actions.iter().any(|a| a == "summary") {
+            crate::ai::summary::run(self.options.as_ref(), status, output).await;
+        }
+
+        // Record total LLM usage (all per-page actions + the summary) as summary items so they
+        // appear in text, JSON, and the HTML report: one headline line (with the model name),
+        // then a per-analysis-type breakdown of requests + input/output tokens.
+        if self.options.ai_enabled
+            && let Some(usage_line) = crate::ai::usage::summary_line()
+            && let Ok(st) = status.lock()
+        {
+            st.add_info_to_summary("ai-usage", &usage_line);
+            for line in crate::ai::usage::breakdown_lines() {
+                st.add_info_to_summary("ai-usage-by-type", &line);
             }
         }
 
@@ -625,7 +649,15 @@ impl Manager {
         }
 
         if need_json {
-            let options_json = serde_json::to_value(options).ok();
+            let options_json = serde_json::to_value(options).ok().map(|mut v| {
+                // Never expose an internal AI endpoint IP in the serialized options.
+                if let Some(ep) = v.get_mut("aiEndpoint")
+                    && let Some(s) = ep.as_str()
+                {
+                    *ep = serde_json::Value::String(utils::mask_ip_addresses(s));
+                }
+                v
+            });
             outputs.push(Box::new(JsonOutput::new(
                 output_crawler_info,
                 options.extra_columns.clone(),

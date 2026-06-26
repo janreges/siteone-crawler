@@ -452,6 +452,8 @@ pub fn get_safe_command(command: &str) -> String {
         (r"(keys?)=\S+", "$1=***"),
         (r"(secrets?)=\S+", "$1=***"),
         (r"(auth)=\S+", "$1=***"),
+        // Space-separated form of the AI API key, e.g. `--ai-api-key sk-...`.
+        (r"(--ai-api-key)\s+\S+", "$1 ***"),
     ];
 
     let mut result = command.to_string();
@@ -460,7 +462,17 @@ pub fn get_safe_command(command: &str) -> String {
             result = re.replace_all(&result, *replacement).to_string();
         }
     }
-    result
+    mask_ip_addresses(&result)
+}
+
+/// Replace IPv4 addresses with `127.0.0.1` so internal infrastructure IPs (e.g. a private
+/// LLM endpoint, proxy, or resolve target) never leak into shareable output (banner, HTML
+/// report, JSON). Octets are validated (0-255) so version-like numbers are not affected.
+pub fn mask_ip_addresses(input: &str) -> String {
+    static RE_IPV4: once_cell::sync::Lazy<Regex> = once_cell::sync::Lazy::new(|| {
+        Regex::new(r"\b(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}\b").unwrap()
+    });
+    RE_IPV4.replace_all(input, "127.0.0.1").to_string()
 }
 
 pub fn get_colored_request_time(request_time: f64, str_pad_to: usize) -> String {
@@ -817,6 +829,30 @@ pub fn get_peak_memory_usage() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn masks_ipv4_in_command() {
+        // 192.0.2.0/24 is the RFC 5737 documentation range (a stand-in for any private endpoint).
+        let cmd = "siteone-crawler --url=https://example.com --ai-endpoint=http://192.0.2.10:7999/v1";
+        let safe = get_safe_command(cmd);
+        assert!(!safe.contains("192.0.2.10"));
+        assert!(safe.contains("http://127.0.0.1:7999/v1"));
+    }
+
+    #[test]
+    fn mask_ip_leaves_versions_and_domains() {
+        // 3-octet version numbers and domains must be untouched.
+        assert_eq!(mask_ip_addresses("v1.96.0 build"), "v1.96.0 build");
+        assert_eq!(
+            mask_ip_addresses("https://crawler.siteone.io/"),
+            "https://crawler.siteone.io/"
+        );
+    }
+
+    #[test]
+    fn mask_ip_replaces_private_and_public_ipv4() {
+        assert_eq!(mask_ip_addresses("10.0.0.5 and 8.8.8.8"), "127.0.0.1 and 127.0.0.1");
+    }
 
     // -- get_flat_response_headers --
 

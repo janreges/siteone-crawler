@@ -619,7 +619,10 @@ impl<'a> HtmlReport<'a> {
         let scores = scorer::calculate_scores(&summary, &output_stats);
         let quality_html = build_quality_scores_html(&scores);
 
-        let content = format!("{}\n{}", quality_html, summary.get_as_html());
+        // Optional AI executive summary box (between the quality score and the findings list).
+        let ai_summary_html = self.status.get_ai_report_summary_html().unwrap_or_default();
+
+        let content = format!("{}\n{}\n{}", quality_html, ai_summary_html, summary.get_as_html());
 
         Some(Tab::new("Summary", None, content, true, badges, Some(-100)))
     }
@@ -1795,6 +1798,52 @@ fn get_super_table_badges_by_apl_code(info: &SuperTableInfo, all_infos: &[SuperT
                     color,
                     "Maximal cache lifetime for images/css/js/fonts",
                 ));
+            }
+        }
+        "ai-content-issues" => {
+            // Count AI-detected content issues by severity for the tab badges.
+            let count = |sev: &str| {
+                info.data
+                    .iter()
+                    .filter(|row| {
+                        row.get("severity")
+                            .map(|s| s.trim().eq_ignore_ascii_case(sev))
+                            .unwrap_or(false)
+                    })
+                    .count()
+            };
+            let high = count("high");
+            let medium = count("medium");
+            let low = count("low");
+            if high > 0 {
+                badges.push(Badge::with_title(
+                    high.to_string(),
+                    BadgeColor::Red,
+                    "High-severity issues",
+                ));
+            }
+            if medium > 0 {
+                badges.push(Badge::with_title(
+                    medium.to_string(),
+                    BadgeColor::Orange,
+                    "Medium-severity issues",
+                ));
+            }
+            if low > 0 {
+                badges.push(Badge::with_title(
+                    low.to_string(),
+                    BadgeColor::Blue,
+                    "Low-severity issues",
+                ));
+            }
+            if high == 0 && medium == 0 && low == 0 {
+                // No graded issues (clean, or rows with an unexpected severity) → show the total.
+                let color = if info.total_rows == 0 {
+                    BadgeColor::Green
+                } else {
+                    BadgeColor::Neutral
+                };
+                badges.push(Badge::new(info.total_rows.to_string(), color));
             }
         }
         _ => {
