@@ -1,6 +1,8 @@
 /target
 /tmp/
 /dist/
+/plans/
+/docs/superpowers/
 *.swp
 *.swo
 *~
