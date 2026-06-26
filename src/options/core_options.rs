@@ -4,6 +4,7 @@
 
 use regex::Regex;
 
+use crate::ai::secret::SecretString;
 use crate::debugger;
 use crate::error::CrawlerError;
 use crate::extra_column::ExtraColumn;
@@ -30,6 +31,7 @@ pub const GROUP_SEO_AND_OPENGRAPH_ANALYZER: &str = "seo-and-opengraph-analyzer";
 pub const GROUP_SLOWEST_ANALYZER: &str = "slowest-analyzer";
 pub const GROUP_CI_CD_SETTINGS: &str = "ci-cd-settings";
 pub const GROUP_SERVER_SETTINGS: &str = "server-settings";
+pub const GROUP_AI_SETTINGS: &str = "ai-settings";
 
 /// Result storage type
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
@@ -243,6 +245,35 @@ pub struct CoreOptions {
     pub ci_ignore_code: Vec<String>,
     pub ci_junit_file: Option<String>,
     pub ci_github_annotations: bool,
+
+    // ai settings (optional AI features; nothing runs unless ai_enabled)
+    #[serde(skip)]
+    pub ai_enabled: bool,
+    pub ai_provider: String,
+    pub ai_endpoint: Option<String>,
+    pub ai_model: Option<String>,
+    /// Raw `--ai-api-key` value (redacted in Debug/Serialize via SecretString).
+    pub ai_api_key: Option<SecretString>,
+    pub ai_api_key_env: Option<String>,
+    pub ai_api_key_file: Option<String>,
+    pub ai_max_tokens: i64,
+    pub ai_use_max_completion_tokens: bool,
+    pub ai_temperature: f64,
+    pub ai_extra_body: Option<String>,
+    pub ai_synthesis_extra_body: Option<String>,
+    pub ai_actions: Vec<String>,
+    pub ai_prompt_file: Option<String>,
+    pub ai_prompt: Option<String>,
+    pub ai_language: Option<String>,
+    pub ai_include: Vec<String>,
+    pub ai_exclude: Vec<String>,
+    pub ai_max_pages: i64,
+    pub ai_max_concurrency: i64,
+    pub ai_max_reqs_per_sec: Option<f64>,
+    pub ai_timeout: i64,
+    pub ai_cache_dir: Option<String>,
+    pub ai_seo_affects_score: bool,
+    pub ai_dry_run: bool,
 }
 
 impl CoreOptions {
@@ -447,6 +478,33 @@ impl CoreOptions {
             ci_ignore_code: Vec::new(),
             ci_junit_file: None,
             ci_github_annotations: false,
+
+            // ai settings
+            ai_enabled: false,
+            ai_provider: "openai-compatible".to_string(),
+            ai_endpoint: None,
+            ai_model: None,
+            ai_api_key: None,
+            ai_api_key_env: None,
+            ai_api_key_file: None,
+            ai_max_tokens: 32000,
+            ai_use_max_completion_tokens: false,
+            ai_temperature: 0.0,
+            ai_extra_body: None,
+            ai_synthesis_extra_body: None,
+            ai_actions: vec!["seo".to_string(), "typos".to_string(), "summary".to_string()],
+            ai_prompt_file: None,
+            ai_prompt: None,
+            ai_language: None,
+            ai_include: Vec::new(),
+            ai_exclude: Vec::new(),
+            ai_max_pages: 100,
+            ai_max_concurrency: 4,
+            ai_max_reqs_per_sec: None,
+            ai_timeout: 180,
+            ai_cache_dir: Some("tmp/ai-cache".to_string()),
+            ai_seo_affects_score: false,
+            ai_dry_run: false,
         };
 
         // Populate from option groups
@@ -454,6 +512,89 @@ impl CoreOptions {
             for (_prop_name, option) in &group.options {
                 let value = option.get_value()?;
                 core.apply_option_value(&option.property_to_fill, value)?;
+            }
+        }
+
+        // AI is active only if the user explicitly set at least one --ai-* flag.
+        core.ai_enabled = [
+            "aiProvider",
+            "aiEndpoint",
+            "aiModel",
+            "aiApiKey",
+            "aiApiKeyEnv",
+            "aiApiKeyFile",
+            "aiActions",
+            "aiPromptFile",
+            "aiPrompt",
+            "aiExtraBody",
+            "aiSynthesisExtraBody",
+            "aiDryRun",
+            "aiSeoAffectsScore",
+            "aiInclude",
+            "aiExclude",
+            "aiMaxPages",
+            "aiMaxTokens",
+            "aiTemperature",
+            "aiLanguage",
+            "aiMaxConcurrency",
+            "aiMaxReqsPerSec",
+            "aiTimeout",
+            "aiUseMaxCompletionTokens",
+            "aiCacheDir",
+        ]
+        .iter()
+        .any(|p| options.is_explicitly_set(p));
+
+        if core.ai_enabled {
+            let provider = crate::ai::provider::Provider::parse(&core.ai_provider).ok_or_else(|| {
+                CrawlerError::Config(format!(
+                    "Invalid --ai-provider '{}'. Use openai, anthropic, gemini, or openai-compatible.",
+                    core.ai_provider
+                ))
+            })?;
+            if provider == crate::ai::provider::Provider::OpenAiCompatible && core.ai_endpoint.is_none() {
+                return Err(CrawlerError::Config(
+                    "--ai-provider=openai-compatible requires --ai-endpoint=URL.".to_string(),
+                ));
+            }
+            if core.ai_model.as_deref().map(|s| s.trim().is_empty()).unwrap_or(true) {
+                return Err(CrawlerError::Config(
+                    "AI is enabled but --ai-model is missing.".to_string(),
+                ));
+            }
+            const KNOWN_ACTIONS: [&str; 6] = ["seo", "llms-txt", "llms-full", "typos", "custom", "summary"];
+            for a in &core.ai_actions {
+                if !KNOWN_ACTIONS.contains(&a.as_str()) {
+                    return Err(CrawlerError::Config(format!(
+                        "Unknown --ai-actions value '{}'. Known values: {}.",
+                        a,
+                        KNOWN_ACTIONS.join(", ")
+                    )));
+                }
+            }
+            if core.ai_actions.iter().any(|a| a == "custom")
+                && core.ai_prompt_file.is_none()
+                && core.ai_prompt.is_none()
+            {
+                return Err(CrawlerError::Config(
+                    "--ai-actions=custom requires --ai-prompt-file=PATH or --ai-prompt=TEXT.".to_string(),
+                ));
+            }
+            for (flag, body) in [
+                ("--ai-extra-body", &core.ai_extra_body),
+                ("--ai-synthesis-extra-body", &core.ai_synthesis_extra_body),
+            ] {
+                if let Some(body) = body {
+                    match serde_json::from_str::<serde_json::Value>(body) {
+                        Ok(v) if v.is_object() => {}
+                        Ok(_) => {
+                            return Err(CrawlerError::Config(format!("{} must be a JSON object.", flag)));
+                        }
+                        Err(e) => {
+                            return Err(CrawlerError::Config(format!("{} is not valid JSON: {}", flag, e)));
+                        }
+                    }
+                }
             }
         }
 
@@ -1335,6 +1476,126 @@ impl CoreOptions {
             "htmlToMarkdownOutput" => {
                 if let Some(s) = value.as_str() {
                     self.html_to_markdown_output = Some(s.to_string());
+                }
+            }
+            // ai options
+            "aiProvider" => {
+                if let Some(s) = value.as_str() {
+                    self.ai_provider = s.to_string();
+                }
+            }
+            "aiEndpoint" => {
+                if let Some(s) = value.as_str() {
+                    self.ai_endpoint = Some(s.to_string());
+                }
+            }
+            "aiModel" => {
+                if let Some(s) = value.as_str() {
+                    self.ai_model = Some(s.to_string());
+                }
+            }
+            "aiApiKey" => {
+                if let Some(s) = value.as_str() {
+                    self.ai_api_key = Some(SecretString::new(s));
+                }
+            }
+            "aiApiKeyEnv" => {
+                if let Some(s) = value.as_str() {
+                    self.ai_api_key_env = Some(s.to_string());
+                }
+            }
+            "aiApiKeyFile" => {
+                if let Some(s) = value.as_str() {
+                    self.ai_api_key_file = Some(s.to_string());
+                }
+            }
+            "aiMaxTokens" => {
+                if let Some(n) = value.as_int() {
+                    self.ai_max_tokens = n;
+                }
+            }
+            "aiUseMaxCompletionTokens" => {
+                if let Some(b) = value.as_bool() {
+                    self.ai_use_max_completion_tokens = b;
+                }
+            }
+            "aiTemperature" => {
+                if let Some(f) = value.as_float() {
+                    self.ai_temperature = f;
+                }
+            }
+            "aiExtraBody" => {
+                if let Some(s) = value.as_str() {
+                    self.ai_extra_body = Some(s.to_string());
+                }
+            }
+            "aiSynthesisExtraBody" => {
+                if let Some(s) = value.as_str() {
+                    self.ai_synthesis_extra_body = Some(s.to_string());
+                }
+            }
+            "aiActions" => {
+                if let Some(arr) = value.as_array() {
+                    self.ai_actions = arr.clone();
+                }
+            }
+            "aiPromptFile" => {
+                if let Some(s) = value.as_str() {
+                    self.ai_prompt_file = Some(s.to_string());
+                }
+            }
+            "aiPrompt" => {
+                if let Some(s) = value.as_str() {
+                    self.ai_prompt = Some(s.to_string());
+                }
+            }
+            "aiLanguage" => {
+                if let Some(s) = value.as_str() {
+                    self.ai_language = Some(s.to_string());
+                }
+            }
+            "aiInclude" => {
+                if let Some(arr) = value.as_array() {
+                    self.ai_include = arr.clone();
+                }
+            }
+            "aiExclude" => {
+                if let Some(arr) = value.as_array() {
+                    self.ai_exclude = arr.clone();
+                }
+            }
+            "aiMaxPages" => {
+                if let Some(n) = value.as_int() {
+                    self.ai_max_pages = n;
+                }
+            }
+            "aiMaxConcurrency" => {
+                if let Some(n) = value.as_int() {
+                    self.ai_max_concurrency = n;
+                }
+            }
+            "aiMaxReqsPerSec" => {
+                if let Some(f) = value.as_float() {
+                    self.ai_max_reqs_per_sec = Some(f);
+                }
+            }
+            "aiTimeout" => {
+                if let Some(n) = value.as_int() {
+                    self.ai_timeout = n;
+                }
+            }
+            "aiCacheDir" => match value.as_str() {
+                Some(s) => self.ai_cache_dir = Some(s.to_string()),
+                None => self.ai_cache_dir = None,
+            },
+            "aiSeoAffectsScore" => {
+                if let Some(b) = value.as_bool() {
+                    self.ai_seo_affects_score = b;
+                }
+            }
+            "aiDryRun" => {
+                if let Some(b) = value.as_bool() {
+                    self.ai_dry_run = b;
                 }
             }
             _ => {
@@ -2584,6 +2845,136 @@ pub fn get_options() -> Options {
         ],
     ));
 
+    // -------------------------------------------------------------------------
+    // AI options (optional AI features — nothing runs unless --ai-* is set)
+    // -------------------------------------------------------------------------
+    options.add_group(OptionGroup::new(
+        GROUP_AI_SETTINGS,
+        "AI options",
+        vec![
+            CrawlerOption::new(
+                "--ai-provider", None, "aiProvider", OptionType::String, false,
+                "AI provider: `openai`, `anthropic`, `gemini`, or `openai-compatible` (vLLM/LiteLLM/MiniMax/self-hosted). Enables the optional AI features.",
+                Some("openai-compatible"), false, false, None,
+            ),
+            CrawlerOption::new(
+                "--ai-endpoint", None, "aiEndpoint", OptionType::Url, false,
+                "Base API endpoint URL. Required for `openai-compatible`; optional override for the other providers.",
+                None, true, false, None,
+            ),
+            CrawlerOption::new(
+                "--ai-model", None, "aiModel", OptionType::String, false,
+                "Model name to call, e.g. `MiniMax-M3`, `gpt-5-mini`, `claude-sonnet-4-6`, `gemini-2.5-pro`.",
+                None, true, false, None,
+            ),
+            CrawlerOption::new(
+                "--ai-api-key", None, "aiApiKey", OptionType::String, false,
+                "API key (DISCOURAGED — leaks into `ps`/shell history/logs). Supports `env:VARNAME` indirection. Prefer the default conventional env var (OPENAI_API_KEY/ANTHROPIC_API_KEY/GEMINI_API_KEY) or --ai-api-key-file.",
+                None, true, false, None,
+            ),
+            CrawlerOption::new(
+                "--ai-api-key-env", None, "aiApiKeyEnv", OptionType::String, false,
+                "Name of the environment variable to read the API key from.",
+                None, true, false, None,
+            ),
+            CrawlerOption::new(
+                "--ai-api-key-file", None, "aiApiKeyFile", OptionType::File, false,
+                "Path to a file whose first line is the API key (safest for CI).",
+                None, true, false, None,
+            ),
+            CrawlerOption::new(
+                "--ai-max-tokens", None, "aiMaxTokens", OptionType::Int, false,
+                "Max output tokens per request. Auto-mapped to max_completion_tokens for OpenAI reasoning models. Raise it further if you enable thinking/reasoning.",
+                Some("32000"), false, false, Some(vec!["1".to_string(), "1000000".to_string()]),
+            ),
+            CrawlerOption::new(
+                "--ai-use-max-completion-tokens", None, "aiUseMaxCompletionTokens", OptionType::Bool, false,
+                "Force `max_completion_tokens` instead of `max_tokens` (for endpoints/models that require it). Otherwise auto-detected.",
+                Some("false"), false, false, None,
+            ),
+            CrawlerOption::new(
+                "--ai-temperature", None, "aiTemperature", OptionType::Float, false,
+                "Sampling temperature (omitted automatically for OpenAI reasoning models).",
+                Some("0.0"), false, false, Some(vec!["0".to_string(), "2".to_string()]),
+            ),
+            CrawlerOption::new(
+                "--ai-extra-body", None, "aiExtraBody", OptionType::String, false,
+                "JSON object deep-merged into the request body, overriding native fields. Use for thinking/reasoning control and any provider-specific knobs, e.g. '{\"chat_template_kwargs\":{\"enable_thinking\":false}}'.",
+                None, true, false, None,
+            ),
+            CrawlerOption::new(
+                "--ai-synthesis-extra-body", None, "aiSynthesisExtraBody", OptionType::String, false,
+                "Like --ai-extra-body but applied ONLY to the final report-summary synthesis call (the `summary` action). Use to enable thinking/max reasoning just for the synthesis, e.g. '{}' to drop a global enable_thinking:false, or '{\"reasoning_effort\":\"high\"}'.",
+                None, true, false, None,
+            ),
+            CrawlerOption::new(
+                "--ai-actions", None, "aiActions", OptionType::String, true,
+                "Comma-separated AI analyses to run: `seo`, `llms-txt`, `llms-full`, `typos`, `custom`, `summary`. The default runs the full report set; `custom` (needs a prompt) and `llms-txt`/`llms-full` (extra files) are opt-in.",
+                Some("seo,typos,summary"), false, true, None,
+            ),
+            CrawlerOption::new(
+                "--ai-prompt-file", None, "aiPromptFile", OptionType::File, false,
+                "Path to a custom prompt file for the `custom` action. Supports placeholders like {{url}}, {{title}}, {{content_markdown}}.",
+                None, true, false, None,
+            ),
+            CrawlerOption::new(
+                "--ai-prompt", None, "aiPrompt", OptionType::String, false,
+                "Inline custom prompt for the `custom` action (alternative to --ai-prompt-file).",
+                None, true, false, None,
+            ),
+            CrawlerOption::new(
+                "--ai-language", None, "aiLanguage", OptionType::String, false,
+                "Force content language (BCP-47, e.g. `cs`, `de`) for the `typos` action. Auto-detected if unset.",
+                None, true, false, None,
+            ),
+            CrawlerOption::new(
+                "--ai-include", None, "aiInclude", OptionType::Regex, true,
+                "Only run AI on URLs matching this regex (repeatable). Applied before ranking.",
+                None, true, true, None,
+            ),
+            CrawlerOption::new(
+                "--ai-exclude", None, "aiExclude", OptionType::Regex, true,
+                "Skip AI on URLs matching this regex (repeatable, wins over --ai-include). E.g. exclude '/press/'.",
+                None, true, true, None,
+            ),
+            CrawlerOption::new(
+                "--ai-max-pages", None, "aiMaxPages", OptionType::Int, false,
+                "Hard cap on the number of pages sent to the LLM (highest-ranked pages kept).",
+                Some("100"), false, false, Some(vec!["1".to_string(), "100000".to_string()]),
+            ),
+            CrawlerOption::new(
+                "--ai-max-concurrency", None, "aiMaxConcurrency", OptionType::Int, false,
+                "Maximum concurrent AI requests.",
+                Some("4"), false, false, Some(vec!["1".to_string(), "64".to_string()]),
+            ),
+            CrawlerOption::new(
+                "--ai-max-reqs-per-sec", None, "aiMaxReqsPerSec", OptionType::Float, false,
+                "Maximum AI requests per second (rate limit for the LLM API).",
+                None, true, false, None,
+            ),
+            CrawlerOption::new(
+                "--ai-timeout", None, "aiTimeout", OptionType::Int, false,
+                "Per-request timeout for AI calls in seconds (raise it for slow reasoning models).",
+                Some("180"), false, false, Some(vec!["1".to_string(), "3600".to_string()]),
+            ),
+            CrawlerOption::new(
+                "--ai-cache-dir", None, "aiCacheDir", OptionType::Dir, false,
+                "Directory for caching AI responses. Empty value disables caching.",
+                Some("tmp/ai-cache"), true, false, None,
+            ),
+            CrawlerOption::new(
+                "--ai-seo-affects-score", None, "aiSeoAffectsScore", OptionType::Bool, false,
+                "Let the AI SEO assessment apply a small capped deduction to the SEO quality score (off = advisory only). Note: non-deterministic across runs.",
+                Some("false"), false, false, None,
+            ),
+            CrawlerOption::new(
+                "--ai-dry-run", None, "aiDryRun", OptionType::Bool, false,
+                "Show which pages would be analyzed, the number of LLM calls, and an estimated input-token count, then exit without calling the API.",
+                Some("false"), false, false, None,
+            ),
+        ],
+    ));
+
     options
 }
 
@@ -3056,6 +3447,33 @@ mod tests {
             ci_ignore_code: Vec::new(),
             ci_junit_file: None,
             ci_github_annotations: false,
+
+            // ai settings
+            ai_enabled: false,
+            ai_provider: "openai-compatible".to_string(),
+            ai_endpoint: None,
+            ai_model: None,
+            ai_api_key: None,
+            ai_api_key_env: None,
+            ai_api_key_file: None,
+            ai_max_tokens: 32000,
+            ai_use_max_completion_tokens: false,
+            ai_temperature: 0.0,
+            ai_extra_body: None,
+            ai_synthesis_extra_body: None,
+            ai_actions: vec!["seo".to_string(), "typos".to_string(), "summary".to_string()],
+            ai_prompt_file: None,
+            ai_prompt: None,
+            ai_language: None,
+            ai_include: Vec::new(),
+            ai_exclude: Vec::new(),
+            ai_max_pages: 100,
+            ai_max_concurrency: 4,
+            ai_max_reqs_per_sec: None,
+            ai_timeout: 180,
+            ai_cache_dir: Some("tmp/ai-cache".to_string()),
+            ai_seo_affects_score: false,
+            ai_dry_run: false,
         }
     }
 

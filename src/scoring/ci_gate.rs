@@ -465,6 +465,33 @@ mod tests {
             ci_ignore_code: Vec::new(),
             ci_junit_file: None,
             ci_github_annotations: false,
+
+            // ai settings
+            ai_enabled: false,
+            ai_provider: "openai-compatible".to_string(),
+            ai_endpoint: None,
+            ai_model: None,
+            ai_api_key: None,
+            ai_api_key_env: None,
+            ai_api_key_file: None,
+            ai_max_tokens: 32000,
+            ai_use_max_completion_tokens: false,
+            ai_temperature: 0.0,
+            ai_extra_body: None,
+            ai_synthesis_extra_body: None,
+            ai_actions: vec!["seo".to_string(), "typos".to_string(), "summary".to_string()],
+            ai_prompt_file: None,
+            ai_prompt: None,
+            ai_language: None,
+            ai_include: Vec::new(),
+            ai_exclude: Vec::new(),
+            ai_max_pages: 100,
+            ai_max_concurrency: 4,
+            ai_max_reqs_per_sec: None,
+            ai_timeout: 180,
+            ai_cache_dir: Some("tmp/ai-cache".to_string()),
+            ai_seo_affects_score: false,
+            ai_dry_run: false,
         }
     }
 

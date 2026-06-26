@@ -149,7 +149,15 @@ impl CrawlerOption {
         let mut value: Option<String> = self.default_value.clone();
         let mut array_values: Vec<String> = if self.is_array {
             if let Some(ref dv) = self.default_value {
-                if dv.is_empty() { Vec::new() } else { vec![dv.clone()] }
+                if dv.is_empty() {
+                    Vec::new()
+                } else {
+                    // Comma-split the default the same way user-provided array values are split.
+                    dv.split(',')
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect()
+                }
             } else {
                 Vec::new()
             }

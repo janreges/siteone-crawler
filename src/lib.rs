@@ -1,6 +1,7 @@
 // SiteOne Crawler - Library root
 // (c) Jan Reges <jan.reges@siteone.cz>
 
+pub mod ai;
 pub mod analysis;
 pub mod components;
 pub mod content_processor;
