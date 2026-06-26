@@ -11,6 +11,7 @@ use crate::utils;
 use crate::version;
 
 // Import all analyzers for registration
+use crate::analysis::browser_console_analyzer::BrowserConsoleAnalyzer;
 use crate::analysis::caching_analyzer::CachingAnalyzer;
 use crate::analysis::content_type_analyzer::ContentTypeAnalyzer;
 use crate::analysis::dns_analyzer::DnsAnalyzer;
@@ -99,6 +100,12 @@ impl Initiator {
         // Register all analyzers in alphabetical order
         analysis_manager.register_analyzer(Box::new(AccessibilityAnalyzer::new()));
         analysis_manager.register_analyzer(Box::new(BestPracticeAnalyzer::new()));
+
+        // Browser console diagnostics (active only in --browser mode)
+        let mut browser_console = BrowserConsoleAnalyzer::new();
+        browser_console.set_activated(options.browser_enabled);
+        analysis_manager.register_analyzer(Box::new(browser_console));
+
         analysis_manager.register_analyzer(Box::new(CachingAnalyzer::new()));
         analysis_manager.register_analyzer(Box::new(ContentTypeAnalyzer::new()));
         analysis_manager.register_analyzer(Box::new(DnsAnalyzer::new()));

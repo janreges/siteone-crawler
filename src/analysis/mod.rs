@@ -4,6 +4,7 @@ pub mod manager;
 pub mod result;
 
 // Simple analyzers
+pub mod browser_console_analyzer;
 pub mod caching_analyzer;
 pub mod content_type_analyzer;
 pub mod dns_analyzer;
