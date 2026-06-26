@@ -472,7 +472,18 @@ impl HtmlToMarkdownConverter {
                 }
                 consecutive_links.clear();
 
-                markdown.push_str(&self.convert_node(&child, document, excluded));
+                let converted = self.convert_node(&child, document, excluded);
+                // Preserve a word boundary between adjacent inline children that the source glued
+                // with no whitespace (e.g. "Pro děti" directly followed by <span>od 8 let</span>,
+                // common with CSS-in-JS). Only triggers when BOTH sides end/start with an
+                // alphanumeric — delimiter-wrapped output (**bold**, [link], `code`) is unaffected,
+                // so intra-word formatting like <b>un</b>believable is never split.
+                if markdown.chars().next_back().is_some_and(|c| c.is_alphanumeric())
+                    && converted.chars().next().is_some_and(|c| c.is_alphanumeric())
+                {
+                    markdown.push(' ');
+                }
+                markdown.push_str(&converted);
             }
         }
 
@@ -509,11 +520,17 @@ impl HtmlToMarkdownConverter {
         }
     }
 
-    /// Extract plain text content from a node recursively.
+    /// Extract plain text content from a node recursively, skipping text inside non-content
+    /// elements (e.g. emotion `<style>` CSS or `<script>` code) so it never leaks into link text.
     fn extract_text_content(&self, node: &NodeRef<Node>) -> String {
         let mut text = String::new();
         for child in node.descendants() {
             if let Node::Text(t) = child.value() {
+                if child.parent().is_some_and(|p| {
+                    matches!(p.value(), Node::Element(el) if matches!(el.name.local.as_ref(), "style" | "script" | "noscript"))
+                }) {
+                    continue;
+                }
                 text.push_str(&t.text);
             }
         }
@@ -1475,5 +1492,35 @@ mod tests {
         let md = converter.get_markdown();
         assert!(md.contains("Content"));
         assert!(!md.contains("Cookie preferences"));
+    }
+
+    // --- Regression: adjacent inline elements glued with no source whitespace ---
+    // (Real airbank pattern: a label text directly followed by a styled <span> note, e.g.
+    //  "Pro děti" + <span>od 8 let</span>, which must not become "Pro dětiod 8 let".)
+
+    #[test]
+    fn adjacent_inline_span_keeps_word_boundary_in_link() {
+        let converter =
+            HtmlToMarkdownConverter::new(r#"<a href="/pro-deti/">Pro děti<span>od 8 let</span></a>"#, vec![]);
+        let md = converter.get_markdown();
+        assert!(md.contains("Pro děti od 8 let"), "words must keep a space: {:?}", md);
+        assert!(!md.contains("dětiod"), "words must not glue: {:?}", md);
+    }
+
+    #[test]
+    fn adjacent_inline_spans_keep_word_boundary() {
+        let converter = HtmlToMarkdownConverter::new("<div>první<span>druhé</span>třetí</div>", vec![]);
+        let md = converter.get_markdown();
+        assert!(md.contains("první druhé třetí"), "got: {:?}", md);
+        assert!(!md.contains("prvnídruhé"));
+    }
+
+    #[test]
+    fn intra_word_bold_is_not_split() {
+        // Delimiter-wrapped output must NOT trigger a boundary space: <b>un</b>believable stays glued.
+        let converter = HtmlToMarkdownConverter::new("<p><strong>un</strong>believable</p>", vec![]);
+        let md = converter.get_markdown();
+        assert!(md.contains("**un**believable"), "got: {:?}", md);
+        assert!(!md.contains("** believable"));
     }
 }
