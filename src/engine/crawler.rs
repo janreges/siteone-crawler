@@ -1617,7 +1617,9 @@ impl Crawler {
 
     /// Get crawler user agent signature
     pub fn get_crawler_user_agent_signature() -> String {
-        format!("siteone-crawler/{}", version::CODE)
+        // PascalCase to match the `SiteOne-Crawler` user-agent token honored by the robots.txt
+        // parser, so the announced UA and the robots rules the crawler obeys stay consistent.
+        format!("SiteOne-Crawler/{}", version::CODE)
     }
 
     /// Compute MD5-based key for URL deduplication

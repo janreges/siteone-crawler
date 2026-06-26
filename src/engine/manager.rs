@@ -84,8 +84,9 @@ impl Manager {
     pub async fn run(&mut self) -> CrawlerResult<i32> {
         let options = self.options.clone();
 
-        // Build crawler info
-        let command = std::env::args().collect::<Vec<_>>().join(" ");
+        // Build crawler info. Reconstruct a copy-pasteable command: drop the binary's path and
+        // shell-quote arguments (e.g. JSON in --ai-extra-body) so it can be pasted as-is.
+        let command = utils::format_command_from_argv(&std::env::args().collect::<Vec<_>>());
         let hostname = gethostname::gethostname().to_string_lossy().to_string();
 
         // Build the final user agent the same way Crawler does
@@ -105,7 +106,7 @@ impl Manager {
             if base.ends_with('!') {
                 base.trim_end_matches('!').trim_end().to_string()
             } else {
-                format!("{} siteone-crawler/{}", base, version::CODE)
+                format!("{} SiteOne-Crawler/{}", base, version::CODE)
             }
         };
 

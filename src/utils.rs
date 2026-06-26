@@ -475,6 +475,61 @@ pub fn mask_ip_addresses(input: &str) -> String {
     RE_IPV4.replace_all(input, "127.0.0.1").to_string()
 }
 
+/// True if `s` contains a character the shell would interpret, so it must be quoted to stay
+/// copy-pasteable. An empty string is safe (e.g. the value of `--http-cache-dir=`).
+fn arg_needs_quoting(s: &str) -> bool {
+    !s.chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '=' | '/' | '.' | ':' | ',' | '@' | '%' | '+'))
+}
+
+/// Wrap `s` in single quotes, escaping any embedded single quote with the POSIX `'\''` idiom.
+fn single_quote(s: &str) -> String {
+    if s.is_empty() {
+        return "''".to_string();
+    }
+    format!("'{}'", s.replace('\'', r"'\''"))
+}
+
+/// Shell-quote one CLI argument so the reconstructed command is copy-pasteable. For a
+/// `--key=value` argument only the value is quoted (keeps the flag readable), e.g.
+/// `--ai-extra-body={...}` becomes `--ai-extra-body='{...}'`.
+pub fn shell_quote_arg(arg: &str) -> String {
+    if arg.starts_with('-')
+        && let Some(eq) = arg.find('=')
+    {
+        let (key, rest) = arg.split_at(eq);
+        let value = &rest[1..];
+        if arg_needs_quoting(value) {
+            return format!("{}={}", key, single_quote(value));
+        }
+        return arg.to_string();
+    }
+    if arg_needs_quoting(arg) {
+        single_quote(arg)
+    } else {
+        arg.to_string()
+    }
+}
+
+/// Reconstruct a copy-pasteable command line from argv: the binary's leading path is dropped (so
+/// `./target/release/siteone-crawler` shows as `siteone-crawler`) and every argument is
+/// shell-quoted as needed. Run `get_safe_command` on the result to redact secrets.
+pub fn format_command_from_argv(argv: &[String]) -> String {
+    if argv.is_empty() {
+        return String::new();
+    }
+    let bin = std::path::Path::new(&argv[0])
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| argv[0].clone());
+    let mut parts = Vec::with_capacity(argv.len());
+    parts.push(shell_quote_arg(&bin));
+    for arg in &argv[1..] {
+        parts.push(shell_quote_arg(arg));
+    }
+    parts.join(" ")
+}
+
 pub fn get_colored_request_time(request_time: f64, str_pad_to: usize) -> String {
     let formatted = get_formatted_duration(request_time);
     let padded = format!("{:<width$}", formatted, width = str_pad_to);
@@ -852,6 +907,62 @@ mod tests {
     #[test]
     fn mask_ip_replaces_private_and_public_ipv4() {
         assert_eq!(mask_ip_addresses("10.0.0.5 and 8.8.8.8"), "127.0.0.1 and 127.0.0.1");
+    }
+
+    #[test]
+    fn shell_quote_wraps_only_the_json_value() {
+        assert_eq!(
+            shell_quote_arg(r#"--ai-extra-body={"chat_template_kwargs":{"enable_thinking":false}}"#),
+            r#"--ai-extra-body='{"chat_template_kwargs":{"enable_thinking":false}}'"#
+        );
+    }
+
+    #[test]
+    fn shell_quote_leaves_plain_args_untouched() {
+        assert_eq!(
+            shell_quote_arg("--url=https://crawler.siteone.io/"),
+            "--url=https://crawler.siteone.io/"
+        );
+        assert_eq!(shell_quote_arg("--http-cache-dir="), "--http-cache-dir=");
+        assert_eq!(shell_quote_arg("--single-page"), "--single-page");
+        assert_eq!(
+            shell_quote_arg("--ai-actions=seo,typos,summary"),
+            "--ai-actions=seo,typos,summary"
+        );
+    }
+
+    #[test]
+    fn shell_quote_escapes_embedded_single_quote() {
+        assert_eq!(
+            shell_quote_arg("--ai-prompt=find it's bugs"),
+            "--ai-prompt='find it'\\''s bugs'"
+        );
+    }
+
+    #[test]
+    fn format_command_strips_binary_path_and_quotes_args() {
+        let argv = vec![
+            "./target/release/siteone-crawler".to_string(),
+            "--url=https://crawler.siteone.io/".to_string(),
+            r#"--ai-extra-body={"a":1}"#.to_string(),
+        ];
+        let cmd = format_command_from_argv(&argv);
+        assert!(
+            cmd.starts_with("siteone-crawler "),
+            "binary path must be stripped: {}",
+            cmd
+        );
+        assert!(!cmd.contains("target/release"));
+        assert!(cmd.contains(r#"--ai-extra-body='{"a":1}'"#));
+    }
+
+    #[test]
+    fn format_command_strips_absolute_binary_path() {
+        let argv = vec![
+            "/usr/local/bin/siteone-crawler".to_string(),
+            "--single-page".to_string(),
+        ];
+        assert_eq!(format_command_from_argv(&argv), "siteone-crawler --single-page");
     }
 
     // -- get_flat_response_headers --

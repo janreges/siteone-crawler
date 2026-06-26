@@ -1695,7 +1695,7 @@ pub fn get_options() -> Options {
             ),
             CrawlerOption::new(
                 "--user-agent", Some("-ua"), "userAgent", OptionType::String, false,
-                "Override User-Agent selected by --device. If you add `!` at the end, the siteone-crawler/version will not be added as a signature at the end of the final user-agent.",
+                "Override User-Agent selected by --device. If you add `!` at the end, the SiteOne-Crawler/version will not be added as a signature at the end of the final user-agent.",
                 None, true, false, None,
             ),
             CrawlerOption::new(
