@@ -3,6 +3,7 @@
 
 pub mod ai;
 pub mod analysis;
+pub mod browser;
 pub mod components;
 pub mod content_processor;
 pub mod debugger;

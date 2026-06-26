@@ -36,9 +36,9 @@ static RE_DOM_COUNT: Lazy<Regex> = Lazy::new(|| Regex::new(r"<\w+").unwrap());
 use crate::analysis::manager::AnalysisManager;
 use crate::content_processor::html_processor::HTML_PAGES_EXTENSIONS;
 use crate::content_processor::manager::ContentProcessorManager;
+use crate::engine::fetcher::Fetcher;
 use crate::engine::found_url::UrlSource;
 use crate::engine::found_urls::FoundUrls;
-use crate::engine::http_client::HttpClient;
 use crate::engine::http_response::HttpResponse;
 use crate::engine::parsed_url::ParsedUrl;
 use crate::engine::robots_txt::RobotsTxt;
@@ -87,7 +87,7 @@ const ACCEPT_HEADER: &str = "text/html,application/xhtml+xml,application/xml;q=0
 /// Main crawler engine
 pub struct Crawler {
     options: Arc<CoreOptions>,
-    http_client: Arc<HttpClient>,
+    http_client: Arc<dyn Fetcher>,
     content_processor_manager: Arc<Mutex<ContentProcessorManager>>,
     analysis_manager: Arc<Mutex<AnalysisManager>>,
     output: Arc<Mutex<Box<dyn Output>>>,
@@ -141,7 +141,7 @@ pub struct Crawler {
 impl Crawler {
     pub fn new(
         options: Arc<CoreOptions>,
-        http_client: HttpClient,
+        http_client: Arc<dyn Fetcher>,
         content_processor_manager: ContentProcessorManager,
         analysis_manager: AnalysisManager,
         output: Box<dyn Output>,
@@ -192,7 +192,7 @@ impl Crawler {
 
         Crawler {
             options,
-            http_client: Arc::new(http_client),
+            http_client,
             content_processor_manager: Arc::new(Mutex::new(content_processor_manager)),
             analysis_manager: Arc::new(Mutex::new(analysis_manager)),
             output: Arc::new(Mutex::new(output)),
@@ -395,7 +395,7 @@ impl Crawler {
     async fn process_url(
         entry: QueueEntry,
         options: &Arc<CoreOptions>,
-        http_client: &Arc<HttpClient>,
+        http_client: &Arc<dyn Fetcher>,
         content_processor_manager: &Arc<Mutex<ContentProcessorManager>>,
         analysis_manager: &Arc<Mutex<AnalysisManager>>,
         output: &Arc<Mutex<Box<dyn Output>>>,
@@ -569,7 +569,7 @@ impl Crawler {
                 }
 
                 match http_client
-                    .request(
+                    .fetch(
                         &http_request_host,
                         port,
                         scheme,
@@ -803,6 +803,9 @@ impl Crawler {
 
         if let Ok(mut st) = status.lock() {
             st.add_visited_url(visited_url.clone(), body.as_deref(), Some(&http_response.headers));
+            if let Some(diag) = &http_response.browser_diagnostics {
+                st.add_browser_diagnostics(&parsed_url_uq_id, diag.clone());
+            }
         }
 
         // Run per-URL analysis (headers, security, accessibility, best practices, etc.)
@@ -858,7 +861,7 @@ impl Crawler {
         robots_txt_cache: &Arc<DashMap<String, Option<RobotsTxt>>>,
         loaded_robots_txt_count: &Arc<AtomicI64>,
         resolve_cache: &Arc<DashMap<String, String>>,
-        http_client: &Arc<HttpClient>,
+        http_client: &Arc<dyn Fetcher>,
         output: &Arc<Mutex<Box<dyn Output>>>,
         status: &Arc<Mutex<Status>>,
         terminated: &Arc<AtomicBool>,
@@ -950,7 +953,7 @@ impl Crawler {
         robots_txt_cache: &Arc<DashMap<String, Option<RobotsTxt>>>,
         loaded_robots_txt_count: &Arc<AtomicI64>,
         resolve_cache: &Arc<DashMap<String, String>>,
-        http_client: &Arc<HttpClient>,
+        http_client: &Arc<dyn Fetcher>,
         output: &Arc<Mutex<Box<dyn Output>>>,
         status: &Arc<Mutex<Status>>,
         terminated: &Arc<AtomicBool>,
@@ -1027,7 +1030,7 @@ impl Crawler {
         robots_txt_cache: &Arc<DashMap<String, Option<RobotsTxt>>>,
         _loaded_robots_txt_count: &Arc<AtomicI64>,
         _resolve_cache: &Arc<DashMap<String, String>>,
-        _http_client: &Arc<HttpClient>,
+        _http_client: &Arc<dyn Fetcher>,
         _output: &Arc<Mutex<Box<dyn Output>>>,
         _status: &Arc<Mutex<Status>>,
         terminated: &Arc<AtomicBool>,
@@ -1498,7 +1501,7 @@ impl Crawler {
 
         let response = self
             .http_client
-            .request(
+            .fetch_http_only(
                 &http_request_host,
                 port,
                 scheme,

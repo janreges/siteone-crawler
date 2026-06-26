@@ -14,8 +14,10 @@ use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use base64::Engine as _;
 
 use super::http_response::HttpResponse;
+use crate::engine::fetcher::Fetcher;
 use crate::error::{CrawlerError, CrawlerResult};
 use crate::version;
+use async_trait::async_trait;
 
 /// Async HTTP client for crawling with caching, proxy, and auth support
 pub struct HttpClient {
@@ -407,6 +409,70 @@ impl HttpClient {
     }
 }
 
+/// Direct-HTTP implementation of the `Fetcher` trait. Delegates to the existing
+/// inherent methods so the default crawl path is byte-for-byte unchanged.
+#[async_trait]
+impl Fetcher for HttpClient {
+    async fn fetch(
+        &self,
+        host: &str,
+        port: u16,
+        scheme: &str,
+        url: &str,
+        http_method: &str,
+        timeout_secs: u64,
+        user_agent: &str,
+        accept: &str,
+        accept_encoding: &str,
+        origin: Option<&str>,
+        use_http_auth_if_configured: bool,
+        forced_ip: Option<&str>,
+    ) -> CrawlerResult<HttpResponse> {
+        self.request(
+            host,
+            port,
+            scheme,
+            url,
+            http_method,
+            timeout_secs,
+            user_agent,
+            accept,
+            accept_encoding,
+            origin,
+            use_http_auth_if_configured,
+            forced_ip,
+        )
+        .await
+    }
+
+    fn is_url_cached(
+        &self,
+        host: &str,
+        port: u16,
+        scheme: &str,
+        url: &str,
+        http_method: &str,
+        user_agent: &str,
+        accept: &str,
+        accept_encoding: &str,
+        origin: Option<&str>,
+    ) -> bool {
+        // Explicit path to the inherent method (the trait method shares its name).
+        HttpClient::is_url_cached(
+            self,
+            host,
+            port,
+            scheme,
+            url,
+            http_method,
+            user_agent,
+            accept,
+            accept_encoding,
+            origin,
+        )
+    }
+}
+
 /// Internal struct for cache serialization
 #[derive(serde::Serialize, serde::Deserialize)]
 struct CachedResponse {
@@ -465,5 +531,11 @@ mod tests {
     fn test_no_cache_when_disabled() {
         let client = HttpClient::new(None, None, None, false, None, false);
         assert!(client.get_cache_file_path("any-key").is_none());
+    }
+
+    #[test]
+    fn http_client_implements_fetcher() {
+        fn assert_fetcher<T: crate::engine::fetcher::Fetcher>() {}
+        assert_fetcher::<HttpClient>();
     }
 }

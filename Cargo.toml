@@ -39,6 +39,7 @@ terminal_size = "0.4"
 quick-xml = "0.40"
 thiserror = "2"
 anyhow = "1"
+async-trait = "0.1"
 md-5 = "0.11"
 url = "2"
 percent-encoding = "2"
@@ -54,6 +55,14 @@ pulldown-cmark = "0.13.4"
 inquire = { version = "0.9", default-features = false, features = ["crossterm"] }
 crossterm = "0.29"
 fancy-regex = "0.18"
+# Optional: browser rendering mode (CDP client). Behind the `browser` feature so the
+# default build is unaffected. See docs/superpowers/specs/2026-06-26-browser-rendering-mode-design.md §3.6.
+chromiumoxide = { version = "0.9.1", optional = true, features = ["fetcher", "rustls", "zip8"] }
+futures = { version = "0.3", optional = true }
+
+[features]
+# Opt-in browser rendering mode. The default build compiles none of chromiumoxide.
+browser = ["dep:chromiumoxide", "dep:futures"]
 
 [package.metadata.deb]
 maintainer = "Ján Regeš <jan.reges@siteone.cz>"

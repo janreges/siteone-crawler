@@ -17,6 +17,9 @@ pub struct HttpResponse {
     pub exec_time: f64,
     pub skipped_reason: Option<String>,
     loaded_from_cache: bool,
+    /// Browser-rendering diagnostics (console/JS/network/security). `None` on the
+    /// direct-HTTP path; populated only by the browser renderer.
+    pub browser_diagnostics: Option<crate::browser::diagnostics::BrowserDiagnostics>,
 }
 
 impl HttpResponse {
@@ -39,6 +42,7 @@ impl HttpResponse {
             exec_time,
             skipped_reason: None,
             loaded_from_cache: false,
+            browser_diagnostics: None,
         }
     }
 
@@ -86,6 +90,11 @@ impl HttpResponse {
         self.loaded_from_cache
     }
 
+    /// Attach browser-rendering diagnostics to this response (browser path only).
+    pub fn set_browser_diagnostics(&mut self, diagnostics: crate::browser::diagnostics::BrowserDiagnostics) {
+        self.browser_diagnostics = Some(diagnostics);
+    }
+
     pub fn is_skipped(&self) -> bool {
         self.skipped_reason.is_some()
     }
@@ -100,6 +109,7 @@ impl HttpResponse {
             exec_time: 0.0,
             skipped_reason: Some(reason),
             loaded_from_cache: false,
+            browser_diagnostics: None,
         };
         response.skipped_reason = response.skipped_reason.take();
         response

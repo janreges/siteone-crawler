@@ -166,6 +166,41 @@ impl Manager {
             options.accept_invalid_certs,
         );
 
+        // Select the fetcher. Direct HTTP is the default path (unchanged behavior).
+        // With the `browser` feature and `--browser`, render pages in a real Chromium instead.
+        // (The `--browser` without the feature is rejected earlier in `CoreOptions::from_options`.)
+        let fetcher: std::sync::Arc<dyn crate::engine::fetcher::Fetcher> = {
+            #[cfg(feature = "browser")]
+            {
+                if options.browser_enabled {
+                    if options.http_auth.is_some() {
+                        eprintln!(
+                            "⚠️  --browser: HTTP auth is applied to the status/headers fetch but NOT to the browser navigation; the rendered page may be the unauthenticated version."
+                        );
+                    }
+                    // Browser renders live; give it a cache-free inner client so the metadata
+                    // (status/headers) matches the live rendered DOM rather than a cached snapshot.
+                    let browser_http = HttpClient::new(
+                        options.proxy.clone(),
+                        options.http_auth.clone(),
+                        None,
+                        false,
+                        None,
+                        options.accept_invalid_certs,
+                    );
+                    std::sync::Arc::new(crate::browser::BrowserRenderer::new(options.clone(), browser_http).await?)
+                } else {
+                    std::sync::Arc::new(http_client)
+                }
+            }
+            #[cfg(not(feature = "browser"))]
+            {
+                std::sync::Arc::new(http_client)
+            }
+        };
+        // Keep a handle so the browser can be shut down cleanly after the crawl.
+        let fetcher_handle = fetcher.clone();
+
         // Create content processor manager and register processors
         let content_processor_manager = Self::create_content_processor_manager(&options);
 
@@ -178,7 +213,7 @@ impl Manager {
         // Create crawler
         let mut crawler = Crawler::new(
             options.clone(),
-            http_client,
+            fetcher,
             content_processor_manager,
             analysis_manager,
             output,
@@ -207,7 +242,13 @@ impl Manager {
             .await;
 
         // Run the crawler
-        crawler.run().await?;
+        let run_result = crawler.run().await;
+
+        // Shut down the browser on EVERY exit path (no-op for the direct-HTTP fetcher) so a
+        // crawl error never leaks the Chromium process / handler task. No fetches occur after this.
+        fetcher_handle.shutdown().await;
+
+        run_result?;
 
         // Optional AI phase (post-crawl, before analyzers/exporters). Fail-soft.
         if options.ai_enabled {

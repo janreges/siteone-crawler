@@ -59,6 +59,9 @@ pub struct Status {
 
     /// Pre-rendered HTML of the optional AI executive report summary (the `summary` AI action).
     ai_report_summary_html: Mutex<Option<String>>,
+
+    /// Per-URL browser-rendering diagnostics, keyed by uq_id (only populated in --browser mode).
+    browser_diagnostics: Mutex<HashMap<String, crate::browser::diagnostics::BrowserDiagnostics>>,
 }
 
 /// Entry for a skipped URL stored in Status
@@ -98,7 +101,20 @@ impl Status {
             robots_txt_content: RwLock::new(HashMap::new()),
             skipped_urls: Mutex::new(Vec::new()),
             ai_report_summary_html: Mutex::new(None),
+            browser_diagnostics: Mutex::new(HashMap::new()),
         }
+    }
+
+    /// Store browser-rendering diagnostics for a URL (by uq_id). Only used in --browser mode.
+    pub fn add_browser_diagnostics(&self, uq_id: &str, diagnostics: crate::browser::diagnostics::BrowserDiagnostics) {
+        if let Ok(mut map) = self.browser_diagnostics.lock() {
+            map.insert(uq_id.to_string(), diagnostics);
+        }
+    }
+
+    /// Get browser-rendering diagnostics for a URL (by uq_id), if any.
+    pub fn get_browser_diagnostics(&self, uq_id: &str) -> Option<crate::browser::diagnostics::BrowserDiagnostics> {
+        self.browser_diagnostics.lock().ok().and_then(|m| m.get(uq_id).cloned())
     }
 
     /// Store the pre-rendered HTML of the AI executive report summary.

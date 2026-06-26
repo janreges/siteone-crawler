@@ -2,6 +2,7 @@
 // (c) Jan Reges <jan.reges@siteone.cz>
 
 pub mod crawler;
+pub mod fetcher;
 pub mod found_url;
 pub mod found_urls;
 pub mod http_client;
