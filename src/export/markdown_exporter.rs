@@ -1099,8 +1099,28 @@ pub fn convert_html_file_to_markdown(
 ) -> Result<String, CrawlerError> {
     let html_content = fs::read_to_string(html_file_path)
         .map_err(|e| CrawlerError::Export(format!("Cannot read HTML file '{}': {}", html_file_path, e)))?;
+    Ok(convert_html_string_to_markdown(
+        &html_content,
+        exclude_selectors,
+        disable_images,
+        disable_files,
+        move_content_before_h1_to_end,
+    ))
+}
 
-    let converter = HtmlToMarkdownConverter::new(&html_content, exclude_selectors);
+/// Convert an in-memory HTML string to clean Markdown: the HTML→Markdown conversion followed by
+/// the full normalization pipeline (empty link/row removal, pre-H1 content relocation, link-list
+/// collapsing, whitespace cleanup). Shared by the `--html-to-markdown` file mode and the AI
+/// page-context builder, so AI prompts and `llms-full.txt` get the same cleaned content as the
+/// site's markdown export. `exclude_selectors` strip page chrome before conversion.
+pub fn convert_html_string_to_markdown(
+    html: &str,
+    exclude_selectors: Vec<String>,
+    disable_images: bool,
+    disable_files: bool,
+    move_content_before_h1_to_end: bool,
+) -> String {
+    let converter = HtmlToMarkdownConverter::new(html, exclude_selectors);
     let markdown = converter.get_markdown();
 
     let mut exporter = MarkdownExporter::new();
@@ -1108,7 +1128,7 @@ pub fn convert_html_file_to_markdown(
     exporter.set_markdown_disable_files(disable_files);
     exporter.set_markdown_move_content_before_h1_to_end(move_content_before_h1_to_end);
 
-    Ok(exporter.normalize_markdown_content(&markdown, false))
+    exporter.normalize_markdown_content(&markdown, false)
 }
 
 #[cfg(test)]

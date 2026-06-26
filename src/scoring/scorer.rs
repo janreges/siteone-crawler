@@ -273,6 +273,19 @@ fn score_seo(summary: &Summary, stats: &BasicStats) -> CategoryScore {
         );
     }
 
+    // Weak on-page SEO flagged by the AI SEO action. Only present when --ai-seo-affects-score is
+    // set (otherwise those findings are advisory Info items, ignored here); a small capped
+    // deduction per flagged page so the opt-in flag actually moves the score.
+    if is_not_ok(summary, "seo-ai-low") {
+        let count = get_item_count_for_code(summary, "seo-ai-low").unwrap_or(1);
+        let pts = (count as f64 * 0.2).min(MAX_PER_TYPE_DEDUCTION);
+        deductions.push(
+            Deduction::new(format!("AI flagged weak on-page SEO on {} page(s)", count), round1(pts)).with_fix(
+                "Improve the title, meta description, and content depth on the flagged pages (see the AI SEO table).",
+            ),
+        );
+    }
+
     build_category("SEO", "seo", 0.20, deductions)
 }
 
@@ -730,6 +743,31 @@ mod tests {
         let scores = calculate_scores(&summary, &stats);
         let seo = scores.categories.iter().find(|c| c.code == "seo").unwrap();
         assert!(seo.score < 10.0);
+    }
+
+    #[test]
+    fn ai_seo_low_warning_deducts_from_seo_when_opted_in() {
+        // With --ai-seo-affects-score the runner emits Warning items coded "seo-ai-low"; they
+        // must actually move the SEO score (previously a no-op).
+        let summary = make_summary_with_items(vec![
+            ("seo-ai-low", ItemStatus::Warning),
+            ("seo-ai-low", ItemStatus::Warning),
+        ]);
+        let stats = make_basic_stats();
+        let scores = calculate_scores(&summary, &stats);
+        let seo = scores.categories.iter().find(|c| c.code == "seo").unwrap();
+        assert!(seo.score < 10.0, "AI SEO low warnings should reduce the SEO score");
+    }
+
+    #[test]
+    fn ai_seo_low_info_is_advisory_only() {
+        // Without the flag the runner emits advisory Info items (code "ai-seo-low"); those must
+        // NOT affect the score.
+        let summary = make_summary_with_items(vec![("ai-seo-low", ItemStatus::Info), ("ai-seo-low", ItemStatus::Info)]);
+        let stats = make_basic_stats();
+        let scores = calculate_scores(&summary, &stats);
+        let seo = scores.categories.iter().find(|c| c.code == "seo").unwrap();
+        assert_eq!(seo.score, 10.0, "advisory AI SEO info must not affect the score");
     }
 
     #[test]
