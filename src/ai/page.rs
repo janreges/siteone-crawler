@@ -22,12 +22,19 @@ pub struct PageContext {
     pub canonical: String,
     pub robots: String,
     pub og_present: bool,
+    /// Size-bounded browser console/JS/network diagnostics (only in --browser mode); None otherwise.
+    pub browser_diagnostics: Option<String>,
 }
 
 impl PageContext {
     /// Build a PageContext from a crawled page's stored HTML body. Returns None if the
     /// body is unavailable.
-    pub fn build(status: &Status, uq_id: &str, url: &str) -> Option<PageContext> {
+    pub fn build(
+        status: &Status,
+        uq_id: &str,
+        url: &str,
+        options: &crate::options::core_options::CoreOptions,
+    ) -> Option<PageContext> {
         let html = status.get_url_body_text(uq_id)?;
         let document = Html::parse_document(&html);
 
@@ -40,6 +47,15 @@ impl PageContext {
         let canonical = select_link_href(&document, "canonical");
         let robots = select_meta(&document, "robots");
         let og_present = has_opengraph(&document);
+
+        // Browser-rendering diagnostics (console/JS/network errors), size-bounded for AI input.
+        let browser_diagnostics = status.get_browser_diagnostics(uq_id).map(|d| {
+            d.to_ai_payload(
+                options.console_max_messages.max(0) as usize,
+                options.console_msg_max_chars.max(0) as usize,
+                options.console_total_max_kb.max(0) as usize,
+            )
+        });
 
         // Convert the page to clean markdown, REUSING the site-export markdown pipeline so AI
         // prompts (and llms-full.txt) get the same cleaned content: page chrome (nav/header/
@@ -66,6 +82,7 @@ impl PageContext {
             canonical,
             robots,
             og_present,
+            browser_diagnostics,
         })
     }
 }

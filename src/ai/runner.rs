@@ -47,7 +47,7 @@ pub async fn run_ai(options: &CoreOptions, status: &Arc<Mutex<Status>>, output: 
 
         let mut pages: Vec<(RankedPage, PageContext)> = Vec::new();
         for rp in &sel.selected {
-            if let Some(ctx) = PageContext::build(&st, &rp.uq_id, &rp.url) {
+            if let Some(ctx) = PageContext::build(&st, &rp.uq_id, &rp.url, options) {
                 pages.push((rp.clone(), ctx));
             }
         }

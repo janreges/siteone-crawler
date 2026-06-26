@@ -310,6 +310,7 @@ mod tests {
             canonical: "https://x/canonical".to_string(),
             robots: "noindex".to_string(),
             og_present: true,
+            browser_diagnostics: None,
         };
         let req = build_request(&ctx, "TestSite", false, 1000, 0.0);
         let user = &req.messages[0].content;

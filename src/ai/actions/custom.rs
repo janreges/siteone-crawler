@@ -46,6 +46,7 @@ const PLACEHOLDERS: &[(&str, usize)] = &[
     ("headings", 2000),
     ("lang", 16),
     ("content_markdown", 8000),
+    ("browser_diagnostics", 8000),
 ];
 
 fn placeholder_value<'a>(ctx: &'a PageContext, key: &str) -> Option<&'a str> {
@@ -58,6 +59,7 @@ fn placeholder_value<'a>(ctx: &'a PageContext, key: &str) -> Option<&'a str> {
         "headings" => Some(&ctx.headings),
         "lang" => Some(&ctx.lang),
         "content_markdown" => Some(&ctx.content_markdown),
+        "browser_diagnostics" => ctx.browser_diagnostics.as_deref(),
         _ => None,
     }
 }
@@ -163,6 +165,7 @@ mod tests {
             canonical: String::new(),
             robots: String::new(),
             og_present: false,
+            browser_diagnostics: None,
         }
     }
 
