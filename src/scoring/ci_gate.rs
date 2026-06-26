@@ -492,6 +492,29 @@ mod tests {
             ai_cache_dir: Some("tmp/ai-cache".to_string()),
             ai_seo_affects_score: false,
             ai_dry_run: false,
+
+            // browser rendering settings
+            browser_enabled: false,
+            browser_path: None,
+            browser_headful: false,
+            browser_workers: 3,
+            browser_wait: "networkidle".to_string(),
+            browser_wait_extra_ms: 0,
+            browser_timeout: 30,
+            browser_render_all: false,
+            browser_auto_download: false,
+
+            // screenshot settings
+            screenshots: false,
+            screenshots_dir: None,
+            screenshot_mode: "viewport".to_string(),
+            screenshot_viewport: "1920x1080".to_string(),
+            screenshot_format: "png".to_string(),
+            screenshot_quality: 80,
+            browser_no_sandbox: false,
+            console_max_messages: 100,
+            console_msg_max_chars: 200,
+            console_total_max_kb: 128,
         }
     }
 

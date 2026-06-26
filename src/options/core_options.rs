@@ -32,6 +32,7 @@ pub const GROUP_SLOWEST_ANALYZER: &str = "slowest-analyzer";
 pub const GROUP_CI_CD_SETTINGS: &str = "ci-cd-settings";
 pub const GROUP_SERVER_SETTINGS: &str = "server-settings";
 pub const GROUP_AI_SETTINGS: &str = "ai-settings";
+pub const GROUP_BROWSER: &str = "browser-settings";
 
 /// Result storage type
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
@@ -274,6 +275,32 @@ pub struct CoreOptions {
     pub ai_cache_dir: Option<String>,
     pub ai_seo_affects_score: bool,
     pub ai_dry_run: bool,
+
+    // browser rendering settings (optional; nothing runs unless browser_enabled)
+    #[serde(skip)]
+    pub browser_enabled: bool,
+    pub browser_path: Option<String>,
+    pub browser_headful: bool,
+    pub browser_workers: i64,
+    pub browser_wait: String,
+    pub browser_wait_extra_ms: i64,
+    pub browser_timeout: i64,
+    pub browser_render_all: bool,
+    pub browser_auto_download: bool,
+
+    // screenshot settings (browser mode only)
+    pub screenshots: bool,
+    pub screenshots_dir: Option<String>,
+    pub screenshot_mode: String,
+    pub screenshot_viewport: String,
+    pub screenshot_format: String,
+    pub screenshot_quality: i64,
+    pub browser_no_sandbox: bool,
+
+    // console diagnostics → AI payload limits (browser mode only)
+    pub console_max_messages: i64,
+    pub console_msg_max_chars: i64,
+    pub console_total_max_kb: i64,
 }
 
 impl CoreOptions {
@@ -505,6 +532,29 @@ impl CoreOptions {
             ai_cache_dir: Some("tmp/ai-cache".to_string()),
             ai_seo_affects_score: false,
             ai_dry_run: false,
+
+            // browser rendering settings
+            browser_enabled: false,
+            browser_path: None,
+            browser_headful: false,
+            browser_workers: 3,
+            browser_wait: "networkidle".to_string(),
+            browser_wait_extra_ms: 0,
+            browser_timeout: 30,
+            browser_render_all: false,
+            browser_auto_download: false,
+
+            // screenshot settings
+            screenshots: false,
+            screenshots_dir: None,
+            screenshot_mode: "viewport".to_string(),
+            screenshot_viewport: "1920x1080".to_string(),
+            screenshot_format: "png".to_string(),
+            screenshot_quality: 80,
+            browser_no_sandbox: false,
+            console_max_messages: 100,
+            console_msg_max_chars: 200,
+            console_total_max_kb: 128,
         };
 
         // Populate from option groups
@@ -596,6 +646,63 @@ impl CoreOptions {
                     }
                 }
             }
+        }
+
+        // Browser mode requires the `browser` feature to be compiled in. Reject it here (config
+        // error, exit 101) instead of only at runtime.
+        #[cfg(not(feature = "browser"))]
+        if core.browser_enabled {
+            return Err(CrawlerError::Config(
+                "--browser requires a browser-enabled build (compile with `--features browser`, or use a browser-enabled release artifact).".to_string(),
+            ));
+        }
+
+        // Browser rendering validation.
+        if core.browser_enabled {
+            const WAIT: [&str; 3] = ["load", "domcontentloaded", "networkidle"];
+            if !WAIT.contains(&core.browser_wait.as_str()) {
+                return Err(CrawlerError::Config(format!(
+                    "Invalid --browser-wait '{}'. Use load, domcontentloaded, or networkidle.",
+                    core.browser_wait
+                )));
+            }
+            // Viewport must be WxH (otherwise it would silently fall back to 1920x1080).
+            let viewport_ok = core
+                .screenshot_viewport
+                .split_once(['x', 'X'])
+                .map(|(w, h)| {
+                    matches!(
+                        (w.trim().parse::<u32>(), h.trim().parse::<u32>()),
+                        (Ok(w), Ok(h)) if w > 0 && h > 0
+                    )
+                })
+                .unwrap_or(false);
+            if !viewport_ok {
+                return Err(CrawlerError::Config(format!(
+                    "Invalid --screenshot-viewport '{}'. Use WxH, e.g. 1920x1080.",
+                    core.screenshot_viewport
+                )));
+            }
+            if core.screenshots {
+                const MODE: [&str; 2] = ["viewport", "full-page"];
+                if !MODE.contains(&core.screenshot_mode.as_str()) {
+                    return Err(CrawlerError::Config(format!(
+                        "Invalid --screenshot-mode '{}'. Use viewport or full-page.",
+                        core.screenshot_mode
+                    )));
+                }
+                const FORMAT: [&str; 4] = ["png", "jpg", "jpeg", "webp"];
+                if !FORMAT.contains(&core.screenshot_format.to_lowercase().as_str()) {
+                    return Err(CrawlerError::Config(format!(
+                        "Invalid --screenshot-format '{}'. Use png, jpg, or webp.",
+                        core.screenshot_format
+                    )));
+                }
+            }
+        } else if core.screenshots {
+            return Err(CrawlerError::Config(
+                "--screenshots requires --browser (screenshots are captured during browser rendering).".to_string(),
+            ));
         }
 
         // Disable all assets if set
@@ -1596,6 +1703,101 @@ impl CoreOptions {
             "aiDryRun" => {
                 if let Some(b) = value.as_bool() {
                     self.ai_dry_run = b;
+                }
+            }
+            "browserEnabled" => {
+                if let Some(b) = value.as_bool() {
+                    self.browser_enabled = b;
+                }
+            }
+            "browserPath" => {
+                if let Some(s) = value.as_str() {
+                    self.browser_path = Some(s.to_string());
+                }
+            }
+            "browserHeadful" => {
+                if let Some(b) = value.as_bool() {
+                    self.browser_headful = b;
+                }
+            }
+            "browserWorkers" => {
+                if let Some(n) = value.as_int() {
+                    self.browser_workers = n;
+                }
+            }
+            "browserWait" => {
+                if let Some(s) = value.as_str() {
+                    self.browser_wait = s.to_string();
+                }
+            }
+            "browserWaitExtraMs" => {
+                if let Some(n) = value.as_int() {
+                    self.browser_wait_extra_ms = n;
+                }
+            }
+            "browserTimeout" => {
+                if let Some(n) = value.as_int() {
+                    self.browser_timeout = n;
+                }
+            }
+            "browserRenderAll" => {
+                if let Some(b) = value.as_bool() {
+                    self.browser_render_all = b;
+                }
+            }
+            "browserAutoDownload" => {
+                if let Some(b) = value.as_bool() {
+                    self.browser_auto_download = b;
+                }
+            }
+            "screenshots" => {
+                if let Some(b) = value.as_bool() {
+                    self.screenshots = b;
+                }
+            }
+            "screenshotsDir" => {
+                if let Some(s) = value.as_str() {
+                    self.screenshots_dir = Some(s.to_string());
+                }
+            }
+            "screenshotMode" => {
+                if let Some(s) = value.as_str() {
+                    self.screenshot_mode = s.to_string();
+                }
+            }
+            "screenshotViewport" => {
+                if let Some(s) = value.as_str() {
+                    self.screenshot_viewport = s.to_string();
+                }
+            }
+            "screenshotFormat" => {
+                if let Some(s) = value.as_str() {
+                    self.screenshot_format = s.to_string();
+                }
+            }
+            "screenshotQuality" => {
+                if let Some(n) = value.as_int() {
+                    self.screenshot_quality = n;
+                }
+            }
+            "browserNoSandbox" => {
+                if let Some(b) = value.as_bool() {
+                    self.browser_no_sandbox = b;
+                }
+            }
+            "consoleMaxMessages" => {
+                if let Some(n) = value.as_int() {
+                    self.console_max_messages = n;
+                }
+            }
+            "consoleMsgMaxChars" => {
+                if let Some(n) = value.as_int() {
+                    self.console_msg_max_chars = n;
+                }
+            }
+            "consoleTotalMaxKb" => {
+                if let Some(n) = value.as_int() {
+                    self.console_total_max_kb = n;
                 }
             }
             _ => {
@@ -2975,6 +3177,111 @@ pub fn get_options() -> Options {
         ],
     ));
 
+    // -------------------------------------------------------------------------
+    // Browser rendering options (optional — nothing runs unless --browser is set)
+    // -------------------------------------------------------------------------
+    options.add_group(OptionGroup::new(
+        GROUP_BROWSER,
+        "Browser rendering options",
+        vec![
+            CrawlerOption::new(
+                "--browser", None, "browserEnabled", OptionType::Bool, false,
+                "Render each page in a real Chromium browser (CDP) instead of a direct HTTP request. Enables crawling JS-rendered/SPA sites. Requires a browser-enabled build and a Chromium-family browser (auto-detected, or --browser-path).",
+                Some("false"), false, false, None,
+            ),
+            CrawlerOption::new(
+                "--browser-path", None, "browserPath", OptionType::String, false,
+                "Explicit path to a Chromium/Chrome/Edge/Brave executable. Skips auto-detection and download.",
+                None, true, false, None,
+            ),
+            CrawlerOption::new(
+                "--browser-headful", None, "browserHeadful", OptionType::Bool, false,
+                "Show a visible browser window (default is headless). Concurrency is kept low so the windows are watchable.",
+                Some("false"), false, false, None,
+            ),
+            CrawlerOption::new(
+                "--browser-workers", None, "browserWorkers", OptionType::Int, false,
+                "Max concurrently rendered pages (separate from --workers; browser pages are heavier).",
+                Some("3"), false, false, Some(vec!["1".to_string(), "32".to_string()]),
+            ),
+            CrawlerOption::new(
+                "--browser-wait", None, "browserWait", OptionType::String, false,
+                "Page-ready wait strategy: `load`, `domcontentloaded`, or `networkidle` (near-idle network).",
+                Some("networkidle"), false, false, None,
+            ),
+            CrawlerOption::new(
+                "--browser-wait-extra", None, "browserWaitExtraMs", OptionType::Int, false,
+                "Extra settle delay in milliseconds after the wait condition is met.",
+                Some("0"), false, false, Some(vec!["0".to_string(), "60000".to_string()]),
+            ),
+            CrawlerOption::new(
+                "--browser-timeout", None, "browserTimeout", OptionType::Int, false,
+                "Hard navigation+render timeout per page, in seconds. On timeout, whatever rendered is captured.",
+                Some("30"), false, false, Some(vec!["1".to_string(), "600".to_string()]),
+            ),
+            CrawlerOption::new(
+                "--browser-render-all", None, "browserRenderAll", OptionType::Bool, false,
+                "Render every URL in the browser. By default only HTML documents are rendered; assets (images/CSS/JS/fonts) are fetched via HTTP.",
+                Some("false"), false, false, None,
+            ),
+            CrawlerOption::new(
+                "--browser-auto-download", None, "browserAutoDownload", OptionType::Bool, false,
+                "Pre-consent to downloading chrome-headless-shell when no browser is found (for non-interactive/CI runs; interactive runs prompt instead).",
+                Some("false"), false, false, None,
+            ),
+            CrawlerOption::new(
+                "--screenshots", None, "screenshots", OptionType::Bool, false,
+                "Capture a screenshot of every rendered page (requires --browser).",
+                Some("false"), false, false, None,
+            ),
+            CrawlerOption::new(
+                "--screenshots-dir", None, "screenshotsDir", OptionType::String, false,
+                "Directory to save screenshots into. Defaults to `tmp/screenshots/`.",
+                None, true, false, None,
+            ),
+            CrawlerOption::new(
+                "--screenshot-mode", None, "screenshotMode", OptionType::String, false,
+                "Screenshot mode: `viewport` (visible area at the set resolution) or `full-page` (entire scroll height).",
+                Some("viewport"), false, false, None,
+            ),
+            CrawlerOption::new(
+                "--screenshot-viewport", None, "screenshotViewport", OptionType::String, false,
+                "Viewport size `WxH` used for rendering and viewport screenshots.",
+                Some("1920x1080"), false, false, None,
+            ),
+            CrawlerOption::new(
+                "--screenshot-format", None, "screenshotFormat", OptionType::String, false,
+                "Screenshot image format: `png`, `jpg`, or `webp`.",
+                Some("png"), false, false, None,
+            ),
+            CrawlerOption::new(
+                "--screenshot-quality", None, "screenshotQuality", OptionType::Int, false,
+                "Image quality (1-100) for `jpg`/`webp` screenshots.",
+                Some("80"), false, false, Some(vec!["1".to_string(), "100".to_string()]),
+            ),
+            CrawlerOption::new(
+                "--browser-no-sandbox", None, "browserNoSandbox", OptionType::Bool, false,
+                "Launch Chromium with --no-sandbox. Often required in Docker/CI/WSL or when running as root, but it weakens the renderer's security isolation against untrusted pages.",
+                Some("false"), false, false, None,
+            ),
+            CrawlerOption::new(
+                "--console-max-messages", None, "consoleMaxMessages", OptionType::Int, false,
+                "Max console/diagnostic messages per page kept for the AI payload.",
+                Some("100"), false, false, Some(vec!["1".to_string(), "100000".to_string()]),
+            ),
+            CrawlerOption::new(
+                "--console-msg-max-chars", None, "consoleMsgMaxChars", OptionType::Int, false,
+                "Truncate each console/diagnostic message to this many characters in the AI payload.",
+                Some("200"), false, false, Some(vec!["1".to_string(), "100000".to_string()]),
+            ),
+            CrawlerOption::new(
+                "--console-total-max-kb", None, "consoleTotalMaxKb", OptionType::Int, false,
+                "Total size cap (in KB) of the per-page console diagnostics AI payload.",
+                Some("128"), false, false, Some(vec!["1".to_string(), "10000".to_string()]),
+            ),
+        ],
+    ));
+
     options
 }
 
@@ -3474,6 +3781,29 @@ mod tests {
             ai_cache_dir: Some("tmp/ai-cache".to_string()),
             ai_seo_affects_score: false,
             ai_dry_run: false,
+
+            // browser rendering settings
+            browser_enabled: false,
+            browser_path: None,
+            browser_headful: false,
+            browser_workers: 3,
+            browser_wait: "networkidle".to_string(),
+            browser_wait_extra_ms: 0,
+            browser_timeout: 30,
+            browser_render_all: false,
+            browser_auto_download: false,
+
+            // screenshot settings
+            screenshots: false,
+            screenshots_dir: None,
+            screenshot_mode: "viewport".to_string(),
+            screenshot_viewport: "1920x1080".to_string(),
+            screenshot_format: "png".to_string(),
+            screenshot_quality: 80,
+            browser_no_sandbox: false,
+            console_max_messages: 100,
+            console_msg_max_chars: 200,
+            console_total_max_kb: 128,
         }
     }
 
