@@ -18,6 +18,9 @@ use crate::error::{CrawlerError, CrawlerResult};
 
 const MAX_ATTEMPTS: u32 = 3;
 
+/// Delay before the single end-to-end retry in `complete_parsed`.
+const PARSE_RETRY_DELAY_SECS: u64 = 5;
+
 /// Result of a successful completion. `text` is the raw model output (callers run it
 /// through `normalize::*` before parsing).
 pub struct AiCompletion {
@@ -60,6 +63,34 @@ impl AiClient {
     /// human-readable analysis-type label used for the per-type token accounting in the summary.
     pub async fn complete(&self, req: &ChatRequest, category: &str) -> CrawlerResult<AiCompletion> {
         self.complete_with(req, None, category).await
+    }
+
+    /// `complete` + the caller's `parse`, retried ONCE after a short delay on ANY failure —
+    /// not only transport/HTTP errors (already retried inside `complete`), but also a response
+    /// the model returns malformed so that `parse` rejects it (common under provider overload).
+    /// LLMs are non-deterministic, so a second attempt usually succeeds. Returns the parsed value
+    /// plus the (successful) completion so callers can still read token usage.
+    pub async fn complete_parsed<T>(
+        &self,
+        req: &ChatRequest,
+        category: &str,
+        parse: impl Fn(&str) -> Result<T, String>,
+    ) -> CrawlerResult<(T, AiCompletion)> {
+        let mut last_err: Option<CrawlerError> = None;
+        // attempt 0 = first try; attempt 1 = the one retry (after a 5s pause).
+        for attempt in 0..2u32 {
+            if attempt > 0 {
+                tokio::time::sleep(Duration::from_secs(PARSE_RETRY_DELAY_SECS)).await;
+            }
+            match self.complete(req, category).await {
+                Ok(completion) => match parse(&completion.text) {
+                    Ok(value) => return Ok((value, completion)),
+                    Err(e) => last_err = Some(CrawlerError::Other(format!("invalid response: {}", e))),
+                },
+                Err(e) => last_err = Some(e),
+            }
+        }
+        Err(last_err.unwrap_or_else(|| CrawlerError::Other("AI request failed".to_string())))
     }
 
     /// Perform a chat completion, optionally overriding `extra_body` for this single request

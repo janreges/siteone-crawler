@@ -278,16 +278,15 @@ async fn run_seo_action(
         handles.push(tokio::spawn(async move {
             let _permit = permit;
             let req = seo::build_request(&ctx, &site_name, is_homepage, max_tokens, temperature);
-            let outcome = match client.complete(&req, CAT_SEO).await {
-                Ok(completion) => match seo::parse(&completion.text) {
-                    Ok(result) => SeoOutcome::Ok(Box::new(SeoOk {
-                        result,
-                        prompt_tokens: completion.usage.prompt_tokens,
-                        completion_tokens: completion.usage.completion_tokens,
-                        from_cache: completion.from_cache,
-                    })),
-                    Err(e) => SeoOutcome::ParseError(e),
-                },
+            // Retries once after a short delay on any failure (network, provider, or a malformed
+            // response that fails to parse).
+            let outcome = match client.complete_parsed(&req, CAT_SEO, seo::parse).await {
+                Ok((result, completion)) => SeoOutcome::Ok(Box::new(SeoOk {
+                    result,
+                    prompt_tokens: completion.usage.prompt_tokens,
+                    completion_tokens: completion.usage.completion_tokens,
+                    from_cache: completion.from_cache,
+                })),
                 Err(e) => SeoOutcome::CallError(e.to_string()),
             };
             (rp, ctx, outcome)
@@ -341,18 +340,15 @@ async fn run_seo_action(
                 );
                 rows.push(row);
             }
-            SeoOutcome::ParseError(e) => {
-                fail_count += 1;
-                eprintln!(
-                    "  {}",
-                    utils::get_color_text(&format!("AI SEO parse error for {}: {}", ctx.url, e), "yellow", false)
-                );
-            }
             SeoOutcome::CallError(e) => {
                 fail_count += 1;
                 eprintln!(
                     "  {}",
-                    utils::get_color_text(&format!("AI SEO call error for {}: {}", ctx.url, e), "yellow", false)
+                    utils::get_color_text(
+                        &format!("AI SEO failed for {} (after retry): {}", ctx.url, e),
+                        "yellow",
+                        false
+                    )
                 );
             }
         }
@@ -418,7 +414,6 @@ struct SeoOk {
 
 enum SeoOutcome {
     Ok(Box<SeoOk>),
-    ParseError(String),
     CallError(String),
 }
 
@@ -580,13 +575,14 @@ async fn run_llms_action(
         handles.push(tokio::spawn(async move {
             let _permit = permit;
             let req = llms_txt::build_summary_request(&ctx, max_tokens, temperature);
-            let summary = match client.complete(&req, CAT_LLMS).await {
-                Ok(c) => llms_txt::parse_summary(&c.text).ok(),
+            // Retry once on any failure (network, provider, or malformed summary JSON).
+            let summary = match client.complete_parsed(&req, CAT_LLMS, llms_txt::parse_summary).await {
+                Ok((s, _)) => Some(s),
                 Err(e) => {
                     eprintln!(
                         "  {}",
                         utils::get_color_text(
-                            &format!("AI llms summary call error for {}: {}", ctx.url, e),
+                            &format!("AI llms summary failed for {} (after retry): {}", ctx.url, e),
                             "yellow",
                             false
                         )
@@ -828,28 +824,16 @@ async fn run_typos_action(
         handles.push(tokio::spawn(async move {
             let _permit = permit;
             let req = typos::build_request(&ctx, lang.as_deref(), max_tokens, temperature);
-            // Surface call/parse failures instead of silently swallowing them (otherwise the
-            // report would show "No content issues found" even when every request failed).
-            let res = match client.complete(&req, CAT_TYPOS).await {
-                Ok(c) => match typos::parse(&c.text) {
-                    Ok(r) => Some(r),
-                    Err(e) => {
-                        eprintln!(
-                            "  {}",
-                            utils::get_color_text(
-                                &format!("AI content check parse error for {}: {}", ctx.url, e),
-                                "yellow",
-                                false
-                            )
-                        );
-                        None
-                    }
-                },
+            // Retry once on any failure; surface a persistent failure instead of silently
+            // swallowing it (otherwise the report would show "No content issues found" even when
+            // every request failed).
+            let res = match client.complete_parsed(&req, CAT_TYPOS, typos::parse).await {
+                Ok((r, _)) => Some(r),
                 Err(e) => {
                     eprintln!(
                         "  {}",
                         utils::get_color_text(
-                            &format!("AI content check call error for {}: {}", ctx.url, e),
+                            &format!("AI content check failed for {} (after retry): {}", ctx.url, e),
                             "yellow",
                             false
                         )
@@ -1005,8 +989,12 @@ async fn run_custom_action(
         handles.push(tokio::spawn(async move {
             let _permit = permit;
             let req = custom::build_request(&prompt, &ctx, max_tokens, temperature);
-            let findings = match client.complete(&req, CAT_CUSTOM).await {
-                Ok(c) => custom::parse(&c.text),
+            // custom::parse is infallible, so this retries once only on a transport/provider error.
+            let findings = match client
+                .complete_parsed(&req, CAT_CUSTOM, |t| Ok::<_, String>(custom::parse(t)))
+                .await
+            {
+                Ok((findings, _)) => findings,
                 Err(e) => vec![custom::CustomFinding {
                     severity: "error".to_string(),
                     label: "call-error".to_string(),
