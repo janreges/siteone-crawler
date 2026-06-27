@@ -2802,7 +2802,7 @@ checksum = "8ee5873ec9cce0195efcb7a4e9507a04cd49aec9c83d0389df45b1ef7ba2e649"
 
 [[package]]
 name = "siteone-crawler"
-version = "2.5.1"
+version = "2.6.0"
 dependencies = [
  "anyhow",
  "async-trait",
