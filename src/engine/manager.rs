@@ -22,6 +22,8 @@ use crate::engine::crawler::{Crawler, compile_domain_patterns};
 use crate::engine::http_client::HttpClient;
 use crate::engine::parsed_url::ParsedUrl;
 use crate::error::{CrawlerError, CrawlerResult};
+#[cfg(feature = "browser")]
+use crate::export::animation_exporter::AnimationExporter;
 use crate::export::exporter::Exporter;
 use crate::export::file_exporter::FileExporter;
 use crate::export::html_report::report::HtmlReport;
@@ -467,6 +469,19 @@ impl Manager {
         let status = crawler.get_status();
         let output = crawler.get_output();
         let options = &self.options;
+
+        // AnimationExporter (browser screenshots → GIF/MP4) runs BEFORE the HTML report is
+        // snapshotted below, so its summary findings appear in the report/mailer/upload too.
+        #[cfg(feature = "browser")]
+        {
+            let mut animation = AnimationExporter::new(options);
+            if animation.should_be_activated()
+                && let (Ok(st), Ok(out)) = (status.lock(), output.lock())
+                && let Err(e) = animation.export(&st, &**out)
+            {
+                st.add_critical_to_summary(animation.get_name(), &format!("{} error: {}", animation.get_name(), e));
+            }
+        }
 
         // Generate HTML report content if any exporter needs it
         let html_report_needed =

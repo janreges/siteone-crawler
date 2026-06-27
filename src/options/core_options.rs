@@ -295,6 +295,13 @@ pub struct CoreOptions {
     pub screenshot_viewport: String,
     pub screenshot_format: String,
     pub screenshot_quality: i64,
+    pub screenshot_hide_cookie_banners: bool,
+    pub screenshot_hide_selector: Option<String>,
+    // screenshot animation (browser mode only; see --screenshots-animation)
+    pub screenshots_animation: String,
+    pub screenshots_animation_frame_duration: f64,
+    pub screenshots_animation_width: i64,
+    pub ffmpeg_path: Option<String>,
     pub browser_no_sandbox: bool,
 
     // console diagnostics → AI payload limits (browser mode only)
@@ -551,6 +558,13 @@ impl CoreOptions {
             screenshot_viewport: "1920x1080".to_string(),
             screenshot_format: "png".to_string(),
             screenshot_quality: 80,
+            screenshot_hide_cookie_banners: false,
+            screenshot_hide_selector: None,
+            // screenshot animation
+            screenshots_animation: String::new(),
+            screenshots_animation_frame_duration: 2.0,
+            screenshots_animation_width: 1024,
+            ffmpeg_path: None,
             browser_no_sandbox: false,
             console_max_messages: 100,
             console_msg_max_chars: 200,
@@ -702,6 +716,42 @@ impl CoreOptions {
         } else if core.screenshots {
             return Err(CrawlerError::Config(
                 "--screenshots requires --browser (screenshots are captured during browser rendering).".to_string(),
+            ));
+        }
+
+        // Screenshots animation validation.
+        if !core.screenshots_animation.trim().is_empty() {
+            if !core.browser_enabled || !core.screenshots {
+                return Err(CrawlerError::Config(
+                    "--screenshots-animation requires --browser and --screenshots.".to_string(),
+                ));
+            }
+            for token in core.screenshots_animation.split(',') {
+                let t = token.trim().to_lowercase();
+                if t.is_empty() {
+                    continue;
+                }
+                if t != "gif" && t != "mp4" {
+                    return Err(CrawlerError::Config(format!(
+                        "Invalid --screenshots-animation value '{}'. Use gif and/or mp4.",
+                        token.trim()
+                    )));
+                }
+            }
+            if !(2..=8192).contains(&core.screenshots_animation_width) {
+                return Err(CrawlerError::Config(
+                    "--screenshots-animation-width must be between 2 and 8192.".to_string(),
+                ));
+            }
+        }
+
+        // Cookie-banner hiding only applies during screenshot capture.
+        if (core.screenshot_hide_cookie_banners || core.screenshot_hide_selector.is_some())
+            && (!core.browser_enabled || !core.screenshots)
+        {
+            return Err(CrawlerError::Config(
+                "--screenshot-hide-cookie-banners/--screenshot-hide-selector require --browser and --screenshots."
+                    .to_string(),
             ));
         }
 
@@ -1778,6 +1828,36 @@ impl CoreOptions {
             "screenshotQuality" => {
                 if let Some(n) = value.as_int() {
                     self.screenshot_quality = n;
+                }
+            }
+            "screenshotHideCookieBanners" => {
+                if let Some(b) = value.as_bool() {
+                    self.screenshot_hide_cookie_banners = b;
+                }
+            }
+            "screenshotHideSelector" => {
+                if let Some(s) = value.as_str() {
+                    self.screenshot_hide_selector = Some(s.to_string());
+                }
+            }
+            "screenshotsAnimation" => {
+                if let Some(s) = value.as_str() {
+                    self.screenshots_animation = s.to_string();
+                }
+            }
+            "screenshotsAnimationFrameDuration" => {
+                if let Some(n) = value.as_float() {
+                    self.screenshots_animation_frame_duration = n;
+                }
+            }
+            "screenshotsAnimationWidth" => {
+                if let Some(n) = value.as_int() {
+                    self.screenshots_animation_width = n;
+                }
+            }
+            "ffmpegPath" => {
+                if let Some(s) = value.as_str() {
+                    self.ffmpeg_path = Some(s.to_string());
                 }
             }
             "browserNoSandbox" => {
@@ -3260,6 +3340,36 @@ pub fn get_options() -> Options {
                 Some("80"), false, false, Some(vec!["1".to_string(), "100".to_string()]),
             ),
             CrawlerOption::new(
+                "--screenshots-animation", None, "screenshotsAnimation", OptionType::String, false,
+                "Build an animation from the page screenshots: comma-separated `gif`,`mp4` (requires --browser --screenshots).",
+                None, true, false, None,
+            ),
+            CrawlerOption::new(
+                "--screenshots-animation-frame-duration", None, "screenshotsAnimationFrameDuration", OptionType::Float, false,
+                "Seconds each page is shown in the animation (0.2-10, default 2).",
+                Some("2"), false, false, None,
+            ),
+            CrawlerOption::new(
+                "--screenshots-animation-width", None, "screenshotsAnimationWidth", OptionType::Int, false,
+                "Animation width in px (default 1024); height is derived from the --screenshot-viewport aspect ratio.",
+                Some("1024"), false, false, None,
+            ),
+            CrawlerOption::new(
+                "--ffmpeg-path", None, "ffmpegPath", OptionType::String, false,
+                "Path to the ffmpeg binary (auto-detected from PATH if omitted). Required for MP4 output.",
+                None, true, false, None,
+            ),
+            CrawlerOption::new(
+                "--screenshot-hide-cookie-banners", None, "screenshotHideCookieBanners", OptionType::Bool, false,
+                "Before each screenshot, try to dismiss/hide cookie consent banners (best-effort; requires --browser --screenshots).",
+                Some("false"), false, false, None,
+            ),
+            CrawlerOption::new(
+                "--screenshot-hide-selector", None, "screenshotHideSelector", OptionType::String, false,
+                "Comma-separated CSS selectors to hide before each screenshot (e.g. a site-specific cookie banner).",
+                None, true, false, None,
+            ),
+            CrawlerOption::new(
                 "--browser-no-sandbox", None, "browserNoSandbox", OptionType::Bool, false,
                 "Launch Chromium with --no-sandbox. Often required in Docker/CI/WSL or when running as root, but it weakens the renderer's security isolation against untrusted pages.",
                 Some("false"), false, false, None,
@@ -3800,6 +3910,12 @@ mod tests {
             screenshot_viewport: "1920x1080".to_string(),
             screenshot_format: "png".to_string(),
             screenshot_quality: 80,
+            screenshot_hide_cookie_banners: false,
+            screenshot_hide_selector: None,
+            screenshots_animation: String::new(),
+            screenshots_animation_frame_duration: 2.0,
+            screenshots_animation_width: 1024,
+            ffmpeg_path: None,
             browser_no_sandbox: false,
             console_max_messages: 100,
             console_msg_max_chars: 200,
@@ -4035,5 +4151,22 @@ mod tests {
         opts.apply_option_value("ignoreHtmlComments", &OptionValue::Bool(true))
             .unwrap();
         assert!(opts.ignore_html_comments);
+    }
+
+    #[test]
+    fn test_apply_screenshots_animation_options() {
+        let mut opts = make_default_core_options();
+        opts.apply_option_value("screenshotsAnimation", &OptionValue::Str("gif,mp4".into()))
+            .unwrap();
+        opts.apply_option_value("screenshotsAnimationFrameDuration", &OptionValue::Float(3.5))
+            .unwrap();
+        opts.apply_option_value("screenshotsAnimationWidth", &OptionValue::Int(800))
+            .unwrap();
+        opts.apply_option_value("ffmpegPath", &OptionValue::Str("/usr/bin/ffmpeg".into()))
+            .unwrap();
+        assert_eq!(opts.screenshots_animation, "gif,mp4");
+        assert_eq!(opts.screenshots_animation_frame_duration, 3.5);
+        assert_eq!(opts.screenshots_animation_width, 800);
+        assert_eq!(opts.ffmpeg_path.as_deref(), Some("/usr/bin/ffmpeg"));
     }
 }

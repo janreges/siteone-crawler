@@ -209,6 +209,16 @@ impl BrowserRenderer {
         let mut screenshot_path = None;
         let mut screenshot_error = None;
         if outcome.is_ok() && self.options.screenshots {
+            // Best-effort cookie-banner removal before capture (fail-soft).
+            if self.options.screenshot_hide_cookie_banners || self.options.screenshot_hide_selector.is_some() {
+                let _ = tokio::time::timeout(
+                    Duration::from_secs(5),
+                    crate::browser::cookie_consent::dismiss(&page, &self.options),
+                )
+                .await;
+                // Let the hide/animations settle before snapping.
+                tokio::time::sleep(Duration::from_millis(400)).await;
+            }
             match tokio::time::timeout(
                 Duration::from_secs(30),
                 crate::browser::screenshot::capture(&page, &self.options, url),

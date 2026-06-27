@@ -802,7 +802,40 @@ Browser is auto-detected (Chrome/Chromium/Edge/Brave); if none is found you're o
 | `--screenshot-viewport=<WxH>` | `1920x1080` | Render/viewport size. |
 | `--screenshot-format=<f>` | `png` | `png`, `jpg`, or `webp`. |
 | `--screenshot-quality=<1-100>` | 80 | Quality for `jpg`/`webp`. |
+| `--screenshots-animation=<fmt>` | — | Assemble screenshots into an animation; `gif`, `mp4`, or `gif,mp4`. |
+| `--screenshots-animation-frame-duration=<s>` | 2 | Seconds each page is shown in the animation (0.2–10). |
+| `--screenshots-animation-width=<px>` | 1024 | Output width in pixels; height is derived from `--screenshot-viewport` aspect ratio. |
+| `--ffmpeg-path=<path>` | — | Explicit ffmpeg binary (auto-detected from PATH otherwise). Required for MP4. |
+| `--screenshot-hide-cookie-banners` | off | Before each screenshot, try to dismiss/hide cookie consent banners (best-effort). |
+| `--screenshot-hide-selector=<css>` | — | Comma-separated CSS selectors to hide before each screenshot (site-specific banners). |
 | `--console-max-messages` / `--console-msg-max-chars` / `--console-total-max-kb` | 100 / 200 / 128 | Size limits for the console diagnostics passed to the AI assistant. |
+
+#### Screenshot animation
+
+When capturing screenshots (`--browser --screenshots`), you can assemble them into an
+animation in crawl order:
+
+- `--screenshots-animation=gif,mp4` — formats to produce (`gif`, `mp4`, or both).
+- `--screenshots-animation-frame-duration=2` — seconds each page is shown (0.2–10).
+- `--screenshots-animation-width=1024` — output width in px; height is derived from
+  the `--screenshot-viewport` aspect ratio.
+- `--ffmpeg-path=/path/to/ffmpeg` — explicit ffmpeg binary (auto-detected from PATH
+  otherwise). **Required for MP4**; GIF works without ffmpeg.
+
+Output files are written next to the screenshots (default `tmp/screenshots/animation.gif`
+and `animation.mp4`). If MP4 is requested but ffmpeg is unavailable, MP4 is skipped with a
+warning and the GIF is still produced.
+
+#### Hiding cookie consent banners
+
+Cookie consent banners are fixed overlays that otherwise appear on every screenshot.
+`--screenshot-hide-cookie-banners` injects a best-effort script before each capture that
+clicks "reject/accept" controls across major consent platforms (OneTrust, Cookiebot,
+Didomi, Usercentrics incl. shadow DOM, Quantcast, TrustArc, …), removes scroll-lock, and
+hides remaining consent containers plus any fixed/sticky high-z-index overlay whose text
+matches cookie/consent keywords (English **and** Czech). For a stubborn site-specific
+banner, pass your own selectors with `--screenshot-hide-selector="#my-banner,.overlay"`.
+This is best-effort — no method removes 100 % of banners.
 
 Captured console/JS/network/security diagnostics appear in a "Browser issues" table and are also exposed (size-bounded) to the AI assistant via the `{{browser_diagnostics}}` placeholder in `--ai-prompt` / `--ai-prompt-file` (the `custom` AI action) — e.g. ask the model to triage the console/network errors.
 

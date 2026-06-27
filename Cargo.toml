@@ -59,12 +59,15 @@ fancy-regex = "0.18"
 # default build is unaffected. See docs/superpowers/specs/2026-06-26-browser-rendering-mode-design.md §3.6.
 chromiumoxide = { version = "0.9.1", optional = true, features = ["fetcher", "rustls", "zip8"] }
 futures = { version = "0.3", optional = true }
+# Optional: assemble page screenshots into GIF/MP4 animations (see --screenshots-animation).
+# Behind the `browser` feature so the lean build is unaffected. Scoped features keep it small.
+image = { version = "0.25", optional = true, default-features = false, features = ["png", "jpeg", "webp", "gif"] }
 
 [features]
 # Browser rendering is ON by default so the shipped binaries can drive a real browser
 # out of the box. Build with `--no-default-features` for a lean binary without chromiumoxide.
 default = ["browser"]
-browser = ["dep:chromiumoxide", "dep:futures"]
+browser = ["dep:chromiumoxide", "dep:futures", "dep:image"]
 
 [package.metadata.deb]
 maintainer = "Ján Regeš <jan.reges@siteone.cz>"

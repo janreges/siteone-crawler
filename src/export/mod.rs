@@ -8,4 +8,7 @@ pub mod mailer_exporter;
 pub mod markdown_exporter;
 pub mod offline_website_exporter;
 pub mod sitemap_exporter;
+
+#[cfg(feature = "browser")]
+pub mod animation_exporter;
 pub mod upload_exporter;
