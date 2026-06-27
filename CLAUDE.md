@@ -44,10 +44,11 @@ cargo test scoring::ci_gate::tests::all_checks_pass  # run a single test by name
 cargo clippy -- -D warnings                       # lint (CI enforces zero warnings)
 cargo fmt -- --check                              # format check
 
-# Browser rendering feature (optional `--browser` mode; pulls in chromiumoxide/CDP)
-cargo build --release --features browser          # build with browser rendering
-cargo test --features browser                     # run tests with the feature compiled in
-cargo clippy --features browser -- -D warnings    # lint the feature-gated code
+# Browser rendering (`--browser`, chromiumoxide/CDP) is a DEFAULT feature — `cargo build`,
+# `cargo test`, `cargo clippy` all include it. Build/test the lean variant (no chromiumoxide):
+cargo build --release --no-default-features        # lean build, ~6 MB smaller, no browser
+cargo test --no-default-features                   # tests without the browser feature
+cargo clippy --no-default-features -- -D warnings  # lint the lean variant
 ```
 
 ## Quick Run

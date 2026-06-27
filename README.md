@@ -242,7 +242,7 @@ Don't hesitate and try it. You will love it as we do! ❤️
 - **console / error diagnostics** per page — JavaScript console errors, uncaught exceptions, failed sub-requests (404/5xx), CSP/CORS/mixed-content violations — reported in a table and feedable to the AI assistant
 - **headless by default**, or `--browser-headful` to watch the browser open each page
 - **easiest possible setup, no Node.js**: it auto-detects an installed Chrome/Chromium/Edge/Brave, and if none is found it offers to download a `chrome-headless-shell` build — or point it at any browser with `--browser-path`
-- requires a **browser-enabled build** (the default binary does not include it — see [🔨 Build from source](#-build-from-source)) — see [🌐 Browser rendering (optional) usage & options](#-browser-rendering-optional-1)
+- **built into the default build and pre-built binaries** (adds the ~6 MB CDP client, not a browser — the actual Chromium is detected/downloaded at runtime) — see [🌐 Browser rendering (optional) usage & options](#-browser-rendering-optional-1)
 
 > **Limitations of browser mode** (by design): the browser loads sub-resources and runs page JS, so domain-scope/robots rules apply to the top document only; `--http-cache-dir` does not cache rendered bodies (the browser always fetches live), and each rendered HTML page is fetched twice (once for status/headers, once by the browser); HTTP auth/cookies are not forwarded to the browser; the auto-download trusts Google's CDN over TLS. `--proxy` and `--resolve` are forwarded to the browser, but `--resolve` is applied **host-only** in browser mode (Chrome's host-resolver-rules ignore the port), so per-port overrides for the same host aren't honored by the browser the way they are on the HTTP path.
 
@@ -334,16 +334,21 @@ cargo build --release
 ./target/release/siteone-crawler --url=https://my.domain.tld
 ```
 
-**Build with browser rendering (`--browser`, screenshots, console diagnostics):**
+**Browser rendering is built into the default build and the pre-built binaries** (it adds the
+~6 MB chromiumoxide CDP client; the actual browser is detected/downloaded at runtime, never
+bundled). Just use `--browser`:
 
 ```bash
-# Adds the chromiumoxide (CDP) engine. The default build above does NOT include it,
-# and pre-built release binaries are the default (lean) build.
-cargo build --release --features browser
-
-# Then a browser (Chrome/Chromium/Edge/Brave) is detected automatically at runtime,
-# or downloaded on first use, or pointed at via --browser-path=<exe>.
+cargo build --release
+# A browser (Chrome/Chromium/Edge/Brave) is detected automatically at runtime, downloaded on
+# first use, or pointed at via --browser-path=<exe>.
 ./target/release/siteone-crawler --url=https://my.spa.tld --browser --screenshots
+```
+
+**Lean build without browser rendering** (drops chromiumoxide, ~6 MB smaller):
+
+```bash
+cargo build --release --no-default-features
 ```
 
 **Build statically linked (musl) binary:**
@@ -761,7 +766,7 @@ Convert a local HTML file to clean Markdown without crawling. Uses the same conv
 
 ### 🌐 Browser rendering (optional)
 
-Render each page in a real Chromium (CDP) instead of a plain HTTP request. **Requires a browser-enabled build** (`cargo build --release --features browser`). With `--browser` off, the crawler behaves exactly as before.
+Render each page in a real Chromium (CDP) instead of a plain HTTP request. **Included in the default build / pre-built binaries** (no special flag needed; for a lean build without it use `cargo build --release --no-default-features`). With `--browser` off, the crawler behaves exactly as before.
 
 ```bash
 # Crawl a JavaScript / SPA site with full browser rendering
@@ -781,7 +786,7 @@ Browser is auto-detected (Chrome/Chromium/Edge/Brave); if none is found you're o
 
 | Option | Default | Meaning |
 |--------|---------|---------|
-| `--browser` | off | Render pages in Chromium (requires browser-enabled build). |
+| `--browser` | off | Render pages in Chromium (built into the default binaries). |
 | `--browser-path=<exe>` | — | Explicit browser binary; skips detection/download. |
 | `--browser-headful` | off | Visible window (default is headless; renders one page at a time). |
 | `--browser-no-sandbox` | off | Add `--no-sandbox` (often required in Docker/CI/WSL/root; weakens isolation). |
