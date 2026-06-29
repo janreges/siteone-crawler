@@ -216,7 +216,8 @@ impl BrowserRenderer {
                     crate::browser::cookie_consent::dismiss(&page, &self.options),
                 )
                 .await;
-                // Let the hide/animations settle before snapping.
+                // Let the banner-hide reflow settle before snapping (animations are settled
+                // separately inside screenshot::capture).
                 tokio::time::sleep(Duration::from_millis(400)).await;
             }
             match tokio::time::timeout(

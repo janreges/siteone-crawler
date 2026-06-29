@@ -26,13 +26,16 @@ const MAX_FULLPAGE_HEIGHT: f64 = 16384.0;
 /// - CSS transitions are forced to 0s — they are always finite, so they snap to their end state.
 /// - Finite animations (entrance reveals: fade/slide-in) get `finish()` → jump to their end
 ///   state. This is the exact case the user reported: content stuck mid-reveal.
-/// - Infinite animations (ambient/auto-play hero loops, spinners) get `pause()` in their current
-///   visible frame. Fast-forwarding these to "the end" lands on an empty/transitional keyframe
-///   and wipes the hero, so we freeze them where they are instead.
+/// - Infinite animations — and effectively-infinite ones with a very high iteration count
+///   (ambient/auto-play hero loops, spinners) — get `pause()` in their current visible frame.
+///   Fast-forwarding these to "the end" lands on an empty/transitional keyframe and wipes the
+///   hero, so we freeze them where they are instead.
 ///
 /// We intentionally do NOT inject a global `animation-duration:0s !important`: that forces
 /// infinite `@keyframes` loops onto their final (often empty) frame — the very regression this
-/// split avoids. Must never throw (everything is wrapped in try/catch).
+/// split avoids. Not covered: scroll-driven animations (`animation-timeline: scroll()/view()`)
+/// whose progress is bound to scroll position, not time — `finish()` can't advance them, so they
+/// stay at their scroll-0 state. Must never throw (everything is wrapped in try/catch).
 const FREEZE_ANIMATIONS_JS: &str = r#"(function(){
   try{
     var s=document.createElement('style');
@@ -44,7 +47,7 @@ const FREEZE_ANIMATIONS_JS: &str = r#"(function(){
     if(document.getAnimations){document.getAnimations().forEach(function(a){
       try{
         var t=a.effect&&a.effect.getComputedTiming?a.effect.getComputedTiming():null;
-        if(t&&t.iterations===Infinity){a.pause();}else{a.finish();}
+        if(t&&(t.iterations===Infinity||t.iterations>100)){a.pause();}else{a.finish();}
       }catch(e){}
     });}
   }catch(e){}

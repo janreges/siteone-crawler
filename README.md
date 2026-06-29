@@ -238,7 +238,8 @@ Don't hesitate and try it. You will love it as we do! ❤️
 ### 🌐 Browser rendering (optional)
 
 - optional, opt-in mode (`--browser`) that renders each page in a **real Chromium** via the Chrome DevTools Protocol, so **JavaScript / SPA sites** are crawled with their post-render DOM (client-side links, hydrated content, framework markup) — link extraction, offline export and markdown export then all see the rendered page
-- **screenshots** of every page — viewport (custom resolution) or **full-page** (entire scroll height), as PNG/JPG/WebP
+- **screenshots** of every page — viewport (custom resolution) or **full-page** (entire scroll height), as PNG/JPG/WebP; animations are settled before each capture so pages look loaded, not mid-effect
+- **screenshot extras** — assemble the per-page screenshots into a **GIF/MP4 animation** (GIF built-in, MP4 via ffmpeg), and optionally **hide cookie-consent banners** before capture
 - **console / error diagnostics** per page — JavaScript console errors, uncaught exceptions, failed sub-requests (404/5xx), CSP/CORS/mixed-content violations — reported in a table and feedable to the AI assistant
 - **headless by default**, or `--browser-headful` to watch the browser open each page
 - **easiest possible setup, no Node.js**: it auto-detects an installed Chrome/Chromium/Edge/Brave, and if none is found it offers to download a `chrome-headless-shell` build — or point it at any browser with `--browser-path`
@@ -810,6 +811,15 @@ Browser is auto-detected (Chrome/Chromium/Edge/Brave); if none is found you're o
 | `--screenshot-hide-selector=<css>` | — | Comma-separated CSS selectors to hide before each screenshot (site-specific banners). |
 | `--console-max-messages` / `--console-msg-max-chars` / `--console-total-max-kb` | 100 / 200 / 128 | Size limits for the console diagnostics passed to the AI assistant. |
 
+#### Animations are settled before each capture
+
+To avoid capturing a page mid-effect, animations are **intentionally settled right before
+every screenshot**: finite entrance animations (fade-/slide-in reveals) are fast-forwarded to
+their final state, and infinite loops (spinners, auto-play hero animations) are paused on their
+current frame. The result looks fully loaded instead of half-rendered. This is automatic and
+needs no flag. Scroll-driven animations whose progress is bound to the scroll position (rather
+than to time) are not covered by this.
+
 #### Screenshot animation
 
 When capturing screenshots (`--browser --screenshots`), you can assemble them into an
@@ -824,18 +834,24 @@ animation in crawl order:
 
 Output files are written next to the screenshots (default `tmp/screenshots/animation.gif`
 and `animation.mp4`). If MP4 is requested but ffmpeg is unavailable, MP4 is skipped with a
-warning and the GIF is still produced.
+warning and the GIF is still produced. MP4 is the **only** feature that needs an external
+binary (ffmpeg); everything else, including GIF, is self-contained.
 
 #### Hiding cookie consent banners
 
 Cookie consent banners are fixed overlays that otherwise appear on every screenshot.
 `--screenshot-hide-cookie-banners` injects a best-effort script before each capture that
-clicks "reject/accept" controls across major consent platforms (OneTrust, Cookiebot,
-Didomi, Usercentrics incl. shadow DOM, Quantcast, TrustArc, …), removes scroll-lock, and
-hides remaining consent containers plus any fixed/sticky high-z-index overlay whose text
-matches cookie/consent keywords (English **and** Czech). For a stubborn site-specific
-banner, pass your own selectors with `--screenshot-hide-selector="#my-banner,.overlay"`.
-This is best-effort — no method removes 100 % of banners.
+clicks "reject" controls first (and "accept-all" as a fallback) across major consent
+platforms (OneTrust, Cookiebot, Didomi, Usercentrics incl. shadow DOM, Quantcast, TrustArc,
+…), removes scroll-lock, and hides remaining consent containers plus any fixed/sticky
+high-z-index overlay whose text matches cookie/consent keywords (English **and** Czech). For
+a stubborn site-specific banner, pass your own selectors with
+`--screenshot-hide-selector="#my-banner,.overlay"`.
+
+This is best-effort — no method removes 100 % of banners. It's a screenshot-cleanliness
+helper, not a privacy tool: the accept-all fallback may **grant** consent on sites that
+expose no reject control, and the heuristic may occasionally hide a legitimate sticky
+element that merely mentions cookies/privacy.
 
 Captured console/JS/network/security diagnostics appear in a "Browser issues" table and are also exposed (size-bounded) to the AI assistant via the `{{browser_diagnostics}}` placeholder in `--ai-prompt` / `--ai-prompt-file` (the `custom` AI action) — e.g. ask the model to triage the console/network errors.
 

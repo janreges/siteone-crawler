@@ -18,6 +18,18 @@ use crate::options::core_options::CoreOptions;
 use crate::output::output::Output;
 use crate::result::status::Status;
 
+/// Removes a staging directory on drop, so the temp frames are cleaned up on every exit path —
+/// including an early return or a panic inside the `image`/ffmpeg encode steps.
+struct TempDirGuard<'a>(&'a Path);
+
+impl Drop for TempDirGuard<'_> {
+    fn drop(&mut self) {
+        if self.0.exists() {
+            let _ = std::fs::remove_dir_all(self.0);
+        }
+    }
+}
+
 /// Output formats the exporter can produce.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AnimationFormat {
@@ -131,6 +143,10 @@ impl AnimationExporter {
                 "-y".into(),
                 "-framerate".into(),
                 framerate.clone(),
+                // Frames are staged as frame_00001.png upward; make the start index explicit
+                // instead of relying on ffmpeg's default, so a staging change can't drop frame 1.
+                "-start_number".into(),
+                "1".into(),
                 "-i".into(),
                 input.to_string_lossy().into_owned(),
                 "-vf".into(),
@@ -144,6 +160,8 @@ impl AnimationExporter {
                 "-y".into(),
                 "-framerate".into(),
                 framerate,
+                "-start_number".into(),
+                "1".into(),
                 "-i".into(),
                 input.to_string_lossy().into_owned(),
                 "-i".into(),
@@ -157,8 +175,9 @@ impl AnimationExporter {
         )
     }
 
-    /// MP4 (H.264) via ffmpeg + libx264. Each frame held for `frame_duration` (input
-    /// framerate), re-timed to 25 fps output for smooth, widely-compatible playback.
+    /// MP4 (H.264) via ffmpeg + libx264. Each frame is shown for ~`frame_duration` (set via the
+    /// input framerate), re-timed to a constant 25 fps output for smooth, widely-compatible
+    /// playback; the per-frame hold is exact only when `25 * frame_duration` is an integer.
     fn encode_mp4_ffmpeg(&self, program: &str, frames_dir: &Path, out: &Path) -> Result<(), String> {
         let framerate = format!("{:.6}", 1.0 / self.frame_duration);
         let input = frames_dir.join("frame_%05d.png");
@@ -168,6 +187,8 @@ impl AnimationExporter {
                 "-y".into(),
                 "-framerate".into(),
                 framerate,
+                "-start_number".into(),
+                "1".into(),
                 "-i".into(),
                 input.to_string_lossy().into_owned(),
                 "-r".into(),
@@ -245,10 +266,12 @@ impl crate::export::exporter::Exporter for AnimationExporter {
         let ffmpeg = self.resolve_ffmpeg();
         let _ = std::fs::create_dir_all(&self.screenshots_dir);
 
-        // Per-run staging dir: the pid suffix avoids clashes between concurrent runs that
-        // share a screenshots dir, and we clear it up front so a prior crash leaves no
-        // stale frames that the ffmpeg `frame_%05d` glob would otherwise pick up.
+        // Per-run staging dir, suffixed by PID to reduce — not perfectly prevent, since PIDs are
+        // eventually reused — clashes with another run sharing the screenshots dir. We clear it
+        // up front so a prior crash leaves no stale frames the ffmpeg `frame_%05d` glob would
+        // pick up; the guard removes it again on every exit path (including a panic).
         let temp_dir = Path::new(&self.screenshots_dir).join(format!(".animation-frames-{}", std::process::id()));
+        let _temp_guard = TempDirGuard(&temp_dir);
 
         // With ffmpeg available we stage normalized frames as PNGs (streamed one at a time
         // → O(1) memory) and let ffmpeg encode GIF/MP4 from them.
@@ -258,14 +281,13 @@ impl crate::export::exporter::Exporter for AnimationExporter {
         if use_ffmpeg {
             let _ = std::fs::remove_dir_all(&temp_dir);
             match Self::write_temp_frames(
-                paths
-                    .iter()
-                    .filter_map(|p| decode_normalize(p.as_str(), cw, ch, status)),
+                paths.iter().filter_map(|p| decode_normalize(p.as_str(), cw, ch)),
                 &temp_dir,
             ) {
                 Ok(n) if n > 0 => {
                     staged = n;
                     staged_ok = true;
+                    warn_skipped(status, paths.len(), n);
                 }
                 Ok(_) => status.add_warning_to_summary(
                     "screenshots-animation",
@@ -291,9 +313,7 @@ impl crate::export::exporter::Exporter for AnimationExporter {
                 (None, _) => {
                     // No ffmpeg: encode the GIF with the embedded encoder, streaming frames.
                     match encode_gif_embedded(
-                        paths
-                            .iter()
-                            .filter_map(|p| decode_normalize(p.as_str(), cw, ch, status)),
+                        paths.iter().filter_map(|p| decode_normalize(p.as_str(), cw, ch)),
                         self.frame_duration,
                         &out,
                     ) {
@@ -304,7 +324,10 @@ impl crate::export::exporter::Exporter for AnimationExporter {
                                 "No screenshots could be decoded for the animation.",
                             );
                         }
-                        Ok(n) => self.report(status, "GIF", &out, n, Ok(())),
+                        Ok(n) => {
+                            warn_skipped(status, paths.len(), n);
+                            self.report(status, "GIF", &out, n, Ok(()))
+                        }
                         Err(e) => self.report(status, "GIF", &out, 0, Err(e)),
                     }
                 }
@@ -328,9 +351,7 @@ impl crate::export::exporter::Exporter for AnimationExporter {
             }
         }
 
-        if temp_dir.exists() {
-            let _ = std::fs::remove_dir_all(&temp_dir);
-        }
+        // `_temp_guard` removes the staging dir on the way out (success, error, or panic).
         Ok(())
     }
 }
@@ -399,17 +420,27 @@ fn normalize_frame(img: &DynamicImage, canvas_w: u32, canvas_h: u32) -> image::R
     DynamicImage::ImageRgba8(canvas).to_rgb8()
 }
 
-/// Decode one screenshot and normalize it to the target canvas, logging + skipping on failure.
-fn decode_normalize(path: &str, canvas_w: u32, canvas_h: u32, status: &Status) -> Option<RgbImage> {
-    match image::open(path) {
-        Ok(img) => Some(normalize_frame(&img, canvas_w, canvas_h)),
-        Err(e) => {
-            status.add_warning_to_summary(
-                "screenshots-animation",
-                &format!("Skipping screenshot '{}': {}", path, e),
-            );
-            None
-        }
+/// Decode one screenshot and normalize it to the target canvas; silently skips on failure
+/// (an undecodable image returns `None`). Per-file warnings are intentionally NOT emitted here
+/// — the caller reports a single aggregated "skipped X of Y" line via `warn_skipped`, so a
+/// directory of broken screenshots can't flood the summary with one warning each.
+fn decode_normalize(path: &str, canvas_w: u32, canvas_h: u32) -> Option<RgbImage> {
+    image::open(path)
+        .ok()
+        .map(|img| normalize_frame(&img, canvas_w, canvas_h))
+}
+
+/// Emit a single aggregated warning when fewer frames were usable than screenshots collected.
+fn warn_skipped(status: &Status, total: usize, used: usize) {
+    if used < total {
+        status.add_warning_to_summary(
+            "screenshots-animation",
+            &format!(
+                "Skipped {} of {} screenshot(s) that could not be decoded.",
+                total - used,
+                total
+            ),
+        );
     }
 }
 

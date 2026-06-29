@@ -2,11 +2,17 @@
 // (c) Jan Reges <jan.reges@siteone.cz>
 //
 // Compiled only with the `browser` Cargo feature. Best-effort, fail-soft removal of
-// cookie consent banners before a screenshot is taken: clicks known "reject/accept"
-// controls across major CMPs (incl. shadow DOM), removes scroll-lock, then hides a
-// curated set of consent containers plus any fixed/sticky high-z-index overlay whose
-// text matches cookie/consent keywords (English + Czech). Also honours a user-supplied
-// list of CSS selectors (--screenshot-hide-selector).
+// cookie consent banners before a screenshot is taken: clicks known "reject" controls
+// first and "accept-all" controls as a fallback across major CMPs (incl. shadow DOM),
+// removes scroll-lock, then hides a curated set of consent containers plus any
+// fixed/sticky high-z-index overlay whose text matches cookie/consent keywords
+// (English + Czech). Also honours a user-supplied list of CSS selectors
+// (--screenshot-hide-selector).
+//
+// Caveats — this is a screenshot-cleanliness helper, not a privacy tool: the accept-all
+// fallback can GRANT cookie consent on sites that expose no reject control, and the
+// keyword + high-z-index heuristic can occasionally hide a legitimate fixed/sticky element
+// (nav bar, CTA, footer) that merely mentions cookies/privacy.
 
 use chromiumoxide::Page;
 

@@ -738,11 +738,8 @@ impl CoreOptions {
                     )));
                 }
             }
-            if !(2..=8192).contains(&core.screenshots_animation_width) {
-                return Err(CrawlerError::Config(
-                    "--screenshots-animation-width must be between 2 and 8192.".to_string(),
-                ));
-            }
+            // Numeric ranges (width 2-8192, frame-duration 0.2-10) are enforced at the option
+            // layer via each option's `extras` range, consistently with the rest of the CLI.
         }
 
         // Cookie-banner hiding only applies during screenshot capture.
@@ -3347,16 +3344,16 @@ pub fn get_options() -> Options {
             CrawlerOption::new(
                 "--screenshots-animation-frame-duration", None, "screenshotsAnimationFrameDuration", OptionType::Float, false,
                 "Seconds each page is shown in the animation (0.2-10, default 2).",
-                Some("2"), false, false, None,
+                Some("2"), false, false, Some(vec!["0.2".to_string(), "10".to_string()]),
             ),
             CrawlerOption::new(
                 "--screenshots-animation-width", None, "screenshotsAnimationWidth", OptionType::Int, false,
-                "Animation width in px (default 1024); height is derived from the --screenshot-viewport aspect ratio.",
-                Some("1024"), false, false, None,
+                "Animation width in px (2-8192, default 1024); height is derived from the --screenshot-viewport aspect ratio.",
+                Some("1024"), false, false, Some(vec!["2".to_string(), "8192".to_string()]),
             ),
             CrawlerOption::new(
                 "--ffmpeg-path", None, "ffmpegPath", OptionType::String, false,
-                "Path to the ffmpeg binary (auto-detected from PATH if omitted). Required for MP4 output.",
+                "Path to the ffmpeg binary, overriding PATH auto-detection. MP4 output needs ffmpeg (GIF does not).",
                 None, true, false, None,
             ),
             CrawlerOption::new(

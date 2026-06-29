@@ -93,6 +93,7 @@ cargo clippy --no-default-features -- -D warnings  # lint the lean variant
    - `HtmlReport`: Self-contained HTML report (also used by Mailer and Upload)
    - `MailerExporter`: Email HTML report via SMTP
    - `UploadExporter`: Upload report to remote server
+   - `AnimationExporter` (feature `browser`): Assemble per-page screenshots into a GIF/MP4 animation (GIF via the embedded `image` crate, MP4 via external ffmpeg)
 
 8. **Scoring** (`scorer::calculate_scores()`): Computes quality scores (0–10) across 5 weighted categories (Performance 20%, SEO 20%, Security 25%, Accessibility 20%, Best Practices 15%). Deductions come from summary findings (criticals, warnings) and stats (404s, 5xx, slow responses).
 
@@ -168,7 +169,8 @@ This approach is useful for reproducing bug reports, testing regex edge cases (e
 - `src/scoring/scorer.rs`: Quality score calculation from summary findings
 - `src/scoring/ci_gate.rs`: CI/CD threshold evaluation
 - `src/engine/fetcher.rs`: `Fetcher` trait — the single seam the crawl loop fetches through; `HttpClient` (direct HTTP) and `BrowserRenderer` both implement it
-- `src/browser/` (feature `browser`): `BrowserRenderer` (renderer.rs), Chromium detection/download/launch (launcher.rs), CDP diagnostics collection (diagnostics.rs), screenshots (screenshot.rs). `diagnostics.rs` data types are always compiled so `HttpResponse` can carry an inert `Option<BrowserDiagnostics>`
+- `src/browser/` (feature `browser`): `BrowserRenderer` (renderer.rs), Chromium detection/download/launch (launcher.rs), CDP diagnostics collection (diagnostics.rs), screenshots + pre-capture animation settling (screenshot.rs), cookie-banner dismissal/hiding (cookie_consent.rs). `diagnostics.rs` data types are always compiled so `HttpResponse` can carry an inert `Option<BrowserDiagnostics>`
+- `src/export/animation_exporter.rs` (feature `browser`): builds GIF/MP4 animations from per-page screenshots (GIF via the embedded `image` crate, MP4 via external ffmpeg; frames streamed to disk for O(1) memory)
 - `src/analysis/browser_console_analyzer.rs`: reports browser console/JS/network/security diagnostics (the browser-mode analyzer; active only in `--browser` mode)
 
 ### Edition & Rust Version
