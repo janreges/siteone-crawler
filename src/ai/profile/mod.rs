@@ -5,3 +5,4 @@
 // Independent of `src/ai/elaborate/` (which is left untouched).
 
 pub mod budget;
+pub mod promptpack;
