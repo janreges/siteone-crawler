@@ -63,6 +63,8 @@ pub fn build_summary_request(ctx: &PageContext, max_tokens: u32, temperature: f3
         max_tokens,
         temperature,
         json_mode: true,
+        json_schema: None,
+        schema_name: None,
     }
 }
 

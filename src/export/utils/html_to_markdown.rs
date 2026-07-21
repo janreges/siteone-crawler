@@ -11,6 +11,20 @@ use regex::Regex;
 use scraper::{Html, Node, Selector};
 
 static RE_NON_ALNUM: Lazy<Regex> = Lazy::new(|| Regex::new(r"[^a-z0-9]+").unwrap());
+const COOKIE_CONSENT_SELECTORS: &[&str] = &[
+    ".cookie-panel",
+    ".cookie-banner",
+    ".cookie-consent",
+    ".cookie-notice",
+    ".cookie-bar",
+    "#cookie-banner",
+    "#cookie-consent",
+    "#cookie-notice",
+    "#cookiebanner",
+    "#CybotCookiebotDialog",
+    ".cc-window",
+    "#onetrust-banner-sdk",
+];
 
 /// Converts HTML content to Markdown format.
 /// Handles all HTML elements: headings, paragraphs, bold/italic, links, images,
@@ -30,6 +44,7 @@ pub struct HtmlToMarkdownConverter {
     convert_tables: bool,
     convert_strikethrough: bool,
     strikethrough_delimiter: String,
+    include_form_control_text: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -43,32 +58,23 @@ impl HtmlToMarkdownConverter {
         Self {
             html: html.to_string(),
             excluded_selectors,
-            implicit_excluded_selectors: vec![
+            implicit_excluded_selectors: [
                 // Hidden elements
-                ".hidden".to_string(),
-                ".hide".to_string(),
-                ".invisible".to_string(),
-                ".lg\\:sl-hidden".to_string(),
-                ".md\\:sl-hidden".to_string(),
-                ".lg\\:hidden".to_string(),
-                ".md\\:hidden".to_string(),
+                ".hidden",
+                ".hide",
+                ".invisible",
+                ".lg\\:sl-hidden",
+                ".md\\:sl-hidden",
+                ".lg\\:hidden",
+                ".md\\:hidden",
                 // ARIA hidden and menu elements
-                "[aria-hidden='true']".to_string(),
-                "[role='menu']".to_string(),
-                // Cookie consent banners
-                ".cookie-panel".to_string(),
-                ".cookie-banner".to_string(),
-                ".cookie-consent".to_string(),
-                ".cookie-notice".to_string(),
-                ".cookie-bar".to_string(),
-                "#cookie-banner".to_string(),
-                "#cookie-consent".to_string(),
-                "#cookie-notice".to_string(),
-                "#cookiebanner".to_string(),
-                "#CybotCookiebotDialog".to_string(),
-                ".cc-window".to_string(),
-                "#onetrust-banner-sdk".to_string(),
-            ],
+                "[aria-hidden='true']",
+                "[role='menu']",
+            ]
+            .into_iter()
+            .chain(COOKIE_CONSENT_SELECTORS.iter().copied())
+            .map(str::to_string)
+            .collect(),
             strong_delimiter: "**".to_string(),
             em_delimiter: "*".to_string(),
             bullet_list_marker: "-".to_string(),
@@ -80,6 +86,7 @@ impl HtmlToMarkdownConverter {
             convert_tables: true,
             convert_strikethrough: true,
             strikethrough_delimiter: "~~".to_string(),
+            include_form_control_text: false,
         }
     }
 
@@ -114,6 +121,15 @@ impl HtmlToMarkdownConverter {
 
     pub fn set_heading_style(&mut self, style: HeadingStyle) -> &mut Self {
         self.heading_style = style;
+        self
+    }
+
+    /// Compliance text extraction needs the wording of consent choices. Keep those known banner
+    /// containers while retaining the converter's other implicit exclusions.
+    pub fn preserve_cookie_consent_text(&mut self) -> &mut Self {
+        self.implicit_excluded_selectors
+            .retain(|selector| !COOKIE_CONSENT_SELECTORS.contains(&selector.as_str()));
+        self.include_form_control_text = true;
         self
     }
 
@@ -416,11 +432,26 @@ impl HtmlToMarkdownConverter {
                         let inner = self.collapse_inline_whitespace(&self.get_inner_markdown(node, document, excluded));
                         format!("~{}~", inner)
                     }
-                    // Ignored form/non-content elements
-                    "form" | "fieldset" | "legend" | "label" | "dialog" | "button" | "input" | "select"
-                    | "textarea" | "script" | "style" | "noscript" | "head" | "meta" | "link" | "iframe" | "frame" => {
-                        String::new()
+                    // Form controls are normally non-content. Compliance extraction explicitly
+                    // keeps their visible choice wording because confirm-shaming often lives here.
+                    "form" | "fieldset" | "legend" | "label" | "dialog" | "button" | "select" | "textarea" => {
+                        if self.include_form_control_text {
+                            self.get_inner_markdown(node, document, excluded)
+                        } else {
+                            String::new()
+                        }
                     }
+                    "input" => {
+                        if self.include_form_control_text {
+                            el.attr("value")
+                                .or_else(|| el.attr("aria-label"))
+                                .unwrap_or("")
+                                .to_string()
+                        } else {
+                            String::new()
+                        }
+                    }
+                    "script" | "style" | "noscript" | "head" | "meta" | "link" | "iframe" | "frame" => String::new(),
                     // Block container elements - wrap with newlines to prevent text concatenation
                     "nav" | "header" | "footer" | "aside" | "article" | "section" | "main" | "figure"
                     | "figcaption" | "div" => {

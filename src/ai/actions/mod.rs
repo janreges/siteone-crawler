@@ -2,6 +2,7 @@
 // (c) Jan Reges <jan.reges@siteone.cz>
 
 pub mod custom;
+pub mod extract;
 pub mod llms_txt;
 pub mod seo;
 pub mod typos;

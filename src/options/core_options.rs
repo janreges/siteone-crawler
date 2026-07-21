@@ -271,10 +271,20 @@ pub struct CoreOptions {
     pub ai_max_pages: i64,
     pub ai_max_concurrency: i64,
     pub ai_max_reqs_per_sec: Option<f64>,
+    pub ai_input_cost_per_million: Option<f64>,
+    pub ai_output_cost_per_million: Option<f64>,
     pub ai_timeout: i64,
     pub ai_cache_dir: Option<String>,
     pub ai_seo_affects_score: bool,
     pub ai_dry_run: bool,
+    // AI report engine: a preset key (e.g. `ia`, `quality`) or `extract` for a custom schema.
+    pub ai_report: Option<String>,
+    pub ai_report_language: String,
+    pub ai_report_dir: String,
+    pub ai_extract_fields: Option<String>,
+    pub ai_schema_file: Option<String>,
+    pub ai_schema_enforce: String,
+    pub ai_report_cdn: bool,
 
     // browser rendering settings (optional; nothing runs unless browser_enabled)
     #[serde(skip)]
@@ -535,10 +545,19 @@ impl CoreOptions {
             ai_max_pages: 100,
             ai_max_concurrency: 4,
             ai_max_reqs_per_sec: None,
+            ai_input_cost_per_million: None,
+            ai_output_cost_per_million: None,
             ai_timeout: 180,
             ai_cache_dir: Some("tmp/ai-cache".to_string()),
             ai_seo_affects_score: false,
             ai_dry_run: false,
+            ai_report: None,
+            ai_report_language: "en".to_string(),
+            ai_report_dir: output_prefix.clone(),
+            ai_extract_fields: None,
+            ai_schema_file: None,
+            ai_schema_enforce: "auto".to_string(),
+            ai_report_cdn: false,
 
             // browser rendering settings
             browser_enabled: false,
@@ -602,12 +621,34 @@ impl CoreOptions {
             "aiLanguage",
             "aiMaxConcurrency",
             "aiMaxReqsPerSec",
+            "aiInputCostPerMillion",
+            "aiOutputCostPerMillion",
             "aiTimeout",
             "aiUseMaxCompletionTokens",
             "aiCacheDir",
+            "aiReport",
+            "aiReportLanguage",
+            "aiReportDir",
+            "aiExtractFields",
+            "aiSchemaFile",
+            "aiSchemaEnforce",
+            "aiReportCdn",
         ]
         .iter()
         .any(|p| options.is_explicitly_set(p));
+
+        // Setting --ai-report runs the `extract` engine. If the user did NOT explicitly choose
+        // actions, the report replaces the default set (seo,typos,summary) so an IA/quality report
+        // is a focused, cheap run. If they DID list actions, extract is added to their set.
+        if core.ai_report.is_some() {
+            if options.is_explicitly_set("aiActions") {
+                if !core.ai_actions.iter().any(|a| a == "extract") {
+                    core.ai_actions.push("extract".to_string());
+                }
+            } else {
+                core.ai_actions = vec!["extract".to_string()];
+            }
+        }
 
         if core.ai_enabled {
             let provider = crate::ai::provider::Provider::parse(&core.ai_provider).ok_or_else(|| {
@@ -626,7 +667,7 @@ impl CoreOptions {
                     "AI is enabled but --ai-model is missing.".to_string(),
                 ));
             }
-            const KNOWN_ACTIONS: [&str; 6] = ["seo", "llms-txt", "llms-full", "typos", "custom", "summary"];
+            const KNOWN_ACTIONS: [&str; 7] = ["seo", "llms-txt", "llms-full", "typos", "custom", "summary", "extract"];
             for a in &core.ai_actions {
                 if !KNOWN_ACTIONS.contains(&a.as_str()) {
                     return Err(CrawlerError::Config(format!(
@@ -642,6 +683,121 @@ impl CoreOptions {
             {
                 return Err(CrawlerError::Config(
                     "--ai-actions=custom requires --ai-prompt-file=PATH or --ai-prompt=TEXT.".to_string(),
+                ));
+            }
+
+            // AI report engine validation.
+            if core.ai_extract_fields.is_some() && core.ai_schema_file.is_some() {
+                return Err(CrawlerError::Config(
+                    "--ai-extract-fields and --ai-schema-file are mutually exclusive; choose one schema source."
+                        .to_string(),
+                ));
+            }
+            if let Some(ref path) = core.ai_schema_file
+                && let Err(error) = crate::ai::report::schema::load_schema_file(path)
+            {
+                return Err(CrawlerError::Config(format!("Invalid --ai-schema-file: {}", error)));
+            }
+            if !crate::ai::report::locale::is_valid_language_tag(&core.ai_report_language) {
+                return Err(CrawlerError::Config(format!(
+                    "Invalid --ai-report-language '{}'. Use a BCP-47 language tag such as en, cs, or de-DE.",
+                    core.ai_report_language
+                )));
+            }
+            if core.ai_input_cost_per_million.is_some() != core.ai_output_cost_per_million.is_some() {
+                return Err(CrawlerError::Config(
+                    "--ai-input-cost-per-million and --ai-output-cost-per-million must be set together for an honest cost estimate."
+                        .to_string(),
+                ));
+            }
+            for (name, value) in [
+                ("--ai-input-cost-per-million", core.ai_input_cost_per_million),
+                ("--ai-output-cost-per-million", core.ai_output_cost_per_million),
+            ] {
+                if value.is_some_and(|rate| !rate.is_finite() || rate < 0.0) {
+                    return Err(CrawlerError::Config(format!(
+                        "{} must be a finite non-negative number.",
+                        name
+                    )));
+                }
+            }
+            if let Some(ref report) = core.ai_report {
+                if report == "extract" {
+                    if core.ai_extract_fields.is_none() && core.ai_schema_file.is_none() {
+                        return Err(CrawlerError::Config(
+                            "--ai-report=extract requires --ai-extract-fields=\"name:type, ...\" or --ai-schema-file=PATH."
+                                .to_string(),
+                        ));
+                    }
+                } else if crate::ai::report::presets::preset_by_key(report).is_none() {
+                    return Err(CrawlerError::Config(format!(
+                        "Unknown --ai-report '{}'. Known presets: {}, or 'extract' with a custom schema.",
+                        report,
+                        crate::ai::report::presets::PRESET_KEYS.join(", ")
+                    )));
+                } else if core.ai_extract_fields.is_some() || core.ai_schema_file.is_some() {
+                    // A preset ships its own schema — custom fields would be silently ignored.
+                    return Err(CrawlerError::Config(format!(
+                        "--ai-extract-fields/--ai-schema-file only apply to --ai-report=extract, not to the '{}' preset.",
+                        report
+                    )));
+                }
+            }
+            if core.ai_extract_fields.is_some() || core.ai_schema_file.is_some() {
+                // Custom fields imply the extract engine even without an explicit --ai-report.
+                if core.ai_report.is_none() {
+                    core.ai_report = Some("extract".to_string());
+                    if options.is_explicitly_set("aiActions") {
+                        if !core.ai_actions.iter().any(|a| a == "extract") {
+                            core.ai_actions.push("extract".to_string());
+                        }
+                    } else {
+                        core.ai_actions = vec!["extract".to_string()];
+                    }
+                }
+                if let Some(ref fields) = core.ai_extract_fields
+                    && let Err(e) = crate::ai::report::schema::parse_fields_dsl(fields)
+                {
+                    return Err(CrawlerError::Config(format!("Invalid --ai-extract-fields: {}", e)));
+                }
+            }
+            if core.ai_report.is_some() {
+                let report_dir = core.ai_report_dir.trim();
+                if report_dir.is_empty() || report_dir == "off" {
+                    return Err(CrawlerError::Config(
+                        "--ai-report-dir must name a writable output directory.".to_string(),
+                    ));
+                }
+                let report_path = std::path::Path::new(report_dir);
+                if report_path.exists() && !report_path.is_dir() {
+                    return Err(CrawlerError::Config(format!(
+                        "--ai-report-dir '{}' exists but is not a directory.",
+                        report_dir
+                    )));
+                }
+            }
+            // The `extract` action is normally driven by --ai-report; if a user lists it in
+            // --ai-actions manually, it still needs a schema source. Fail at config time (like
+            // `custom`) instead of at runtime.
+            if core.ai_actions.iter().any(|a| a == "extract") && core.ai_report.is_none() {
+                return Err(CrawlerError::Config(
+                    "--ai-actions=extract requires --ai-report=<preset> or --ai-extract-fields/--ai-schema-file."
+                        .to_string(),
+                ));
+            }
+            if !["auto", "on", "off"].contains(&core.ai_schema_enforce.as_str()) {
+                return Err(CrawlerError::Config(format!(
+                    "Invalid --ai-schema-enforce '{}'. Use auto, on, or off.",
+                    core.ai_schema_enforce
+                )));
+            }
+            if provider == crate::ai::provider::Provider::Anthropic
+                && core.ai_schema_enforce == "on"
+                && core.ai_actions.iter().any(|action| action == "extract")
+            {
+                return Err(CrawlerError::Config(
+                    "--ai-schema-enforce=on is not supported for Anthropic; use auto or off for prompt-mode validation."
+                        .to_string(),
                 ));
             }
             for (flag, body) in [
@@ -1733,6 +1889,16 @@ impl CoreOptions {
                     self.ai_max_reqs_per_sec = Some(f);
                 }
             }
+            "aiInputCostPerMillion" => {
+                if let Some(f) = value.as_float() {
+                    self.ai_input_cost_per_million = Some(f);
+                }
+            }
+            "aiOutputCostPerMillion" => {
+                if let Some(f) = value.as_float() {
+                    self.ai_output_cost_per_million = Some(f);
+                }
+            }
             "aiTimeout" => {
                 if let Some(n) = value.as_int() {
                     self.ai_timeout = n;
@@ -1750,6 +1916,38 @@ impl CoreOptions {
             "aiDryRun" => {
                 if let Some(b) = value.as_bool() {
                     self.ai_dry_run = b;
+                }
+            }
+            "aiReport" => match value.as_str() {
+                Some(s) => self.ai_report = Some(s.to_string()),
+                None => self.ai_report = None,
+            },
+            "aiReportLanguage" => {
+                if let Some(s) = value.as_str() {
+                    self.ai_report_language = s.to_string();
+                }
+            }
+            "aiReportDir" => {
+                if let Some(s) = value.as_str() {
+                    self.ai_report_dir = s.to_string();
+                }
+            }
+            "aiExtractFields" => match value.as_str() {
+                Some(s) => self.ai_extract_fields = Some(s.to_string()),
+                None => self.ai_extract_fields = None,
+            },
+            "aiSchemaFile" => match value.as_str() {
+                Some(s) => self.ai_schema_file = Some(s.to_string()),
+                None => self.ai_schema_file = None,
+            },
+            "aiSchemaEnforce" => {
+                if let Some(s) = value.as_str() {
+                    self.ai_schema_enforce = s.to_string();
+                }
+            }
+            "aiReportCdn" => {
+                if let Some(b) = value.as_bool() {
+                    self.ai_report_cdn = b;
                 }
             }
             "browserEnabled" => {
@@ -3188,7 +3386,7 @@ pub fn get_options() -> Options {
             ),
             CrawlerOption::new(
                 "--ai-actions", None, "aiActions", OptionType::String, true,
-                "Comma-separated AI analyses to run: `seo`, `llms-txt`, `llms-full`, `typos`, `custom`, `summary`. The default runs the full report set; `custom` (needs a prompt) and `llms-txt`/`llms-full` (extra files) are opt-in.",
+                "Comma-separated AI analyses to run: `seo`, `llms-txt`, `llms-full`, `typos`, `custom`, `summary`, `extract`. The default runs the standard report set; `custom` (needs a prompt), `extract` (normally enabled by --ai-report), and `llms-txt`/`llms-full` (extra files) are opt-in.",
                 Some("seo,typos,summary"), false, true, None,
             ),
             CrawlerOption::new(
@@ -3228,8 +3426,18 @@ pub fn get_options() -> Options {
             ),
             CrawlerOption::new(
                 "--ai-max-reqs-per-sec", None, "aiMaxReqsPerSec", OptionType::Float, false,
-                "Maximum AI requests per second (rate limit for the LLM API).",
-                None, true, false, None,
+                "Maximum AI requests per second, applied to every actual HTTP attempt including retries.",
+                None, true, false, Some(vec!["0.001".to_string(), "1000000".to_string()]),
+            ),
+            CrawlerOption::new(
+                "--ai-input-cost-per-million", None, "aiInputCostPerMillion", OptionType::Float, false,
+                "Optional model price in USD per one million input tokens. Set together with --ai-output-cost-per-million to include an estimated cost in AI reports.",
+                None, true, false, Some(vec!["0".to_string(), "1000000".to_string()]),
+            ),
+            CrawlerOption::new(
+                "--ai-output-cost-per-million", None, "aiOutputCostPerMillion", OptionType::Float, false,
+                "Optional model price in USD per one million output tokens. Set together with --ai-input-cost-per-million to include an estimated cost in AI reports.",
+                None, true, false, Some(vec!["0".to_string(), "1000000".to_string()]),
             ),
             CrawlerOption::new(
                 "--ai-timeout", None, "aiTimeout", OptionType::Int, false,
@@ -3248,7 +3456,45 @@ pub fn get_options() -> Options {
             ),
             CrawlerOption::new(
                 "--ai-dry-run", None, "aiDryRun", OptionType::Bool, false,
-                "Show which pages would be analyzed, the number of LLM calls, and an estimated input-token count, then exit without calling the API.",
+                "Show selected pages, initial LLM calls, the worst-case retry request budget, and estimated input tokens, then exit without calling the API.",
+                Some("false"), false, false, None,
+            ),
+            CrawlerOption::new(
+                "--ai-report", None, "aiReport", OptionType::String, false,
+                "Generate a first-class AI report over the crawled pages. A preset key — `ia` (information-architecture inventory), `quality` (content quality/readability), `topics` (topic & content-gap map), `compliance` (regulatory & dark-pattern audit, incl. EU CCD2 loan-advertising rules) — or `extract` for a custom typed schema. Emits a structured JSON and a self-contained HTML report.",
+                None, true, false, None,
+            ),
+            CrawlerOption::new(
+                "--ai-report-language", None, "aiReportLanguage", OptionType::String, false,
+                "Output language for AI report prose and report chrome (BCP-47, e.g. `en`, `cs`, `de-DE`). English and Czech chrome are built in; other locales use English chrome while AI prose follows the requested language.",
+                Some("en"), false, false, None,
+            ),
+            {
+                let prefix = default_output_prefix();
+                CrawlerOption::new(
+                    "--ai-report-dir", None, "aiReportDir", OptionType::Dir, false,
+                    "Directory for paired AI report JSON and HTML artifacts. Filenames include a unique run ID and are never silently overwritten.",
+                    Some(&prefix), false, false, None,
+                )
+            },
+            CrawlerOption::new(
+                "--ai-extract-fields", None, "aiExtractFields", OptionType::String, false,
+                "Custom per-page schema for `--ai-report=extract`, as a compact DSL: `name:type[:desc], ...`. Types: string, text, int, float, bool, enum(a,b,c), string[], url, path, score, date, findings. E.g. 'title:string, summary:text, section:enum(Blog,Docs,Other), quality:score'.",
+                None, true, false, None,
+            ),
+            CrawlerOption::new(
+                "--ai-schema-file", None, "aiSchemaFile", OptionType::File, false,
+                "Path to a JSON file describing the custom extract schema (array of {name,type,desc,required,min,max,enum}). Alternative to --ai-extract-fields; also used to enforce the schema at the API level.",
+                None, true, false, None,
+            ),
+            CrawlerOption::new(
+                "--ai-schema-enforce", None, "aiSchemaEnforce", OptionType::String, false,
+                "Whether to enforce the JSON schema at the API level: `auto` (default; enforce when the provider supports it), `on` (force native structured output), or `off` (embed the schema in the prompt and rely on robust parsing).",
+                Some("auto"), false, false, None,
+            ),
+            CrawlerOption::new(
+                "--ai-report-cdn", None, "aiReportCdn", OptionType::Bool, false,
+                "Load a pinned chart library from a CDN (with SRI) for additional interactive charts. The default report already includes server-rendered summaries and remains fully usable offline.",
                 Some("false"), false, false, None,
             ),
         ],
@@ -3884,10 +4130,19 @@ mod tests {
             ai_max_pages: 100,
             ai_max_concurrency: 4,
             ai_max_reqs_per_sec: None,
+            ai_input_cost_per_million: None,
+            ai_output_cost_per_million: None,
             ai_timeout: 180,
             ai_cache_dir: Some("tmp/ai-cache".to_string()),
             ai_seo_affects_score: false,
             ai_dry_run: false,
+            ai_report: None,
+            ai_report_language: "en".to_string(),
+            ai_report_dir: "tmp".to_string(),
+            ai_extract_fields: None,
+            ai_schema_file: None,
+            ai_schema_enforce: "auto".to_string(),
+            ai_report_cdn: false,
 
             // browser rendering settings
             browser_enabled: false,

@@ -12,6 +12,7 @@ pub mod normalize;
 pub mod page;
 pub mod prompt;
 pub mod provider;
+pub mod report;
 pub mod runner;
 pub mod secret;
 pub mod selection;

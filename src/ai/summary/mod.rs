@@ -161,6 +161,8 @@ pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, _output: &A
                 max_tokens,
                 temperature,
                 json_mode: true,
+                json_schema: None,
+                schema_name: None,
             };
             let res = match client.complete(&req, CAT_SUMMARY_AREAS).await {
                 Ok(c) => serde_json::from_str::<AreaAssessment>(&normalize_json_response(&c.text)).ok(),
@@ -241,6 +243,8 @@ pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, _output: &A
         max_tokens: synth_max_tokens,
         temperature,
         json_mode: true,
+        json_schema: None,
+        schema_name: None,
     };
     let synth_result = if options.ai_synthesis_extra_body.is_some() {
         client

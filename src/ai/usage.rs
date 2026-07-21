@@ -19,6 +19,8 @@ static PROMPT_TOKENS: AtomicU64 = AtomicU64::new(0);
 static COMPLETION_TOKENS: AtomicU64 = AtomicU64::new(0);
 static NETWORK_TIME_MS: AtomicU64 = AtomicU64::new(0);
 static CALLS_WITHOUT_USAGE: AtomicU64 = AtomicU64::new(0);
+static HTTP_ATTEMPTS: AtomicU64 = AtomicU64::new(0);
+static RETRIES: AtomicU64 = AtomicU64::new(0);
 
 /// Per-analysis-type accounting (keyed by a human-readable category label).
 static BY_CATEGORY: Lazy<Mutex<BTreeMap<String, CategoryUsage>>> = Lazy::new(|| Mutex::new(BTreeMap::new()));
@@ -53,7 +55,8 @@ pub fn model_name() -> Option<String> {
 }
 
 /// Record one completed LLM call under `category` (a human-readable analysis-type label).
-/// `from_cache` calls contribute their (originally spent) tokens but no network time.
+/// `from_cache` calls count as logical completions but contribute no tokens or network time to the
+/// current run: their provider cost was paid in an earlier run.
 /// `tokens_reported` is false when the provider's response did not contain a recognizable usage
 /// block (the call still counts; its tokens are unknown).
 pub fn record(
@@ -65,26 +68,33 @@ pub fn record(
     tokens_reported: bool,
 ) {
     CALLS.fetch_add(1, Ordering::Relaxed);
-    PROMPT_TOKENS.fetch_add(prompt_tokens, Ordering::Relaxed);
-    COMPLETION_TOKENS.fetch_add(completion_tokens, Ordering::Relaxed);
     if from_cache {
         CACHE_HITS.fetch_add(1, Ordering::Relaxed);
     } else {
+        PROMPT_TOKENS.fetch_add(prompt_tokens, Ordering::Relaxed);
+        COMPLETION_TOKENS.fetch_add(completion_tokens, Ordering::Relaxed);
         NETWORK_TIME_MS.fetch_add(elapsed_ms, Ordering::Relaxed);
     }
-    if !tokens_reported {
+    if !from_cache && !tokens_reported {
         CALLS_WITHOUT_USAGE.fetch_add(1, Ordering::Relaxed);
     }
     if let Ok(mut map) = BY_CATEGORY.lock() {
         let e = map.entry(category.to_string()).or_default();
         e.calls += 1;
-        e.prompt_tokens += prompt_tokens;
-        e.completion_tokens += completion_tokens;
         if from_cache {
             e.cache_hits += 1;
         } else {
+            e.prompt_tokens += prompt_tokens;
+            e.completion_tokens += completion_tokens;
             e.network_time_ms += elapsed_ms;
         }
+    }
+}
+
+pub fn record_http_attempt(is_retry: bool) {
+    HTTP_ATTEMPTS.fetch_add(1, Ordering::Relaxed);
+    if is_retry {
+        RETRIES.fetch_add(1, Ordering::Relaxed);
     }
 }
 
@@ -138,6 +148,23 @@ pub struct UsageSnapshot {
     pub completion_tokens: u64,
     pub network_time_s: f64,
     pub calls_without_usage: u64,
+    pub http_attempts: u64,
+    pub retries: u64,
+}
+
+impl UsageSnapshot {
+    pub fn delta_since(self, earlier: Self) -> Self {
+        Self {
+            calls: self.calls.saturating_sub(earlier.calls),
+            cache_hits: self.cache_hits.saturating_sub(earlier.cache_hits),
+            prompt_tokens: self.prompt_tokens.saturating_sub(earlier.prompt_tokens),
+            completion_tokens: self.completion_tokens.saturating_sub(earlier.completion_tokens),
+            network_time_s: (self.network_time_s - earlier.network_time_s).max(0.0),
+            calls_without_usage: self.calls_without_usage.saturating_sub(earlier.calls_without_usage),
+            http_attempts: self.http_attempts.saturating_sub(earlier.http_attempts),
+            retries: self.retries.saturating_sub(earlier.retries),
+        }
+    }
 }
 
 pub fn snapshot() -> UsageSnapshot {
@@ -148,6 +175,28 @@ pub fn snapshot() -> UsageSnapshot {
         completion_tokens: COMPLETION_TOKENS.load(Ordering::Relaxed),
         network_time_s: NETWORK_TIME_MS.load(Ordering::Relaxed) as f64 / 1000.0,
         calls_without_usage: CALLS_WITHOUT_USAGE.load(Ordering::Relaxed),
+        http_attempts: HTTP_ATTEMPTS.load(Ordering::Relaxed),
+        retries: RETRIES.load(Ordering::Relaxed),
+    }
+}
+
+/// Start a new crawler run with isolated accounting. The CLI executes one crawl at a time; without
+/// this reset, embedding the crawler and running it repeatedly in one process would leak prior-run
+/// tokens and costs into later AI artifacts.
+pub fn reset() {
+    CALLS.store(0, Ordering::Relaxed);
+    CACHE_HITS.store(0, Ordering::Relaxed);
+    PROMPT_TOKENS.store(0, Ordering::Relaxed);
+    COMPLETION_TOKENS.store(0, Ordering::Relaxed);
+    NETWORK_TIME_MS.store(0, Ordering::Relaxed);
+    CALLS_WITHOUT_USAGE.store(0, Ordering::Relaxed);
+    HTTP_ATTEMPTS.store(0, Ordering::Relaxed);
+    RETRIES.store(0, Ordering::Relaxed);
+    if let Ok(mut categories) = BY_CATEGORY.lock() {
+        categories.clear();
+    }
+    if let Ok(mut model) = MODEL.lock() {
+        *model = None;
     }
 }
 

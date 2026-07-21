@@ -60,6 +60,9 @@ pub struct Status {
     /// Pre-rendered HTML of the optional AI executive report summary (the `summary` AI action).
     ai_report_summary_html: Mutex<Option<String>>,
 
+    /// The optional first-class AI report model (the `extract` action / `--ai-report`).
+    ai_report_model: Mutex<Option<crate::ai::report::model::AiReportModel>>,
+
     /// Per-URL browser-rendering diagnostics, keyed by uq_id (only populated in --browser mode).
     browser_diagnostics: Mutex<HashMap<String, crate::browser::diagnostics::BrowserDiagnostics>>,
 }
@@ -101,6 +104,7 @@ impl Status {
             robots_txt_content: RwLock::new(HashMap::new()),
             skipped_urls: Mutex::new(Vec::new()),
             ai_report_summary_html: Mutex::new(None),
+            ai_report_model: Mutex::new(None),
             browser_diagnostics: Mutex::new(HashMap::new()),
         }
     }
@@ -127,6 +131,18 @@ impl Status {
     /// Get the pre-rendered HTML of the AI executive report summary, if generated.
     pub fn get_ai_report_summary_html(&self) -> Option<String> {
         self.ai_report_summary_html.lock().ok().and_then(|s| s.clone())
+    }
+
+    /// Store the first-class AI report model (consumed by the JSON + HTML report exporters).
+    pub fn set_ai_report_model(&self, model: crate::ai::report::model::AiReportModel) {
+        if let Ok(mut slot) = self.ai_report_model.lock() {
+            *slot = Some(model);
+        }
+    }
+
+    /// Get a clone of the AI report model, if the `extract` action produced one.
+    pub fn get_ai_report_model(&self) -> Option<crate::ai::report::model::AiReportModel> {
+        self.ai_report_model.lock().ok().and_then(|s| s.clone())
     }
 
     pub fn add_visited_url(

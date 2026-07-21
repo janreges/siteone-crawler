@@ -22,6 +22,7 @@ use crate::engine::crawler::{Crawler, compile_domain_patterns};
 use crate::engine::http_client::HttpClient;
 use crate::engine::parsed_url::ParsedUrl;
 use crate::error::{CrawlerError, CrawlerResult};
+use crate::export::ai_report_exporter::AiReportExporter;
 #[cfg(feature = "browser")]
 use crate::export::animation_exporter::AnimationExporter;
 use crate::export::exporter::Exporter;
@@ -313,7 +314,8 @@ impl Manager {
 
         // Optional AI executive summary (after analyzers populate findings/tables, before the
         // HTML report is generated so the AI box can be embedded in the Summary tab).
-        if self.options.ai_enabled && self.options.ai_actions.iter().any(|a| a == "summary") {
+        if self.options.ai_enabled && !self.options.ai_dry_run && self.options.ai_actions.iter().any(|a| a == "summary")
+        {
             crate::ai::summary::run(self.options.as_ref(), status, output).await;
         }
 
@@ -469,6 +471,50 @@ impl Manager {
         let status = crawler.get_status();
         let output = crawler.get_output();
         let options = &self.options;
+
+        // Resolve and write paired AI artifacts before the standard HTML is snapshotted. The
+        // mail/upload copy can then state the actual outcome instead of promising a later write.
+        let ai_report_paths = status.lock().ok().and_then(|st| st.get_ai_report_model()).map(|model| {
+            let host = options.get_initial_host(false);
+            let run_id = format!(
+                "{}-{}",
+                chrono::Local::now().format("%Y-%m-%d.%H-%M-%S.%3f"),
+                std::process::id()
+            );
+            AiReportExporter::paired_paths(&options.ai_report_dir, &model.preset, Some(&host), &run_id)
+        });
+        if let Some((json_path, html_path)) = &ai_report_paths {
+            let mut ai_exporter =
+                AiReportExporter::new_pair(json_path.clone(), html_path.clone(), options.ai_report_cdn);
+            let export_result = match (status.lock(), output.lock()) {
+                (Ok(st), Ok(out)) => ai_exporter.export(&st, &**out),
+                _ => Err(crate::error::CrawlerError::Export(
+                    "Cannot lock crawler state for AI report export".to_string(),
+                )),
+            };
+            match export_result {
+                Ok(()) if !options.mail_to.is_empty() || options.upload_enabled => {
+                    if let Ok(st) = status.lock() {
+                        st.add_notice_to_summary(
+                            "ai-report-delivery",
+                            &format!(
+                                "AI report artifacts were saved locally (HTML: {}). Mail/upload continues to deliver the standard crawl report.",
+                                html_path.display()
+                            ),
+                        );
+                    }
+                }
+                Err(error) => {
+                    if let Ok(st) = status.lock() {
+                        st.add_critical_to_summary(
+                            ai_exporter.get_name(),
+                            &format!("AI report export failed: {}", error),
+                        );
+                    }
+                }
+                Ok(()) => {}
+            }
+        }
 
         // AnimationExporter (browser screenshots → GIF/MP4) runs BEFORE the HTML report is
         // snapshotted below, so its summary findings appear in the report/mailer/upload too.

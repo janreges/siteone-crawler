@@ -18,6 +18,9 @@ pub struct PageContext {
     pub h1: String,
     pub headings: String,
     pub content_markdown: String,
+    /// Less aggressively stripped text used by evidence-sensitive compliance reports. It keeps
+    /// header/footer disclosures while still removing scripts, styles, and non-text graphics.
+    pub compliance_markdown: String,
     pub lang: String,
     pub canonical: String,
     pub robots: String,
@@ -69,6 +72,17 @@ impl PageContext {
             false, // keep in-page links
             true,  // relocate any leftover pre-H1 navigation to the end
         );
+        let compliance_markdown = if options.ai_report.as_deref() == Some("compliance") {
+            crate::export::markdown_exporter::convert_html_string_to_markdown_for_compliance(
+                &html,
+                ai_compliance_exclude_selectors(),
+                true,
+                false,
+                false,
+            )
+        } else {
+            String::new()
+        };
 
         Some(PageContext {
             url: url.to_string(),
@@ -78,6 +92,7 @@ impl PageContext {
             h1,
             headings,
             content_markdown,
+            compliance_markdown,
             lang,
             canonical,
             robots,
@@ -135,6 +150,13 @@ fn ai_content_exclude_selectors() -> Vec<String> {
     .iter()
     .map(|s| s.to_string())
     .collect()
+}
+
+fn ai_compliance_exclude_selectors() -> Vec<String> {
+    ["script", "style", "noscript", "svg"]
+        .iter()
+        .map(|selector| selector.to_string())
+        .collect()
 }
 
 fn select_link_href(document: &Html, rel: &str) -> String {
@@ -238,5 +260,27 @@ mod tests {
         assert!(md.contains("The actual content paragraph that matters"));
         assert!(!md.contains("Skip to content"));
         assert!(!md.contains("Copyright 2026"));
+    }
+
+    #[test]
+    fn compliance_markdown_preserves_header_and_footer_disclosures() {
+        let html = r#"<html><body>
+            <header><p>Credit advertisement</p></header>
+            <main><h1>Loan</h1><p>Main offer.</p></main>
+            <div class="cookie-banner"><button>No, I do not want the best experience</button></div>
+            <footer><p>Caution! Borrowing money costs money.</p></footer>
+            <script>track()</script>
+        </body></html>"#;
+        let md = crate::export::markdown_exporter::convert_html_string_to_markdown_for_compliance(
+            html,
+            ai_compliance_exclude_selectors(),
+            true,
+            false,
+            false,
+        );
+        assert!(md.contains("Credit advertisement"));
+        assert!(md.contains("Borrowing money costs money"));
+        assert!(md.contains("I do not want the best experience"));
+        assert!(!md.contains("track()"));
     }
 }

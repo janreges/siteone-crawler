@@ -1120,7 +1120,46 @@ pub fn convert_html_string_to_markdown(
     disable_files: bool,
     move_content_before_h1_to_end: bool,
 ) -> String {
-    let converter = HtmlToMarkdownConverter::new(html, exclude_selectors);
+    convert_html_string_to_markdown_internal(
+        html,
+        exclude_selectors,
+        disable_images,
+        disable_files,
+        move_content_before_h1_to_end,
+        false,
+    )
+}
+
+/// Compliance variant that keeps known cookie/consent banner text for textual dark-pattern rules.
+pub fn convert_html_string_to_markdown_for_compliance(
+    html: &str,
+    exclude_selectors: Vec<String>,
+    disable_images: bool,
+    disable_files: bool,
+    move_content_before_h1_to_end: bool,
+) -> String {
+    convert_html_string_to_markdown_internal(
+        html,
+        exclude_selectors,
+        disable_images,
+        disable_files,
+        move_content_before_h1_to_end,
+        true,
+    )
+}
+
+fn convert_html_string_to_markdown_internal(
+    html: &str,
+    exclude_selectors: Vec<String>,
+    disable_images: bool,
+    disable_files: bool,
+    move_content_before_h1_to_end: bool,
+    preserve_cookie_consent_text: bool,
+) -> String {
+    let mut converter = HtmlToMarkdownConverter::new(html, exclude_selectors);
+    if preserve_cookie_consent_text {
+        converter.preserve_cookie_consent_text();
+    }
     let markdown = converter.get_markdown();
 
     let mut exporter = MarkdownExporter::new();

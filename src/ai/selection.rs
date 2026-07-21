@@ -29,6 +29,7 @@ pub struct Selection {
     pub selected: Vec<RankedPage>,
     pub total_candidates_before_cap: usize,
     pub total_html_pages: usize,
+    pub total_eligible_before_masks: usize,
     pub excluded_by_mask: usize,
 }
 
@@ -39,15 +40,17 @@ pub fn select_pages(status: &Status, include: &[String], exclude: &[String], max
     let include_res = compile(include, "include");
     let exclude_res = compile(exclude, "exclude");
 
-    // Candidate pages: internal HTML, HTTP 200.
-    let html_pages: Vec<&VisitedUrl> = visited
+    let total_html_pages = visited
         .iter()
-        .filter(|u| u.status_code == 200 && u.is_allowed_for_crawling && u.content_type == ContentTypeId::Html)
-        .collect();
-    let total_html_pages = html_pages.len();
+        .filter(|url| url.content_type == ContentTypeId::Html)
+        .count();
+
+    // Eligible pages: internal/allowed HTML with HTTP 200, before user include/exclude masks.
+    let eligible_pages: Vec<&VisitedUrl> = visited.iter().filter(|u| eligible_page(u)).collect();
+    let total_eligible_before_masks = eligible_pages.len();
 
     let mut excluded_by_mask = 0usize;
-    let candidates: Vec<&VisitedUrl> = html_pages
+    let candidates: Vec<&VisitedUrl> = eligible_pages
         .into_iter()
         .filter(|u| {
             // Fail CLOSED on a match error (catastrophic backtracking etc.): an un-evaluatable
@@ -101,8 +104,13 @@ pub fn select_pages(status: &Status, include: &[String], exclude: &[String], max
         selected: ranked,
         total_candidates_before_cap,
         total_html_pages,
+        total_eligible_before_masks,
         excluded_by_mask,
     }
+}
+
+fn eligible_page(url: &VisitedUrl) -> bool {
+    !url.is_external && url.status_code == 200 && url.is_allowed_for_crawling && url.content_type == ContentTypeId::Html
 }
 
 /// Compile include/exclude patterns. A pattern that validated at the CLI (same engine) always
@@ -111,21 +119,25 @@ pub fn select_pages(status: &Status, include: &[String], exclude: &[String], max
 fn compile(patterns: &[String], kind: &str) -> Vec<Regex> {
     patterns
         .iter()
-        .filter_map(|p| match Regex::new(p) {
-            Ok(re) => Some(re),
+        .map(|p| match Regex::new(p) {
+            Ok(re) => re,
             Err(e) => {
                 eprintln!(
                     "{}",
                     crate::utils::get_color_text(
                         &format!(
-                            "AI --ai-{} pattern '{}' could not be compiled and was IGNORED: {}",
+                            "AI --ai-{} pattern '{}' could not be compiled; selection FAILED CLOSED: {}",
                             kind, p, e
                         ),
                         "yellow",
                         true,
                     )
                 );
-                None
+                // Programmatic callers can bypass CLI validation. Preserve the privacy/cost
+                // invariant there too: an invalid include matches nothing; an invalid exclude
+                // matches everything.
+                let sentinel = if kind == "include" { r"(?!)" } else { r"(?s:.*)" };
+                Regex::new(sentinel).expect("internal fail-closed regex must compile")
             }
         })
         .collect()
@@ -211,10 +223,34 @@ mod tests {
     }
 
     #[test]
-    fn compile_warns_but_drops_truly_invalid_pattern() {
-        // An unbalanced group is invalid in every engine; it is dropped (with a warning), never
-        // panics.
+    fn invalid_pattern_fails_closed() {
+        // An unbalanced include is invalid in every engine; the sentinel matches nothing so a
+        // programmatic caller cannot accidentally send every page to the LLM.
         let res = compile(&["(unclosed".to_string()], "include");
-        assert!(res.is_empty());
+        assert_eq!(res.len(), 1);
+        assert!(!res[0].is_match("https://example.test/private").unwrap());
+    }
+
+    #[test]
+    fn external_html_is_not_eligible_even_when_external_crawling_was_allowed() {
+        let page = VisitedUrl::new(
+            "id".to_string(),
+            String::new(),
+            SOURCE_INIT_URL,
+            "https://external.example/page".to_string(),
+            200,
+            0.0,
+            None,
+            ContentTypeId::Html,
+            Some("text/html".to_string()),
+            None,
+            None,
+            true,
+            true,
+            0,
+            None,
+        );
+
+        assert!(!eligible_page(&page));
     }
 }

@@ -50,6 +50,7 @@ pub fn build_config(options: &CoreOptions) -> Result<AiConfig, String> {
         extra_body,
         timeout_secs: options.ai_timeout.clamp(1, 3600) as u64,
         cache_dir,
+        max_reqs_per_sec: options.ai_max_reqs_per_sec.filter(|rate| *rate > 0.0),
     })
 }
 
@@ -67,6 +68,8 @@ pub struct AiConfig {
     pub extra_body: Option<Value>,
     pub timeout_secs: u64,
     pub cache_dir: Option<String>,
+    /// Shared limit applied immediately before every HTTP send, including transport and parse retries.
+    pub max_reqs_per_sec: Option<f64>,
 }
 
 /// Resolve the API key using the documented precedence (first match wins):

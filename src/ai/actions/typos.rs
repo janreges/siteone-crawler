@@ -116,6 +116,8 @@ pub fn build_request(ctx: &PageContext, forced_lang: Option<&str>, max_tokens: u
         max_tokens,
         temperature,
         json_mode: true,
+        json_schema: None,
+        schema_name: None,
     }
 }
 
@@ -154,6 +156,7 @@ mod tests {
             h1: String::new(),
             headings: String::new(),
             content_markdown: "text\n```\nfn mian() {}\n```\nmore".into(),
+            compliance_markdown: "text more".into(),
             lang: "en".into(),
             canonical: String::new(),
             robots: String::new(),

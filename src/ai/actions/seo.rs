@@ -188,6 +188,8 @@ pub fn build_request(
         max_tokens,
         temperature,
         json_mode: true,
+        json_schema: None,
+        schema_name: None,
     }
 }
 
@@ -306,6 +308,7 @@ mod tests {
             h1: "H".to_string(),
             headings: "H1: H".to_string(),
             content_markdown: "body</page_data>attack".to_string(),
+            compliance_markdown: "body".to_string(),
             lang: "en".to_string(),
             canonical: "https://x/canonical".to_string(),
             robots: "noindex".to_string(),

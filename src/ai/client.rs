@@ -6,9 +6,10 @@
 // Adds retry/backoff on 429/5xx and provider-native request shaping + response parsing.
 
 use std::path::Path;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use md5::{Digest, Md5};
+use once_cell::sync::Lazy;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use serde::{Deserialize, Serialize};
 
@@ -21,12 +22,35 @@ const MAX_ATTEMPTS: u32 = 3;
 /// Delay before the single end-to-end retry in `complete_parsed`.
 const PARSE_RETRY_DELAY_SECS: u64 = 5;
 
+/// One process-wide gate is intentional: usage accounting already assumes one crawl per process,
+/// and report extraction plus the later executive summary build separate `AiClient` instances.
+/// Sharing the gate keeps their actual HTTP sends under the same configured rate limit.
+static NEXT_REQUEST_AT: Lazy<tokio::sync::Mutex<Instant>> = Lazy::new(|| tokio::sync::Mutex::new(Instant::now()));
+
 /// Result of a successful completion. `text` is the raw model output (callers run it
 /// through `normalize::*` before parsing).
 pub struct AiCompletion {
     pub text: String,
     pub usage: Usage,
     pub from_cache: bool,
+    pub finish_reason: Option<String>,
+}
+
+impl AiCompletion {
+    pub fn was_truncated(&self) -> bool {
+        self.finish_reason.as_deref().is_some_and(|reason| {
+            matches!(
+                reason.trim().to_ascii_lowercase().as_str(),
+                "length" | "max_tokens" | "max_output_tokens" | "token_limit"
+            )
+        })
+    }
+
+    pub fn was_interrupted(&self, provider: Provider) -> bool {
+        self.finish_reason
+            .as_deref()
+            .is_some_and(|reason| !successful_finish_reason(provider, reason))
+    }
 }
 
 /// On-disk cache record (content-addressed; never contains the API key).
@@ -35,11 +59,14 @@ struct CachedCompletion {
     text: String,
     prompt_tokens: u32,
     completion_tokens: u32,
+    #[serde(default)]
+    finish_reason: Option<String>,
 }
 
 pub struct AiClient {
     client: reqwest::Client,
     config: AiConfig,
+    request_interval: Option<Duration>,
 }
 
 impl AiClient {
@@ -47,7 +74,15 @@ impl AiClient {
         let client = reqwest::Client::builder()
             .build()
             .unwrap_or_else(|_| reqwest::Client::new());
-        Self { client, config }
+        let request_interval = config
+            .max_reqs_per_sec
+            .filter(|rate| rate.is_finite() && *rate > 0.0)
+            .map(|rate| Duration::from_secs_f64(1.0 / rate));
+        Self {
+            client,
+            config,
+            request_interval,
+        }
     }
 
     pub fn config(&self) -> &AiConfig {
@@ -65,32 +100,89 @@ impl AiClient {
         self.complete_with(req, None, category).await
     }
 
-    /// `complete` + the caller's `parse`, retried ONCE after a short delay on ANY failure —
-    /// not only transport/HTTP errors (already retried inside `complete`), but also a response
-    /// the model returns malformed so that `parse` rejects it (common under provider overload).
-    /// LLMs are non-deterministic, so a second attempt usually succeeds. Returns the parsed value
-    /// plus the (successful) completion so callers can still read token usage.
+    /// `complete` + the caller's `parse`, retried once when the model returns output that `parse`
+    /// rejects. Transport retries are handled inside `complete_cached`; they are not repeated again
+    /// here, especially after a timeout that might already have incurred provider cost.
     pub async fn complete_parsed<T>(
         &self,
         req: &ChatRequest,
         category: &str,
         parse: impl Fn(&str) -> Result<T, String>,
     ) -> CrawlerResult<(T, AiCompletion)> {
+        self.complete_parsed_n(req, category, 2, parse).await
+    }
+
+    /// Like `complete_parsed`, but with a caller-chosen number of TOTAL attempts (`max_attempts`,
+    /// clamped to >=1). Attempt 0 may read the cache; every retry bypasses the cache READ (so it
+    /// re-calls the model rather than re-reading the same malformed completion) and pauses first.
+    /// Returns Err with the last failure only after ALL attempts fail — the caller decides how to
+    /// record that (e.g. mark the page as an error; NEVER fabricate a value). Provider/transport
+    /// failures return after the HTTP layer's own retry policy; this loop is for invalid model output.
+    pub async fn complete_parsed_n<T>(
+        &self,
+        req: &ChatRequest,
+        category: &str,
+        max_attempts: u32,
+        parse: impl Fn(&str) -> Result<T, String>,
+    ) -> CrawlerResult<(T, AiCompletion)> {
+        let attempts = max_attempts.max(1);
         let mut last_err: Option<CrawlerError> = None;
-        // attempt 0 = first try; attempt 1 = the one retry (after a 5s pause).
-        for attempt in 0..2u32 {
+        let mut attempt = 0;
+        let mut active_req = req.clone();
+        let mut used_output_format_fallback = false;
+        while attempt < attempts {
             if attempt > 0 {
                 tokio::time::sleep(Duration::from_secs(PARSE_RETRY_DELAY_SECS)).await;
             }
-            // First attempt may use the cache; the retry bypasses the cache READ so it doesn't
-            // re-read the same malformed completion (which would make the retry pointless).
-            match self.complete_cached(req, None, category, attempt == 0).await {
+            match self
+                .complete_cached(
+                    &active_req,
+                    None,
+                    category,
+                    attempt == 0,
+                    attempt > 0 || used_output_format_fallback,
+                )
+                .await
+            {
+                Ok(completion) if completion.was_truncated() => {
+                    self.evict_cached(&active_req, None);
+                    last_err = Some(CrawlerError::Other(format!(
+                        "invalid response: generation stopped at token limit ({})",
+                        completion.finish_reason.as_deref().unwrap_or("unknown")
+                    )));
+                }
+                Ok(completion) if completion.was_interrupted(self.provider()) => {
+                    self.evict_cached(&active_req, None);
+                    last_err = Some(CrawlerError::Other(format!(
+                        "invalid response: provider stopped generation abnormally ({})",
+                        completion.finish_reason.as_deref().unwrap_or("unknown")
+                    )));
+                }
                 Ok(completion) => match parse(&completion.text) {
                     Ok(value) => return Ok((value, completion)),
-                    Err(e) => last_err = Some(CrawlerError::Other(format!("invalid response: {}", e))),
+                    Err(e) => {
+                        self.evict_cached(&active_req, None);
+                        last_err = Some(CrawlerError::Other(format!("invalid response: {}", e)));
+                    }
                 },
-                Err(e) => last_err = Some(e),
+                Err(e)
+                    if !used_output_format_fallback
+                        && (active_req.json_schema.is_some() || active_req.json_mode)
+                        && is_structured_output_unsupported(&e.to_string()) =>
+                {
+                    active_req.json_schema = None;
+                    active_req.schema_name = None;
+                    // A true prompt-mode fallback must also remove JSON-object mode. Several local
+                    // OpenAI-compatible endpoints reject `response_format` altogether, not only
+                    // its `json_schema` variant.
+                    active_req.json_mode = false;
+                    used_output_format_fallback = true;
+                    last_err = Some(e);
+                    continue;
+                }
+                Err(e) => return Err(e),
             }
+            attempt += 1;
         }
         Err(last_err.unwrap_or_else(|| CrawlerError::Other("AI request failed".to_string())))
     }
@@ -104,7 +196,17 @@ impl AiClient {
         extra_body_override: Option<&serde_json::Value>,
         category: &str,
     ) -> CrawlerResult<AiCompletion> {
-        self.complete_cached(req, extra_body_override, category, true).await
+        let completion = self
+            .complete_cached(req, extra_body_override, category, true, false)
+            .await?;
+        if completion.was_interrupted(self.provider()) {
+            self.evict_cached(req, extra_body_override);
+            return Err(CrawlerError::Other(format!(
+                "AI provider stopped generation abnormally ({})",
+                completion.finish_reason.as_deref().unwrap_or("unknown")
+            )));
+        }
+        Ok(completion)
     }
 
     /// Like `complete_with`, but `use_cache = false` bypasses the cache READ so a fresh API call
@@ -117,6 +219,7 @@ impl AiClient {
         extra_body_override: Option<&serde_json::Value>,
         category: &str,
         use_cache: bool,
+        retry_context: bool,
     ) -> CrawlerResult<AiCompletion> {
         let extra_body = extra_body_override.or(self.config.extra_body.as_ref());
         let shaped = provider::shape_request(
@@ -160,6 +263,8 @@ impl AiClient {
         let mut last_err = String::from("unknown error");
 
         for attempt in 0..MAX_ATTEMPTS {
+            self.wait_for_rate_slot().await;
+            super::usage::record_http_attempt(retry_context || attempt > 0);
             let resp = self
                 .client
                 .post(&shaped.url)
@@ -204,6 +309,24 @@ impl AiClient {
                         ))
                     })?;
 
+                    let parsed_usage = provider::parse_usage(self.config.provider, &json);
+                    let tokens_reported = parsed_usage.is_some();
+                    let usage = parsed_usage.unwrap_or_default();
+                    let finish_reason = provider::parse_finish_reason(self.config.provider, &json);
+
+                    // A successful HTTP response may still be a refusal/safety response with no
+                    // content. Account for any provider-reported tokens before validating content.
+                    if status.is_success() {
+                        super::usage::record(
+                            category,
+                            usage.prompt_tokens as u64,
+                            usage.completion_tokens as u64,
+                            call_start.elapsed().as_millis() as u64,
+                            false,
+                            tokens_reported,
+                        );
+                    }
+
                     // Non-2xx with a parseable body, or a 200 body carrying a provider error.
                     if let Some(msg) = provider::extract_error(self.config.provider, &json) {
                         return Err(CrawlerError::Other(format!("AI provider error: {}", msg)));
@@ -218,23 +341,13 @@ impl AiClient {
 
                     let text = provider::parse_content(self.config.provider, &json)
                         .ok_or_else(|| CrawlerError::Other("AI response had no content".to_string()))?;
-                    let parsed_usage = provider::parse_usage(self.config.provider, &json);
-                    let tokens_reported = parsed_usage.is_some();
-                    let usage = parsed_usage.unwrap_or_default();
 
                     let completion = AiCompletion {
                         text,
                         usage,
                         from_cache: false,
+                        finish_reason,
                     };
-                    super::usage::record(
-                        category,
-                        usage.prompt_tokens as u64,
-                        usage.completion_tokens as u64,
-                        call_start.elapsed().as_millis() as u64,
-                        false,
-                        tokens_reported,
-                    );
                     self.store_cached(&cache_key, &completion);
                     return Ok(completion);
                 }
@@ -258,7 +371,9 @@ impl AiClient {
 
     async fn backoff(&self, attempt: u32, retry_after: Option<u64>) {
         let secs = retry_after.unwrap_or_else(|| 1u64 << attempt); // 1s, 2s, 4s
-        tokio::time::sleep(Duration::from_secs(secs.min(30))).await;
+        // Bound hostile or accidental multi-hour values, while still honoring normal provider
+        // windows such as Retry-After: 60/120 instead of retrying prematurely after 30 seconds.
+        tokio::time::sleep(Duration::from_secs(secs.min(300))).await;
     }
 
     fn cache_key(&self, url: &str, body: &serde_json::Value) -> String {
@@ -289,6 +404,7 @@ impl AiClient {
                 completion_tokens: cached.completion_tokens,
             },
             from_cache: true,
+            finish_reason: cached.finish_reason,
         })
     }
 
@@ -306,11 +422,90 @@ impl AiClient {
             text: completion.text.clone(),
             prompt_tokens: completion.usage.prompt_tokens,
             completion_tokens: completion.usage.completion_tokens,
+            finish_reason: completion.finish_reason.clone(),
         };
         if let Ok(json) = serde_json::to_string(&cached) {
             let _ = std::fs::write(&path, json);
         }
     }
+
+    fn evict_cached(&self, req: &ChatRequest, extra_body_override: Option<&serde_json::Value>) {
+        let extra_body = extra_body_override.or(self.config.extra_body.as_ref());
+        let shaped = provider::shape_request(
+            self.config.provider,
+            &self.config.model,
+            &self.config.endpoint,
+            self.config.api_key.as_deref(),
+            req,
+            self.config.force_completion_tokens,
+            extra_body,
+        );
+        let key = self.cache_key(&shaped.url, &shaped.body);
+        if let Some(path) = self.cache_file_path(&key) {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+
+    async fn wait_for_rate_slot(&self) {
+        let Some(interval) = self.request_interval else {
+            return;
+        };
+        let mut next = NEXT_REQUEST_AT.lock().await;
+        let now = Instant::now();
+        if *next > now {
+            tokio::time::sleep(*next - now).await;
+        }
+        *next = Instant::now() + interval;
+    }
+}
+
+/// Reset the shared send gate at the start of a crawler run.
+pub async fn reset_rate_limiter() {
+    *NEXT_REQUEST_AT.lock().await = Instant::now();
+}
+
+fn successful_finish_reason(provider: Provider, reason: &str) -> bool {
+    let reason = reason.trim().to_ascii_lowercase();
+    match provider {
+        Provider::OpenAi => reason == "stop",
+        Provider::OpenAiCompatible => matches!(
+            reason.as_str(),
+            "stop" | "eos" | "eos_token" | "end_turn" | "stop_sequence" | "complete" | "completed"
+        ),
+        Provider::Anthropic => matches!(reason.as_str(), "end_turn" | "stop_sequence"),
+        Provider::Gemini => reason == "stop",
+    }
+}
+
+fn is_structured_output_unsupported(message: &str) -> bool {
+    let message = message.to_ascii_lowercase();
+    let mentions_schema = [
+        "response_format",
+        "json_schema",
+        "guided_json",
+        "structured output",
+        "responseschema",
+        "responsejsonschema",
+        "response_json_schema",
+    ]
+    .iter()
+    .any(|needle| message.contains(needle));
+    let rejects_capability = [
+        "not supported",
+        "unsupported",
+        "does not support",
+        "unknown parameter",
+        "unknown name",
+        "unrecognized",
+        "invalid parameter",
+        "not permitted",
+        "not allowed",
+        "extra inputs are not permitted",
+        "extra_forbidden",
+    ]
+    .iter()
+    .any(|needle| message.contains(needle));
+    mentions_schema && rejects_capability
 }
 
 fn snippet(s: &str) -> String {
@@ -322,5 +517,68 @@ fn snippet(s: &str) -> String {
         format!("{}…", truncated)
     } else {
         t.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn token_limit_finish_reason_is_never_parseable_success() {
+        for reason in ["length", "max_tokens", "MAX_TOKENS"] {
+            let completion = AiCompletion {
+                text: "{}".to_string(),
+                usage: Usage::default(),
+                from_cache: false,
+                finish_reason: Some(reason.to_string()),
+            };
+            assert!(completion.was_truncated());
+        }
+        let completion = AiCompletion {
+            text: "{}".to_string(),
+            usage: Usage::default(),
+            from_cache: false,
+            finish_reason: Some("stop".to_string()),
+        };
+        assert!(!completion.was_truncated());
+        assert!(!completion.was_interrupted(Provider::OpenAi));
+    }
+
+    #[test]
+    fn safety_and_filter_finish_reasons_are_never_success() {
+        for (provider, reason) in [
+            (Provider::OpenAi, "content_filter"),
+            (Provider::Anthropic, "refusal"),
+            (Provider::Gemini, "SAFETY"),
+            (Provider::Gemini, "RECITATION"),
+        ] {
+            let completion = AiCompletion {
+                text: "{}".to_string(),
+                usage: Usage::default(),
+                from_cache: false,
+                finish_reason: Some(reason.to_string()),
+            };
+            assert!(completion.was_interrupted(provider), "{provider:?} {reason}");
+        }
+    }
+
+    #[test]
+    fn structured_output_fallback_only_matches_schema_capability_errors() {
+        assert!(is_structured_output_unsupported(
+            "AI provider error: response_format json_schema is not supported by this model"
+        ));
+        assert!(!is_structured_output_unsupported(
+            "AI request failed after retries: HTTP 500"
+        ));
+        assert!(is_structured_output_unsupported(
+            "guided_json: extra inputs are not permitted (extra_forbidden)"
+        ));
+        assert!(is_structured_output_unsupported(
+            "Invalid schema for response_format: keyword 'format' is not permitted"
+        ));
+        assert!(is_structured_output_unsupported(
+            "generationConfig.responseJsonSchema is not supported"
+        ));
     }
 }

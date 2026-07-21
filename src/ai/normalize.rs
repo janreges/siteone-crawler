@@ -174,6 +174,183 @@ pub fn normalize_text_response(raw: &str) -> String {
     strip_code_fences(&no_think)
 }
 
+/// Best-effort repair of the mechanical JSON mistakes LLMs commonly make, so `serde_json` can
+/// parse the result. This is NOT a full JSON parser — it fixes the frequent, well-documented
+/// failure modes (studied across many models) in a single string-aware pass: markdown/```json
+/// fences and `<think>` reasoning stripped + outer JSON value extracted; Python/JS literals
+/// `True`/`False`/`None` → `true`/`false`/`null` (outside strings); single-quoted strings →
+/// double-quoted (inner `"` escaped); trailing commas before `}`/`]` removed; and truncated output
+/// completed (an unterminated string is closed and any still-open `{`/`[` are closed in order at
+/// end-of-input).
+///
+/// It deliberately makes NO attempt to invent missing content — genuinely lost data stays lost; the
+/// goal is only to make a recoverable structure parseable. Callers must still validate the parsed
+/// value (and never fabricate defaults for a response this cannot rescue).
+pub struct JsonRepair {
+    pub json: String,
+    /// True when repair had to close an unterminated string/container. That operation can make a
+    /// token-truncated response parseable, but cannot recover its missing values.
+    pub completed_truncation: bool,
+}
+
+pub fn repair_json_with_status(raw: &str) -> JsonRepair {
+    // Start from the already-unwrapped candidate (fences + think removed), then the outermost
+    // JSON value so leading/trailing prose does not confuse the pass.
+    let unfenced = strip_code_fences(&strip_think(raw));
+    let candidate = extract_json(&unfenced);
+
+    let mut out = String::with_capacity(candidate.len() + 16);
+    // Stack of open containers, storing the closing char we owe ('}' or ']').
+    let mut stack: Vec<char> = Vec::new();
+    let mut in_str = false;
+    // The delimiter the model used for the current string ('"' or '\''); we always EMIT '"'.
+    let mut str_delim = '"';
+    let mut escaped = false;
+
+    let bytes: Vec<char> = candidate.chars().collect();
+    let mut i = 0usize;
+    while i < bytes.len() {
+        let c = bytes[i];
+        if in_str {
+            if escaped {
+                out.push(c);
+                escaped = false;
+            } else if c == '\\' {
+                // `\'` is not a valid JSON escape — the model meant a literal apostrophe. Drop the
+                // backslash so the string stays parseable; keep every other escape intact.
+                if bytes.get(i + 1) == Some(&'\'') {
+                    out.push('\'');
+                    i += 2;
+                    continue;
+                }
+                out.push(c);
+                escaped = true;
+            } else if c == str_delim {
+                if str_delim == '\'' {
+                    // A single-quoted string may contain an UNescaped apostrophe ("it's fine"). Only
+                    // treat this `'` as the closing delimiter when the next non-space char is a
+                    // structural token (`, : } ]`) or end-of-input; otherwise it is a literal
+                    // apostrophe inside the (now double-quoted) string.
+                    let mut j = i + 1;
+                    while bytes.get(j).is_some_and(|c| c.is_whitespace()) {
+                        j += 1;
+                    }
+                    let closes = match bytes.get(j) {
+                        None => true,
+                        Some(c) => matches!(c, ',' | ':' | '}' | ']'),
+                    };
+                    if closes {
+                        out.push('"');
+                        in_str = false;
+                    } else {
+                        out.push('\''); // literal apostrophe (valid inside a JSON double-quoted string)
+                    }
+                } else {
+                    // End of a double-quoted string → emit a double quote.
+                    out.push('"');
+                    in_str = false;
+                }
+            } else if c == '"' && str_delim == '\'' {
+                // A literal double quote inside a single-quoted string must be escaped.
+                out.push_str("\\\"");
+            } else {
+                out.push(c);
+            }
+            i += 1;
+            continue;
+        }
+        match c {
+            '"' | '\'' => {
+                in_str = true;
+                str_delim = c;
+                out.push('"');
+            }
+            '{' => {
+                stack.push('}');
+                out.push(c);
+            }
+            '[' => {
+                stack.push(']');
+                out.push(c);
+            }
+            '}' | ']' => {
+                trim_trailing_comma(&mut out);
+                if stack.last() == Some(&c) {
+                    stack.pop();
+                }
+                out.push(c);
+            }
+            't' | 'f' | 'n' | 'T' | 'F' | 'N' => {
+                // Python/JS literal normalization on a word boundary.
+                if let Some((lit, len)) = match_literal(&bytes, i) {
+                    out.push_str(lit);
+                    i += len;
+                    continue;
+                }
+                out.push(c);
+            }
+            _ => out.push(c),
+        }
+        i += 1;
+    }
+
+    let completed_truncation = in_str || !stack.is_empty();
+    // Close an unterminated string.
+    if in_str {
+        out.push('"');
+    }
+    // Remove a trailing comma dangling at the very end, then close open containers.
+    trim_trailing_comma(&mut out);
+    while let Some(close) = stack.pop() {
+        out.push(close);
+    }
+    JsonRepair {
+        json: out,
+        completed_truncation,
+    }
+}
+
+pub fn repair_json(raw: &str) -> String {
+    repair_json_with_status(raw).json
+}
+
+/// Drop a trailing comma (and following whitespace) already written to `out`.
+fn trim_trailing_comma(out: &mut String) {
+    let trimmed = out.trim_end();
+    if trimmed.ends_with(',') {
+        let new_len = trimmed.len() - 1;
+        out.truncate(new_len);
+    } else if trimmed.len() != out.len() {
+        // Normalize trailing whitespace we may re-emit before a closer.
+        out.truncate(trimmed.len());
+    }
+}
+
+/// Match a bare `true`/`false`/`null` (any case) at `pos`, returning the canonical form + the
+/// number of source chars consumed, IF it is a standalone word (not part of an identifier/string).
+fn match_literal(bytes: &[char], pos: usize) -> Option<(&'static str, usize)> {
+    let ends_word = |idx: usize| -> bool {
+        match bytes.get(idx) {
+            None => true,
+            Some(c) => !(c.is_ascii_alphanumeric() || *c == '_'),
+        }
+    };
+    let try_word = |word: &str, canon: &'static str| -> Option<(&'static str, usize)> {
+        let wl = word.len();
+        if pos + wl <= bytes.len() {
+            let slice: String = bytes[pos..pos + wl].iter().collect();
+            if slice.eq_ignore_ascii_case(word) && ends_word(pos + wl) {
+                return Some((canon, wl));
+            }
+        }
+        None
+    };
+    try_word("true", "true")
+        .or_else(|| try_word("false", "false"))
+        .or_else(|| try_word("null", "null"))
+        .or_else(|| try_word("none", "null"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -325,5 +502,95 @@ mod tests {
     #[test]
     fn extract_balanced_none_on_truncated() {
         assert!(extract_balanced("{\"a\":1", '{', '}').is_none());
+    }
+
+    // ---- repair_json ----
+    fn repaired_value(raw: &str) -> serde_json::Value {
+        let fixed = repair_json(raw);
+        serde_json::from_str(&fixed).unwrap_or_else(|e| panic!("repair failed to produce valid JSON: {}\n{}", e, fixed))
+    }
+
+    #[test]
+    fn repair_removes_trailing_comma() {
+        let v = repaired_value("{\"a\":1,\"b\":2,}");
+        assert_eq!(v["b"], 2);
+    }
+
+    #[test]
+    fn repair_trailing_comma_in_array() {
+        let v = repaired_value("{\"xs\":[1,2,3,]}");
+        assert_eq!(v["xs"].as_array().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn repair_single_quotes_to_double() {
+        let v = repaired_value("{'a':'hello','b':'world'}");
+        assert_eq!(v["a"], "hello");
+        assert_eq!(v["b"], "world");
+    }
+
+    #[test]
+    fn repair_escapes_inner_double_quote_in_single_quoted_string() {
+        let v = repaired_value("{'msg':'he said \"hi\"'}");
+        assert_eq!(v["msg"], "he said \"hi\"");
+    }
+
+    #[test]
+    fn repair_python_literals() {
+        let v = repaired_value("{\"a\":True,\"b\":False,\"c\":None}");
+        assert_eq!(v["a"], true);
+        assert_eq!(v["b"], false);
+        assert_eq!(v["c"], serde_json::Value::Null);
+    }
+
+    #[test]
+    fn repair_closes_truncated_object_and_string() {
+        // Truncated mid-string mid-object (token limit) → structurally completed.
+        let v = repaired_value("{\"a\":1,\"b\":\"un終");
+        assert_eq!(v["a"], 1);
+        assert!(v["b"].is_string());
+    }
+
+    #[test]
+    fn repair_closes_truncated_nested_array() {
+        let v = repaired_value("{\"findings\":[{\"severity\":\"high\"");
+        assert!(v["findings"].is_array());
+        assert_eq!(v["findings"][0]["severity"], "high");
+    }
+
+    #[test]
+    fn repair_strips_fences_and_prose() {
+        let v = repaired_value("Sure! ```json\n{\"a\":1,}\n``` done");
+        assert_eq!(v["a"], 1);
+    }
+
+    #[test]
+    fn repair_leaves_valid_json_semantically_intact() {
+        let v = repaired_value("{\"a\":[1,2],\"b\":\"x\",\"c\":true}");
+        assert_eq!(v["a"][1], 2);
+        assert_eq!(v["c"], true);
+    }
+
+    #[test]
+    fn repair_does_not_touch_literals_inside_strings() {
+        let v = repaired_value("{\"a\":\"True story, None taken\"}");
+        assert_eq!(v["a"], "True story, None taken");
+    }
+
+    #[test]
+    fn repair_invalid_backslash_apostrophe_escape() {
+        // `\'` is not a valid JSON escape — must become a literal apostrophe, not stay as `\'`.
+        let v = repaired_value("{\"a\":\"it\\'s fine\"}");
+        assert_eq!(v["a"], "it's fine");
+        let v2 = repaired_value("{'msg':'it\\'s ok'}");
+        assert_eq!(v2["msg"], "it's ok");
+    }
+
+    #[test]
+    fn repair_unescaped_apostrophe_in_single_quoted_string() {
+        // The `'` inside "it's" must NOT close the string early.
+        let v = repaired_value("{'name':'John','note':'it's fine'}");
+        assert_eq!(v["name"], "John");
+        assert_eq!(v["note"], "it's fine");
     }
 }

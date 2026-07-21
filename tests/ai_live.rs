@@ -19,6 +19,8 @@ fn json_req() -> ChatRequest {
         max_tokens: 4000,
         temperature: 0.0,
         json_mode: true,
+        json_schema: None,
+        schema_name: None,
     }
 }
 
@@ -37,6 +39,7 @@ async fn minimax_m3_json_roundtrip() {
         extra_body: None,
         timeout_secs: 180,
         cache_dir: None,
+        max_reqs_per_sec: None,
     };
     let client = AiClient::new(cfg);
     let completion = client
@@ -72,6 +75,7 @@ async fn qwen_vllm_json_roundtrip() {
         extra_body: Some(serde_json::json!({"chat_template_kwargs": {"enable_thinking": false}})),
         timeout_secs: 180,
         cache_dir: None,
+        max_reqs_per_sec: None,
     };
     let client = AiClient::new(cfg);
     let completion = client
