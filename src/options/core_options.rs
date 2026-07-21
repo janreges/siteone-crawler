@@ -286,6 +286,16 @@ pub struct CoreOptions {
     pub ai_schema_enforce: String,
     pub ai_report_cdn: bool,
 
+    // AI brand-elaborate: build one large structured brand document (markdown + JSON + HTML).
+    #[serde(skip)]
+    pub ai_elaborate: bool,
+    pub ai_elaborate_template: Option<String>,
+    pub ai_elaborate_correct: bool,
+    pub ai_elaborate_gap_fill: i64,
+    pub ai_elaborate_max_output_kb: i64,
+    pub ai_elaborate_cluster_min: i64,
+    pub ai_elaborate_cluster_reps: i64,
+
     // browser rendering settings (optional; nothing runs unless browser_enabled)
     #[serde(skip)]
     pub browser_enabled: bool,
@@ -558,6 +568,13 @@ impl CoreOptions {
             ai_schema_file: None,
             ai_schema_enforce: "auto".to_string(),
             ai_report_cdn: false,
+            ai_elaborate: false,
+            ai_elaborate_template: None,
+            ai_elaborate_correct: true,
+            ai_elaborate_gap_fill: 20,
+            ai_elaborate_max_output_kb: 45,
+            ai_elaborate_cluster_min: 8,
+            ai_elaborate_cluster_reps: 2,
 
             // browser rendering settings
             browser_enabled: false,
@@ -633,6 +650,7 @@ impl CoreOptions {
             "aiSchemaFile",
             "aiSchemaEnforce",
             "aiReportCdn",
+            "aiElaborate",
         ]
         .iter()
         .any(|p| options.is_explicitly_set(p));
@@ -648,6 +666,13 @@ impl CoreOptions {
             } else {
                 core.ai_actions = vec!["extract".to_string()];
             }
+        }
+
+        // --ai-elaborate is its own pipeline (not an action). When the user did NOT list actions,
+        // clear the default set so an elaborate-only run does no extra per-page action work; if they
+        // DID list actions, both run.
+        if core.ai_elaborate && !options.is_explicitly_set("aiActions") {
+            core.ai_actions.clear();
         }
 
         if core.ai_enabled {
@@ -703,6 +728,15 @@ impl CoreOptions {
                     "Invalid --ai-report-language '{}'. Use a BCP-47 language tag such as en, cs, or de-DE.",
                     core.ai_report_language
                 )));
+            }
+            if let Some(ref template) = core.ai_elaborate_template {
+                let t = template.trim().to_ascii_lowercase();
+                if !matches!(t.as_str(), "" | "auto" | "corporate" | "personal" | "product") {
+                    return Err(CrawlerError::Config(format!(
+                        "Invalid --ai-elaborate-template '{}'. Use corporate, personal, or product.",
+                        template
+                    )));
+                }
             }
             if core.ai_input_cost_per_million.is_some() != core.ai_output_cost_per_million.is_some() {
                 return Err(CrawlerError::Config(
@@ -1948,6 +1982,40 @@ impl CoreOptions {
             "aiReportCdn" => {
                 if let Some(b) = value.as_bool() {
                     self.ai_report_cdn = b;
+                }
+            }
+            "aiElaborate" => {
+                if let Some(b) = value.as_bool() {
+                    self.ai_elaborate = b;
+                }
+            }
+            "aiElaborateTemplate" => match value.as_str() {
+                Some(s) => self.ai_elaborate_template = Some(s.to_string()),
+                None => self.ai_elaborate_template = None,
+            },
+            "aiElaborateCorrect" => {
+                if let Some(b) = value.as_bool() {
+                    self.ai_elaborate_correct = b;
+                }
+            }
+            "aiElaborateGapFill" => {
+                if let Some(i) = value.as_int() {
+                    self.ai_elaborate_gap_fill = i;
+                }
+            }
+            "aiElaborateMaxOutputKb" => {
+                if let Some(i) = value.as_int() {
+                    self.ai_elaborate_max_output_kb = i;
+                }
+            }
+            "aiElaborateClusterMin" => {
+                if let Some(i) = value.as_int() {
+                    self.ai_elaborate_cluster_min = i;
+                }
+            }
+            "aiElaborateClusterReps" => {
+                if let Some(i) = value.as_int() {
+                    self.ai_elaborate_cluster_reps = i;
                 }
             }
             "browserEnabled" => {
@@ -3497,6 +3565,41 @@ pub fn get_options() -> Options {
                 "Load a pinned chart library from a CDN (with SRI) for additional interactive charts. The default report already includes server-rendered summaries and remains fully usable offline.",
                 Some("false"), false, false, None,
             ),
+            CrawlerOption::new(
+                "--ai-elaborate", None, "aiElaborate", OptionType::Bool, false,
+                "Build one large, richly structured brand profile from the crawled site (markdown + JSON + self-contained HTML). People, contacts, offerings and facts are extracted verbatim and rendered by the crawler (un-hallucinatable); the model only writes connective prose. Output language follows --ai-report-language.",
+                Some("false"), false, false, None,
+            ),
+            CrawlerOption::new(
+                "--ai-elaborate-template", None, "aiElaborateTemplate", OptionType::String, false,
+                "Brand-profile template: `corporate`, `personal`, or `product`. Default (auto) picks one from the detected site type.",
+                None, true, false, None,
+            ),
+            CrawlerOption::new(
+                "--ai-elaborate-correct", None, "aiElaborateCorrect", OptionType::Bool, false,
+                "Run a final proofreading pass that safely fixes typos/artifacts and deletes unsupported sentences in the generated prose (verbatim data is never altered).",
+                Some("true"), false, false, None,
+            ),
+            CrawlerOption::new(
+                "--ai-elaborate-gap-fill", None, "aiElaborateGapFill", OptionType::Int, false,
+                "Max number of important global-navigation pages the crawl never visited to fetch on demand before building the profile (robots.txt honored; 0 disables).",
+                Some("20"), false, false, None,
+            ),
+            CrawlerOption::new(
+                "--ai-elaborate-max-output-kb", None, "aiElaborateMaxOutputKb", OptionType::Int, false,
+                "Target size (KB) of the generated prose. Above this, synthesis switches to a sectioned map-reduce so it fits the model's output-token cap.",
+                Some("45"), false, false, None,
+            ),
+            CrawlerOption::new(
+                "--ai-elaborate-cluster-min", None, "aiElaborateClusterMin", OptionType::Int, false,
+                "Minimum number of same-shape URLs (e.g. /blog/*, /product/*) to treat as one mass-entity cluster that is sampled rather than fully enumerated.",
+                Some("8"), false, false, None,
+            ),
+            CrawlerOption::new(
+                "--ai-elaborate-cluster-reps", None, "aiElaborateClusterReps", OptionType::Int, false,
+                "How many representative pages to analyze per mass-entity cluster.",
+                Some("2"), false, false, None,
+            ),
         ],
     ));
 
@@ -4143,6 +4246,13 @@ mod tests {
             ai_schema_file: None,
             ai_schema_enforce: "auto".to_string(),
             ai_report_cdn: false,
+            ai_elaborate: false,
+            ai_elaborate_template: None,
+            ai_elaborate_correct: true,
+            ai_elaborate_gap_fill: 20,
+            ai_elaborate_max_output_kb: 45,
+            ai_elaborate_cluster_min: 8,
+            ai_elaborate_cluster_reps: 2,
 
             // browser rendering settings
             browser_enabled: false,

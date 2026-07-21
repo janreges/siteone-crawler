@@ -22,6 +22,7 @@ use crate::engine::crawler::{Crawler, compile_domain_patterns};
 use crate::engine::http_client::HttpClient;
 use crate::engine::parsed_url::ParsedUrl;
 use crate::error::{CrawlerError, CrawlerResult};
+use crate::export::ai_elaborate_exporter::AiElaborateExporter;
 use crate::export::ai_report_exporter::AiReportExporter;
 #[cfg(feature = "browser")]
 use crate::export::animation_exporter::AnimationExporter;
@@ -254,8 +255,12 @@ impl Manager {
         run_result?;
 
         // Optional AI phase (post-crawl, before analyzers/exporters). Fail-soft.
-        if options.ai_enabled {
+        if options.ai_enabled && !options.ai_actions.is_empty() {
             crate::ai::runner::run_ai(options.as_ref(), crawler.get_status(), crawler.get_output()).await;
+        }
+        // Brand-elaborate is its own pipeline (may run alongside the actions above, or alone).
+        if options.ai_elaborate {
+            crate::ai::elaborate::run(options.as_ref(), crawler.get_status(), crawler.get_output()).await;
         }
 
         // Post-crawl: run analyzers
@@ -513,6 +518,36 @@ impl Manager {
                     }
                 }
                 Ok(()) => {}
+            }
+        }
+
+        // Paired brand-elaborate artifacts (Markdown + JSON + HTML), resolved and written the same
+        // way as the AI report, when the `--ai-elaborate` pipeline produced a document.
+        let elaborate_paths = status.lock().ok().and_then(|st| st.get_ai_elaborate_doc()).map(|doc| {
+            let host = options.get_initial_host(false);
+            let run_id = format!(
+                "{}-{}",
+                chrono::Local::now().format("%Y-%m-%d.%H-%M-%S.%3f"),
+                std::process::id()
+            );
+            AiElaborateExporter::tripled_paths(&options.ai_report_dir, &doc.template, Some(&host), &run_id)
+        });
+        if let Some((md_path, json_path, html_path)) = &elaborate_paths {
+            let mut elaborate_exporter =
+                AiElaborateExporter::new_triple(md_path.clone(), json_path.clone(), html_path.clone());
+            let export_result = match (status.lock(), output.lock()) {
+                (Ok(st), Ok(out)) => elaborate_exporter.export(&st, &**out),
+                _ => Err(crate::error::CrawlerError::Export(
+                    "Cannot lock crawler state for brand-elaborate export".to_string(),
+                )),
+            };
+            if let Err(error) = export_result
+                && let Ok(st) = status.lock()
+            {
+                st.add_critical_to_summary(
+                    elaborate_exporter.get_name(),
+                    &format!("Brand-elaborate export failed: {}", error),
+                );
             }
         }
 

@@ -965,6 +965,29 @@ Field types: `string`, `text`, `int`, `float`, `bool`, `enum(a,b,c)`, `string[]`
 
 **Charts** (`--ai-report-cdn`): the default offline report includes server-rendered preset summaries and CSS distributions. Add `--ai-report-cdn` for extra interactive IA, quality, topic, or compliance charts; if the CDN is unavailable, the material data remains visible.
 
+#### Brand elaborate (`--ai-elaborate`)
+
+`--ai-elaborate` turns a whole crawled site into **one large, richly structured brand profile** — the "who is this company/person/product, in depth" document. It produces three consistent artifacts in `--ai-report-dir` (default `tmp/`): `ai-elaborate.<template>.<host>.<run-id>.md` (readable Markdown), `.json` (structured), and a self-contained light/dark `.html`. The shared run ID makes repeated runs collision-safe, and the three files are written as one no-clobber set (a failed later write rolls back the earlier ones).
+
+The core design is **anti-hallucination**: people, contacts, offerings, locations, facts and quotes are extracted **verbatim** from each page and deduplicated deterministically into a structured model that the crawler itself renders as lists — the model only ever writes the connective **prose** (executive summary, identity, audiences, …). It never invents a name, number, email or claim, and pages that fail to parse (after retries) are counted and listed, never filled with fabricated values.
+
+How it selects what matters, at any site size: it ranks the full page universe, groups mass-entity pages (e.g. `/blog/*`, `/product/*`) into clusters that are **sampled rather than enumerated**, and then asks the model to pick the important pages by **integer id from a numbered list** (hallucinated URLs are impossible by construction), with a deterministic safety floor so a weak model round can never drop the obvious pages. On small sites the LLM selection is skipped entirely.
+
+```bash
+./siteone-crawler --url=https://example.com/ \
+  --ai-elaborate --ai-report-language=en \
+  --ai-provider=openai-compatible --ai-endpoint=http://localhost:8000/v1 \
+  --ai-model=your-model
+```
+
+- `--ai-elaborate-template=corporate|personal|product` — the profile shape; default (auto) picks one from the detected site type.
+- `--ai-report-language=<BCP-47>` — output language for the generated prose (verbatim names, emails, quotes stay in their original language).
+- `--ai-elaborate-correct=true|false` (default `true`) — a final proofreading pass that safely fixes typos/artifacts and deletes unsupported sentences **in the prose only** (verbatim data is never altered).
+- `--ai-elaborate-gap-fill=<n>` (default `20`) — fetch up to *n* important global-navigation pages the crawl never visited (e.g. under `--single-page` or a page cap) before building the profile; robots.txt and include/exclude masks are honored, `0` disables.
+- `--ai-elaborate-cluster-min=<n>` (default `8`) / `--ai-elaborate-cluster-reps=<n>` (default `2`) — how many same-shape URLs form a sampled mass-entity cluster, and how many representatives per cluster to analyze.
+- `--ai-elaborate-max-output-kb=<n>` (default `45`) — target prose size; above it, synthesis switches to a sectioned map-reduce to fit the model's output-token cap.
+- `--ai-max-pages`, `--ai-include`, `--ai-exclude`, `--ai-max-concurrency`, `--ai-dry-run` apply as for other AI features. `--ai-elaborate` is its own pipeline (not an `--ai-actions` value): used alone it runs only the profile; combine it with explicit `--ai-actions=...` to run other AI actions too.
+
 #### AI executive summary (`summary` action)
 
 `--ai-actions=summary` runs **after** the deterministic analysis and produces a visually styled box at the top of the HTML report's **Summary** tab, below the Website Quality Score. It works by evaluating five areas in parallel — security, accessibility, SEO, performance, infrastructure — each grounded in compact *aggregated* crawl data (never raw per-URL lists), then synthesizing one cross-area, prioritized list of up to 15 actionable recommendations (fewer for a clean site — never padded) with severity, impact, and evidence.

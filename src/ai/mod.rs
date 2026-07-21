@@ -8,6 +8,7 @@
 pub mod actions;
 pub mod client;
 pub mod config;
+pub mod elaborate;
 pub mod normalize;
 pub mod page;
 pub mod prompt;

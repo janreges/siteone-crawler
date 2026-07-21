@@ -63,6 +63,9 @@ pub struct Status {
     /// The optional first-class AI report model (the `extract` action / `--ai-report`).
     ai_report_model: Mutex<Option<crate::ai::report::model::AiReportModel>>,
 
+    /// The optional brand-elaborate document (`--ai-elaborate`).
+    ai_elaborate_doc: Mutex<Option<crate::ai::elaborate::doc::BrandDoc>>,
+
     /// Per-URL browser-rendering diagnostics, keyed by uq_id (only populated in --browser mode).
     browser_diagnostics: Mutex<HashMap<String, crate::browser::diagnostics::BrowserDiagnostics>>,
 }
@@ -105,6 +108,7 @@ impl Status {
             skipped_urls: Mutex::new(Vec::new()),
             ai_report_summary_html: Mutex::new(None),
             ai_report_model: Mutex::new(None),
+            ai_elaborate_doc: Mutex::new(None),
             browser_diagnostics: Mutex::new(HashMap::new()),
         }
     }
@@ -143,6 +147,18 @@ impl Status {
     /// Get a clone of the AI report model, if the `extract` action produced one.
     pub fn get_ai_report_model(&self) -> Option<crate::ai::report::model::AiReportModel> {
         self.ai_report_model.lock().ok().and_then(|s| s.clone())
+    }
+
+    /// Store the brand-elaborate document (consumed by the elaborate exporter).
+    pub fn set_ai_elaborate_doc(&self, doc: crate::ai::elaborate::doc::BrandDoc) {
+        if let Ok(mut slot) = self.ai_elaborate_doc.lock() {
+            *slot = Some(doc);
+        }
+    }
+
+    /// Get a clone of the brand-elaborate document, if `--ai-elaborate` produced one.
+    pub fn get_ai_elaborate_doc(&self) -> Option<crate::ai::elaborate::doc::BrandDoc> {
+        self.ai_elaborate_doc.lock().ok().and_then(|s| s.clone())
     }
 
     pub fn add_visited_url(

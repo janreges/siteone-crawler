@@ -501,6 +501,13 @@ mod tests {
             ai_schema_file: None,
             ai_schema_enforce: "auto".to_string(),
             ai_report_cdn: false,
+            ai_elaborate: false,
+            ai_elaborate_template: None,
+            ai_elaborate_correct: true,
+            ai_elaborate_gap_fill: 20,
+            ai_elaborate_max_output_kb: 45,
+            ai_elaborate_cluster_min: 8,
+            ai_elaborate_cluster_reps: 2,
 
             // browser rendering settings
             browser_enabled: false,

@@ -33,8 +33,37 @@ pub struct Selection {
     pub excluded_by_mask: usize,
 }
 
-/// Filter + rank crawled pages for AI analysis.
-pub fn select_pages(status: &Status, include: &[String], exclude: &[String], max_pages: usize) -> Selection {
+/// One eligible, mask-cleared candidate page with the signals downstream selectors need. Unlike
+/// `RankedPage`, the full candidate set is NOT truncated to a page cap — the brand-elaborate
+/// selector needs the whole ranked universe before it clusters, LLM-selects, and caps.
+#[derive(Debug, Clone)]
+pub struct Candidate {
+    pub uq_id: String,
+    pub url: String,
+    /// First-discovery click depth (0 = homepage). 99 when the page is unreachable in the tree.
+    pub depth: u32,
+    /// This page appeared in a crawled sitemap.
+    pub in_sitemap: bool,
+    /// Deterministic importance score (same `score_page` used by `select_pages`).
+    pub score: f64,
+}
+
+/// The complete, ranked candidate universe plus the counts and the tree root, produced once and
+/// reused by both `select_pages` (which caps it) and the brand-elaborate selector (which clusters
+/// and LLM-selects over it).
+pub struct CandidateSet {
+    /// Candidates sorted by `score` descending. NOT capped.
+    pub candidates: Vec<Candidate>,
+    pub total_html_pages: usize,
+    pub total_eligible_before_masks: usize,
+    pub excluded_by_mask: usize,
+    /// uq_id of the initial URL (homepage), if present.
+    pub init_uq: Option<String>,
+}
+
+/// Build the full ranked candidate set: the `select_pages` prefilter (eligible HTML 200 +
+/// include/exclude masks, fail-closed) and the same `score_page` ranking, WITHOUT the page cap.
+pub fn build_candidates(status: &Status, include: &[String], exclude: &[String]) -> CandidateSet {
     let visited = status.get_visited_urls();
 
     let include_res = compile(include, "include");
@@ -50,7 +79,7 @@ pub fn select_pages(status: &Status, include: &[String], exclude: &[String], max
     let total_eligible_before_masks = eligible_pages.len();
 
     let mut excluded_by_mask = 0usize;
-    let candidates: Vec<&VisitedUrl> = eligible_pages
+    let candidate_urls: Vec<&VisitedUrl> = eligible_pages
         .into_iter()
         .filter(|u| {
             // Fail CLOSED on a match error (catastrophic backtracking etc.): an un-evaluatable
@@ -68,8 +97,6 @@ pub fn select_pages(status: &Status, include: &[String], exclude: &[String], max
         })
         .collect();
 
-    let total_candidates_before_cap = candidates.len();
-
     // Build first-discovery tree structures for ranking.
     let init_uq = visited
         .iter()
@@ -85,32 +112,70 @@ pub fn select_pages(status: &Status, include: &[String], exclude: &[String], max
         *fanout.entry(u.source_uq_id.clone()).or_insert(0) += 1;
     }
 
-    let mut ranked: Vec<RankedPage> = candidates
+    let mut candidates: Vec<Candidate> = candidate_urls
         .iter()
-        .map(|u| {
-            let score = score_page(u, init_uq.as_deref(), &depths, &fanout);
-            RankedPage {
-                uq_id: u.uq_id.clone(),
-                url: u.url.clone(),
-                score,
-            }
+        .map(|u| Candidate {
+            uq_id: u.uq_id.clone(),
+            url: u.url.clone(),
+            depth: *depths.get(&u.uq_id).unwrap_or(&99),
+            in_sitemap: u.source_attr == SOURCE_SITEMAP,
+            score: score_page(u, init_uq.as_deref(), &depths, &fanout),
         })
         .collect();
+    candidates.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
 
-    ranked.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
-    ranked.truncate(max_pages);
-
-    Selection {
-        selected: ranked,
-        total_candidates_before_cap,
+    CandidateSet {
+        candidates,
         total_html_pages,
         total_eligible_before_masks,
         excluded_by_mask,
+        init_uq,
+    }
+}
+
+/// Filter + rank crawled pages for AI analysis, capped to `max_pages`.
+pub fn select_pages(status: &Status, include: &[String], exclude: &[String], max_pages: usize) -> Selection {
+    let cs = build_candidates(status, include, exclude);
+    let total_candidates_before_cap = cs.candidates.len();
+
+    let mut selected: Vec<RankedPage> = cs
+        .candidates
+        .into_iter()
+        .map(|c| RankedPage {
+            uq_id: c.uq_id,
+            url: c.url,
+            score: c.score,
+        })
+        .collect();
+    selected.truncate(max_pages);
+
+    Selection {
+        selected,
+        total_candidates_before_cap,
+        total_html_pages: cs.total_html_pages,
+        total_eligible_before_masks: cs.total_eligible_before_masks,
+        excluded_by_mask: cs.excluded_by_mask,
     }
 }
 
 fn eligible_page(url: &VisitedUrl) -> bool {
     !url.is_external && url.status_code == 200 && url.is_allowed_for_crawling && url.content_type == ContentTypeId::Html
+}
+
+/// True if `url` passes the include/exclude masks with the SAME fail-closed semantics as
+/// `build_candidates` (an invalid/unmatched include drops the URL; an invalid/matching exclude drops
+/// it). Used by the brand-elaborate gap-fill so a targeted fetch of a nav page never bypasses the
+/// user's cost/privacy filter. Recompiles per call — only ever called on a tiny gap-fill list.
+pub fn url_passes_masks(url: &str, include: &[String], exclude: &[String]) -> bool {
+    let include_res = compile(include, "include");
+    let exclude_res = compile(exclude, "exclude");
+    if !include_res.is_empty() && !include_res.iter().any(|re| re.is_match(url).unwrap_or(false)) {
+        return false;
+    }
+    if exclude_res.iter().any(|re| re.is_match(url).unwrap_or(true)) {
+        return false;
+    }
+    true
 }
 
 /// Compile include/exclude patterns. A pattern that validated at the CLI (same engine) always
