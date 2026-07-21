@@ -1,0 +1,5 @@
+---
+name_cs: Kultura, akce a sport
+name_en: Culture, events & sport
+---
+Choose this type for organisations and events whose core purpose is culture, entertainment, the arts, or sport — presenting a programme, a collection, or competitive fixtures to an audience. Typical members include music and film festivals (e.g. Colours of Ostrava, KVIFF), theatres and opera houses (e.g. the National Theatre), cinemas, art galleries and museums (e.g. the National Gallery), professional and amateur sports clubs (e.g. a football or ice-hockey club), concert halls and music venues (e.g. Lucerna), professional conferences (e.g. WebExpo), and dance or theatre companies. The site typically presents a programme, season, line-up, exhibition, repertoire, or fixture list, together with tickets, venues, performers or teams, and visitor information. NOT this type: a ticketing platform that resells many organisers' events → portal-directory. NOT this type: a solo artist's or band's personal site → personal. NOT this type: a commercial event agency organising events as a paid service for clients → corporate/services, or a municipal culture department → government.

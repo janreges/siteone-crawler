@@ -1,0 +1,5 @@
+---
+name_cs: Portály, katalogy a agregátory
+name_en: Portals, directories & aggregators
+---
+Choose this type for websites whose core purpose is to aggregate, list, compare, or broker other parties' offerings rather than to sell their own products or services. The site connects two sides — consumers and providers — and its value is the breadth of its inventory. Typical members include price-comparison engines (e.g. Heureka, Zboží.cz), business directories (e.g. Firmy.cz), job boards (e.g. Jobs.cz), real-estate portals (e.g. Sreality.cz), classifieds and marketplaces (e.g. Bazoš, Aukro), travel and accommodation booking aggregators, deals and voucher platforms (e.g. Slevomat), restaurant or service review directories, and event-ticket aggregators. The site typically offers search, filters, categories, listings, reviews, and separate flows for users and for providers who register or pay to be listed. NOT this type: a single online shop selling its own goods → ecommerce/corporate. NOT this type: a SaaS application marketed on its own site → product. NOT this type: a news, magazine, or media portal publishing its own editorial content → media/publisher.
