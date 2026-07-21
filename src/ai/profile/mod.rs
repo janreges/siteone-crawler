@@ -6,6 +6,7 @@
 
 pub mod budget;
 pub mod correct;
+pub mod doc;
 pub mod embedded;
 pub mod promptpack;
 pub mod registry;
