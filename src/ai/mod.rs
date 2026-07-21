@@ -11,6 +11,7 @@ pub mod config;
 pub mod elaborate;
 pub mod normalize;
 pub mod page;
+pub mod profile;
 pub mod prompt;
 pub mod provider;
 pub mod report;
