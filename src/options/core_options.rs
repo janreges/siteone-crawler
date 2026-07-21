@@ -296,6 +296,14 @@ pub struct CoreOptions {
     pub ai_elaborate_cluster_min: i64,
     pub ai_elaborate_cluster_reps: i64,
 
+    // ai profile (independent chapter-based subject-profile pipeline; nothing runs unless ai_profile)
+    #[serde(skip)]
+    pub ai_profile: bool,
+    pub ai_profile_template: Option<String>,
+    pub ai_profile_correct: bool,
+    /// Model context window in tokens; input budgets are calibrated at 128000 and scale from this.
+    pub ai_context_window: i64,
+
     // browser rendering settings (optional; nothing runs unless browser_enabled)
     #[serde(skip)]
     pub browser_enabled: bool,
@@ -575,6 +583,10 @@ impl CoreOptions {
             ai_elaborate_max_output_kb: 45,
             ai_elaborate_cluster_min: 8,
             ai_elaborate_cluster_reps: 2,
+            ai_profile: false,
+            ai_profile_template: None,
+            ai_profile_correct: true,
+            ai_context_window: 128000,
 
             // browser rendering settings
             browser_enabled: false,
@@ -651,9 +663,16 @@ impl CoreOptions {
             "aiSchemaEnforce",
             "aiReportCdn",
             "aiElaborate",
+            "aiProfile",
         ]
         .iter()
         .any(|p| options.is_explicitly_set(p));
+
+        if options.is_explicitly_set("aiContextWindow") && !core.ai_enabled {
+            return Err(CrawlerError::Config(
+                "--ai-context-window requires an AI feature such as --ai-profile.".to_string(),
+            ));
+        }
 
         // Setting --ai-report runs the `extract` engine. If the user did NOT explicitly choose
         // actions, the report replaces the default set (seo,typos,summary) so an IA/quality report
@@ -672,6 +691,13 @@ impl CoreOptions {
         // clear the default set so an elaborate-only run does no extra per-page action work; if they
         // DID list actions, both run.
         if core.ai_elaborate && !options.is_explicitly_set("aiActions") {
+            core.ai_actions.clear();
+        }
+
+        // --ai-profile is its own pipeline (not an action). When the user did NOT list actions and
+        // no --ai-report is active, clear the default set so a profile-only run does no extra
+        // per-page action work; if they DID list actions (or a report is active), both run.
+        if core.ai_profile && !options.is_explicitly_set("aiActions") && core.ai_report.is_none() {
             core.ai_actions.clear();
         }
 
@@ -735,6 +761,40 @@ impl CoreOptions {
                     return Err(CrawlerError::Config(format!(
                         "Invalid --ai-elaborate-template '{}'. Use corporate, personal, or product.",
                         template
+                    )));
+                }
+            }
+            for (flag, is_set) in [
+                ("--ai-profile-template", core.ai_profile_template.is_some()),
+                ("--ai-profile-correct", options.is_explicitly_set("aiProfileCorrect")),
+            ] {
+                if is_set && !core.ai_profile {
+                    return Err(CrawlerError::Config(format!("{} requires --ai-profile.", flag)));
+                }
+            }
+            if let Some(ref template) = core.ai_profile_template {
+                let t = template.trim().to_ascii_lowercase();
+                const PROFILE_TEMPLATES: [&str; 14] = [
+                    "auto",
+                    "corporate",
+                    "smb-services",
+                    "product",
+                    "ecommerce",
+                    "personal",
+                    "media-news",
+                    "expert-content",
+                    "nonprofit",
+                    "government",
+                    "institution",
+                    "portal-directory",
+                    "events-culture",
+                    "general",
+                ];
+                if !t.is_empty() && !PROFILE_TEMPLATES.contains(&t.as_str()) {
+                    return Err(CrawlerError::Config(format!(
+                        "Invalid --ai-profile-template '{}'. Use auto or one of: {}.",
+                        template,
+                        PROFILE_TEMPLATES[1..].join(", ")
                     )));
                 }
             }
@@ -2016,6 +2076,25 @@ impl CoreOptions {
             "aiElaborateClusterReps" => {
                 if let Some(i) = value.as_int() {
                     self.ai_elaborate_cluster_reps = i;
+                }
+            }
+            "aiProfile" => {
+                if let Some(b) = value.as_bool() {
+                    self.ai_profile = b;
+                }
+            }
+            "aiProfileTemplate" => match value.as_str() {
+                Some(s) => self.ai_profile_template = Some(s.to_string()),
+                None => self.ai_profile_template = None,
+            },
+            "aiProfileCorrect" => {
+                if let Some(b) = value.as_bool() {
+                    self.ai_profile_correct = b;
+                }
+            }
+            "aiContextWindow" => {
+                if let Some(i) = value.as_int() {
+                    self.ai_context_window = i;
                 }
             }
             "browserEnabled" => {
@@ -3600,6 +3679,26 @@ pub fn get_options() -> Options {
                 "How many representative pages to analyze per mass-entity cluster.",
                 Some("2"), false, false, None,
             ),
+            CrawlerOption::new(
+                "--ai-profile", None, "aiProfile", OptionType::Bool, false,
+                "Build a polished, chapter-based profile of the subject behind the site (Markdown + JSON + self-contained HTML). Classifies the site into one of 13 subject types and synthesizes per-type chapters from the most relevant pages. Independent of --ai-elaborate; both may run.",
+                Some("false"), false, false, None,
+            ),
+            CrawlerOption::new(
+                "--ai-profile-template", None, "aiProfileTemplate", OptionType::String, false,
+                "Subject type: auto (classify at run time) or one of corporate, smb-services, product, ecommerce, personal, media-news, expert-content, nonprofit, government, institution, portal-directory, events-culture, general.",
+                None, true, false, None,
+            ),
+            CrawlerOption::new(
+                "--ai-profile-correct", None, "aiProfileCorrect", OptionType::Bool, false,
+                "Run a proofreading/fact-correction pass after each chapter and the executive summary that safely fixes typos and deletes claims unsupported by the source pages.",
+                Some("true"), false, false, None,
+            ),
+            CrawlerOption::new(
+                "--ai-context-window", None, "aiContextWindow", OptionType::Int, false,
+                "Model context window in tokens. Profile input budgets are calibrated at 128000 and scale proportionally, so small local models get smaller prompts instead of overflowing.",
+                Some("128000"), false, false, Some(vec!["8000".to_string(), "2000000".to_string()]),
+            ),
         ],
     ));
 
@@ -4253,6 +4352,10 @@ mod tests {
             ai_elaborate_max_output_kb: 45,
             ai_elaborate_cluster_min: 8,
             ai_elaborate_cluster_reps: 2,
+            ai_profile: false,
+            ai_profile_template: None,
+            ai_profile_correct: true,
+            ai_context_window: 128000,
 
             // browser rendering settings
             browser_enabled: false,
@@ -4530,5 +4633,50 @@ mod tests {
         assert_eq!(opts.screenshots_animation_frame_duration, 3.5);
         assert_eq!(opts.screenshots_animation_width, 800);
         assert_eq!(opts.ffmpeg_path.as_deref(), Some("/usr/bin/ffmpeg"));
+    }
+
+    #[test]
+    fn ai_profile_flags_parse_and_default() {
+        let argv = vec![
+            "bin".to_string(),
+            "--url=https://example.com".to_string(),
+            "--ai-provider=openai-compatible".to_string(),
+            "--ai-endpoint=http://localhost:8000/v1".to_string(),
+            "--ai-model=test-model".to_string(),
+            "--ai-profile".to_string(),
+            "--ai-profile-template=corporate".to_string(),
+            "--ai-context-window=30000".to_string(),
+        ];
+        let core = parse_argv(&argv).expect("should parse");
+        assert!(core.ai_profile);
+        assert_eq!(core.ai_profile_template.as_deref(), Some("corporate"));
+        assert_eq!(core.ai_context_window, 30000);
+        assert!(core.ai_profile_correct, "correction defaults to ON");
+        // --ai-profile clears the default per-page actions when actions not explicitly listed.
+        assert!(core.ai_actions.is_empty());
+    }
+
+    #[test]
+    fn ai_profile_rejects_unknown_template() {
+        let argv = vec![
+            "bin".to_string(),
+            "--url=https://example.com".to_string(),
+            "--ai-provider=openai-compatible".to_string(),
+            "--ai-endpoint=http://localhost:8000/v1".to_string(),
+            "--ai-model=test-model".to_string(),
+            "--ai-profile".to_string(),
+            "--ai-profile-template=nonsense".to_string(),
+        ];
+        assert!(parse_argv(&argv).is_err());
+    }
+
+    #[test]
+    fn ai_context_window_without_ai_feature_errors() {
+        let argv = vec![
+            "bin".to_string(),
+            "--url=https://example.com".to_string(),
+            "--ai-context-window=64000".to_string(),
+        ];
+        assert!(parse_argv(&argv).is_err());
     }
 }

@@ -508,6 +508,10 @@ mod tests {
             ai_elaborate_max_output_kb: 45,
             ai_elaborate_cluster_min: 8,
             ai_elaborate_cluster_reps: 2,
+            ai_profile: false,
+            ai_profile_template: None,
+            ai_profile_correct: true,
+            ai_context_window: 128000,
 
             // browser rendering settings
             browser_enabled: false,
