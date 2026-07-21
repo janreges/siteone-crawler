@@ -911,8 +911,59 @@ Supported providers: `openai`, `anthropic`, `gemini`, and `openai-compatible` (v
 | `typos` | Language-aware spelling, grammar, and weak-copy detection with suggestions. Skips brand names, code, and identifiers. | "AI content issues" table |
 | `custom` | Runs your own prompt (`--ai-prompt-file` / `--ai-prompt`) against each page. | "AI custom check" table |
 | `summary` | AI **executive summary** of the whole site (see below). Synthesizes the deterministic analysis (security, accessibility, SEO, performance, infrastructure) into a prioritized list of recommendations. | "AI Insights & Recommendations" box on the HTML report Summary tab |
+| `extract` | First-class **AI report** engine (via `--ai-report`): extracts a typed set of fields per page (preset or custom schema) into a structured JSON + a self-contained HTML report. | `<ai-report-dir>/ai-report.<preset>.<host>.<run-id>.json` + `.html` |
 
 > `llms.txt` / `llms-full.txt` are written next to `--markdown-export-dir` or `--offline-export-dir` if set, otherwise to `tmp/`.
+
+#### AI reports (`--ai-report`)
+
+`--ai-report` runs the **extract** engine over selected crawled pages and produces two consistent artifacts in `--ai-report-dir` (default `tmp/`): `ai-report.<preset>.<host>.<run-id>.json` and `.html`. The shared run ID makes repeated runs collision-safe. The light/dark HTML has no external dependency by default and remains useful with JavaScript disabled: the hero summary, coverage, distributions, topic analysis, compliance evidence, and complete per-page table are server-rendered. Small inline JavaScript enhances it with search, sorting, theme switching, and spreadsheet-safe CSV export. Optional interactive ECharts visualizations use a pinned, SRI-verified CDN only with `--ai-report-cdn`.
+
+Every artifact states its coverage: crawled HTML pages, eligible/selected/analyzed/failed pages, exclusions, cap drops, truncated evidence, include/exclude masks, and ranking method. It is visibly labelled **sampled** whenever the selected pages do not represent a complete successful crawl. Its usage/cost block covers the report extraction itself; the main crawl summary retains totals across all AI actions. Setting `--ai-report` alone runs only the report; combine it with explicit `--ai-actions=...` to run other AI actions too.
+
+Built-in presets:
+
+| Preset | Per-page output | Use case |
+|--------|-----------------|----------|
+| `ia` | URL path, cleaned title, a 200–300 char neutral description, `section` + `pageType` labels | Understand the **current information architecture** before a redesign |
+| `quality` | clarity / depth / engagement / overall scores, reading grade level, tone, word count, top issue | Content **quality & readability** scoring across the site |
+| `topics` | Per-page topic data plus deterministic site-wide clusters, competing topic/intent URLs, thin clusters, and missing funnel stages | Internal **topic/content coverage** and cannibalization candidates; it does not infer competitor or search-demand gaps |
+| `compliance` | Deterministic `riskScore` + grounded findings with severity, rule, legal basis, SHALL/MAY status, effective date, verbatim excerpt, and recommendation | Advisory **regulatory & textual dark-pattern audit**, including EU consumer-credit (CCD2) loan-advertising readiness |
+
+```bash
+# Information-architecture inventory of a whole site
+siteone-crawler --url=https://www.example.com/ --disable-all-assets \
+  --ai-report=ia --ai-provider=openai-compatible \
+  --ai-endpoint=http://localhost:8000/v1 --ai-model=Qwen/Qwen3-32B
+
+# Regulatory / dark-pattern audit (advisory) — findings grounded in EU CCD2 loan-advertising rules
+siteone-crawler --url=https://www.example.com/ \
+  --ai-report=compliance --ai-provider=openai-compatible \
+  --ai-endpoint=http://localhost:8000/v1 --ai-model=Qwen/Qwen3-32B
+```
+
+The versioned `compliance` rule pack allowlists rule/category pairs and verifies normalized excerpts against the exact retained model input. The semantic rule mapping and severity remain model judgements, not legal validation. `riskScore` is recalculated from model-classified findings with grounded excerpts (`critical=40`, `high=25`, `medium=12`, `low=5`, `info=2`, capped at 100); Member-State `MAY` observations remain visible but contribute zero. Unknown rules and ungrounded evidence trigger retries and ultimately an honest page error. The report distinguishes current UCPD duties, forward-looking **CCD2 (Directive (EU) 2023/2225) readiness from 20 November 2026**, and Member-State options whose national implementation must be checked. It also states that jurisdiction, Article 2 exclusions, and whether a page advertises an in-scope consumer-credit agreement cannot be established reliably from retained page text alone. It is prominently **advisory, not legal advice** and requires qualified legal review before reliance.
+
+This profile supports claims and textual patterns that can be established from retained page text, including availability/approval claims, cost/risk framing, required credit-advertising information, urgency/scarcity, forced continuity, and confirm shaming. Known consent controls are retained as text so their wording can be assessed. The report deliberately does **not** claim to assess cookie network behavior, pre-ticked state, interaction flow, or visual prominence because text input cannot prove those properties. Legally relevant header/footer text is retained and bounded; when content is truncated, absence checks are marked indeterminate rather than clean.
+
+**Custom typed extraction** (`--ai-report=extract`): define any per-page schema with a compact DSL and get one column per field in the JSON + HTML — no external script needed:
+
+```bash
+siteone-crawler --url=https://www.example.com/ --disable-all-assets \
+  --ai-report=extract \
+  --ai-extract-fields="title:string, summary:text, section:enum(Blog,Docs,Product,Legal,Other), quality:score, tags:string[]" \
+  --ai-provider=openai-compatible --ai-endpoint=http://localhost:8000/v1 --ai-model=my-model
+```
+
+Field types: `string`, `text`, `int`, `float`, `bool`, `enum(a,b,c)`, `string[]`, `url`, `path`, `score` (0-100), `date`, and `findings`. Dates must be real calendar dates in `YYYY-MM-DD` form. Integers are limited to JSON/JavaScript's lossless range (`-9007199254740991` to `9007199254740991`); URL/path and numeric bounds are also validated. Reserved report keys (`url`, `path`, `_error`, `_evidence`) and empty or duplicate enum values are rejected. A rich schema with descriptions, `required`, `min`, `max`, and enums can be supplied via `--ai-schema-file=schema.json`; it is mutually exclusive with `--ai-extract-fields`. Required invalid/missing fields fail the page. Optional unknown values must be explicit JSON `null` and are excluded from aggregates.
+
+**Robust JSON handling.** Mechanical repair handles syntax-only defects such as fences/prose, trailing commas, quote variants, and Python literals. Semantically incomplete objects, wrong types/ranges, malformed findings, unknown required values, and token-truncated completions are rejected even if their brackets could be repaired. A report extraction is retried up to three times; after that the page is recorded as an honest `_error` row with no fabricated cells and cannot enter aggregates.
+
+**Schema enforcement** (`--ai-schema-enforce=auto|on|off`): `auto` is provider/model-aware. Supported hosted OpenAI models receive only the documented strict `response_format: json_schema`; Gemini receives `responseJsonSchema`; unknown hosted models, Anthropic, and OpenAI-compatible endpoints use the embedded field contract plus a generic JSON-object mode where the provider accepts it. `on` enables hosted strict output or the compatible endpoint's `response_format` + `guided_json`; Anthropic rejects explicit `on` clearly. If a provider rejects either structured-schema or generic JSON output controls, the request falls back once to the pure embedded-contract prompt. `off` skips schema enforcement but keeps the embedded contract and strict post-parse validation.
+
+**Language and files:** `--ai-report-language=<BCP-47>` controls generated report prose, prompt output language, preset title, deterministic topic/compliance explanations, built-in schema descriptions, and HTML chrome. English and Czech chrome are built in; other tags retain the requested AI-output language and use English chrome. Stable JSON keys, enum/rule IDs, paths, dates, and verbatim excerpts are never translated; the HTML uses localized display labels for built-in IDs. `--ai-report-dir=<dir>` controls the paired output location. JSON and HTML are created as one no-clobber pair; a failed second write removes the first rather than leaving a partial report. AI artifacts are local files; existing `--mail-to` / `--upload` continue to deliver the standard crawl report and a summary notice states that decision.
+
+**Charts** (`--ai-report-cdn`): the default offline report includes server-rendered preset summaries and CSS distributions. Add `--ai-report-cdn` for extra interactive IA, quality, topic, or compliance charts; if the CDN is unavailable, the material data remains visible.
 
 #### AI executive summary (`summary` action)
 
@@ -941,7 +992,7 @@ Tip: the area evaluations are cheap and usually run best without thinking, but t
 | `--ai-include=<regex>` | Only run AI on URLs matching this regex (repeatable). |
 | `--ai-exclude=<regex>` | Skip AI on URLs matching this regex (repeatable, wins over include). E.g. `--ai-exclude='/press/'` to skip a thousand press releases. |
 | `--ai-max-pages=<int>` | Hard cap on pages sent to the LLM. Default `100`. The highest-ranked (most important) pages are kept. This is the primary spend control. |
-| `--ai-dry-run` | Show which pages would be analyzed, the number of LLM calls, and an estimated input-token count, then exit **without any API call**. |
+| `--ai-dry-run` | Show selected pages, initial calls, the worst-case retry request budget, and estimated input tokens, then exit **without any API call**. With supplied token prices it also shows an input-only cost floor. |
 
 Importance ranking favors the homepage, pages linked from it, shallow click-depth, hub/navigation pages, sitemap presence, and short URL paths. Only internal HTML pages with HTTP 200 are eligible.
 
@@ -950,10 +1001,13 @@ Importance ranking favors the homepage, pages linked from it, shallow click-dept
 | Parameter | Description |
 |-----------|-------------|
 | `--ai-max-concurrency=<int>` | Maximum concurrent AI requests. Default `4`. |
-| `--ai-max-reqs-per-sec=<val>` | Rate limit for the LLM API (requests per second). |
+| `--ai-max-reqs-per-sec=<val>` | Shared LLM API rate limit applied at every actual HTTP send, including transport and parse retries. |
 | `--ai-timeout=<int>` | Per-request timeout for AI calls in seconds. Default `180`. Raise it for slow reasoning models. |
-| `--ai-cache-dir=<dir>` | Directory for caching AI responses (content-addressed; re-runs are free). Default `tmp/ai-cache`. Empty value disables caching. |
+| `--ai-cache-dir=<dir>` | Directory for content-addressed AI responses. Parse-invalid and truncated entries are evicted immediately. Default `tmp/ai-cache`; empty disables caching. |
+| `--ai-input-cost-per-million=<usd>` + `--ai-output-cost-per-million=<usd>` | Optional model-specific rates, supplied together. The artifact records rates, reported token use, and a complete/partial USD estimate without maintaining a potentially stale built-in price table. |
 | `--ai-language=<code>` | Force content language (BCP-47, e.g. `cs`, `de`) for `typos`. Auto-detected otherwise. |
+| `--ai-report-language=<code>` | Output language for report prose and chrome. Built-in chrome: English and Czech; other locales use English chrome fallback. |
+| `--ai-report-dir=<dir>` | Paired JSON/HTML AI artifact directory. Default `tmp/`; filenames always include a unique run ID. |
 | `--ai-seo-affects-score` | Let the AI SEO assessment apply a small capped deduction to the SEO quality score. **Off by default** — AI is advisory and never affects the `--ci` gate, keeping the score deterministic and reproducible. |
 
 #### Thinking / reasoning

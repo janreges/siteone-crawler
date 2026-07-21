@@ -94,6 +94,7 @@ cargo clippy --no-default-features -- -D warnings  # lint the lean variant
    - `MailerExporter`: Email HTML report via SMTP
    - `UploadExporter`: Upload report to remote server
    - `AnimationExporter` (feature `browser`): Assemble per-page screenshots into a GIF/MP4 animation (GIF via the embedded `image` crate, MP4 via external ffmpeg)
+   - `AiReportExporter` (JSON + HTML): when the `extract` AI action (`--ai-report`) produced an `AiReportModel`, atomically writes a no-clobber pair named `ai-report.<preset>.<host>.<run-id>.json` + `.html`
 
 8. **Scoring** (`scorer::calculate_scores()`): Computes quality scores (0–10) across 5 weighted categories (Performance 20%, SEO 20%, Security 25%, Accessibility 20%, Best Practices 15%). Deductions come from summary findings (criticals, warnings) and stats (404s, 5xx, slow responses).
 
@@ -172,6 +173,7 @@ This approach is useful for reproducing bug reports, testing regex edge cases (e
 - `src/browser/` (feature `browser`): `BrowserRenderer` (renderer.rs), Chromium detection/download/launch (launcher.rs), CDP diagnostics collection (diagnostics.rs), screenshots + pre-capture animation settling (screenshot.rs), cookie-banner dismissal/hiding (cookie_consent.rs). `diagnostics.rs` data types are always compiled so `HttpResponse` can carry an inert `Option<BrowserDiagnostics>`
 - `src/export/animation_exporter.rs` (feature `browser`): builds GIF/MP4 animations from per-page screenshots (GIF via the embedded `image` crate, MP4 via external ffmpeg; frames streamed to disk for O(1) memory)
 - `src/analysis/browser_console_analyzer.rs`: reports browser console/JS/network/security diagnostics (the browser-mode analyzer; active only in `--browser` mode)
+- `src/ai/report/` (`--ai-report`): first-class AI report engine — `model.rs` (`AiReportModel`: typed schema + per-page rows + derived rollups; `FieldType::Findings` + `ReportCell::Findings` for audit presets; `ReportRow::errored` carries an honest `_error`, never fabricated values, and is excluded from rollups), `schema.rs` (`--ai-extract-fields` DSL + `--ai-schema-file` → `FieldSpec`s + JSON Schema for native enforcement), `coerce.rs` (LLM-output → typed cells), `presets.rs` (`ia`, `quality`, `topics`, `compliance` — the last grounded in EU CCD2 loan-advertising rules). The `extract` action (`src/ai/actions/extract.rs`, dispatched in `runner.rs::run_extract_action`) runs it per page with up to 3 parse attempts (each first runs `normalize::repair_json`, a mechanical LLM-JSON repairer); `src/export/ai_report_exporter.rs` + `ai_report_html.rs` render the JSON + self-contained HTML. Native JSON-schema enforcement plugs into `provider.rs::shape_request` (`ChatRequest.json_schema`); `auto` only enforces for hosted OpenAI/Gemini (vLLM `guided_json` is unreliable — returns only the first field on some models)
 
 ### Edition & Rust Version
 
