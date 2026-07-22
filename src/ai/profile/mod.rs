@@ -14,6 +14,7 @@ pub mod promptpack;
 pub mod registry;
 pub mod select;
 pub mod summarize;
+pub mod synthesize;
 
 /// One page in the profile's working universe. `description` is filled by the describe phase (P4);
 /// `size_chars` is the char length of the page's cleaned markdown (used to fit selection budgets).
