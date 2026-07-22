@@ -88,43 +88,100 @@ pub fn parse(raw: &str, heading: &str) -> String {
 pub(crate) fn clean_markdown(md: &str) -> String {
     let mut lines: Vec<String> = Vec::new();
     for raw in md.lines() {
-        let lower = raw.to_ascii_lowercase();
-        if META_MARKERS.iter().any(|m| lower.contains(m)) {
+        if is_meta_line(raw) {
             continue; // drop a meta-commentary line entirely
         }
         // Remove empty bold markers left when a correction blanked the span between `**`…`**`.
         let mut line = raw.replace("** **", " ").replace("****", "");
-        // Tidy whitespace a deletion left before punctuation ("word ." → "word.").
-        line = SPACE_BEFORE_PUNCT.replace_all(&line, "$1").into_owned();
-        // Drop a line that is now only stray punctuation / an empty table row.
+        // Tidy whitespace a deletion left before punctuation ("word ." → "word.") — but never on a
+        // table row, where " :" is a legitimate part of an alignment separator (`| :--- |`).
+        if !is_table_line(&line) {
+            line = SPACE_BEFORE_PUNCT.replace_all(&line, "$1").into_owned();
+        }
         let t = line.trim();
-        let punct_only = !t.is_empty() && t.chars().all(|c| c.is_ascii_punctuation() || c.is_whitespace());
+        // Drop a stray punctuation-only line (e.g. " ." left by a deletion) — but NEVER a table row
+        // (a GFM separator `| :--- |` is all punctuation yet must be kept for the table to render).
+        let punct_only =
+            !t.is_empty() && !t.starts_with('|') && t.chars().all(|c| c.is_ascii_punctuation() || c.is_whitespace());
         let empty_table_row = t.starts_with('|') && t.trim_matches('|').split('|').all(|c| c.trim().is_empty());
         if punct_only || empty_table_row {
             continue;
         }
         lines.push(line);
     }
-    tidy_structure(&lines.join("\n"))
+    tidy_structure(&insert_table_separators(&lines))
 }
 
-/// Structural tidy: drop any heading with no body before the next heading/end (an orphaned subsection),
-/// and collapse runs of 2+ blank lines to a single blank line.
+/// True if a line is unambiguous meta-commentary about the generation process that must not reach the
+/// reader (the model was told to omit such chapters, not to narrate the omission).
+fn is_meta_line(line: &str) -> bool {
+    let lower = line.to_ascii_lowercase();
+    if META_MARKERS.iter().any(|m| lower.contains(m)) {
+        return true;
+    }
+    // Czech "…kapitola … vynech…" with words allowed between (e.g. "je tato kapitola vynechána").
+    lower.contains("kapitol") && lower.contains("vynech")
+}
+
+fn is_table_line(l: &str) -> bool {
+    l.trim_start().starts_with('|')
+}
+
+fn is_table_separator(l: &str) -> bool {
+    let t = l.trim();
+    t.starts_with('|') && t.chars().all(|c| matches!(c, '|' | '-' | ':' | ' ')) && t.contains('-')
+}
+
+/// Insert a missing GFM header-separator row (`| --- | --- |`) after a table header that is followed
+/// directly by a data row — without it neither GitHub/Markdown viewers nor the report's own HTML
+/// renderer show the block as a table.
+fn insert_table_separators(lines: &[String]) -> String {
+    let mut out: Vec<String> = Vec::with_capacity(lines.len() + 4);
+    let mut prev_was_table = false;
+    for (i, line) in lines.iter().enumerate() {
+        let cur_is_table = is_table_line(line);
+        out.push(line.clone());
+        if cur_is_table
+            && !prev_was_table
+            && lines
+                .get(i + 1)
+                .is_some_and(|n| is_table_line(n) && !is_table_separator(n))
+        {
+            let cols = line.trim().trim_matches('|').split('|').count().max(1);
+            out.push(format!("|{}", " --- |".repeat(cols)));
+        }
+        prev_was_table = cur_is_table;
+    }
+    out.join("\n")
+}
+
+/// Structural tidy: drop any `#`-heading OR standalone `**bold**` pseudo-heading that has no body
+/// before the next heading/end (an orphaned subsection), and collapse runs of 2+ blank lines to one.
 fn tidy_structure(md: &str) -> String {
-    let is_heading = |l: &str| {
+    let is_hash = |l: &str| {
         let n = l.trim_start().chars().take_while(|c| *c == '#').count();
         (1..=6).contains(&n) && l.trim_start()[n..].starts_with(' ')
     };
+    // A whole-line bold span used as a subsection heading, e.g. "**Energetika a elektromobilita**".
+    let is_bold_heading = |l: &str| {
+        let t = l.trim();
+        t.len() >= 5
+            && t.starts_with("**")
+            && t.ends_with("**")
+            && !t[2..t.len() - 2].contains("**")
+            && !t[2..t.len() - 2].trim().is_empty()
+    };
+    let is_marker = |l: &str| is_hash(l) || is_bold_heading(l);
     let lines: Vec<&str> = md.lines().collect();
     let mut kept: Vec<&str> = Vec::with_capacity(lines.len());
     for (i, line) in lines.iter().enumerate() {
-        if is_heading(line) {
+        if is_marker(line) {
             let has_body = lines[i + 1..]
                 .iter()
-                .take_while(|l| !is_heading(l))
+                .take_while(|l| !is_marker(l))
                 .any(|l| !l.trim().is_empty());
             if !has_body {
-                continue; // orphaned heading with no content — drop it
+                continue; // orphaned heading/pseudo-heading with no content — drop it
             }
         }
         kept.push(line);
@@ -245,5 +302,38 @@ mod tests {
         let once = clean_markdown(raw);
         assert_eq!(once, clean_markdown(&once), "cleanup must be idempotent");
         assert!(once.contains("**bold**"), "legitimate bold must be preserved");
+    }
+
+    #[test]
+    fn clean_preserves_and_inserts_table_separators() {
+        // An existing separator row (all punctuation) must NOT be stripped.
+        let with_sep = "| Plan | Price |\n| :--- | :--- |\n| Free | 0 |";
+        let out = clean_markdown(with_sep);
+        assert!(out.contains("| :--- | :--- |"), "existing separator row must be kept");
+        // A table missing its separator gets one inserted after the header.
+        let no_sep = "| Plan | Price |\n| Free | 0 |";
+        let out2 = clean_markdown(no_sep);
+        let lines: Vec<&str> = out2.lines().collect();
+        assert!(
+            is_table_separator(lines[1]),
+            "a separator row must be inserted after the header: {out2:?}"
+        );
+        assert!(out2.contains("| Free | 0 |"));
+    }
+
+    #[test]
+    fn clean_drops_orphaned_bold_pseudo_heading_and_catches_kapitola_meta() {
+        let raw = "**Sekce s obsahem**\n\nReálný text sekce.\n\n**Prázdná sekce**\n\n## Konec\n\nText.\n\nJe tato kapitola vynechána.";
+        let out = clean_markdown(raw);
+        assert!(out.contains("**Sekce s obsahem**"), "bold heading WITH body kept");
+        assert!(out.contains("Reálný text sekce."));
+        assert!(
+            !out.contains("**Prázdná sekce**"),
+            "orphaned bold pseudo-heading dropped"
+        );
+        assert!(
+            !out.to_lowercase().contains("kapitola vynech"),
+            "'kapitola ... vynechána' meta must be dropped even with words between"
+        );
     }
 }
