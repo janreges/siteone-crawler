@@ -25,6 +25,9 @@ pub struct PageContext {
     pub canonical: String,
     pub robots: String,
     pub og_present: bool,
+    /// `<meta property="og:site_name">` — the clean brand/site name when the page provides it
+    /// (a more reliable subject name than the raw `<title>`, which often leads with a slogan).
+    pub og_site_name: String,
     /// Size-bounded browser console/JS/network diagnostics (only in --browser mode); None otherwise.
     pub browser_diagnostics: Option<String>,
 }
@@ -50,6 +53,7 @@ impl PageContext {
         let canonical = select_link_href(&document, "canonical");
         let robots = select_meta(&document, "robots");
         let og_present = has_opengraph(&document);
+        let og_site_name = select_meta_property(&document, "og:site_name");
 
         // Browser-rendering diagnostics (console/JS/network errors), size-bounded for AI input.
         let browser_diagnostics = status.get_browser_diagnostics(uq_id).map(|d| {
@@ -97,6 +101,7 @@ impl PageContext {
             canonical,
             robots,
             og_present,
+            og_site_name,
             browser_diagnostics,
         })
     }
@@ -113,6 +118,18 @@ fn select_text(document: &Html, selector: &str) -> Option<String> {
 
 fn select_meta(document: &Html, name: &str) -> String {
     let selector = format!(r#"meta[name="{}"]"#, name);
+    if let Ok(sel) = Selector::parse(&selector)
+        && let Some(el) = document.select(&sel).next()
+        && let Some(content) = el.value().attr("content")
+    {
+        return content.trim().to_string();
+    }
+    String::new()
+}
+
+/// Read a `<meta property="...">` content attribute (Open Graph uses `property`, not `name`).
+fn select_meta_property(document: &Html, property: &str) -> String {
+    let selector = format!(r#"meta[property="{}"]"#, property);
     if let Ok(sel) = Selector::parse(&selector)
         && let Some(el) = document.select(&sel).next()
         && let Some(content) = el.value().attr("content")

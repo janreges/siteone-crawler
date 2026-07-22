@@ -161,6 +161,7 @@ mod tests {
             canonical: String::new(),
             robots: String::new(),
             og_present: false,
+            og_site_name: String::new(),
             browser_diagnostics: None,
         };
         let req = build_request(&ctx, None, 1000, 0.0);

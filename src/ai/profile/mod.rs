@@ -72,19 +72,45 @@ fn path_hint(url: &str) -> String {
         .unwrap_or_else(|| url.to_string())
 }
 
-/// Derive a display subject name from the homepage title (leading segment before a separator), else
-/// the host.
+/// Derive a display subject name from the homepage `<title>`. Titles are usually "Brand | tagline"
+/// or "Slogan | Brand"; we split on the common separators and PREFER the segment whose letters match
+/// the domain's second-level label (the brand, e.g. "Air Bank" ~ airbank.cz) — which reliably picks
+/// the brand out of a leading slogan. Falls back to the first segment, then the host.
 fn subject_name_from(title: &str, host: &str) -> String {
     let t = title.trim();
     if t.is_empty() {
         return host.to_string();
     }
-    let cut = t.split(['|', '—', '–', '-', '·']).next().unwrap_or(t).trim();
-    if cut.is_empty() {
-        host.to_string()
-    } else {
-        cut.to_string()
+    let segments: Vec<&str> = t
+        .split(['|', '—', '–', '·', '»', '‹', '›', ':'])
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .collect();
+    if segments.is_empty() {
+        return host.to_string();
     }
+    let alnum = |s: &str| {
+        s.chars()
+            .filter(|c| c.is_alphanumeric())
+            .flat_map(|c| c.to_lowercase())
+            .collect::<String>()
+    };
+    // Second-level domain label: "www.airbank.cz" → "airbank".
+    let root = host
+        .trim_start_matches("www.")
+        .split('.')
+        .next()
+        .map(alnum)
+        .unwrap_or_default();
+    if root.len() >= 3
+        && let Some(seg) = segments.iter().find(|s| {
+            let n = alnum(s);
+            !n.is_empty() && (n == root || n.contains(&root) || root.contains(&n))
+        })
+    {
+        return seg.to_string();
+    }
+    segments[0].to_string()
 }
 
 fn report_error(status: &Arc<Mutex<Status>>, msg: &str) {
@@ -117,7 +143,7 @@ pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, output: &Ar
     let out_tokens = budget.out_tokens();
 
     // --- P1: candidate universe → ordered ProfilePage set with cleaned markdown (one status lock) ---
-    let (mut pages, markdowns, meta_fallback, homepage_title) = {
+    let (mut pages, markdowns, meta_fallback, homepage_title, homepage_og_name) = {
         let st = match status.lock() {
             Ok(s) => s,
             Err(_) => return,
@@ -127,12 +153,14 @@ pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, output: &Ar
         let mut markdowns: Vec<String> = Vec::new();
         let mut meta_fallback: Vec<(String, String)> = Vec::new();
         let mut homepage_title = String::new();
+        let mut homepage_og_name = String::new();
         for (i, c) in cs.candidates.iter().take(page_budget).enumerate() {
             let Some(ctx) = PageContext::build(&st, &c.uq_id, &c.url, options) else {
                 continue;
             };
             if i == 0 {
                 homepage_title = ctx.title.clone();
+                homepage_og_name = ctx.og_site_name.clone();
             }
             let md = ctx.content_markdown.clone();
             pages.push(ProfilePage {
@@ -145,7 +173,7 @@ pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, output: &Ar
             meta_fallback.push((ctx.title.clone(), ctx.meta_description.clone()));
             markdowns.push(md);
         }
-        (pages, markdowns, meta_fallback, homepage_title)
+        (pages, markdowns, meta_fallback, homepage_title, homepage_og_name)
     };
 
     if pages.is_empty() {
@@ -154,7 +182,14 @@ pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, output: &Ar
         }
         return;
     }
-    let subject_name = subject_name_from(&homepage_title, &host);
+    // Prefer the homepage's `og:site_name` (a clean brand name) over the raw <title>, which often
+    // leads with a slogan ("I banku můžete mít rádi | Air Bank"); fall back to the title/host heuristic.
+    let og = homepage_og_name.trim();
+    let subject_name = if !og.is_empty() && og.chars().count() <= 60 {
+        og.to_string()
+    } else {
+        subject_name_from(&homepage_title, &host)
+    };
 
     // --- Resolve the forced template (if any) up front for dry-run + skip-classify. ---
     let forced = options
@@ -815,5 +850,15 @@ mod tests {
     fn subject_name_prefers_title_segment_then_host() {
         assert_eq!(subject_name_from("Acme s.r.o. | Domů", "acme.cz"), "Acme s.r.o.");
         assert_eq!(subject_name_from("", "acme.cz"), "acme.cz");
+        // A leading slogan is skipped in favour of the brand segment that matches the domain.
+        assert_eq!(
+            subject_name_from("I banku můžete mít rádi | Air Bank", "www.airbank.cz"),
+            "Air Bank"
+        );
+        // No segment matches the host → first segment.
+        assert_eq!(
+            subject_name_from("Novinky a tipy | Blog", "example.com"),
+            "Novinky a tipy"
+        );
     }
 }
