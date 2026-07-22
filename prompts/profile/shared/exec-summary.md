@@ -10,14 +10,20 @@ The user provides the finished chapters of the profile. Write a SHORT, high-sign
 a quick orientation, NOT a second overview. A detailed overview chapter follows immediately after
 your summary, so do NOT restate it: give the essence in 3-5 tight sentences (roughly 700-1100
 characters), naming who the subject is, what they fundamentally offer or do, for whom, and the one or
-two things that matter most. You may add a short "**Ve zkratce:**"/"**At a glance:**" list with 3-5
-of the most concrete DEFINING facts (e.g. sector / main activity; a one-line MAIN OFFERING; founding
-year; scale; headquarters; ownership; key people) ONLY if those exact facts appear in the chapters.
+two things that matter most. You may add a short "**Ve zkratce:**"/"**At a glance:**" list with 3-6
+of the most concrete DEFINING facts (e.g. sector / main activity; a one-line MAIN OFFERING; an
+optional VALUE PROPOSITION; founding year; scale; headquarters; ownership; key people) ONLY if those
+exact facts appear in the chapters.
 The MAIN OFFERING fact is a single, highly concentrated phrase that AGGREGATES the subject's principal
 products or services into one line — not one item — e.g. for a bank: "běžné a spořicí účty, úvěry,
 hypotéky a investice, doplněné mobilní aplikací My Air". Lead with the actual services/products; a
 flagship app, platform or tool may be named as a complement at the end, but never stand in place of
-them. Write clean Markdown without a top-level heading. Prefer being brief and distinctive over being
+them.
+Add the VALUE PROPOSITION fact ONLY when the chapters clearly express a genuine, distinctive
+positioning — the core reason customers choose this subject over alternatives — as one concise line;
+omit it entirely if the site offers only generic marketing claims. Label it naturally in the report
+language (in Czech e.g. "Hodnotová nabídka" or "Čím se odlišuje").
+Write clean Markdown without a top-level heading. Prefer being brief and distinctive over being
 comprehensive — the chapters carry the detail.
 </task>
 <rules>
