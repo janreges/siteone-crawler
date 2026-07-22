@@ -245,24 +245,47 @@ impl ProfileDoc {
             CSS
         ));
 
-        // Header bar with SiteOne branding.
-        h.push_str("<header class=\"bar\"><div class=\"brand\"><span class=\"logo\">◧ SiteOne</span> ");
-        h.push_str("<span class=\"sub\">AI Profile</span></div>");
+        // Header bar: the real SiteOne Crawler logo (theme-aware) links home; theme toggle on the right.
+        let toggle_label = if czech {
+            "Přepnout světlý/tmavý motiv"
+        } else {
+            "Toggle light/dark theme"
+        };
         h.push_str(&format!(
-            "<div class=\"meta\"><strong>{}</strong> · <a href=\"{}\">{}</a>",
-            esc(&self.title),
+            "<header class=\"bar\"><a class=\"logo\" href=\"https://crawler.siteone.io/\" target=\"_blank\" rel=\"noopener\" aria-label=\"SiteOne Crawler\">{}<span class=\"wordmark\">SiteOne&nbsp;Crawler<span class=\"sub\">AI&nbsp;Profile</span></span></a><button id=\"themeBtn\" class=\"btn\" aria-label=\"{}\">◐</button></header>\n",
+            LOGO_SVG, esc(toggle_label)
+        ));
+
+        // Hero card: type badge, big subject title, kicker, host + date. (Model/provider live in the footer.)
+        let kicker = if czech {
+            "AI profil subjektu"
+        } else {
+            "AI subject profile"
+        };
+        h.push_str("<section class=\"hero\"><div class=\"hero-card\">");
+        if !self.meta.template_name.is_empty() {
+            h.push_str(&format!(
+                "<span class=\"hero-badge\">{}</span>",
+                esc(&self.meta.template_name)
+            ));
+        }
+        let big = if self.subject_name.trim().is_empty() {
+            self.title.as_str()
+        } else {
+            self.subject_name.as_str()
+        };
+        h.push_str(&format!("<h1 class=\"hero-title\">{}</h1>", esc(big)));
+        h.push_str(&format!("<div class=\"hero-kicker\">{}</div>", esc(kicker)));
+        h.push_str("<div class=\"hero-meta\">");
+        h.push_str(&format!(
+            "<a href=\"{}\">{}</a>",
             esc(&self.meta.url),
             esc(&self.meta.host)
         ));
-        if !self.meta.model.is_empty() {
-            h.push_str(&format!(" · {} / {}", esc(&self.meta.provider), esc(&self.meta.model)));
+        if !self.meta.crawled_at.is_empty() {
+            h.push_str(&format!("<span class=\"dot\">·</span>{}", esc(&self.meta.crawled_at)));
         }
-        h.push_str(&format!(
-            " · <span class=\"badge\">{}</span> · {}",
-            esc(&self.meta.template_name),
-            esc(&self.meta.crawled_at)
-        ));
-        h.push_str("</div><button id=\"themeBtn\" class=\"btn\">◐</button></header>\n");
+        h.push_str("</div></div></section>\n");
 
         // Build the visible section list (summary + chapters) for the TOC and body.
         let mut sections: Vec<(String, String, String)> = Vec::new(); // (anchor, heading, body_html)
@@ -309,19 +332,47 @@ impl ProfileDoc {
         }
         h.push_str("</main>\n</div>\n");
 
-        // Footer.
+        // Footer: a fuller disclaimer callout, the run/model line, LLM stats, and the linked credit.
         let disclaimer = if czech {
-            "AI-generovaný profil subjektu. Ověřte fakta před použitím."
+            "Tento profil sestavila umělá inteligence výhradně z veřejně dostupného obsahu webu. Může obsahovat nepřesnosti, zjednodušení nebo zastaralé údaje — před jakýmkoli rozhodnutím si klíčová fakta ověřte přímo u zdroje. Nejde o oficiální stanovisko popisovaného subjektu."
         } else {
-            "AI-generated subject profile. Verify facts before acting."
+            "This profile was assembled by AI solely from the site's publicly available content. It may contain inaccuracies, simplifications, or outdated details — verify key facts at the source before acting on them. It is not an official statement of the profiled subject."
         };
-        h.push_str(&format!("<footer class=\"foot\"><p>{}</p>", disclaimer));
-        if !self.meta.pages_failed.is_empty() {
+        h.push_str(&format!(
+            "<footer class=\"foot\"><p class=\"disc\">{}</p>",
+            esc(disclaimer)
+        ));
+        if !self.meta.model.is_empty() {
+            let (ctx, lang_lbl) = if czech {
+                ("kontext", "jazyk")
+            } else {
+                ("context", "language")
+            };
             h.push_str(&format!(
-                "<p class=\"gen\">{} pages used, {} failed.</p>",
-                self.meta.pages_described,
-                self.meta.pages_failed.len()
+                "<p class=\"gen\">Model: {} / {} · {} {}k · {} {}</p>",
+                esc(&self.meta.provider),
+                esc(&self.meta.model),
+                ctx,
+                self.meta.context_window / 1000,
+                lang_lbl,
+                esc(&self.meta.report_language)
             ));
+        }
+        if !self.meta.pages_failed.is_empty() {
+            let note = if czech {
+                format!(
+                    "Sestaveno z {} stránek; {} se nepodařilo zpracovat (vynechány, nikoli vymyšleny).",
+                    self.meta.pages_described,
+                    self.meta.pages_failed.len()
+                )
+            } else {
+                format!(
+                    "Built from {} pages; {} could not be processed (omitted, never fabricated).",
+                    self.meta.pages_described,
+                    self.meta.pages_failed.len()
+                )
+            };
+            h.push_str(&format!("<p class=\"gen\">{}</p>", esc(&note)));
         }
         if let Some(stats) = self.llm_stats(czech) {
             h.push_str(&format!("<p class=\"gen\">{}</p>", esc(&stats)));
@@ -588,16 +639,28 @@ fn render_bold(s: &str) -> String {
     out
 }
 
-const CSS: &str = r#":root{--bg:#f3f4f6;--surface:#fff;--ink:#111827;--muted:#6b7280;--border:#e5e7eb;--accent:#4e79a7;--chipbg:#eef2f7}
-[data-theme="dark"]{--bg:#0f172a;--surface:#1f2937;--ink:#e5e7eb;--muted:#9ca3af;--border:#374151;--accent:#7aa8d6;--chipbg:#243244}
+/// The SiteOne Crawler wordmark logo (same artwork as the audit report). Its two paths use CSS
+/// variables (`--logo-a`/`--logo-b`) so it re-tints for the light/dark theme.
+const LOGO_SVG: &str = r##"<svg class="logo-svg" viewBox="0 0 119 59" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M49.4 29.1L49.4 29.1L49.4 29.1l8.8-8.8l0 0h0V0h-9.9v16.2l-5.9 5.9L29.1 8.9L15.9 22.1l-5.9-5.9V0H0v20.2h0l0 0l8.8 8.8l0 0l0 0L0 37.9l0 0h0v20.2h9.9V42l5.9-5.9l13.3 13.3l13.3-13.3l5.9 5.9v16.2h9.9V38h0l0 0L49.4 29.1z M29.1 35.4l-6.3-6.3l6.3-6.3l6.3 6.3L29.1 35.4z" fill="var(--logo-a)"/><path fill-rule="evenodd" clip-rule="evenodd" d="M92.3 15v33.2H75.5v10H119v-10h-16.4V0h-9.3L67.1 26.2l7 7C74.1 33.2 92.3 15 92.3 15z" fill="var(--logo-b)"/></svg>"##;
+
+const CSS: &str = r#":root{--bg:#f3f4f6;--surface:#fff;--ink:#111827;--muted:#6b7280;--border:#e5e7eb;--accent:#4e79a7;--accent-ink:#fff;--chipbg:#eef2f7;--logo-a:#111827;--logo-b:#4e79a7}
+[data-theme="dark"]{--bg:#0f172a;--surface:#1f2937;--ink:#e5e7eb;--muted:#9ca3af;--border:#374151;--accent:#7aa8d6;--accent-ink:#0f172a;--chipbg:#243244;--logo-a:#e5e7eb;--logo-b:#7aa8d6}
 *{box-sizing:border-box}body{margin:0;font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink)}
 a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
-.bar{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:14px 22px;background:var(--surface);border-bottom:1px solid var(--border)}
-.brand{font-weight:700}.logo{color:var(--accent)}.sub{color:var(--muted);font-weight:500}
-.meta{color:var(--muted);flex:1;min-width:200px}.meta strong{color:var(--ink)}
-.badge{background:var(--chipbg);border:1px solid var(--border);border-radius:6px;padding:1px 8px;font-size:12.5px;color:var(--ink)}
-.btn{background:var(--chipbg);color:var(--ink);border:1px solid var(--border);border-radius:8px;padding:6px 12px;cursor:pointer}
-.layout{display:flex;gap:24px;max-width:1100px;margin:0 auto;padding:24px 22px 60px}
+.bar{position:sticky;top:0;z-index:10;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:11px 22px;background:var(--surface);border-bottom:1px solid var(--border)}
+.logo{display:inline-flex;align-items:center;gap:11px;text-decoration:none}.logo:hover{text-decoration:none}
+.logo-svg{display:block;height:30px;width:auto}
+.wordmark{font-weight:800;font-size:16px;letter-spacing:-.01em;color:var(--ink);line-height:1.05}
+.wordmark .sub{display:block;font-weight:700;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);margin-top:3px}
+.btn{background:var(--chipbg);color:var(--ink);border:1px solid var(--border);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:14px}
+.hero{max-width:1100px;margin:26px auto 0;padding:0 22px}
+.hero-card{position:relative;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px 26px 22px;overflow:hidden}
+.hero-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:var(--accent)}
+.hero-badge{display:inline-block;background:var(--accent);color:var(--accent-ink);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:4px 11px;border-radius:999px}
+.hero-title{font-size:32px;line-height:1.15;margin:14px 0 3px;font-weight:800;letter-spacing:-.02em}
+.hero-kicker{color:var(--muted);font-size:12.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase}
+.hero-meta{margin-top:12px;color:var(--muted);font-size:14px}.hero-meta a{font-weight:600;word-break:break-all}.hero-meta .dot{margin:0 8px;opacity:.5}
+.layout{display:flex;gap:24px;max-width:1100px;margin:22px auto 0;padding:0 22px 60px}
 .toc{position:sticky;top:16px;align-self:flex-start;flex:0 0 220px;max-height:90vh;overflow:auto}
 .toc ul{list-style:none;margin:0;padding:0}.toc li{margin:4px 0}.toc a{font-size:13.5px}
 main{flex:1;min-width:0}
@@ -611,8 +674,10 @@ main{flex:1;min-width:0}
 blockquote{margin:8px 0;padding:6px 14px;border-left:3px solid var(--accent);color:var(--muted);font-style:italic}
 code{background:var(--chipbg);border-radius:4px;padding:1px 5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px}
 .src{font-size:12.5px;color:var(--muted);word-break:break-all}
-.foot{max-width:1100px;margin:0 auto;padding:0 22px 40px;color:var(--muted)}.gen{font-size:12px;margin:4px 0 0}
-@media(max-width:760px){.layout{flex-direction:column}.toc{position:static;flex-basis:auto}}"#;
+.foot{max-width:1100px;margin:26px auto 0;padding:20px 22px 48px;color:var(--muted);border-top:1px solid var(--border)}
+.foot .disc{background:var(--chipbg);border:1px solid var(--border);border-radius:10px;padding:11px 14px;font-size:12.5px;line-height:1.55;color:var(--ink);margin:0 0 12px}
+.gen{font-size:12px;margin:5px 0 0}.foot a{font-weight:600}
+@media(max-width:760px){.layout{flex-direction:column}.toc{position:static;flex-basis:auto}.hero-title{font-size:26px}}"#;
 
 const JS: &str = r#"(function(){var html=document.documentElement;
 try{if(matchMedia('(prefers-color-scheme: dark)').matches)html.setAttribute('data-theme','dark');}catch(e){}
