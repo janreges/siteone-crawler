@@ -5,12 +5,15 @@
 // Independent of `src/ai/elaborate/` (which is left untouched).
 
 pub mod budget;
+pub mod classify;
 pub mod correct;
+pub mod describe;
 pub mod doc;
 pub mod embedded;
 pub mod promptpack;
 pub mod registry;
 pub mod select;
+pub mod summarize;
 
 /// One page in the profile's working universe. `description` is filled by the describe phase (P4);
 /// `size_chars` is the char length of the page's cleaned markdown (used to fit selection budgets).
