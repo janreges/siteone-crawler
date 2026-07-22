@@ -97,8 +97,10 @@ fn report_error(status: &Arc<Mutex<Status>>, msg: &str) {
 /// Entry point for `--ai-profile`. Fail-soft: never panics, never aborts the crawl.
 pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, output: &Arc<Mutex<Box<dyn Output>>>) {
     let _ = output;
-    // Own the usage ledger only when running standalone (run_ai already reset it if actions ran).
-    if options.ai_actions.is_empty() {
+    // Own the usage ledger only when running truly standalone: `run_ai` already reset it if actions
+    // ran, and `--ai-elaborate` (dispatched before us) already reset + recorded into it — resetting
+    // again here would discard elaborate's tokens from the combined end-of-run cost summary.
+    if options.ai_actions.is_empty() && !options.ai_elaborate {
         crate::ai::usage::reset();
     }
     crate::ai::usage::note_model(&options.ai_model.clone().unwrap_or_default());
@@ -172,11 +174,8 @@ pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, output: &Ar
             .unwrap_or(12);
         let corr = if options.ai_profile_correct { 1 } else { 0 };
         let classify = if forced.is_some() { 0 } else { 1 };
-        let localize = if locale.is_czech() || locale.code() == "en" {
-            0
-        } else {
-            1
-        };
+        // Every non-English language (Czech included) makes one heading-localization call.
+        let localize = if locale.code() == "en" { 0 } else { 1 };
         let est_calls = 1 + classify + pages.len() + est_chapters * (2 + corr) + localize + (1 + corr);
         eprintln!(
             "{}",
@@ -362,7 +361,7 @@ pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, output: &Ar
         );
     }
 
-    // --- Heading localization (one batched call for non-English, non-Czech locales). ---
+    // --- Heading localization (one batched call for every non-English locale, Czech included). ---
     let localized_headings = localize_headings(&client, type_spec, &lang, &locale, out_tokens, &mut calls).await;
 
     // --- P5: chapters (parallel sub-pipelines). ---
@@ -662,9 +661,10 @@ async fn run_correction(
     }
 }
 
-/// One batched heading-translation call for non-English, non-Czech report languages (Czech headings
-/// are built in via the type spec's fixed English->Czech map is not used here; Czech falls back to
-/// English headings unless the model localizes them). English keeps the English headings.
+/// One batched heading-translation call for every non-English report language (including Czech): the
+/// chapter headings authored in English are translated into `lang` in a single id-constrained call,
+/// with an English fallback on failure. English (`code() == "en"`) skips the call and keeps the
+/// English headings.
 async fn localize_headings(
     client: &Arc<AiClient>,
     type_spec: &promptpack::TypeSpec,
