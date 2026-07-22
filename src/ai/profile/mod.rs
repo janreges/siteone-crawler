@@ -97,6 +97,7 @@ fn report_error(status: &Arc<Mutex<Status>>, msg: &str) {
 /// Entry point for `--ai-profile`. Fail-soft: never panics, never aborts the crawl.
 pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, output: &Arc<Mutex<Box<dyn Output>>>) {
     let _ = output;
+    let run_start = std::time::Instant::now();
     // Own the usage ledger only when running truly standalone: `run_ai` already reset it if actions
     // ran, and `--ai-elaborate` (dispatched before us) already reset + recorded into it — resetting
     // again here would discard elaborate's tokens from the combined end-of-run cost summary.
@@ -443,6 +444,19 @@ pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, output: &Ar
             "subject profile"
         }
     );
+    // Real LLM accounting for this profile, summed from the usage ledger's "AI profile (*)"
+    // categories (accurate even when combined with other AI actions in one process).
+    let (mut ledger_calls, mut input_tokens, mut output_tokens, mut llm_ms) = (0u64, 0u64, 0u64, 0u64);
+    for (name, u) in crate::ai::usage::categories() {
+        if name.starts_with("AI profile") {
+            ledger_calls += u.calls;
+            input_tokens += u.prompt_tokens;
+            output_tokens += u.completion_tokens;
+            llm_ms += u.network_time_ms;
+        }
+    }
+    let _ = calls; // superseded by the authoritative ledger count below
+
     let doc = ProfileDoc {
         title,
         subject_name,
@@ -459,7 +473,11 @@ pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, output: &Ar
             template_detected,
             pages_total: pages_arc.len(),
             pages_described: pages_arc.len(),
-            calls,
+            calls: ledger_calls as usize,
+            input_tokens,
+            output_tokens,
+            llm_ms,
+            gen_ms: run_start.elapsed().as_millis() as u64,
             pages_failed: Vec::new(),
         },
         site_description,
