@@ -263,6 +263,10 @@ impl Manager {
         if options.ai_elaborate {
             crate::ai::elaborate::run(options.as_ref(), crawler.get_status(), crawler.get_output()).await;
         }
+        // AI profile is its own pipeline (may run alongside actions/elaborate, or alone).
+        if options.ai_profile {
+            crate::ai::profile::run(options.as_ref(), crawler.get_status(), crawler.get_output()).await;
+        }
 
         // Post-crawl: run analyzers
         let exit_code = self.run_post_crawl(&crawler).await;
