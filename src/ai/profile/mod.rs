@@ -606,10 +606,16 @@ async fn build_chapter(
 
     // P5c: correction.
     let (body, correction) = if shared.correct {
-        run_correction(shared, &chapter.synthesis_instructions, &content, &body).await
+        let (corrected, report) = run_correction(shared, &chapter.synthesis_instructions, &content, &body).await;
+        // The correction deletes spans and can leave debris (empty bold, blank runs, stray
+        // punctuation) or a leaked meta-comment — re-run the deterministic cleanup over its output.
+        (synthesize::clean_markdown(&corrected), report)
     } else {
         (body, None)
     };
+    if body.trim().is_empty() {
+        return omitted("chapter empty after correction cleanup");
+    }
 
     ProfileChapter {
         id: chapter.id.clone(),
@@ -750,7 +756,7 @@ async fn build_exec_summary(
         Err(_) => return String::new(),
     };
     if !correct || body.is_empty() {
-        return body;
+        return synthesize::clean_markdown(&body);
     }
     // Reuse the correction prompt with the exec-summary material as source.
     let system = promptpack::render(registry::CORRECT, &[("language", lang)]);
@@ -772,8 +778,8 @@ async fn build_exec_summary(
         .complete_parsed_n(&req, CAT_CORRECT, PARSE_ATTEMPTS, correct::parse_edits)
         .await
     {
-        Ok((edits, _)) => correct::apply(&body, &edits).0,
-        Err(_) => body,
+        Ok((edits, _)) => synthesize::clean_markdown(&correct::apply(&body, &edits).0),
+        Err(_) => synthesize::clean_markdown(&body),
     }
 }
 

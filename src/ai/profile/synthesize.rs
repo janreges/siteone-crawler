@@ -5,11 +5,31 @@
 // The tool renders the heading, so a leading duplicate heading is stripped. An empty result means the
 // pages held nothing relevant → the caller OMITS the chapter (never fabricated).
 
+use once_cell::sync::Lazy;
+use regex::Regex;
+
 use crate::ai::normalize::strip_think;
 use crate::ai::provider::{ChatMessage, ChatRequest};
 
 use super::promptpack::{self, ChapterSpec};
 use super::registry;
+
+/// Whitespace left immediately before sentence punctuation by a deleted span (e.g. "vzduch-voda .").
+static SPACE_BEFORE_PUNCT: Lazy<Regex> = Lazy::new(|| Regex::new(r" +([.,;:!?])").unwrap());
+
+/// Unambiguous meta-commentary about the generation process that must never reach the reader. A line
+/// containing any of these (case-insensitive) is dropped entirely — the model was told to omit such
+/// chapters, not to narrate the omission, but it sometimes leaks the instruction into the prose.
+const META_MARKERS: [&str; 8] = [
+    "v souladu s instrukc",
+    "je vynechána",
+    "byla vynechána",
+    "in accordance with the instruction",
+    "this chapter is omitted",
+    "this chapter has been omitted",
+    "based on the provided pages",
+    "the provided pages contain",
+];
 
 /// Concatenate `<content url="/path">markdown</content>` blocks up to `budget_bytes` (keeps at least
 /// the first block even if it alone exceeds the budget).
@@ -54,17 +74,43 @@ pub fn build_request(
     }
 }
 
-/// Clean the model output: strip reasoning, trim, drop a leading duplicate heading line, then tidy
-/// orphaned empty subsections and excess blank lines.
+/// Clean the model output: strip reasoning, trim, drop a leading duplicate heading line, then run the
+/// full deterministic cleanup (`clean_markdown`).
 pub fn parse(raw: &str, heading: &str) -> String {
     let text = strip_think(raw).trim().to_string();
-    tidy_markdown(&strip_leading_heading(&text, heading))
+    clean_markdown(&strip_leading_heading(&text, heading))
 }
 
-/// Deterministic markdown tidy: drop any heading line that has no body before the next heading or the
-/// end (an "orphaned" subsection the model emitted but never filled), and collapse runs of 3+ blank
-/// lines to a single blank line. Keeps everything else byte-for-byte.
-fn tidy_markdown(md: &str) -> String {
+/// Full deterministic cleanup of a chapter/summary body. Idempotent and safe to run BEFORE and AFTER
+/// the correction pass: correction deletes spans and can leave debris (empty `**bold**` markers,
+/// blanked table cells, stray " ." fragments, orphaned headings, blank-line runs) plus the model
+/// occasionally leaks meta-commentary about the generation process — all removed here.
+pub(crate) fn clean_markdown(md: &str) -> String {
+    let mut lines: Vec<String> = Vec::new();
+    for raw in md.lines() {
+        let lower = raw.to_ascii_lowercase();
+        if META_MARKERS.iter().any(|m| lower.contains(m)) {
+            continue; // drop a meta-commentary line entirely
+        }
+        // Remove empty bold markers left when a correction blanked the span between `**`…`**`.
+        let mut line = raw.replace("** **", " ").replace("****", "");
+        // Tidy whitespace a deletion left before punctuation ("word ." → "word.").
+        line = SPACE_BEFORE_PUNCT.replace_all(&line, "$1").into_owned();
+        // Drop a line that is now only stray punctuation / an empty table row.
+        let t = line.trim();
+        let punct_only = !t.is_empty() && t.chars().all(|c| c.is_ascii_punctuation() || c.is_whitespace());
+        let empty_table_row = t.starts_with('|') && t.trim_matches('|').split('|').all(|c| c.trim().is_empty());
+        if punct_only || empty_table_row {
+            continue;
+        }
+        lines.push(line);
+    }
+    tidy_structure(&lines.join("\n"))
+}
+
+/// Structural tidy: drop any heading with no body before the next heading/end (an orphaned subsection),
+/// and collapse runs of 2+ blank lines to a single blank line.
+fn tidy_structure(md: &str) -> String {
     let is_heading = |l: &str| {
         let n = l.trim_start().chars().take_while(|c| *c == '#').count();
         (1..=6).contains(&n) && l.trim_start()[n..].starts_with(' ')
@@ -73,7 +119,6 @@ fn tidy_markdown(md: &str) -> String {
     let mut kept: Vec<&str> = Vec::with_capacity(lines.len());
     for (i, line) in lines.iter().enumerate() {
         if is_heading(line) {
-            // Look ahead: is there any non-blank, non-heading content before the next heading/end?
             let has_body = lines[i + 1..]
                 .iter()
                 .take_while(|l| !is_heading(l))
@@ -84,7 +129,6 @@ fn tidy_markdown(md: &str) -> String {
         }
         kept.push(line);
     }
-    // Collapse 3+ consecutive blank lines to one blank line.
     let mut out = String::with_capacity(md.len());
     let mut blank_run = 0usize;
     for line in kept {
@@ -176,5 +220,30 @@ mod tests {
             "trailing orphaned heading must be dropped"
         );
         assert!(!out.contains("\n\n\n"), "3+ blank lines must be collapsed");
+    }
+
+    #[test]
+    fn clean_removes_correction_debris_and_meta() {
+        let raw = "Skutečná věta o produktu.\n\nV souladu s instrukcemi je tato kapitola vynechána.\n\n- Nabídka vzduch-voda .\n\nProdukt **** a další.\n .";
+        let out = clean_markdown(raw);
+        assert!(out.contains("Skutečná věta o produktu."));
+        assert!(
+            !out.to_lowercase().contains("v souladu s instrukc"),
+            "meta-commentary line must be dropped"
+        );
+        assert!(!out.contains("****"), "empty bold markers must be removed");
+        assert!(out.contains("vzduch-voda."), "space-before-punctuation must be tidied");
+        assert!(
+            !out.contains("\n .\n") && !out.ends_with(" ."),
+            "stray punctuation line removed"
+        );
+    }
+
+    #[test]
+    fn clean_is_idempotent_and_keeps_real_bold() {
+        let raw = "## Kept\n\nBody with **bold** kept.\n\nvzduch-voda .";
+        let once = clean_markdown(raw);
+        assert_eq!(once, clean_markdown(&once), "cleanup must be idempotent");
+        assert!(once.contains("**bold**"), "legitimate bold must be preserved");
     }
 }
