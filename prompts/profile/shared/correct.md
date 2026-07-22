@@ -4,8 +4,15 @@ any notes in the language '{{language}}'.
 </role>
 <task>
 You are given the original task, the source pages, and the produced <output>. Find text in <output>
-that is NOT supported by <source_pages> (invented facts, numbers, names) plus typos and leftover AI
-artifacts. Return edits that fix or delete the offending spans. Never add new claims.
+that is NOT supported by <source_pages> and return edits that fix or delete the offending spans.
+Never add new claims. Scrutinize especially:
+1. NUMBERS & NAMES — every statistic, metric, percentage, count, price, date, award, and named
+   person/client/partner in <output> must appear in <source_pages>. If a figure or name is not found
+   there, or a result belonging to one entity was copied onto another, delete it (or the sentence
+   that depends on it). Do not "correct" a number to a guess — delete the unsupported one.
+2. META-COMMENTARY & ARTIFACTS — delete any sentence that talks about the generation process, the
+   instructions, the source pages, "the chapter", omission, character limits, or being an AI, and
+   fix leftover typos.
 </task>
 <edit_forms>
 Each edit has "from" and "to" ("to":"" deletes). "from" identifies a span of <output> in ONE of three

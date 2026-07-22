@@ -54,10 +54,52 @@ pub fn build_request(
     }
 }
 
-/// Clean the model output: strip reasoning, trim, and drop a leading duplicate heading line.
+/// Clean the model output: strip reasoning, trim, drop a leading duplicate heading line, then tidy
+/// orphaned empty subsections and excess blank lines.
 pub fn parse(raw: &str, heading: &str) -> String {
     let text = strip_think(raw).trim().to_string();
-    strip_leading_heading(&text, heading)
+    tidy_markdown(&strip_leading_heading(&text, heading))
+}
+
+/// Deterministic markdown tidy: drop any heading line that has no body before the next heading or the
+/// end (an "orphaned" subsection the model emitted but never filled), and collapse runs of 3+ blank
+/// lines to a single blank line. Keeps everything else byte-for-byte.
+fn tidy_markdown(md: &str) -> String {
+    let is_heading = |l: &str| {
+        let n = l.trim_start().chars().take_while(|c| *c == '#').count();
+        (1..=6).contains(&n) && l.trim_start()[n..].starts_with(' ')
+    };
+    let lines: Vec<&str> = md.lines().collect();
+    let mut kept: Vec<&str> = Vec::with_capacity(lines.len());
+    for (i, line) in lines.iter().enumerate() {
+        if is_heading(line) {
+            // Look ahead: is there any non-blank, non-heading content before the next heading/end?
+            let has_body = lines[i + 1..]
+                .iter()
+                .take_while(|l| !is_heading(l))
+                .any(|l| !l.trim().is_empty());
+            if !has_body {
+                continue; // orphaned heading with no content — drop it
+            }
+        }
+        kept.push(line);
+    }
+    // Collapse 3+ consecutive blank lines to one blank line.
+    let mut out = String::with_capacity(md.len());
+    let mut blank_run = 0usize;
+    for line in kept {
+        if line.trim().is_empty() {
+            blank_run += 1;
+            if blank_run >= 2 {
+                continue;
+            }
+        } else {
+            blank_run = 0;
+        }
+        out.push_str(line);
+        out.push('\n');
+    }
+    out.trim().to_string()
 }
 
 /// Remove a leading `#`..`######` heading line when it merely repeats the chapter heading (the tool
@@ -119,5 +161,20 @@ mod tests {
         // A different heading is left intact.
         let raw2 = "## Our team\n\nBody.";
         assert_eq!(parse(raw2, "Services"), "## Our team\n\nBody.");
+    }
+
+    #[test]
+    fn tidy_drops_orphaned_headings_and_collapses_blanks() {
+        // "### Empty" has no body before the next heading → dropped; the 4 blank lines collapse to 1.
+        let raw = "### Kept\n\nBody text.\n\n### Empty\n\n\n\n### Also empty at end";
+        let out = parse(raw, "Chapter");
+        assert!(out.contains("### Kept"));
+        assert!(out.contains("Body text."));
+        assert!(!out.contains("### Empty"), "orphaned heading must be dropped");
+        assert!(
+            !out.contains("### Also empty"),
+            "trailing orphaned heading must be dropped"
+        );
+        assert!(!out.contains("\n\n\n"), "3+ blank lines must be collapsed");
     }
 }
