@@ -357,6 +357,8 @@ mod tests {
             memory_limit: "2048M".to_string(),
             resolve: Vec::new(),
             websocket_server: None,
+            events_file: None,
+            control_stdin: false,
             ignore_robots_txt: false,
             ignore_html_comments: false,
             allowed_domains_for_external_files: Vec::new(),

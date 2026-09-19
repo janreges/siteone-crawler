@@ -139,6 +139,30 @@ async fn main() {
         return;
     }
 
+    // Open the machine-readable event stream before anything can report into it.
+    //
+    // Failing here is fatal on purpose: a host that asked for events is relying on them, and
+    // running on without would leave it watching an empty file forever.
+    if let Some(path) = initiator.get_options().events_file.clone() {
+        if let Err(e) = siteone_crawler::events::init(std::path::Path::new(&path)) {
+            eprintln!("ERROR: cannot write the event file '{}': {}", path, e);
+            std::process::exit(101);
+        }
+        let options = initiator.get_options();
+        siteone_crawler::events::emit(siteone_crawler::events::Event::RunStarted {
+            protocol: siteone_crawler::events::PROTOCOL,
+            version: siteone_crawler::version::CODE,
+            executed_at: chrono::Local::now().to_rfc3339(),
+            url: options.url.clone(),
+            working_dir: std::env::current_dir()
+                .map(|d| d.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+        });
+    }
+
+    // Read before `create_manager` consumes the initiator.
+    let control_stdin = initiator.get_options().control_stdin;
+
     // Create manager from initiator
     let mut manager = match initiator.create_manager() {
         Ok(m) => m,
@@ -147,6 +171,22 @@ async fn main() {
             std::process::exit(1);
         }
     };
+
+    // Accept `stop` from a host that has no terminal to send Ctrl+C from. End of input means
+    // the same, so a crawl cannot outlive the process that started it.
+    if control_stdin {
+        std::thread::spawn(|| {
+            use std::io::BufRead;
+            for line in std::io::stdin().lock().lines() {
+                match line {
+                    Ok(l) if l.trim().eq_ignore_ascii_case("stop") => break,
+                    Ok(_) => {}
+                    Err(_) => break,
+                }
+            }
+            siteone_crawler::engine::crawler::request_stop();
+        });
+    }
 
     // Run the crawler
     match manager.run().await {
@@ -170,6 +210,13 @@ async fn main() {
         }
         Err(e) => {
             eprintln!("Crawler error: {}", e);
+            siteone_crawler::events::emit(siteone_crawler::events::Event::RunFinished {
+                outcome: "failed",
+                exit_code: 1,
+                ms: 0,
+                interrupted: false,
+                error: Some(e.to_string()),
+            });
             if launched_via_wizard {
                 siteone_crawler::wizard::press_enter_to_exit();
             }

@@ -12,6 +12,18 @@ use fancy_regex::Regex as FilterRegex;
 use md5::{Digest, Md5};
 use once_cell::sync::Lazy;
 use regex::Regex;
+
+/// Set when a host asks the crawl to wind down through `--control-stdin`.
+///
+/// Process-wide because the request can arrive before the crawler is built, and it has to
+/// mean the same thing as Ctrl+C: stop taking new URLs, finish what is in flight, then let
+/// the reports be written.
+static STOP_REQUESTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Asks the running crawl to wind down, as Ctrl+C would.
+pub fn request_stop() {
+    STOP_REQUESTED.store(true, std::sync::atomic::Ordering::SeqCst);
+}
 use tokio::sync::Semaphore;
 
 /// Regex to extract <base href="..."> from HTML
@@ -248,7 +260,7 @@ impl Crawler {
         let mut join_handles = Vec::new();
 
         loop {
-            if self.terminated.load(Ordering::SeqCst) {
+            if self.terminated.load(Ordering::SeqCst) || STOP_REQUESTED.load(Ordering::SeqCst) {
                 if let Ok(mut output) = self.output.lock() {
                     output.add_notice(
                         "Crawler interrupted by user (Ctrl+C). Processing will stop after in-flight requests complete.",
@@ -367,6 +379,11 @@ impl Crawler {
         ctrl_c_handler.abort();
 
         Ok(())
+    }
+
+    /// Whether the crawl was cut short by Ctrl+C or a `stop` on stdin.
+    pub fn was_interrupted(&self) -> bool {
+        self.terminated.load(Ordering::SeqCst) || STOP_REQUESTED.load(Ordering::SeqCst)
     }
 
     /// Take the next URL from the queue (breadth-first order)
@@ -828,6 +845,21 @@ impl Crawler {
         let done_count = done_urls_count.fetch_add(1, Ordering::SeqCst) + 1;
         let total_count = queue.len() + visited.len();
         let progress_status = format!("{}/{}", done_count, total_count);
+
+        // The same row, in machine-readable form, for a host driving the crawler.
+        if crate::events::is_enabled() {
+            crate::events::emit(crate::events::Event::Url {
+                url: absolute_url.clone(),
+                status: response_status,
+                content_type: crate::utils::get_content_type_name_by_id(content_type),
+                time_ms: (elapsed_time * 1000.0).round().max(0.0) as u64,
+                size: body_size,
+                // Any cache flag at all means the body did not come from the network.
+                cached: cache_type_flags != 0,
+                done: done_count,
+                total: total_count,
+            });
+        }
 
         // Print table row to output
         if let Ok(mut out) = output.lock() {

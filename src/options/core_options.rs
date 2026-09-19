@@ -116,6 +116,10 @@ pub struct CoreOptions {
     pub memory_limit: String,
     pub resolve: Vec<String>,
     pub websocket_server: Option<String>,
+    /// Write a machine-readable NDJSON account of the run to this file, for host applications.
+    pub events_file: Option<String>,
+    /// Read `stop` from stdin as an alternative to Ctrl+C, for hosts that have no terminal.
+    pub control_stdin: bool,
     pub ignore_robots_txt: bool,
     pub ignore_html_comments: bool,
     pub allowed_domains_for_external_files: Vec<String>,
@@ -372,6 +376,8 @@ impl CoreOptions {
             memory_limit: "2048M".to_string(),
             resolve: Vec::new(),
             websocket_server: None,
+            events_file: None,
+            control_stdin: false,
             ignore_robots_txt: false,
             ignore_html_comments: false,
             allowed_domains_for_external_files: Vec::new(),
@@ -1092,6 +1098,18 @@ impl CoreOptions {
             "websocketServer" => {
                 if let Some(s) = value.as_str() {
                     self.websocket_server = Some(s.to_string());
+                }
+            }
+            "eventsFile" => {
+                if let Some(s) = value.as_str()
+                    && !s.is_empty()
+                {
+                    self.events_file = Some(s.to_string());
+                }
+            }
+            "controlStdin" => {
+                if let Some(b) = value.as_bool() {
+                    self.control_stdin = b;
                 }
             }
             "ignoreRobotsTxt" => {
@@ -2349,6 +2367,16 @@ pub fn get_options() -> Options {
                 "--console-width", Some("-cw"), "consoleWidth", OptionType::Int, false,
                 "Enforce the definition of the console width and disable automatic detection.",
                 None, true, false, None,
+            ),
+            CrawlerOption::new(
+                "--events-file", None, "eventsFile", OptionType::File, false,
+                "Write a machine-readable NDJSON account of the run to this file (one JSON object per line: crawled URLs, phases, artifacts, issues, result). Intended for GUIs and CI tooling that would otherwise have to parse the human-readable output.",
+                None, true, false, None,
+            ),
+            CrawlerOption::new(
+                "--control-stdin", None, "controlStdin", OptionType::Bool, false,
+                "Read commands from stdin. A line `stop` winds the crawl down exactly like Ctrl+C, and end-of-input does the same, so a crawl cannot outlive the process that started it. Do not combine with `< /dev/null`.",
+                Some("false"), false, false, None,
             ),
         ],
     ));
@@ -3792,6 +3820,8 @@ mod tests {
             memory_limit: "2048M".to_string(),
             resolve: Vec::new(),
             websocket_server: None,
+            events_file: None,
+            control_stdin: false,
             ignore_robots_txt: false,
             ignore_html_comments: false,
             allowed_domains_for_external_files: Vec::new(),
@@ -4272,7 +4302,7 @@ mod tests {
                 .values()
                 .map(|group| group.options.len())
                 .sum::<usize>(),
-            196
+            198
         );
     }
 }
