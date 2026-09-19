@@ -30,6 +30,7 @@ pub struct HtmlToMarkdownConverter {
     convert_tables: bool,
     convert_strikethrough: bool,
     strikethrough_delimiter: String,
+    source_url: Option<url::Url>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -80,7 +81,40 @@ impl HtmlToMarkdownConverter {
             convert_tables: true,
             convert_strikethrough: true,
             strikethrough_delimiter: "~~".to_string(),
+            source_url: None,
         }
+    }
+
+    /// Resolve destinations against their online source for a standalone document.
+    pub fn set_source_url(&mut self, source: &str) {
+        self.source_url = url::Url::parse(&crate::utils::redact_url_userinfo(source)).ok();
+        let document = Html::parse_document(&self.html);
+        let selector = Selector::parse("base[href]").unwrap();
+        if let Some(base) = document
+            .select(&selector)
+            .next()
+            .and_then(|node| node.value().attr("href"))
+            && let Some(resolved) = self.source_url.as_ref().and_then(|source| source.join(base).ok())
+        {
+            self.source_url = Some(resolved);
+        }
+    }
+
+    fn destination(&self, value: &str) -> String {
+        if value.is_empty() || self.source_url.is_none() {
+            return value.to_string();
+        }
+        self.source_url
+            .as_ref()
+            .and_then(|source| source.join(value).ok())
+            .map(|url| {
+                if url.cannot_be_a_base() {
+                    url.to_string()
+                } else {
+                    crate::utils::redact_url_userinfo(url.as_str())
+                }
+            })
+            .unwrap_or_else(|| value.to_string())
     }
 
     pub fn set_strong_delimiter(&mut self, delimiter: &str) -> &mut Self {
@@ -575,7 +609,7 @@ impl HtmlToMarkdownConverter {
     /// Convert link element to Markdown.
     fn convert_link(&self, node: &NodeRef<Node>, document: &Html, excluded: &[ego_tree::NodeId]) -> String {
         if let Node::Element(el) = node.value() {
-            let href = el.attr("href").unwrap_or("").to_string();
+            let href = self.destination(el.attr("href").unwrap_or(""));
 
             if href.is_empty() {
                 return self.get_inner_markdown(node, document, excluded);
@@ -619,7 +653,7 @@ impl HtmlToMarkdownConverter {
             }
 
             let alt = self.collapse_inline_whitespace(el.attr("alt").unwrap_or(""));
-            let src = el.attr("src").unwrap_or("").to_string();
+            let src = self.destination(el.attr("src").unwrap_or(""));
             let title = el.attr("title").unwrap_or("").to_string();
 
             if src.is_empty() {
@@ -1188,6 +1222,20 @@ impl HtmlToMarkdownConverter {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn standalone_destinations_keep_online_targets_and_respect_html_base() {
+        let mut converter = HtmlToMarkdownConverter::new(
+            r#"<base href="/assets/"><a href="../about.html#part">About</a><img src="pic.png" alt="Image"><a href="mailto:test@example.test">Mail</a>"#,
+            vec![],
+        );
+        converter.set_source_url("https://user:secret@example.test/pages/current");
+        let markdown = converter.get_markdown();
+        assert!(markdown.contains("https://example.test/about.html#part"));
+        assert!(markdown.contains("https://example.test/assets/pic.png"));
+        assert!(markdown.contains("mailto:test@example.test"));
+        assert!(!markdown.contains("secret"));
+    }
 
     #[test]
     fn test_simple_paragraph() {

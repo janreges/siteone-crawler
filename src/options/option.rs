@@ -13,6 +13,28 @@ use super::option_type::OptionType;
 
 static EXTRAS_DOMAIN: Mutex<Option<String>> = Mutex::new(None);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct InlineOptionAssignment<'a> {
+    pub name: &'a str,
+    pub value: &'a str,
+    pub is_literal_array: bool,
+}
+
+/// Parse an inline `--name=value` assignment without interpreting its value.
+///
+/// A name ending in `:` selects the literal-array form (`--name:=value`). Splitting at the
+/// first equals sign keeps `:=` inside a normal value as data rather than syntax.
+pub(crate) fn parse_inline_option_assignment(arg: &str) -> Option<InlineOptionAssignment<'_>> {
+    let (name, value) = arg.split_once('=')?;
+    let is_literal_array = name.ends_with(':');
+    let name = name.strip_suffix(':').unwrap_or(name);
+    Some(InlineOptionAssignment {
+        name,
+        value,
+        is_literal_array,
+    })
+}
+
 #[derive(Debug, Clone)]
 pub enum OptionValue {
     None,
@@ -172,6 +194,7 @@ impl CrawlerOption {
         while i < argv.len() {
             let arg = &argv[i];
             let mut arg_value: Option<String> = None;
+            let mut is_literal_array_assignment = false;
 
             if arg == &self.name || self.alt_name.as_deref() == Some(arg.as_str()) {
                 if self.option_type == OptionType::Bool {
@@ -187,18 +210,24 @@ impl CrawlerOption {
                         arg_value = Some(String::new());
                     }
                 }
-            } else if let Some(rest) = arg.strip_prefix(&format!("{}=", self.name)) {
-                arg_value = Some(rest.to_string());
-            } else if let Some(ref alt) = self.alt_name
-                && let Some(rest) = arg.strip_prefix(&format!("{}=", alt))
-            {
-                arg_value = Some(rest.to_string());
-                defined_by_alt_name = true;
+            } else if let Some(assignment) = parse_inline_option_assignment(arg) {
+                if assignment.name == self.name && (!assignment.is_literal_array || self.is_array) {
+                    arg_value = Some(assignment.value.to_string());
+                    is_literal_array_assignment = assignment.is_literal_array;
+                } else if self.alt_name.as_deref() == Some(assignment.name)
+                    && (!assignment.is_literal_array || self.is_array)
+                {
+                    arg_value = Some(assignment.value.to_string());
+                    is_literal_array_assignment = assignment.is_literal_array;
+                    defined_by_alt_name = true;
+                }
             }
 
             if let Some(ref mut av) = arg_value {
                 self.is_explicitly_set = true;
-                unquote_value(av);
+                if !is_literal_array_assignment {
+                    unquote_value(av);
+                }
 
                 if self.is_array {
                     if !has_default_been_replaced {
@@ -206,7 +235,9 @@ impl CrawlerOption {
                         array_values.clear();
                         has_default_been_replaced = true;
                     }
-                    if av.contains(',') {
+                    if is_literal_array_assignment {
+                        array_values.push(av.clone());
+                    } else if av.contains(',') {
                         let parts: Vec<String> = av
                             .split(',')
                             .map(|s| s.trim().to_string())
@@ -454,7 +485,7 @@ impl CrawlerOption {
                 let replace_from = parts[0].trim();
                 let is_regex = crate::utils::is_regex_pattern(replace_from);
 
-                if is_regex && Regex::new(replace_from).is_err() {
+                if is_regex && Regex::new(&utils::extract_pcre_regex_pattern(replace_from)).is_err() {
                     return Err(CrawlerError::Config(format!(
                         "Option {} and its first part ({}) must be valid PCRE regular expression",
                         display_name, replace_from
@@ -595,4 +626,145 @@ fn replace_placeholders(value: &mut String) {
         .replace("%domain%", &domain)
         .replace("%date%", &date)
         .replace("%datetime%", &datetime);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn array_option(
+        alt_name: Option<&str>,
+        option_type: OptionType,
+        default_value: Option<&str>,
+        is_nullable: bool,
+    ) -> CrawlerOption {
+        CrawlerOption::new(
+            "--array",
+            alt_name,
+            "array",
+            option_type,
+            true,
+            "Test array option.",
+            default_value,
+            is_nullable,
+            true,
+            None,
+        )
+    }
+
+    fn argv(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| (*value).to_string()).collect()
+    }
+
+    #[test]
+    fn m07_replace_content_accepts_literal_and_supported_regex_rules() {
+        for rule in [
+            "127.0.0.1 -> localhost",
+            r"/127\.0\.0\.1/ -> localhost",
+            "/old/i -> new",
+            r"#^mirror\.test/old/# -> final.test/new/",
+            "/foo{1,2}/ -> bar",
+        ] {
+            let mut options = crate::options::core_options::get_options();
+            let option = options
+                .get_groups_mut()
+                .values_mut()
+                .find_map(|group| group.options.get_mut("transformUrl"))
+                .unwrap();
+
+            option
+                .set_value_from_argv(&argv(&["siteone-crawler", &format!("--transform-url:={rule}")]))
+                .unwrap();
+
+            assert_eq!(option.get_value().unwrap().as_array().unwrap(), &vec![rule.to_string()]);
+        }
+    }
+
+    #[test]
+    fn m07_replace_content_rejects_malformed_inner_regex() {
+        let mut options = crate::options::core_options::get_options();
+        let option = options
+            .get_groups_mut()
+            .values_mut()
+            .find_map(|group| group.options.get_mut("transformUrl"))
+            .unwrap();
+
+        let error = option
+            .set_value_from_argv(&argv(&["siteone-crawler", r"--transform-url:=/foo\/ -> bar"]))
+            .unwrap_err();
+
+        assert!(error.to_string().contains("--transform-url"), "{error}");
+        assert!(
+            error.to_string().contains("must be valid PCRE regular expression"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn h01_literal_array_assignment_preserves_one_raw_member_and_normal_csv() {
+        let literal = "'quoted',^/foo,bar{1,2}=value\\";
+        let mut option = array_option(None, OptionType::String, Some("legacy,default"), true);
+        let args = argv(&[
+            "siteone-crawler",
+            "--array=normal:=data,second",
+            &format!("--array:={literal}"),
+            "--array=tail",
+        ]);
+
+        option.set_value_from_argv(&args).unwrap();
+
+        assert_eq!(
+            option.get_value().unwrap().as_array().unwrap(),
+            &vec![
+                "normal:=data".to_string(),
+                "second".to_string(),
+                literal.to_string(),
+                "tail".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn h01_literal_array_assignment_works_with_an_alias() {
+        let mut option = array_option(Some("-a"), OptionType::String, None, true);
+
+        option
+            .set_value_from_argv(&argv(&["siteone-crawler", "-a:=first,second"]))
+            .unwrap();
+
+        assert_eq!(
+            option.get_value().unwrap().as_array().unwrap(),
+            &vec!["first,second".to_string()]
+        );
+    }
+
+    #[test]
+    fn h01_literal_empty_nullable_array_replaces_its_default() {
+        let mut option = array_option(None, OptionType::String, Some("legacy"), true);
+
+        option
+            .set_value_from_argv(&argv(&["siteone-crawler", "--array:="]))
+            .unwrap();
+
+        assert_eq!(option.get_value().unwrap().as_array().unwrap(), &Vec::<String>::new());
+    }
+
+    #[test]
+    fn h01_literal_empty_array_matches_legacy_default_replacement() {
+        let mut literal = array_option(None, OptionType::Regex, Some("legacy"), false);
+        let mut normal = array_option(None, OptionType::Regex, Some("legacy"), false);
+
+        literal
+            .set_value_from_argv(&argv(&["siteone-crawler", "--array:="]))
+            .unwrap();
+        normal
+            .set_value_from_argv(&argv(&["siteone-crawler", "--array="]))
+            .unwrap();
+
+        assert_eq!(
+            literal.get_value().unwrap().as_array(),
+            normal.get_value().unwrap().as_array()
+        );
+        assert_eq!(literal.get_value().unwrap().as_array().unwrap(), &Vec::<String>::new());
+    }
 }

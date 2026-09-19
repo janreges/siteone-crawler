@@ -11,7 +11,7 @@ use crate::extra_column::ExtraColumn;
 use crate::types::{DeviceType, OutputType};
 
 use super::group::OptionGroup;
-use super::option::{CrawlerOption, OptionValue};
+use super::option::{CrawlerOption, OptionValue, parse_inline_option_assignment};
 use super::option_type::OptionType;
 use super::options::Options;
 
@@ -66,15 +66,19 @@ impl StorageType {
 #[serde(rename_all = "camelCase")]
 pub struct CoreOptions {
     // basic settings
+    #[serde(serialize_with = "crate::utils::serialize_public_url")]
     pub url: String,
     pub url_list: Option<String>,
+    #[serde(serialize_with = "crate::utils::serialize_public_urls")]
     pub url_list_urls: Vec<String>,
     pub single_page: bool,
     pub max_depth: i64,
     pub device: DeviceType,
     pub user_agent: Option<String>,
     pub timeout: i64,
+    #[serde(serialize_with = "crate::utils::serialize_optional_public_url")]
     pub proxy: Option<String>,
+    #[serde(serialize_with = "crate::utils::serialize_optional_secret")]
     pub http_auth: Option<String>,
     pub accept_invalid_certs: bool,
     pub timezone: Option<String>,
@@ -185,12 +189,15 @@ pub struct CoreOptions {
     pub mail_smtp_host: String,
     pub mail_smtp_port: i64,
     pub mail_smtp_user: Option<String>,
+    #[serde(serialize_with = "crate::utils::serialize_optional_secret")]
     pub mail_smtp_pass: Option<String>,
 
     // upload settings
     pub upload_enabled: bool,
+    #[serde(serialize_with = "crate::utils::serialize_public_url")]
     pub upload_to: String,
     pub upload_retention: String,
+    #[serde(serialize_with = "crate::utils::serialize_optional_secret")]
     pub upload_password: Option<String>,
     pub upload_timeout: i64,
 
@@ -251,6 +258,7 @@ pub struct CoreOptions {
     #[serde(skip)]
     pub ai_enabled: bool,
     pub ai_provider: String,
+    #[serde(serialize_with = "crate::utils::serialize_optional_public_url")]
     pub ai_endpoint: Option<String>,
     pub ai_model: Option<String>,
     /// Raw `--ai-api-key` value (redacted in Debug/Serialize via SecretString).
@@ -577,6 +585,15 @@ impl CoreOptions {
                 let value = option.get_value()?;
                 core.apply_option_value(&option.property_to_fill, value)?;
             }
+        }
+
+        if core.max_reqs_per_sec <= 0.0
+            || !core.max_reqs_per_sec.is_finite()
+            || std::time::Duration::try_from_secs_f64(1.0 / core.max_reqs_per_sec).is_err()
+        {
+            return Err(CrawlerError::Config(
+                "--max-reqs-per-sec must be positive and produce a finite request interval.".to_string(),
+            ));
         }
 
         // AI is active only if the user explicitly set at least one --ai-* flag.
@@ -3484,17 +3501,18 @@ pub fn parse_argv(argv: &[String]) -> Result<CoreOptions, CrawlerError> {
 
     let mut options = get_options();
 
-    // Collect all known option names and alt names for unknown detection
-    let mut known_options: Vec<String> = Vec::new();
+    // Collect all known option names and alt names for unknown detection.
+    // The bool records whether the option accepts the literal-array `:=` operator.
+    let mut known_options: std::collections::HashMap<String, bool> = std::collections::HashMap::new();
     let mut bool_options: std::collections::HashSet<String> = std::collections::HashSet::new();
     for (_apl_code, group) in options.get_groups() {
         for (_prop_name, option) in &group.options {
-            known_options.push(option.name.clone());
+            known_options.insert(option.name.clone(), option.is_array);
             if matches!(option.option_type, OptionType::Bool) {
                 bool_options.insert(option.name.clone());
             }
             if let Some(ref alt) = option.alt_name {
-                known_options.push(alt.clone());
+                known_options.insert(alt.clone(), option.is_array);
                 if matches!(option.option_type, OptionType::Bool) {
                     bool_options.insert(alt.clone());
                 }
@@ -3502,7 +3520,7 @@ pub fn parse_argv(argv: &[String]) -> Result<CoreOptions, CrawlerError> {
         }
     }
     // Also accept --config-file as known
-    known_options.push("--config-file".to_string());
+    known_options.insert("--config-file".to_string(), false);
 
     // Check for unknown options
     let mut unknown_options: Vec<String> = Vec::new();
@@ -3520,8 +3538,10 @@ pub fn parse_argv(argv: &[String]) -> Result<CoreOptions, CrawlerError> {
             if i > 0 {
                 // Check if previous arg was a known option that could consume this as value
                 let prev = &argv[i - 1];
-                let prev_name = prev.split('=').next().unwrap_or(prev);
-                let is_prev_known_non_bool = known_options.iter().any(|k| k == prev_name) && !prev.contains('=');
+                let prev_name = parse_inline_option_assignment(prev)
+                    .map(|assignment| assignment.name)
+                    .unwrap_or(prev);
+                let is_prev_known_non_bool = known_options.contains_key(prev_name) && !prev.contains('=');
                 if !is_prev_known_non_bool {
                     // Not a consumed value — could be unknown, but skip argv[0] (binary name)
                     // We just skip non-dash args silently (they might be the binary path)
@@ -3530,15 +3550,13 @@ pub fn parse_argv(argv: &[String]) -> Result<CoreOptions, CrawlerError> {
             i += 1;
             continue;
         }
-        // Extract option name without value (strip =...)
-        let arg_without_value = if let Some(eq_pos) = arg.find('=') {
-            &arg[..eq_pos]
-        } else {
-            arg
-        };
-        if !known_options.iter().any(|k| k == arg_without_value) {
+        let assignment = parse_inline_option_assignment(arg);
+        let arg_without_value = assignment.map(|parsed| parsed.name).unwrap_or(arg);
+        let is_literal_array_assignment = assignment.is_some_and(|parsed| parsed.is_literal_array);
+        let supports_literal_array = known_options.get(arg_without_value).is_some_and(|is_array| *is_array);
+        if !known_options.contains_key(arg_without_value) || (is_literal_array_assignment && !supports_literal_array) {
             unknown_options.push(arg.to_string());
-        } else if !arg.contains('=') && !bool_options.contains(arg_without_value) {
+        } else if assignment.is_none() && !bool_options.contains(arg_without_value) {
             // Known non-bool option without '=' — the next token is its value, skip it
             i += 1;
         }
@@ -3551,19 +3569,39 @@ pub fn parse_argv(argv: &[String]) -> Result<CoreOptions, CrawlerError> {
         )));
     }
 
-    // Parse all options from argv
+    // Establish the effective base host before any output path expands %domain%.
+    CrawlerOption::set_extras_domain(None);
+    let mut explicit_url = None;
+    for property in ["url", "urlList"] {
+        for (_apl_code, group) in options.get_groups_mut() {
+            for (_prop_name, option) in group.options.iter_mut() {
+                if option.property_to_fill != property {
+                    continue;
+                }
+                option.set_value_from_argv(argv)?;
+                let value = option.get_value()?;
+                if property == "url" {
+                    explicit_url = value.as_str().and_then(|value| url::Url::parse(value).ok());
+                    CrawlerOption::set_extras_domain(explicit_url.as_ref().and_then(|url| url.host_str()));
+                } else if explicit_url.is_none()
+                    && let Some(filename) = value.as_str()
+                    && let Ok(content) = std::fs::read_to_string(filename)
+                    && let Some(first_url) = parse_line_list(&content).into_iter().find(|url| is_http_url(url))
+                    && let Ok(parsed) = url::Url::parse(&first_url)
+                {
+                    CrawlerOption::set_extras_domain(parsed.host_str());
+                }
+            }
+        }
+    }
+
+    // Parse remaining options from argv.
     for (_apl_code, group) in options.get_groups_mut() {
         for (_prop_name, option) in group.options.iter_mut() {
-            option.set_value_from_argv(argv)?;
-
-            // Set domain for use in file/dir %domain% placeholder
-            if option.property_to_fill == "url"
-                && let Ok(value) = option.get_value()
-                && let Some(url_str) = value.as_str()
-                && let Ok(parsed) = url::Url::parse(url_str)
-            {
-                CrawlerOption::set_extras_domain(parsed.host_str());
+            if matches!(option.property_to_fill.as_str(), "url" | "urlList") {
+                continue;
             }
+            option.set_value_from_argv(argv)?;
         }
     }
 
@@ -3576,7 +3614,8 @@ pub fn get_help_text() -> String {
     use crate::utils;
 
     let options = get_options();
-    let mut help = String::new();
+    let mut help =
+        String::from("Array option syntax: --flag=value uses legacy CSV; --flag:=value appends one literal value.\n\n");
 
     for (_apl_code, group) in options.get_groups() {
         let group_label = format!("{}:", group.name);
@@ -4165,5 +4204,75 @@ mod tests {
         assert_eq!(opts.screenshots_animation_frame_duration, 3.5);
         assert_eq!(opts.screenshots_animation_width, 800);
         assert_eq!(opts.ffmpeg_path.as_deref(), Some("/usr/bin/ffmpeg"));
+    }
+
+    fn h01_config_file() -> tempfile::NamedTempFile {
+        tempfile::NamedTempFile::new().unwrap()
+    }
+
+    fn h01_argv(config: &tempfile::NamedTempFile, extra: &[&str]) -> Vec<String> {
+        let mut argv = vec![
+            "siteone-crawler".to_string(),
+            format!("--config-file={}", config.path().display()),
+            "--url=https://example.test/".to_string(),
+        ];
+        argv.extend(extra.iter().map(|arg| (*arg).to_string()));
+        argv
+    }
+
+    #[test]
+    fn h01_parse_argv_accepts_literal_array_assignments_and_aliases() {
+        let config = h01_config_file();
+        let options = parse_argv(&h01_argv(
+            &config,
+            &["--include-regex:=^/foo,bar{1,2}$", "--include-regexp:=^/alias,entry$"],
+        ))
+        .unwrap();
+
+        assert_eq!(
+            options.include_regex,
+            vec!["^/foo,bar{1,2}$".to_string(), "^/alias,entry$".to_string(),]
+        );
+    }
+
+    #[test]
+    fn h01_parse_argv_accepts_literal_array_assignments_from_config() {
+        let config = h01_config_file();
+        std::fs::write(config.path(), "--include-regex:=^/foo,bar{1,2}$\n").unwrap();
+
+        let options = parse_argv(&h01_argv(&config, &[])).unwrap();
+
+        assert_eq!(options.include_regex, vec!["^/foo,bar{1,2}$".to_string()]);
+    }
+
+    #[test]
+    fn h01_literal_assignment_is_rejected_for_non_array_and_unknown_options() {
+        let config = h01_config_file();
+        for arg in ["--url:=https://other.test/", "--not-an-option:=value"] {
+            let error = parse_argv(&h01_argv(&config, &[arg])).unwrap_err();
+            assert!(
+                error.to_string().contains(&format!("Unknown options: {arg}")),
+                "{error}"
+            );
+        }
+    }
+
+    #[test]
+    fn h01_help_documents_literal_array_syntax_without_new_option_records() {
+        let help = get_help_text();
+
+        assert!(
+            help.contains(
+                "Array option syntax: --flag=value uses legacy CSV; --flag:=value appends one literal value."
+            )
+        );
+        assert_eq!(
+            get_options()
+                .get_groups()
+                .values()
+                .map(|group| group.options.len())
+                .sum::<usize>(),
+            196
+        );
     }
 }

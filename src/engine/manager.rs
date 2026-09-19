@@ -220,7 +220,7 @@ impl Manager {
             analysis_manager,
             output,
             status,
-        );
+        )?;
 
         // Set extra columns from analyzers (for Access., Best pr. columns in progress table)
         if let (Ok(am), Ok(mut out)) = (crawler.get_analysis_manager().lock(), crawler.get_output().lock()) {
