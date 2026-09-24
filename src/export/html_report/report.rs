@@ -1294,7 +1294,7 @@ impl<'a> HtmlReport<'a> {
 
     /// Get initial URL from status
     fn get_initial_url(&self) -> String {
-        self.status.get_crawler_info().initial_url.clone()
+        utils::redact_url_userinfo(&self.status.get_crawler_info().initial_url)
     }
 
     /// Get initial scheme from the URL

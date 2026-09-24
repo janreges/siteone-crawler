@@ -223,7 +223,7 @@ impl Manager {
             analysis_manager,
             output,
             status,
-        );
+        )?;
 
         // Set extra columns from analyzers (for Access., Best pr. columns in progress table)
         if let (Ok(am), Ok(mut out)) = (crawler.get_analysis_manager().lock(), crawler.get_output().lock()) {
@@ -247,7 +247,10 @@ impl Manager {
             .await;
 
         // Run the crawler
+        crate::events::phase("crawl", crate::events::PhaseState::Started);
+        let crawl_started = std::time::Instant::now();
         let run_result = crawler.run().await;
+        crate::events::phase_finished("crawl", crawl_started.elapsed().as_millis() as u64);
 
         // Shut down the browser on EVERY exit path (no-op for the direct-HTTP fetcher) so a
         // crawl error never leaks the Chromium process / handler task. No fetches occur after this.
@@ -256,6 +259,11 @@ impl Manager {
         run_result?;
 
         // Optional AI phase (post-crawl, before analyzers/exporters). Fail-soft.
+        // One `ai` event phase brackets every AI pipeline below, so a host sees the whole wait.
+        let runs_ai = !options.ai_actions.is_empty() || options.ai_elaborate || options.ai_profile;
+        if options.ai_enabled && runs_ai {
+            crate::events::phase("ai", crate::events::PhaseState::Started);
+        }
         if options.ai_enabled && !options.ai_actions.is_empty() {
             crate::ai::runner::run_ai(options.as_ref(), crawler.get_status(), crawler.get_output()).await;
         }
@@ -267,9 +275,27 @@ impl Manager {
         if options.ai_profile {
             crate::ai::profile::run(options.as_ref(), crawler.get_status(), crawler.get_output()).await;
         }
+        if options.ai_enabled && runs_ai {
+            crate::events::phase("ai", crate::events::PhaseState::Finished);
+        }
 
         // Post-crawl: run analyzers
+        crate::events::phase("analysis", crate::events::PhaseState::Started);
         let exit_code = self.run_post_crawl(&crawler).await;
+        crate::events::phase("analysis", crate::events::PhaseState::Finished);
+
+        crate::events::emit(crate::events::Event::RunFinished {
+            outcome: match exit_code {
+                0 if crawler.was_interrupted() => "cancelled",
+                0 => "success",
+                10 => "qualityGate",
+                _ => "failed",
+            },
+            exit_code,
+            ms: crawl_started.elapsed().as_millis() as u64,
+            interrupted: crawler.was_interrupted(),
+            error: None,
+        });
 
         Ok(exit_code)
     }

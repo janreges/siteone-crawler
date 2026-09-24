@@ -848,3 +848,128 @@ fn url_list_crawls_listed_urls() {
         .unwrap_or(0);
     assert_eq!(count_200, 2, "Expected 2 successful pages, got {}", count_200);
 }
+
+// ---------------------------------------------------------------------------
+// Machine-readable event stream (--events-file)
+// ---------------------------------------------------------------------------
+
+/// Hosts driving the crawler rely on this instead of parsing the human-readable output, so
+/// the shape of the stream is part of the contract.
+#[test]
+fn events_file_records_the_whole_run() {
+    let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let tmp = TempDir::new("events");
+    let events = tmp.path.join("events.ndjson");
+    let report = tmp.path.join("report.html");
+
+    let output = run_crawler(&[
+        "--url=https://crawler.siteone.io/",
+        "--workers=2",
+        "--max-reqs-per-sec=3",
+        "--max-visited-urls=5",
+        "--http-cache-dir=",
+        &format!("--events-file={}", events.display()),
+        &format!("--output-html-report={}", report.display()),
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let text = std::fs::read_to_string(&events).expect("the event file exists");
+    let lines: Vec<serde_json::Value> = text
+        .lines()
+        .map(|line| serde_json::from_str(line).expect("one JSON object per line"))
+        .collect();
+
+    assert_eq!(lines.first().unwrap()["type"], "runStarted");
+    assert_eq!(lines.first().unwrap()["protocol"], 1);
+    assert_eq!(lines.last().unwrap()["type"], "runFinished");
+    assert_eq!(lines.last().unwrap()["outcome"], "success");
+    assert_eq!(lines.last().unwrap()["interrupted"], false);
+
+    let urls: Vec<&serde_json::Value> = lines.iter().filter(|e| e["type"] == "url").collect();
+    assert!(!urls.is_empty(), "every crawled URL is reported");
+    assert!(urls[0]["status"].is_i64(), "with its status");
+    assert!(urls[0]["timeMs"].is_u64(), "and how long it took");
+    assert!(urls[0]["total"].is_u64(), "and how much is left");
+
+    assert!(
+        lines.iter().any(|e| e["type"] == "artifact" && e["kind"] == "html"),
+        "the HTML report is reported as an artifact, path included"
+    );
+    assert!(
+        lines.iter().any(|e| e["type"] == "phase" && e["name"] == "crawl"),
+        "the crawl phase brackets the work"
+    );
+}
+
+/// Without `--events-file` nothing changes: the stream is entirely opt-in.
+#[test]
+fn no_events_file_means_no_events() {
+    let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let tmp = TempDir::new("no-events");
+    let report = tmp.path.join("report.html");
+
+    let output = run_crawler(&[
+        "--url=https://crawler.siteone.io/",
+        "--single-page",
+        "--http-cache-dir=",
+        &format!("--output-html-report={}", report.display()),
+    ]);
+    assert_eq!(output.status.code(), Some(0));
+    assert!(!tmp.path.join("events.ndjson").exists());
+}
+
+/// `stop` on stdin winds the crawl down like Ctrl+C: the reports for what was already
+/// crawled still get written, and the stream says the run was cancelled rather than failed.
+#[test]
+fn control_stdin_stops_the_crawl_but_keeps_the_reports() {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+
+    let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let tmp = TempDir::new("control-stdin");
+    let events = tmp.path.join("events.ndjson");
+    let report = tmp.path.join("report.html");
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_siteone-crawler"))
+        .args([
+            "--config-file=/dev/null",
+            "--url=https://crawler.siteone.io/",
+            "--workers=2",
+            "--max-reqs-per-sec=3",
+            "--max-visited-urls=500",
+            "--http-cache-dir=",
+            "--control-stdin",
+            &format!("--events-file={}", events.display()),
+            &format!("--output-html-report={}", report.display()),
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("crawler starts");
+
+    // Let a few pages come back, then ask it to stop.
+    std::thread::sleep(std::time::Duration::from_secs(2));
+    let mut stdin = child.stdin.take().expect("stdin is piped");
+    writeln!(stdin, "stop").expect("stop is accepted");
+    stdin.flush().ok();
+    // Keep the handle open: end-of-input means stop too, and we are testing the command.
+    let status = child.wait().expect("crawler exits");
+    drop(stdin);
+
+    assert_eq!(status.code(), Some(0), "a graceful stop is a clean exit");
+    assert!(
+        report.exists(),
+        "the report for the pages already crawled is still written"
+    );
+
+    let text = std::fs::read_to_string(&events).expect("the event file exists");
+    let last: serde_json::Value = serde_json::from_str(text.lines().last().expect("at least one event")).unwrap();
+    assert_eq!(last["outcome"], "cancelled");
+    assert_eq!(last["interrupted"], true);
+}

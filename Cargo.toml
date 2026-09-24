@@ -56,6 +56,8 @@ inquire = { version = "0.9", default-features = false, features = ["crossterm"] 
 crossterm = "0.29"
 fancy-regex = "0.18"
 unicode-normalization = "0.1"
+shlex = "2"
+tempfile = "3"
 # Optional: browser rendering mode (CDP client). Behind the `browser` feature so the
 # default build is unaffected. See docs/superpowers/specs/2026-06-26-browser-rendering-mode-design.md §3.6.
 chromiumoxide = { version = "0.9.1", optional = true, features = ["fetcher", "rustls", "zip8"] }

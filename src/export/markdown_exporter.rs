@@ -131,7 +131,7 @@ impl MarkdownExporter {
     }
 
     pub fn set_initial_url(&mut self, url: String) {
-        self.initial_url = url;
+        self.initial_url = utils::redact_url_userinfo(&url);
     }
 
     pub fn set_content_processor_manager(&mut self, cpm: Arc<Mutex<ContentProcessorManager>>) {
@@ -144,12 +144,7 @@ impl MarkdownExporter {
     }
 
     /// Store a file to the markdown export directory.
-    fn store_file(&mut self, visited_url: &VisitedUrl, status: &Status) -> CrawlerResult<()> {
-        let export_dir = self
-            .markdown_export_directory
-            .as_ref()
-            .ok_or_else(|| CrawlerError::Export("Markdown export directory not set".to_string()))?;
-
+    fn store_file(&mut self, visited_url: &VisitedUrl, status: &Status, export_dir: &str) -> CrawlerResult<()> {
         let body_bytes = status.get_url_body(&visited_url.uq_id).unwrap_or_default();
 
         // For content types requiring URL rewriting (HTML, CSS, JS), work with text.
@@ -159,7 +154,9 @@ impl MarkdownExporter {
                 let mut content = String::from_utf8_lossy(&body_bytes).into_owned();
 
                 // Apply content changes for offline version through content processors
-                if let Some(ref cpm) = self.content_processor_manager {
+                if self.markdown_export_directory.is_some()
+                    && let Some(ref cpm) = self.content_processor_manager
+                {
                     let parsed_url = ParsedUrl::parse(&visited_url.url, None);
                     if let Ok(mut manager) = cpm.lock() {
                         manager.apply_content_changes_for_offline_version(
@@ -255,7 +252,10 @@ impl MarkdownExporter {
             let md_file_path = format!("{}md", &store_file_path[..store_file_path.len() - 4]);
 
             let html_content = fs::read_to_string(&store_file_path).unwrap_or_default();
-            let converter = HtmlToMarkdownConverter::new(&html_content, self.markdown_exclude_selector.clone());
+            let mut converter = HtmlToMarkdownConverter::new(&html_content, self.markdown_exclude_selector.clone());
+            if self.markdown_export_directory.is_none() {
+                converter.set_source_url(&visited_url.url);
+            }
             let markdown = converter.get_markdown();
 
             if let Err(_e) = fs::write(&md_file_path, &markdown) {
@@ -302,7 +302,7 @@ impl MarkdownExporter {
             Err(_) => return,
         };
 
-        let normalized = self.normalize_markdown_content(&md_content, true);
+        let normalized = self.normalize_markdown_content(&md_content, self.markdown_export_directory.is_some());
         let _ = fs::write(md_file_path, &normalized);
     }
 
@@ -969,6 +969,19 @@ impl Exporter for MarkdownExporter {
     fn export(&mut self, status: &Status, _output: &dyn Output) -> CrawlerResult<()> {
         let start_time = Instant::now();
 
+        // Reuse the complete conversion pipeline without leaving an unrequested
+        // directory export behind. The private staging directory is removed on error too.
+        let staging = if self.markdown_export_directory.is_none() && self.markdown_export_single_file.is_some() {
+            Some(tempfile::Builder::new().prefix("siteone-markdown-").tempdir()?)
+        } else {
+            None
+        };
+        let export_dir = self
+            .markdown_export_directory
+            .clone()
+            .or_else(|| staging.as_ref().map(|dir| dir.path().to_string_lossy().into_owned()))
+            .ok_or_else(|| CrawlerError::Export("Markdown export destination not set".to_string()))?;
+
         // Set replace_query_string configuration
         OfflineUrlConverter::set_replace_query_string(self.markdown_replace_query_string.clone());
 
@@ -999,7 +1012,7 @@ impl Exporter for MarkdownExporter {
         // Store all allowed URLs
         for exported_url in &exported_urls {
             if Self::is_valid_url(&exported_url.url) && self.should_be_url_stored(exported_url) {
-                self.store_file(exported_url, status)?;
+                self.store_file(exported_url, status, &export_dir)?;
             }
         }
 
@@ -1017,14 +1030,17 @@ impl Exporter for MarkdownExporter {
             );
         }
 
+        // Private staging files must not become links in the HTML report.
+        if staging.is_some() {
+            self.exported_file_paths.clear();
+        }
+
         // Combine markdown files to single file if requested
-        if let (Some(single_file), Some(export_dir)) =
-            (&self.markdown_export_single_file, &self.markdown_export_directory)
-        {
+        if let Some(single_file) = &self.markdown_export_single_file {
             let combine_start = Instant::now();
             let combiner = MarkdownSiteAggregator::new(&self.initial_url);
 
-            match combiner.combine_directory(export_dir, self.markdown_remove_links_and_images_from_single_file) {
+            match combiner.combine_directory(&export_dir, self.markdown_remove_links_and_images_from_single_file) {
                 Ok(combined_markdown) => {
                     // Ensure directory exists
                     if let Some(parent) = Path::new(single_file).parent()

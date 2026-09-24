@@ -257,18 +257,21 @@ impl Status {
     }
 
     pub fn add_info_to_summary(&self, apl_code: &str, text: &str) {
+        crate::events::emit_artifact(apl_code, text);
         if let Ok(mut summary) = self.summary.lock() {
             summary.add_item(Item::new(apl_code.to_string(), text.to_string(), ItemStatus::Info));
         }
     }
 
     pub fn add_warning_to_summary(&self, apl_code: &str, text: &str) {
+        crate::events::emit_issue(apl_code, text);
         if let Ok(mut summary) = self.summary.lock() {
             summary.add_item(Item::new(apl_code.to_string(), text.to_string(), ItemStatus::Warning));
         }
     }
 
     pub fn add_critical_to_summary(&self, apl_code: &str, text: &str) {
+        crate::events::emit_issue(apl_code, text);
         if let Ok(mut summary) = self.summary.lock() {
             summary.add_item(Item::new(apl_code.to_string(), text.to_string(), ItemStatus::Critical));
         }

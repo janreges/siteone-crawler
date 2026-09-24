@@ -8,9 +8,22 @@ use std::sync::atomic::{AtomicBool, AtomicI64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use dashmap::DashMap;
+use fancy_regex::Regex as FilterRegex;
 use md5::{Digest, Md5};
 use once_cell::sync::Lazy;
 use regex::Regex;
+
+/// Set when a host asks the crawl to wind down through `--control-stdin`.
+///
+/// Process-wide because the request can arrive before the crawler is built, and it has to
+/// mean the same thing as Ctrl+C: stop taking new URLs, finish what is in flight, then let
+/// the reports be written.
+static STOP_REQUESTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Asks the running crawl to wind down, as Ctrl+C would.
+pub fn request_stop() {
+    STOP_REQUESTED.store(true, std::sync::atomic::Ordering::SeqCst);
+}
 use tokio::sync::Semaphore;
 
 /// Regex to extract <base href="..."> from HTML
@@ -42,7 +55,7 @@ use crate::engine::found_urls::FoundUrls;
 use crate::engine::http_response::HttpResponse;
 use crate::engine::parsed_url::ParsedUrl;
 use crate::engine::robots_txt::RobotsTxt;
-use crate::error::CrawlerResult;
+use crate::error::{CrawlerError, CrawlerResult};
 use crate::options::core_options::CoreOptions;
 use crate::output::output::Output;
 use crate::result::status::Status;
@@ -133,9 +146,9 @@ pub struct Crawler {
     resolve_cache: Arc<DashMap<String, String>>,
 
     /// Pre-compiled include regex patterns
-    compiled_include_regex: Arc<Vec<Regex>>,
+    compiled_include_regex: Arc<Vec<FilterRegex>>,
     /// Pre-compiled ignore regex patterns
-    compiled_ignore_regex: Arc<Vec<Regex>>,
+    compiled_ignore_regex: Arc<Vec<FilterRegex>>,
 }
 
 impl Crawler {
@@ -146,7 +159,7 @@ impl Crawler {
         analysis_manager: AnalysisManager,
         output: Box<dyn Output>,
         status: Status,
-    ) -> Self {
+    ) -> CrawlerResult<Self> {
         let initial_parsed_url = ParsedUrl::parse(&options.url, None);
         let final_user_agent = Self::build_final_user_agent(&options);
 
@@ -159,22 +172,22 @@ impl Crawler {
         let optimal_delay = (1.0 / options.max_reqs_per_sec).max(0.001);
 
         // Pre-compile include/ignore regex patterns
-        let compiled_include_regex: Vec<Regex> = options
+        let compiled_include_regex: Vec<FilterRegex> = options
             .include_regex
             .iter()
-            .filter_map(|p| {
+            .map(|p| {
                 let pattern = utils::extract_pcre_regex_pattern(p);
-                Regex::new(&pattern).ok()
+                FilterRegex::new(&pattern).map_err(|e| CrawlerError::Config(format!("Invalid --include-regex: {e}")))
             })
-            .collect();
-        let compiled_ignore_regex: Vec<Regex> = options
+            .collect::<CrawlerResult<_>>()?;
+        let compiled_ignore_regex: Vec<FilterRegex> = options
             .ignore_regex
             .iter()
-            .filter_map(|p| {
+            .map(|p| {
                 let pattern = utils::extract_pcre_regex_pattern(p);
-                Regex::new(&pattern).ok()
+                FilterRegex::new(&pattern).map_err(|e| CrawlerError::Config(format!("Invalid --ignore-regex: {e}")))
             })
-            .collect();
+            .collect::<CrawlerResult<_>>()?;
 
         // Build resolve cache
         let resolve_cache = DashMap::new();
@@ -190,7 +203,7 @@ impl Crawler {
             }
         }
 
-        Crawler {
+        Ok(Crawler {
             options,
             http_client,
             content_processor_manager: Arc::new(Mutex::new(content_processor_manager)),
@@ -215,7 +228,7 @@ impl Crawler {
             resolve_cache: Arc::new(resolve_cache),
             compiled_include_regex: Arc::new(compiled_include_regex),
             compiled_ignore_regex: Arc::new(compiled_ignore_regex),
-        }
+        })
     }
 
     /// Main crawl loop. Processes URLs concurrently with rate limiting.
@@ -247,7 +260,7 @@ impl Crawler {
         let mut join_handles = Vec::new();
 
         loop {
-            if self.terminated.load(Ordering::SeqCst) {
+            if self.terminated.load(Ordering::SeqCst) || STOP_REQUESTED.load(Ordering::SeqCst) {
                 if let Ok(mut output) = self.output.lock() {
                     output.add_notice(
                         "Crawler interrupted by user (Ctrl+C). Processing will stop after in-flight requests complete.",
@@ -368,6 +381,11 @@ impl Crawler {
         Ok(())
     }
 
+    /// Whether the crawl was cut short by Ctrl+C or a `stop` on stdin.
+    pub fn was_interrupted(&self) -> bool {
+        self.terminated.load(Ordering::SeqCst) || STOP_REQUESTED.load(Ordering::SeqCst)
+    }
+
     /// Take the next URL from the queue (breadth-first order)
     fn take_next_from_queue(&self) -> Option<QueueEntry> {
         let mut order = self.queue_order.lock().unwrap_or_else(|e| e.into_inner());
@@ -416,8 +434,8 @@ impl Crawler {
         resolve_cache: &Arc<DashMap<String, String>>,
         last_request_time: &Arc<Mutex<f64>>,
         optimal_delay: f64,
-        compiled_include_regex: &Arc<Vec<Regex>>,
-        compiled_ignore_regex: &Arc<Vec<Regex>>,
+        compiled_include_regex: &Arc<Vec<FilterRegex>>,
+        compiled_ignore_regex: &Arc<Vec<FilterRegex>>,
     ) {
         let parsed_url = ParsedUrl::parse(&entry.url, None);
         let parsed_url_uq_id = Self::compute_url_uq_id(&parsed_url);
@@ -470,14 +488,15 @@ impl Crawler {
             parsed_url.query.as_ref().map(|q| format!("?{}", q)).unwrap_or_default()
         );
 
+        let request_target = format!(
+            "{}{}",
+            parsed_url.path,
+            parsed_url.query.as_ref().map(|q| format!("?{}", q)).unwrap_or_default()
+        );
         let final_url_for_client = if options.add_random_query_params {
-            Self::add_random_query_params(&parsed_url.path)
+            Self::add_random_query_params(&request_target)
         } else {
-            format!(
-                "{}{}",
-                parsed_url.path,
-                parsed_url.query.as_ref().map(|q| format!("?{}", q)).unwrap_or_default()
-            )
+            request_target
         };
 
         // Get origin header from source URL
@@ -827,6 +846,21 @@ impl Crawler {
         let total_count = queue.len() + visited.len();
         let progress_status = format!("{}/{}", done_count, total_count);
 
+        // The same row, in machine-readable form, for a host driving the crawler.
+        if crate::events::is_enabled() {
+            crate::events::emit(crate::events::Event::Url {
+                url: absolute_url.clone(),
+                status: response_status,
+                content_type: crate::utils::get_content_type_name_by_id(content_type),
+                time_ms: (elapsed_time * 1000.0).round().max(0.0) as u64,
+                size: body_size,
+                // Any cache flag at all means the body did not come from the network.
+                cached: cache_type_flags != 0,
+                done: done_count,
+                total: total_count,
+            });
+        }
+
         // Print table row to output
         if let Ok(mut out) = output.lock() {
             out.add_table_row(
@@ -865,8 +899,8 @@ impl Crawler {
         output: &Arc<Mutex<Box<dyn Output>>>,
         status: &Arc<Mutex<Status>>,
         terminated: &Arc<AtomicBool>,
-        compiled_include_regex: &[Regex],
-        compiled_ignore_regex: &[Regex],
+        compiled_include_regex: &[FilterRegex],
+        compiled_ignore_regex: &[FilterRegex],
     ) -> HashMap<String, String> {
         let mut result = HashMap::new();
 
@@ -957,8 +991,8 @@ impl Crawler {
         output: &Arc<Mutex<Box<dyn Output>>>,
         status: &Arc<Mutex<Status>>,
         terminated: &Arc<AtomicBool>,
-        compiled_include_regex: &[Regex],
-        compiled_ignore_regex: &[Regex],
+        compiled_include_regex: &[FilterRegex],
+        compiled_ignore_regex: &[FilterRegex],
     ) {
         // Detect <base href="..."> in HTML content to use as base URL for resolving relative URLs
         let effective_base_url = if content_type == ContentTypeId::Html {
@@ -1034,8 +1068,8 @@ impl Crawler {
         _output: &Arc<Mutex<Box<dyn Output>>>,
         _status: &Arc<Mutex<Status>>,
         terminated: &Arc<AtomicBool>,
-        compiled_include_regex: &[Regex],
-        compiled_ignore_regex: &[Regex],
+        compiled_include_regex: &[FilterRegex],
+        compiled_ignore_regex: &[FilterRegex],
     ) {
         let source_url_uq_id = Self::compute_url_uq_id(source_url);
 
@@ -1270,8 +1304,8 @@ impl Crawler {
         queue: &DashMap<String, QueueEntry>,
         visited: &DashMap<String, VisitedEntry>,
         options: &CoreOptions,
-        compiled_include: &[Regex],
-        compiled_ignore: &[Regex],
+        compiled_include: &[FilterRegex],
+        compiled_ignore: &[FilterRegex],
     ) -> bool {
         if !Self::is_url_allowed_by_regexes(url, options, compiled_include, compiled_ignore) {
             return false;
@@ -1309,8 +1343,8 @@ impl Crawler {
     fn is_url_allowed_by_regexes(
         url: &ParsedUrl,
         options: &CoreOptions,
-        compiled_include: &[Regex],
-        compiled_ignore: &[Regex],
+        compiled_include: &[FilterRegex],
+        compiled_ignore: &[FilterRegex],
     ) -> bool {
         // Bypass regex filtering for static files if configured
         if options.regex_filtering_only_for_pages && url.is_static_file() {
@@ -1321,14 +1355,16 @@ impl Crawler {
 
         let mut is_allowed = compiled_include.is_empty();
         for re in compiled_include {
-            if re.is_match(&full_url) {
-                is_allowed = true;
-                break;
+            match re.is_match(&full_url) {
+                Ok(true) => is_allowed = true,
+                Ok(false) => {}
+                Err(_) => return false,
             }
         }
 
         for re in compiled_ignore {
-            if re.is_match(&full_url) {
+            // A matching failure must never broaden the permitted crawl scope.
+            if re.is_match(&full_url).unwrap_or(true) {
                 is_allowed = false;
                 break;
             }
@@ -1393,8 +1429,8 @@ impl Crawler {
         _skipped: &Arc<DashMap<String, SkippedEntry>>,
         _initial_parsed_url: &ParsedUrl,
         terminated: &Arc<AtomicBool>,
-        compiled_include_regex: &[Regex],
-        compiled_ignore_regex: &[Regex],
+        compiled_include_regex: &[FilterRegex],
+        compiled_ignore_regex: &[FilterRegex],
     ) {
         let redirect_url = if redirect_location.starts_with("//") {
             format!("{}:{}", scheme, redirect_location)
@@ -1699,7 +1735,7 @@ impl Crawler {
             let is_regex = utils::is_regex_pattern(from);
 
             if is_regex {
-                if let Ok(re) = Regex::new(from) {
+                if let Ok(re) = Regex::new(&utils::extract_pcre_regex_pattern(from)) {
                     full_url = re.replace_all(&full_url, to).to_string();
                 }
             } else {
@@ -1904,6 +1940,98 @@ fn filter_query_params(url: &str, keep_params: &[String]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn m08_random_query_params_without_existing_query() {
+        let result = Crawler::add_random_query_params("/page");
+        let random_value = result.strip_prefix("/page?_soc=").unwrap();
+
+        assert!(random_value.parse::<u64>().is_ok(), "{result}");
+    }
+
+    #[test]
+    fn m08_random_query_params_preserves_existing_query() {
+        let result = Crawler::add_random_query_params("/page?keep=1&tag=two");
+        let random_value = result.strip_prefix("/page?keep=1&tag=two&_soc=").unwrap();
+
+        assert!(random_value.parse::<u64>().is_ok(), "{result}");
+    }
+
+    #[test]
+    fn m08_random_query_params_preserves_duplicate_pairs() {
+        let result = Crawler::add_random_query_params("/page?tag=one&tag=two&tag=&_soc=original");
+        let random_value = result
+            .strip_prefix("/page?tag=one&tag=two&tag=&_soc=original&_soc=")
+            .unwrap();
+
+        assert!(random_value.parse::<u64>().is_ok(), "{result}");
+    }
+
+    #[test]
+    fn m08_random_query_params_preserves_encoded_pairs() {
+        let result = Crawler::add_random_query_params(
+            "/page?encoded=a%2Fb%26c%3Dd&space=one+two&space=one%20two&lower=%2f&flag&empty=",
+        );
+        let random_value = result
+            .strip_prefix("/page?encoded=a%2Fb%26c%3Dd&space=one+two&space=one%20two&lower=%2f&flag&empty=&_soc=")
+            .unwrap();
+
+        assert!(random_value.parse::<u64>().is_ok(), "{result}");
+    }
+
+    #[test]
+    fn m07_transform_url_literal_control() {
+        let result =
+            Crawler::apply_http_request_transformations("127.0.0.1", "/page", &["127.0.0.1 -> localhost".to_string()]);
+
+        assert_eq!(result, ("localhost".to_string(), "/page".to_string()));
+    }
+
+    #[test]
+    fn m07_transform_url_extracts_delimited_regex() {
+        let result = Crawler::apply_http_request_transformations(
+            "127.0.0.1",
+            "/page",
+            &[r"/127\.0\.0\.1/ -> localhost".to_string()],
+        );
+
+        assert_eq!(result, ("localhost".to_string(), "/page".to_string()));
+    }
+
+    #[test]
+    fn m07_transform_url_honors_supported_case_insensitive_flag() {
+        let result =
+            Crawler::apply_http_request_transformations("example.test", "/OLD/Old/old", &["/old/i -> new".to_string()]);
+
+        assert_eq!(result, ("example.test".to_string(), "/new/new/new".to_string()));
+    }
+
+    #[test]
+    fn m07_transform_url_applies_rules_sequentially() {
+        let result = Crawler::apply_http_request_transformations(
+            "127.0.0.1",
+            "/old/page",
+            &[
+                r"/127\.0\.0\.1/ -> localhost".to_string(),
+                "localhost -> mirror.test".to_string(),
+                r"#^mirror\.test/old/# -> final.test/new/".to_string(),
+            ],
+        );
+
+        assert_eq!(result, ("final.test".to_string(), "/new/page".to_string()));
+    }
+
+    #[test]
+    fn m07_transform_url_preserves_query_when_rewriting_host() {
+        let path = "/page?keep=1&tag=two&encoded=a%2Fb&tag=three";
+        let result = Crawler::apply_http_request_transformations(
+            "127.0.0.1",
+            path,
+            &[r"/127\.0\.0\.1/ -> localhost".to_string()],
+        );
+
+        assert_eq!(result, ("localhost".to_string(), path.to_string()));
+    }
 
     // =========================================================================
     // <base href> regex tests (#68)

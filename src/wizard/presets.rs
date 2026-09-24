@@ -261,7 +261,32 @@ pub const PRESETS: &[Preset] = &[
         allowed_domains_for_external_files: None,
         hide_columns: Some("cache"),
     },
-    // 10. Custom — power users
+    // 10. Sitemap Generator — HTML-only crawl that writes both sitemap formats
+    Preset {
+        name: "Sitemap Generator",
+        description: "Crawl pages only and write XML and TXT sitemap files",
+        workers: 5,
+        timeout: 5,
+        max_reqs_per_sec: 15,
+        max_visited_urls: 50000,
+        disable_javascript: true,
+        disable_styles: true,
+        disable_fonts: true,
+        disable_images: true,
+        disable_files: true,
+        single_page: false,
+        offline_export_dir: None,
+        markdown_export_dir: None,
+        sitemap_xml_file: Some("./{domain}.sitemap.xml"),
+        http_cache_enabled: true,
+        result_storage_file: false,
+        extra_columns: None,
+        ignore_robots_txt: false,
+        add_random_query_params: false,
+        allowed_domains_for_external_files: None,
+        hide_columns: Some("cache"),
+    },
+    // 11. Custom — power users
     Preset {
         name: "Custom",
         description: "Start from defaults and configure every option manually",
@@ -479,8 +504,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn preset_count_is_10() {
-        assert_eq!(PRESETS.len(), 10);
+    fn preset_count_is_11() {
+        assert_eq!(PRESETS.len(), 11);
     }
 
     #[test]
@@ -499,7 +524,11 @@ mod tests {
 
     #[test]
     fn build_argv_custom_is_minimal() {
-        let mut state = WizardState::from_preset(&PRESETS[9]); // Custom
+        let custom = PRESETS
+            .iter()
+            .find(|p| p.name == "Custom")
+            .expect("Custom preset exists");
+        let mut state = WizardState::from_preset(custom);
         state.url = "https://example.com".to_string();
         let argv = state.build_argv();
         // Custom preset uses all defaults, so only binary name + URL

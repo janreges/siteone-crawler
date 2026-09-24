@@ -9,6 +9,7 @@ pub mod content_processor;
 pub mod debugger;
 pub mod engine;
 pub mod error;
+pub mod events;
 pub mod export;
 pub mod extra_column;
 pub mod info;

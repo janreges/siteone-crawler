@@ -447,22 +447,79 @@ pub fn get_url_without_scheme_and_host(
 }
 
 pub fn get_safe_command(command: &str) -> String {
-    let patterns = [
-        (r"(pass[a-z]{0,5})=\S+", "$1=***"),
-        (r"(keys?)=\S+", "$1=***"),
-        (r"(secrets?)=\S+", "$1=***"),
-        (r"(auth)=\S+", "$1=***"),
-        // Space-separated form of the AI API key, e.g. `--ai-api-key sk-...`.
-        (r"(--ai-api-key)\s+\S+", "$1 ***"),
-    ];
+    shlex::split(command)
+        .map(|argv| mask_ip_addresses(&format_command_from_argv(&argv)))
+        .unwrap_or_else(|| "[unparseable command omitted]".to_string())
+}
 
-    let mut result = command.to_string();
-    for (pattern, replacement) in &patterns {
-        if let Ok(re) = Regex::new(pattern) {
-            result = re.replace_all(&result, *replacement).to_string();
-        }
+pub fn redact_url_userinfo(value: &str) -> String {
+    if !value.contains('@') {
+        return value.to_string();
     }
-    mask_ip_addresses(&result)
+    let unquoted = value.trim_matches(['\'', '"']);
+    let has_scheme = unquoted.contains("://");
+    let candidate = if has_scheme {
+        unquoted.to_string()
+    } else {
+        format!("http://{unquoted}")
+    };
+    let Ok(mut parsed) = url::Url::parse(&candidate) else {
+        return "[redacted URL]".to_string();
+    };
+    if parsed.username().is_empty() && parsed.password().is_none() {
+        return value.to_string();
+    }
+    if parsed.set_username("").is_err() || parsed.set_password(None).is_err() {
+        return "[redacted URL]".to_string();
+    }
+    let redacted = parsed.to_string();
+    if has_scheme {
+        redacted
+    } else {
+        redacted.trim_start_matches("http://").trim_end_matches('/').to_string()
+    }
+}
+
+pub fn serialize_public_url<S: serde::Serializer>(value: &str, serializer: S) -> Result<S::Ok, S::Error> {
+    serializer.serialize_str(&redact_url_userinfo(value))
+}
+
+pub fn serialize_public_urls<S: serde::Serializer>(values: &[String], serializer: S) -> Result<S::Ok, S::Error> {
+    serde::Serialize::serialize(
+        &values
+            .iter()
+            .map(|value| redact_url_userinfo(value))
+            .collect::<Vec<_>>(),
+        serializer,
+    )
+}
+
+pub fn serialize_optional_public_url<S: serde::Serializer>(
+    value: &Option<String>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    serde::Serialize::serialize(&value.as_ref().map(|value| redact_url_userinfo(value)), serializer)
+}
+
+pub fn serialize_optional_secret<S: serde::Serializer>(
+    value: &Option<String>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    serde::Serialize::serialize(&value.as_ref().map(|_| "***"), serializer)
+}
+
+fn is_secret_flag(flag: &str) -> bool {
+    matches!(
+        flag,
+        "--http-auth" | "-ha" | "--mail-smtp-pass" | "--upload-password" | "-uppass" | "--ai-api-key"
+    )
+}
+
+fn is_url_flag(flag: &str) -> bool {
+    matches!(
+        flag,
+        "--url" | "-u" | "--proxy" | "-p" | "--upload-to" | "-upt" | "--ai-endpoint"
+    )
 }
 
 /// Replace IPv4 addresses with `127.0.0.1` so internal infrastructure IPs (e.g. a private
@@ -511,13 +568,38 @@ pub fn shell_quote_arg(arg: &str) -> String {
     }
 }
 
-/// Reconstruct a copy-pasteable command line from argv: the binary's leading path is dropped (so
+/// Reconstruct a shareable command line from argv: the binary's leading path is dropped (so
 /// `./target/release/siteone-crawler` shows as `siteone-crawler`) and every argument is
-/// shell-quoted as needed. Run `get_safe_command` on the result to redact secrets.
+/// redacted before shell quoting. Execution always uses the original argv.
 pub fn format_command_from_argv(argv: &[String]) -> String {
     if argv.is_empty() {
         return String::new();
     }
+    let mut safe_argv = vec![argv[0].clone()];
+    let mut secret_value = false;
+    let mut url_value = false;
+    for arg in &argv[1..] {
+        if secret_value {
+            safe_argv.push("***".to_string());
+            secret_value = false;
+        } else if url_value {
+            safe_argv.push(redact_url_userinfo(arg));
+            url_value = false;
+        } else if let Some((flag, value)) = arg.split_once('=') {
+            safe_argv.push(if is_secret_flag(flag) {
+                format!("{flag}=***")
+            } else if is_url_flag(flag) {
+                format!("{flag}={}", redact_url_userinfo(value))
+            } else {
+                arg.clone()
+            });
+        } else {
+            secret_value = is_secret_flag(arg);
+            url_value = is_url_flag(arg);
+            safe_argv.push(arg.clone());
+        }
+    }
+    let argv = &safe_argv;
     let bin = std::path::Path::new(&argv[0])
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
@@ -884,6 +966,68 @@ pub fn get_peak_memory_usage() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn review_command_redacts_complete_secret_values_before_quoting() {
+        for flag in [
+            "--http-auth",
+            "-ha",
+            "--mail-smtp-pass",
+            "--upload-password",
+            "-uppass",
+            "--ai-api-key",
+        ] {
+            for secret in [
+                "prefix SECRET_SUFFIX",
+                "prefix'SECRET_SUFFIX",
+                "prefix\nSECRET_SUFFIX",
+                "prefix=SECRET_SUFFIX",
+            ] {
+                for args in [
+                    vec![format!("{flag}={secret}")],
+                    vec![flag.to_string(), secret.to_string()],
+                ] {
+                    let mut argv = vec!["siteone-crawler".to_string()];
+                    argv.extend(args);
+                    argv.push("--single-page".to_string());
+                    let command = format_command_from_argv(&argv);
+                    assert!(!command.contains("SECRET_SUFFIX"), "{flag}");
+                    assert!(!get_safe_command(&command).contains("SECRET_SUFFIX"));
+                    assert!(command.ends_with("--single-page"));
+                    assert!(argv.iter().any(|arg| arg.contains("SECRET_SUFFIX")));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn review_url_credentials_are_removed_from_commands_and_serialized_options() {
+        for value in [
+            "https://user:SECRET_SUFFIX@example.test/path",
+            "user:SECRET_SUFFIX@example.test:3128",
+            "'https://user:SECRET_SUFFIX@example.test/'",
+        ] {
+            assert!(!redact_url_userinfo(value).contains("SECRET_SUFFIX"));
+        }
+        assert_eq!(
+            redact_url_userinfo("https://example.test/path?q=a@b"),
+            "https://example.test/path?q=a@b"
+        );
+        let mut options = crate::options::core_options::parse_argv(&[
+            "siteone-crawler".to_string(),
+            "--url=https://example.test".to_string(),
+            format!("--config-file={}", if cfg!(windows) { "NUL" } else { "/dev/null" }),
+        ])
+        .unwrap();
+        options.url = "https://user:URL_SENTINEL@example.test/".to_string();
+        options.proxy = Some("user:PROXY_SENTINEL@example.test:3128".to_string());
+        options.http_auth = Some("user:HTTP_SENTINEL".to_string());
+        options.mail_smtp_pass = Some("SMTP_SENTINEL".to_string());
+        options.upload_password = Some("UPLOAD_SENTINEL".to_string());
+        let json = serde_json::to_string(&options).unwrap();
+        assert!(!json.contains("SENTINEL"));
+        assert_eq!(options.http_auth.as_deref(), Some("user:HTTP_SENTINEL"));
+    }
 
     #[test]
     fn masks_ipv4_in_command() {
