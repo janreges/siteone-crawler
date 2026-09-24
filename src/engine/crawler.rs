@@ -854,8 +854,9 @@ impl Crawler {
                 content_type: crate::utils::get_content_type_name_by_id(content_type),
                 time_ms: (elapsed_time * 1000.0).round().max(0.0) as u64,
                 size: body_size,
-                // Any cache flag at all means the body did not come from the network.
-                cached: cache_type_flags != 0,
+                // Served from the local HTTP cache. `cache_type_flags` only describes the server's
+                // caching headers, which say nothing about where this body came from.
+                cached: http_response.is_loaded_from_cache(),
                 done: done_count,
                 total: total_count,
             });

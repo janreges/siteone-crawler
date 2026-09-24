@@ -973,3 +973,94 @@ fn control_stdin_stops_the_crawl_but_keeps_the_reports() {
     assert_eq!(last["outcome"], "cancelled");
     assert_eq!(last["interrupted"], true);
 }
+
+/// `cached` says the body came from the local HTTP cache (`--http-cache-dir`), not merely that
+/// the server sent caching headers. Runs against the built-in server, so it needs no network.
+#[test]
+fn events_mark_only_local_http_cache_hits_as_cached() {
+    use std::process::{Child, Command, Stdio};
+
+    struct KillOnDrop(Child);
+    impl Drop for KillOnDrop {
+        fn drop(&mut self) {
+            self.0.kill().ok();
+            self.0.wait().ok();
+        }
+    }
+
+    let tmp = TempDir::new("events-cache");
+    let site = tmp.path.join("site");
+    std::fs::create_dir_all(&site).expect("site dir");
+    std::fs::write(
+        site.join("index.html"),
+        "<html><head><title>Cache</title></head><body><p>Hello</p></body></html>",
+    )
+    .expect("index.html");
+
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .and_then(|listener| listener.local_addr())
+        .expect("a free port")
+        .port();
+    let _server = KillOnDrop(
+        Command::new(env!("CARGO_BIN_EXE_siteone-crawler"))
+            .args([
+                format!("--serve-offline={}", site.display()),
+                format!("--serve-port={port}"),
+            ])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("the built-in server starts"),
+    );
+    assert!(
+        (0..50).any(|_| {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            std::net::TcpStream::connect(("127.0.0.1", port)).is_ok()
+        }),
+        "the built-in server accepts connections"
+    );
+
+    let cache = tmp.path.join("cache");
+    let crawl = |name: &str| -> Vec<serde_json::Value> {
+        let events = tmp.path.join(format!("{name}.ndjson"));
+        let output = Command::new(env!("CARGO_BIN_EXE_siteone-crawler"))
+            .args([
+                "--config-file=/dev/null".to_string(),
+                format!("--url=http://127.0.0.1:{port}/"),
+                "--single-page".to_string(),
+                // Skips the DNS analyzer, whose lookups of an IP-literal host can sit out resolver timeouts.
+                "--analyzer-filter-regex=/Headers/".to_string(),
+                format!("--http-cache-dir={}", cache.display()),
+                format!("--events-file={}", events.display()),
+                format!(
+                    "--output-html-report={}",
+                    tmp.path.join(format!("{name}.html")).display()
+                ),
+            ])
+            .output()
+            .expect("the crawler runs");
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "stderr: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        std::fs::read_to_string(&events)
+            .expect("the event file exists")
+            .lines()
+            .map(|line| serde_json::from_str::<serde_json::Value>(line).expect("one JSON object per line"))
+            .filter(|event| event["type"] == "url")
+            .collect()
+    };
+
+    let cold = crawl("cold");
+    assert!(
+        !cold.is_empty() && cold.iter().all(|e| e["cached"] == false),
+        "an empty cache means network fetches: {cold:?}"
+    );
+    let warm = crawl("warm");
+    assert!(
+        !warm.is_empty() && warm.iter().all(|e| e["cached"] == true),
+        "a warm cache is reported as such: {warm:?}"
+    );
+}
