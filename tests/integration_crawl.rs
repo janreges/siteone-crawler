@@ -10,7 +10,7 @@
 
 mod common;
 
-use common::{TempDir, run_crawler, run_crawler_json};
+use common::{LocalServer, TempDir, run_built_crawler, run_crawler, run_crawler_json};
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -851,22 +851,48 @@ fn url_list_crawls_listed_urls() {
 
 // ---------------------------------------------------------------------------
 // Machine-readable event stream (--events-file)
+//
+// These run against the built-in server, so they need no network and no fixed delays.
 // ---------------------------------------------------------------------------
+
+/// Skips the DNS analyzer, whose lookups of an IP-literal host can sit out resolver timeouts.
+const LOCAL_ANALYZERS: &str = "--analyzer-filter-regex=/Headers/";
+
+/// Writes an index page that links to `pages` further pages.
+fn write_site(dir: &Path, pages: usize) {
+    std::fs::create_dir_all(dir).expect("site dir");
+    let links: String = (1..=pages)
+        .map(|n| format!("<a href=\"/page-{n}.html\">Page {n}</a>"))
+        .collect();
+    std::fs::write(
+        dir.join("index.html"),
+        format!("<html><head><title>Home</title></head><body>{links}</body></html>"),
+    )
+    .expect("index.html");
+    for n in 1..=pages {
+        std::fs::write(
+            dir.join(format!("page-{n}.html")),
+            format!("<html><head><title>Page {n}</title></head><body><p>Page {n}</p></body></html>"),
+        )
+        .expect("page");
+    }
+}
 
 /// Hosts driving the crawler rely on this instead of parsing the human-readable output, so
 /// the shape of the stream is part of the contract.
 #[test]
 fn events_file_records_the_whole_run() {
-    let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let tmp = TempDir::new("events");
+    let site = tmp.path.join("site");
+    write_site(&site, 3);
+    let server = LocalServer::start(&site);
     let events = tmp.path.join("events.ndjson");
     let report = tmp.path.join("report.html");
 
-    let output = run_crawler(&[
-        "--url=https://crawler.siteone.io/",
-        "--workers=2",
-        "--max-reqs-per-sec=3",
-        "--max-visited-urls=5",
+    let output = run_built_crawler(&[
+        "--config-file=/dev/null",
+        &format!("--url={}", server.url()),
+        LOCAL_ANALYZERS,
         "--http-cache-dir=",
         &format!("--events-file={}", events.display()),
         &format!("--output-html-report={}", report.display()),
@@ -909,13 +935,17 @@ fn events_file_records_the_whole_run() {
 /// Without `--events-file` nothing changes: the stream is entirely opt-in.
 #[test]
 fn no_events_file_means_no_events() {
-    let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let tmp = TempDir::new("no-events");
+    let site = tmp.path.join("site");
+    write_site(&site, 0);
+    let server = LocalServer::start(&site);
     let report = tmp.path.join("report.html");
 
-    let output = run_crawler(&[
-        "--url=https://crawler.siteone.io/",
+    let output = run_built_crawler(&[
+        "--config-file=/dev/null",
+        &format!("--url={}", server.url()),
         "--single-page",
+        LOCAL_ANALYZERS,
         "--http-cache-dir=",
         &format!("--output-html-report={}", report.display()),
     ]);
@@ -930,18 +960,21 @@ fn control_stdin_stops_the_crawl_but_keeps_the_reports() {
     use std::io::Write;
     use std::process::{Command, Stdio};
 
-    let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let tmp = TempDir::new("control-stdin");
+    let site = tmp.path.join("site");
+    write_site(&site, 20);
+    let server = LocalServer::start(&site);
     let events = tmp.path.join("events.ndjson");
     let report = tmp.path.join("report.html");
 
+    // One request per second keeps most of the site queued when `stop` arrives.
     let mut child = Command::new(env!("CARGO_BIN_EXE_siteone-crawler"))
         .args([
             "--config-file=/dev/null",
-            "--url=https://crawler.siteone.io/",
-            "--workers=2",
-            "--max-reqs-per-sec=3",
-            "--max-visited-urls=500",
+            &format!("--url={}", server.url()),
+            "--workers=1",
+            "--max-reqs-per-sec=1",
+            LOCAL_ANALYZERS,
             "--http-cache-dir=",
             "--control-stdin",
             &format!("--events-file={}", events.display()),
@@ -953,8 +986,11 @@ fn control_stdin_stops_the_crawl_but_keeps_the_reports() {
         .spawn()
         .expect("crawler starts");
 
-    // Let a few pages come back, then ask it to stop.
-    std::thread::sleep(std::time::Duration::from_secs(2));
+    // Wait for the first crawled page rather than a fixed delay, then ask it to stop.
+    let first_page_done = (0..300).any(|_| {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        std::fs::read_to_string(&events).is_ok_and(|text| text.contains(r#""type":"url""#))
+    });
     let mut stdin = child.stdin.take().expect("stdin is piped");
     writeln!(stdin, "stop").expect("stop is accepted");
     stdin.flush().ok();
@@ -962,6 +998,7 @@ fn control_stdin_stops_the_crawl_but_keeps_the_reports() {
     let status = child.wait().expect("crawler exits");
     drop(stdin);
 
+    assert!(first_page_done, "the first crawled page is reported");
     assert_eq!(status.code(), Some(0), "a graceful stop is a clean exit");
     assert!(
         report.exists(),
@@ -975,70 +1012,29 @@ fn control_stdin_stops_the_crawl_but_keeps_the_reports() {
 }
 
 /// `cached` says the body came from the local HTTP cache (`--http-cache-dir`), not merely that
-/// the server sent caching headers. Runs against the built-in server, so it needs no network.
+/// the server sent caching headers.
 #[test]
 fn events_mark_only_local_http_cache_hits_as_cached() {
-    use std::process::{Child, Command, Stdio};
-
-    struct KillOnDrop(Child);
-    impl Drop for KillOnDrop {
-        fn drop(&mut self) {
-            self.0.kill().ok();
-            self.0.wait().ok();
-        }
-    }
-
     let tmp = TempDir::new("events-cache");
     let site = tmp.path.join("site");
-    std::fs::create_dir_all(&site).expect("site dir");
-    std::fs::write(
-        site.join("index.html"),
-        "<html><head><title>Cache</title></head><body><p>Hello</p></body></html>",
-    )
-    .expect("index.html");
-
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .and_then(|listener| listener.local_addr())
-        .expect("a free port")
-        .port();
-    let _server = KillOnDrop(
-        Command::new(env!("CARGO_BIN_EXE_siteone-crawler"))
-            .args([
-                format!("--serve-offline={}", site.display()),
-                format!("--serve-port={port}"),
-            ])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .expect("the built-in server starts"),
-    );
-    assert!(
-        (0..50).any(|_| {
-            std::thread::sleep(std::time::Duration::from_millis(100));
-            std::net::TcpStream::connect(("127.0.0.1", port)).is_ok()
-        }),
-        "the built-in server accepts connections"
-    );
+    write_site(&site, 0);
+    let server = LocalServer::start(&site);
 
     let cache = tmp.path.join("cache");
     let crawl = |name: &str| -> Vec<serde_json::Value> {
         let events = tmp.path.join(format!("{name}.ndjson"));
-        let output = Command::new(env!("CARGO_BIN_EXE_siteone-crawler"))
-            .args([
-                "--config-file=/dev/null".to_string(),
-                format!("--url=http://127.0.0.1:{port}/"),
-                "--single-page".to_string(),
-                // Skips the DNS analyzer, whose lookups of an IP-literal host can sit out resolver timeouts.
-                "--analyzer-filter-regex=/Headers/".to_string(),
-                format!("--http-cache-dir={}", cache.display()),
-                format!("--events-file={}", events.display()),
-                format!(
-                    "--output-html-report={}",
-                    tmp.path.join(format!("{name}.html")).display()
-                ),
-            ])
-            .output()
-            .expect("the crawler runs");
+        let output = run_built_crawler(&[
+            "--config-file=/dev/null",
+            &format!("--url={}", server.url()),
+            "--single-page",
+            LOCAL_ANALYZERS,
+            &format!("--http-cache-dir={}", cache.display()),
+            &format!("--events-file={}", events.display()),
+            &format!(
+                "--output-html-report={}",
+                tmp.path.join(format!("{name}.html")).display()
+            ),
+        ]);
         assert_eq!(
             output.status.code(),
             Some(0),

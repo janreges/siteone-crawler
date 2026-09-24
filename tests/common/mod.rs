@@ -1,7 +1,9 @@
 // Shared helpers for integration tests
 
-use std::path::PathBuf;
-use std::process::{Command, Output};
+use std::net::{TcpListener, TcpStream};
+use std::path::{Path, PathBuf};
+use std::process::{Child, Command, Output, Stdio};
+use std::time::Duration;
 
 /// Get path to the compiled binary.
 /// Tries release first, falls back to debug.
@@ -26,6 +28,60 @@ pub fn run_crawler(args: &[&str]) -> Output {
         .args(args)
         .output()
         .expect("Failed to execute crawler binary")
+}
+
+/// Run the binary Cargo built for this test run. Unlike `run_crawler`, it never picks up a
+/// stale `target/release` build, so it suits tests of behaviour that changed recently.
+pub fn run_built_crawler(args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_siteone-crawler"))
+        .args(args)
+        .output()
+        .expect("Failed to execute crawler binary")
+}
+
+/// The crawler's built-in server (`--serve-offline`) serving a local directory, so a crawl can
+/// run without network access. Stopped when dropped.
+pub struct LocalServer {
+    child: Child,
+    port: u16,
+}
+
+impl LocalServer {
+    pub fn start(root: &Path) -> Self {
+        let port = TcpListener::bind("127.0.0.1:0")
+            .and_then(|listener| listener.local_addr())
+            .expect("a free port")
+            .port();
+        let child = Command::new(env!("CARGO_BIN_EXE_siteone-crawler"))
+            .args([
+                format!("--serve-offline={}", root.display()),
+                format!("--serve-port={port}"),
+            ])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("the built-in server starts");
+        let server = LocalServer { child, port };
+        assert!(
+            (0..50).any(|_| {
+                std::thread::sleep(Duration::from_millis(100));
+                TcpStream::connect(("127.0.0.1", port)).is_ok()
+            }),
+            "the built-in server accepts connections"
+        );
+        server
+    }
+
+    pub fn url(&self) -> String {
+        format!("http://127.0.0.1:{}/", self.port)
+    }
+}
+
+impl Drop for LocalServer {
+    fn drop(&mut self) {
+        self.child.kill().ok();
+        self.child.wait().ok();
+    }
 }
 
 /// Run crawler and parse stdout as JSON.
