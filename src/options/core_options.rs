@@ -710,10 +710,10 @@ impl CoreOptions {
             }
         }
 
-        // --ai-elaborate is its own pipeline (not an action). When the user did NOT list actions,
-        // clear the default set so an elaborate-only run does no extra per-page action work; if they
-        // DID list actions, both run.
-        if core.ai_elaborate && !options.is_explicitly_set("aiActions") {
+        // --ai-elaborate is its own pipeline (not an action). When the user did NOT list actions and
+        // no --ai-report is active, clear the default set so an elaborate-only run does no extra
+        // per-page action work; if they DID list actions (or a report is active), both run.
+        if core.ai_elaborate && !options.is_explicitly_set("aiActions") && core.ai_report.is_none() {
             core.ai_actions.clear();
         }
 
@@ -4723,6 +4723,22 @@ mod tests {
         assert!(core.ai_profile_correct, "correction defaults to ON");
         // --ai-profile clears the default per-page actions when actions not explicitly listed.
         assert!(core.ai_actions.is_empty());
+    }
+
+    #[test]
+    fn ai_elaborate_keeps_the_ai_report_extract_action() {
+        let argv = vec![
+            "bin".to_string(),
+            "--url=https://example.com".to_string(),
+            "--ai-provider=openai-compatible".to_string(),
+            "--ai-endpoint=http://localhost:8000/v1".to_string(),
+            "--ai-model=test-model".to_string(),
+            "--ai-report=ia".to_string(),
+            "--ai-elaborate".to_string(),
+        ];
+        let core = parse_argv(&argv).expect("should parse");
+        // Clearing the default actions for an elaborate-only run must not drop the report.
+        assert_eq!(core.ai_actions, vec!["extract".to_string()]);
     }
 
     #[test]
