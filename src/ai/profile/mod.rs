@@ -497,7 +497,7 @@ pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, output: &Ar
         subject_name,
         meta: ProfileMeta {
             host: host.clone(),
-            url: options.url.clone(),
+            url: crate::utils::redact_url_userinfo(&options.url),
             crawled_at: chrono::Local::now().format("%Y-%m-%d %H:%M").to_string(),
             provider: provider.as_str().to_string(),
             model: model_name,

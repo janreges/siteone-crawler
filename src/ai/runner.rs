@@ -619,7 +619,7 @@ async fn run_extract_action(
     };
     let site = SiteMeta {
         host,
-        url: options.url.clone(),
+        url: crate::utils::redact_url_userinfo(&options.url),
         crawled_at: chrono::Local::now().format("%Y-%m-%d %H:%M").to_string(),
         pages_analyzed: analyzed,
         provider: client.provider().as_str().to_string(),
