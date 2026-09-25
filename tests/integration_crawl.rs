@@ -1835,6 +1835,88 @@ fn gzipped_sitemap_at_plain_gz_url_is_crawled() {
     assert!(urls.contains(&format!("{base}page-2.html")), "{urls:?}");
 }
 
+/// A `.xml.gz` sitemap is read however long its prolog is — here a comment over 64 KB before
+/// `<urlset>` (#106).
+#[test]
+fn gzipped_sitemap_with_long_prolog_is_crawled() {
+    let tmp = TempDir::new("sitemap-gz-long-prolog");
+    let site = tmp.path.join("site");
+    write_site(&site, 1);
+    let server = LocalServer::start(&site);
+    let base = server.url();
+    let comment = "a".repeat(65_536);
+    std::fs::write(
+        site.join("sitemap.xml.gz"),
+        gzip_bytes(&format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?><!--{comment}--><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>{base}page-1.html</loc></url></urlset>"#
+        )),
+    )
+    .expect("sitemap.xml.gz");
+
+    let urls = crawled_urls(&format!("{base}sitemap.xml.gz"));
+
+    assert!(urls.contains(&format!("{base}page-1.html")), "{urls:?}");
+}
+
+/// A `.gz` download holding XML with another root element is not a sitemap, even when it mentions
+/// `<urlset>` in a comment: its `<loc>` values are not crawled and the offline export keeps its
+/// gzip bytes (#106).
+#[test]
+fn gzipped_xml_that_is_not_a_sitemap_keeps_its_bytes() {
+    let tmp = TempDir::new("gz-download-not-sitemap");
+    let site = tmp.path.join("site");
+    std::fs::create_dir_all(&site).expect("site dir");
+    let server = LocalServer::start(&site);
+    let base = server.url();
+    std::fs::write(
+        site.join("index.html"),
+        r#"<html><head><title>Home</title></head><body><a href="/catalog.gz">Catalog</a></body></html>"#,
+    )
+    .expect("index.html");
+    std::fs::write(
+        site.join("page.html"),
+        "<html><head><title>Page</title></head><body></body></html>",
+    )
+    .expect("page.html");
+    let catalog = gzip_bytes(&format!(
+        r#"<?xml version="1.0"?><catalog><!-- <urlset> --><item><loc>{base}page.html</loc></item></catalog>"#
+    ));
+    std::fs::write(site.join("catalog.gz"), &catalog).expect("catalog.gz");
+    let export = tmp.path.join("export");
+
+    let output = run_crawler(&[
+        "--config-file=/dev/null",
+        &format!("--url={base}"),
+        "--output=json",
+        LOCAL_ANALYZERS,
+        "--http-cache-dir=",
+        "--output-html-report=",
+        "--output-json-file=",
+        "--output-text-file=",
+        &format!("--offline-export-dir={}", export.display()),
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).expect("JSON on stdout");
+    let urls: Vec<&str> = json["results"]
+        .as_array()
+        .expect("results")
+        .iter()
+        .filter_map(|result| result["url"].as_str())
+        .collect();
+
+    assert!(urls.contains(&format!("{base}catalog.gz").as_str()), "{urls:?}");
+    assert!(!urls.contains(&format!("{base}page.html").as_str()), "{urls:?}");
+    assert_eq!(
+        std::fs::read(export.join("catalog.gz")).expect("catalog.gz is exported"),
+        catalog
+    );
+}
+
 /// A sitemap index entry with a query string (Shopify's `?from=…&to=…`) is followed with the
 /// whole query (#106).
 #[test]

@@ -3,7 +3,7 @@
 //
 // Extracts URLs from sitemap.xml and sitemap index files.
 
-use std::io::Read;
+use std::io::{BufRead, BufReader, Read};
 
 use quick_xml::Reader;
 use quick_xml::events::Event;
@@ -18,9 +18,20 @@ use crate::types::ContentTypeId;
 /// Largest sitemap accepted from a gzip body: the protocol caps a sitemap at 50 MB uncompressed.
 const MAX_SITEMAP_BYTES: u64 = 50 * 1024 * 1024;
 
-/// Leading (decompressed) bytes in which a gzip sitemap must name its root element (`<urlset>` or
-/// `<sitemapindex>`), so archives such as a linked `.tar.gz` are never inflated in full.
-const SITEMAP_ROOT_WINDOW: u64 = 64 * 1024;
+/// A reader that keeps a copy of every byte read through it, so what was inflated while looking
+/// for the root element of a gzip body is not lost.
+struct CopyingReader<R> {
+    inner: R,
+    copy: Vec<u8>,
+}
+
+impl<R: Read> Read for CopyingReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let read = self.inner.read(buf)?;
+        self.copy.extend_from_slice(&buf[..read]);
+        Ok(read)
+    }
+}
 
 pub struct XmlProcessor {
     #[allow(dead_code)]
@@ -55,13 +66,18 @@ impl XmlProcessor {
             return None;
         }
 
-        let mut decoder = flate2::read::GzDecoder::new(body).take(MAX_SITEMAP_BYTES + 1);
-        let mut xml = Vec::new();
-        (&mut decoder).take(SITEMAP_ROOT_WINDOW).read_to_end(&mut xml).ok()?;
-        if !Self::starts_with_sitemap_root(&xml) {
+        let mut decoder = CopyingReader {
+            inner: flate2::read::GzDecoder::new(body).take(MAX_SITEMAP_BYTES + 1),
+            copy: Vec::new(),
+        };
+        if !Self::has_sitemap_root(BufReader::new(&mut decoder)) {
             return None;
         }
-        decoder.read_to_end(&mut xml).ok()?;
+        let CopyingReader {
+            mut inner,
+            copy: mut xml,
+        } = decoder;
+        inner.read_to_end(&mut xml).ok()?;
         (xml.len() as u64 <= MAX_SITEMAP_BYTES).then_some(xml)
     }
 
@@ -69,7 +85,7 @@ impl XmlProcessor {
     /// file served with `Content-Encoding: gzip`): a `.gz` path or gzip content type, and a body
     /// that is sitemap XML.
     pub fn is_decoded_gzip_sitemap(url_path: &str, content_type: &str, body: &[u8]) -> bool {
-        Self::is_gzip_candidate(url_path, content_type) && Self::starts_with_sitemap_root(body)
+        Self::is_gzip_candidate(url_path, content_type) && Self::has_sitemap_root(body)
     }
 
     /// A URL path ending in `.gz` or a response served as `application/gzip` / `application/x-gzip`.
@@ -80,14 +96,35 @@ impl XmlProcessor {
             || content_type.contains("application/x-gzip")
     }
 
-    /// Whether `body` is XML (after an optional BOM and whitespace) that names a sitemap root
-    /// element (`<urlset>` / `<sitemapindex>`) within its first 64 KB, past any XML prolog. An
-    /// archive that merely contains a sitemap file does not start with markup.
-    fn starts_with_sitemap_root(body: &[u8]) -> bool {
-        let head = &body[..body.len().min(SITEMAP_ROOT_WINDOW as usize)];
-        let head = String::from_utf8_lossy(head);
-        head.trim_start_matches('\u{feff}').trim_start().starts_with('<')
-            && (Self::is_sitemap_xml(&head) || Self::is_sitemap_xml_index(&head))
+    /// Whether the document element of the XML read from `input` is `<urlset>` or `<sitemapindex>`.
+    /// Reading stops at that element, past an XML declaration, comments, processing instructions
+    /// and a doctype of any length. Text before it (e.g. the file name heading a `.tar.gz` archive
+    /// that merely contains a sitemap) or another root element, even one whose document mentions
+    /// `<urlset>` in a comment, means no.
+    fn has_sitemap_root(mut input: impl BufRead) -> bool {
+        // Only a BOM and whitespace may precede the first markup, so the first buffered bytes
+        // are enough to turn down a download that is not XML without inflating it further.
+        if let Ok(head) = input.fill_buf()
+            && head
+                .iter()
+                .find(|byte| !byte.is_ascii_whitespace() && ![0xef, 0xbb, 0xbf].contains(*byte))
+                .is_some_and(|&byte| byte != b'<')
+        {
+            return false;
+        }
+
+        let mut reader = Reader::from_reader(input);
+        reader.config_mut().trim_text(true);
+        let mut buf = Vec::new();
+        loop {
+            match reader.read_event_into(&mut buf) {
+                Ok(Event::Start(ref e) | Event::Empty(ref e)) => {
+                    return matches!(e.local_name().as_ref(), b"urlset" | b"sitemapindex");
+                }
+                Ok(Event::Decl(_) | Event::Comment(_) | Event::PI(_) | Event::DocType(_)) => buf.clear(),
+                _ => return false,
+            }
+        }
     }
 
     /// Whether a URL path has a sitemap file extension: `.xml`, or `.gz` except a `.tar.gz` archive
@@ -453,6 +490,54 @@ mod tests {
             "/downloads/sitemaps.tar.gz",
             "application/gzip",
             tar.as_bytes()
+        ));
+    }
+
+    #[test]
+    fn gzip_xml_with_another_root_is_not_a_sitemap() {
+        for xml in [
+            r#"<?xml version="1.0"?><catalog><!-- <urlset> --><item><loc>https://example.com/a</loc></item></catalog>"#,
+            r#"<?xml version="1.0"?><catalog><urlset><url><loc>https://example.com/a</loc></url></urlset></catalog>"#,
+            r#"<!-- <sitemapindex> --><feed><loc>https://example.com/a</loc></feed>"#,
+        ] {
+            assert_eq!(
+                XmlProcessor::gunzip_sitemap("/catalog.gz", "application/gzip", &gzip(xml.as_bytes())),
+                None,
+                "{xml}"
+            );
+            assert!(
+                !XmlProcessor::is_decoded_gzip_sitemap("/catalog.gz", "application/gzip", xml.as_bytes()),
+                "{xml}"
+            );
+        }
+    }
+
+    #[test]
+    fn download_that_is_not_xml_is_turned_down_from_its_first_bytes() {
+        // A large CSV (no `<` anywhere) behind a `.gz` link is not inflated in full.
+        let csv = "id,name\n".repeat(128 * 1024);
+        let mut rest = csv.as_bytes();
+        assert!(!XmlProcessor::has_sitemap_root(BufReader::new(&mut rest)));
+        assert!(
+            csv.len() - rest.len() <= 64 * 1024,
+            "read {} bytes",
+            csv.len() - rest.len()
+        );
+    }
+
+    #[test]
+    fn gzip_sitemap_after_a_long_prolog_is_read() {
+        // A legal comment longer than 64 KB between the XML declaration and the root element.
+        let xml = URLSET.replacen("?>", &format!("?><!--{}--><?pi x?>", "a".repeat(65_536)), 1);
+        assert_eq!(
+            XmlProcessor::gunzip_sitemap("/sitemap.xml.gz", "application/octet-stream", &gzip(xml.as_bytes()))
+                .as_deref(),
+            Some(xml.as_bytes())
+        );
+        assert!(XmlProcessor::is_decoded_gzip_sitemap(
+            "/sitemap.xml.gz",
+            "application/gzip",
+            xml.as_bytes()
         ));
     }
 

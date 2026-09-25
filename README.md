@@ -110,6 +110,8 @@ The following features are summarized in greater detail:
 - as `--url` parameter, you can specify also a `sitemap.xml` file (or [sitemap index](https://www.sitemaps.org/protocol.html#index)),
   which will be processed as a list of URLs. Such a URL may end in `.xml`, `.xml.gz` or any other `.gz`,
   or be served as `application/gzip` / `application/x-gzip`; gzip-compressed sitemaps are decompressed.
+  A gzip file counts as a sitemap only when its XML root element is `<urlset>` or `<sitemapindex>`;
+  any other `.gz` download (e.g. a `.tar.gz` archive) keeps its original bytes.
   Entries of a sitemap index may point to `.xml`, `.xml.gz` or `.gz` files (not `.tar.gz`), also with a
   query string (e.g. Shopify's `sitemap_products_1.xml?from=1&to=100`). When the URL path contains
   `sitemap` and ends in `.xml` or `.gz` (e.g. `/sitemap.xml`, `/sitemap-products.gz`), the crawler runs
