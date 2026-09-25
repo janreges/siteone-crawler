@@ -642,14 +642,7 @@ impl Crawler {
             (http_response.body.clone(), http_response.body_text())
         };
 
-        let body_size = if is_asset_url {
-            http_response
-                .get_header("content-length")
-                .and_then(|v| v.parse::<i64>().ok())
-                .unwrap_or_else(|| body.as_ref().map(|b| b.len() as i64).unwrap_or(0))
-        } else {
-            body.as_ref().map(|b| b.len() as i64).unwrap_or(0)
-        };
+        let body_size = Self::get_body_size(is_asset_url, &http_response, body.as_deref());
 
         if response_status != 200 {
             Self::process_non200_url(&parsed_url, non200_basenames);
@@ -1591,6 +1584,23 @@ impl Crawler {
         self.robots_txt_cache.insert(cache_key, None);
     }
 
+    /// Size reported for a crawled URL: the decoded body length. For assets a `Content-Length`
+    /// header is trusted instead, but not together with `Content-Encoding`, because then it
+    /// counts the compressed bytes on the wire.
+    fn get_body_size(is_asset_url: bool, http_response: &HttpResponse, body: Option<&[u8]>) -> i64 {
+        let body_len = body.map(|b| b.len() as i64).unwrap_or(0);
+        let is_encoded = http_response
+            .get_header("content-encoding")
+            .is_some_and(|coding| !coding.trim().is_empty() && !coding.trim().eq_ignore_ascii_case("identity"));
+        if !is_asset_url || is_encoded {
+            return body_len;
+        }
+        http_response
+            .get_header("content-length")
+            .and_then(|v| v.parse::<i64>().ok())
+            .unwrap_or(body_len)
+    }
+
     /// Get content type ID from Content-Type header
     fn get_content_type_id_by_header(content_type_header: &str) -> ContentTypeId {
         let header_lower = content_type_header.to_lowercase();
@@ -2317,5 +2327,38 @@ mod tests {
         let keep = vec!["id".to_string()];
         let result = filter_query_params("https://example.com/page?id=42&session=abc&tracking=xyz", &keep);
         assert_eq!(result, "https://example.com/page?id=42");
+    }
+
+    #[test]
+    fn body_size_uses_decoded_length_when_content_encoding_is_present() {
+        let decoded = vec![b'x'; 5000];
+        let mut headers = HashMap::new();
+        headers.insert("content-length".to_string(), vec!["120".to_string()]);
+        headers.insert("content-encoding".to_string(), vec!["br".to_string()]);
+        let compressed = HttpResponse::new(
+            "https://example.test/app.js".to_string(),
+            200,
+            Some(decoded.clone()),
+            headers,
+            0.1,
+        );
+        assert_eq!(
+            Crawler::get_body_size(true, &compressed, Some(decoded.as_slice())),
+            5000
+        );
+
+        let mut headers = HashMap::new();
+        headers.insert("content-length".to_string(), vec!["5000".to_string()]);
+        let plain = HttpResponse::new("https://example.test/app.js".to_string(), 200, None, headers, 0.1);
+        assert_eq!(
+            Crawler::get_body_size(true, &plain, None),
+            5000,
+            "an unencoded asset keeps using Content-Length"
+        );
+        assert_eq!(
+            Crawler::get_body_size(false, &plain, Some("<p>page</p>".as_bytes())),
+            11,
+            "pages always use the body length"
+        );
     }
 }

@@ -147,6 +147,8 @@ CLI options are defined in `options/core_options.rs` via `get_options()` which r
 
 `HttpResponse.body` is `Option<Vec<u8>>` (not String) to preserve binary data for images, fonts, etc. Use `body_text()` for string content. Failed HTTP requests return `Ok(HttpResponse)` with negative status codes (-1 connection error, -2 timeout, -4 send error), not `Err`.
 
+The crawler's HTTP client has automatic decompression **off** (`HttpClient::client_builder()`, also for the fallback client): the body is decoded by `http_client::decode_body`, while the headers stay as received, including `Content-Encoding` and the compressed `Content-Length` (#107). Reported sizes are the decoded length (`Crawler::get_body_size`, which trusts an asset's `Content-Length` only without `Content-Encoding`). Never switch reqwest's automatic decompression back on: it would strip those headers.
+
 ### Testing Structure
 
 - **Unit tests**: In-file `#[cfg(test)] mod tests` blocks (standard Rust convention)

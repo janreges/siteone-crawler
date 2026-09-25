@@ -10,7 +10,7 @@
 
 mod common;
 
-use common::{LocalServer, TempDir, run_built_crawler, run_crawler, run_crawler_json};
+use common::{LocalServer, RecordingServer, Route, TempDir, run_built_crawler, run_crawler, run_crawler_json};
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -1058,5 +1058,128 @@ fn events_mark_only_local_http_cache_hits_as_cached() {
     assert!(
         !warm.is_empty() && warm.iter().all(|e| e["cached"] == true),
         "a warm cache is reported as such: {warm:?}"
+    );
+}
+
+fn brotli_compress(data: &[u8]) -> Vec<u8> {
+    let mut writer = brotli::CompressorWriter::new(Vec::new(), 4096, 5, 22);
+    std::io::Write::write_all(&mut writer, data).expect("compressing in memory");
+    writer.into_inner()
+}
+
+/// #107: a response served from the local HTTP cache keeps `Content-Encoding` and is not decoded a
+/// second time, so the second crawl reports exactly what the first one did.
+#[test]
+fn http_cache_hit_keeps_content_encoding_and_decoded_size() {
+    let tmp = TempDir::new("brotli-cache");
+    let page = format!(
+        "<!DOCTYPE html><html lang=\"en\"><head><title>Cached</title></head><body><p>{}</p></body></html>",
+        "Cached compressed content. ".repeat(200)
+    );
+    let server = RecordingServer::start(vec![Route {
+        path: "/",
+        headers: vec![
+            ("Content-Type", "text/html; charset=utf-8".to_string()),
+            ("Content-Encoding", "br".to_string()),
+        ],
+        body: brotli_compress(page.as_bytes()),
+    }]);
+    let cache = tmp.path.join("cache");
+    let crawl = || -> serde_json::Value {
+        let output = run_built_crawler(&[
+            "--config-file=/dev/null",
+            &format!("--url={}", server.url()),
+            "--single-page",
+            "--output=json",
+            "--extra-columns=Content-Encoding",
+            LOCAL_ANALYZERS,
+            &format!("--http-cache-dir={}", cache.display()),
+            "--output-html-report=",
+            "--output-json-file=",
+            "--output-text-file=",
+        ]);
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "stderr: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        serde_json::from_slice(&output.stdout).expect("JSON on stdout")
+    };
+    let page_requests = || {
+        server
+            .requests()
+            .iter()
+            .filter(|head| head.starts_with("GET / "))
+            .count()
+    };
+
+    let live = crawl();
+    assert_eq!(page_requests(), 1);
+    let cached = crawl();
+    assert_eq!(page_requests(), 1, "the second crawl is served from the HTTP cache");
+
+    for json in [&live, &cached] {
+        let row = &json["results"][0];
+        assert_eq!(row["extras"]["Content-Encoding"], "br", "{row}");
+        assert_eq!(row["size"], page.len() as u64, "{row}");
+    }
+}
+
+/// #107: the crawler must see the server's `Content-Encoding` (the HTTP client used to strip it
+/// while decompressing), so Brotli pages pass the Brotli check; the size stays the decoded length.
+#[test]
+fn brotli_response_keeps_content_encoding_and_passes_the_brotli_check() {
+    let page = format!(
+        "<!DOCTYPE html><html lang=\"en\"><head><title>Brotli</title></head><body><p>{}</p></body></html>",
+        "Compressed content. ".repeat(200)
+    );
+    let server = RecordingServer::start(vec![Route {
+        path: "/",
+        headers: vec![
+            ("Content-Type", "text/html; charset=utf-8".to_string()),
+            ("Content-Encoding", "br".to_string()),
+            ("Vary", "Accept-Encoding".to_string()),
+        ],
+        body: brotli_compress(page.as_bytes()),
+    }]);
+
+    let output = run_built_crawler(&[
+        "--config-file=/dev/null",
+        &format!("--url={}", server.url()),
+        "--single-page",
+        "--output=json",
+        "--extra-columns=Content-Encoding",
+        "--analyzer-filter-regex=/BestPractice/",
+        "--http-cache-dir=",
+        "--output-html-report=",
+        "--output-json-file=",
+        "--output-text-file=",
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).expect("JSON on stdout");
+
+    let row = &json["results"][0];
+    assert_eq!(row["extras"]["Content-Encoding"], "br");
+    assert_eq!(row["size"], page.len() as u64, "size is the decoded body length");
+    let brotli = json["summary"]["items"]
+        .as_array()
+        .expect("summary items")
+        .iter()
+        .find(|item| item["aplCode"] == "brotli-support")
+        .expect("the Brotli check ran");
+    assert_eq!(brotli["status"], "OK", "{brotli}");
+
+    let requests = server.requests();
+    assert!(
+        requests
+            .iter()
+            .any(|head| head.to_ascii_lowercase().contains("accept-encoding: gzip, deflate, br")),
+        "the crawler still asks for compressed responses: {requests:?}"
     );
 }

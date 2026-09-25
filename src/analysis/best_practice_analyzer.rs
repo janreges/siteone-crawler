@@ -865,7 +865,7 @@ impl BestPracticeAnalyzer {
         let summary_code = "brotli-support";
         let without_brotli = urls
             .iter()
-            .filter(|u| u.content_encoding.as_deref() != Some("br"))
+            .filter(|u| !is_brotli_encoded(u.content_encoding.as_deref()))
             .count();
         let with_brotli = urls.len().saturating_sub(without_brotli);
 
@@ -1367,6 +1367,11 @@ fn parse_phone_numbers_from_html(html: &str, only_non_clickable: bool) -> Vec<St
     phones
 }
 
+/// Whether a `Content-Encoding` value includes Brotli (`br`); codings are case-insensitive.
+fn is_brotli_encoded(content_encoding: Option<&str>) -> bool {
+    content_encoding.is_some_and(|value| value.split(',').any(|coding| coding.trim().eq_ignore_ascii_case("br")))
+}
+
 /// Strip JavaScript content from HTML
 fn strip_js_and_css(html: &str) -> String {
     use once_cell::sync::Lazy;
@@ -1375,4 +1380,20 @@ fn strip_js_and_css(html: &str) -> String {
 
     let result = RE_SCRIPT.replace_all(html, " ").to_string();
     RE_STYLE.replace_all(&result, " ").to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn brotli_encoding_is_matched_case_insensitively() {
+        assert!(is_brotli_encoded(Some("br")));
+        assert!(is_brotli_encoded(Some("BR")));
+        assert!(is_brotli_encoded(Some(" Br ")));
+        assert!(is_brotli_encoded(Some("gzip, br")));
+        assert!(!is_brotli_encoded(Some("gzip")));
+        assert!(!is_brotli_encoded(Some("")));
+        assert!(!is_brotli_encoded(None));
+    }
 }

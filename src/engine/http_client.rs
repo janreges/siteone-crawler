@@ -54,10 +54,10 @@ impl HttpClient {
 
     /// Build the shared reqwest::Client with proxy support.
     /// Timeout is set per-request, not on the shared client.
+    /// Automatic decompression is off: reqwest would drop `Content-Encoding` and `Content-Length`
+    /// after decoding, so bodies are decoded by `decode_body` and headers stay as the server sent them.
     fn build_shared_client(proxy: &Option<String>, accept_invalid_certs: bool) -> reqwest::Client {
-        let mut builder = reqwest::Client::builder()
-            .danger_accept_invalid_certs(accept_invalid_certs)
-            .redirect(reqwest::redirect::Policy::none());
+        let mut builder = Self::client_builder().danger_accept_invalid_certs(accept_invalid_certs);
 
         if let Some(proxy_str) = proxy {
             let parts: Vec<&str> = proxy_str.splitn(2, ':').collect();
@@ -69,7 +69,24 @@ impl HttpClient {
             }
         }
 
-        builder.build().unwrap_or_else(|_| reqwest::Client::new())
+        // If the proxy or certificate settings cannot be applied, fall back to a client without
+        // them, but never to `reqwest::Client::new()`, which decompresses automatically.
+        builder.build().unwrap_or_else(|_| {
+            Self::client_builder()
+                .build()
+                .expect("a default HTTP client can be built")
+        })
+    }
+
+    /// Settings every crawler client shares: redirects are not followed, and there is no automatic
+    /// decompression (see `build_shared_client`).
+    fn client_builder() -> reqwest::ClientBuilder {
+        reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .no_gzip()
+            .no_brotli()
+            .no_deflate()
+            .no_zstd()
     }
 
     /// Perform an HTTP request (GET or HEAD)
@@ -197,22 +214,17 @@ impl HttpClient {
         let result = match request.send().await {
             Ok(resp) => {
                 let status = resp.status().as_u16() as i32;
-                let mut resp_headers = convert_response_headers(resp.headers());
-                // reqwest auto-decompresses and strips Content-Encoding header.
-                // Detect decompression by checking if Transfer-Encoding: chunked and
-                // Vary: Accept-Encoding are present (indicating the response was compressed).
-                let has_transfer_chunked = resp_headers
-                    .get("transfer-encoding")
-                    .map(|vals| vals.iter().any(|v| v.contains("chunked")))
-                    .unwrap_or(false);
-                let has_vary_encoding = resp_headers
-                    .get("vary")
-                    .map(|vals| vals.iter().any(|v| v.contains("Accept-Encoding")))
-                    .unwrap_or(false);
-                if has_transfer_chunked && has_vary_encoding && !resp_headers.contains_key("content-encoding") {
-                    resp_headers.insert("content-encoding".to_string(), vec!["gzip".to_string()]);
-                }
-                let body = resp.bytes().await.ok().map(|b| b.to_vec());
+                let resp_headers = convert_response_headers(resp.headers());
+                let content_encoding = resp_headers
+                    .get("content-encoding")
+                    .map(|values| values.join(", "))
+                    .unwrap_or_default();
+                // A body that cannot be read or decoded is handled alike: no body.
+                let body = resp
+                    .bytes()
+                    .await
+                    .ok()
+                    .and_then(|raw| decode_body(&raw, &content_encoding).ok());
                 let elapsed = start_time.elapsed().as_secs_f64();
 
                 HttpResponse::new(url.to_string(), status, body, resp_headers, elapsed)
@@ -495,6 +507,46 @@ fn convert_response_headers(headers: &reqwest::header::HeaderMap) -> HashMap<Str
     result
 }
 
+/// Decode a response body according to its `Content-Encoding` value: `br`, `gzip`/`x-gzip` and
+/// `deflate`; a comma-separated list is removed in reverse order of application. `identity`, an
+/// empty value and an empty body (HEAD, 204, 304) leave the bytes unchanged, and so does a coding
+/// this client cannot decode (e.g. `zstd`) — the body is then kept exactly as received.
+pub fn decode_body(raw: &[u8], content_encoding: &str) -> std::io::Result<Vec<u8>> {
+    let codings: Vec<String> = content_encoding
+        .split(',')
+        .map(|coding| coding.trim().to_ascii_lowercase())
+        .filter(|coding| !coding.is_empty() && coding.as_str() != "identity")
+        .collect();
+    let decodable = codings
+        .iter()
+        .all(|coding| matches!(coding.as_str(), "br" | "gzip" | "x-gzip" | "deflate"));
+    if raw.is_empty() || codings.is_empty() || !decodable {
+        return Ok(raw.to_vec());
+    }
+
+    let mut body = raw.to_vec();
+    for coding in codings.iter().rev() {
+        let mut decoded = Vec::new();
+        match coding.as_str() {
+            "br" => {
+                std::io::Read::read_to_end(&mut brotli::Decompressor::new(&body[..], 4096), &mut decoded)?;
+            }
+            "gzip" | "x-gzip" => {
+                std::io::Read::read_to_end(&mut flate2::read::MultiGzDecoder::new(&body[..]), &mut decoded)?;
+            }
+            _ => {
+                // `deflate` is zlib-wrapped by the spec, but some servers send a raw deflate stream.
+                if std::io::Read::read_to_end(&mut flate2::read::ZlibDecoder::new(&body[..]), &mut decoded).is_err() {
+                    decoded.clear();
+                    std::io::Read::read_to_end(&mut flate2::read::DeflateDecoder::new(&body[..]), &mut decoded)?;
+                }
+            }
+        }
+        body = decoded;
+    }
+    Ok(body)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -537,5 +589,164 @@ mod tests {
     fn http_client_implements_fetcher() {
         fn assert_fetcher<T: crate::engine::fetcher::Fetcher>() {}
         assert_fetcher::<HttpClient>();
+    }
+
+    const PAGE: &[u8] = b"<html><body><p>Hello, compressed world!</p></body></html>";
+
+    fn gzip_compress(data: &[u8]) -> Vec<u8> {
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+        std::io::Write::write_all(&mut encoder, data).unwrap();
+        encoder.finish().unwrap()
+    }
+
+    fn zlib_compress(data: &[u8]) -> Vec<u8> {
+        let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), Compression::default());
+        std::io::Write::write_all(&mut encoder, data).unwrap();
+        encoder.finish().unwrap()
+    }
+
+    fn raw_deflate_compress(data: &[u8]) -> Vec<u8> {
+        let mut encoder = flate2::write::DeflateEncoder::new(Vec::new(), Compression::default());
+        std::io::Write::write_all(&mut encoder, data).unwrap();
+        encoder.finish().unwrap()
+    }
+
+    fn br_compress(data: &[u8]) -> Vec<u8> {
+        let mut writer = brotli::CompressorWriter::new(Vec::new(), 4096, 5, 22);
+        std::io::Write::write_all(&mut writer, data).unwrap();
+        writer.into_inner()
+    }
+
+    #[test]
+    fn decode_body_handles_each_supported_coding() {
+        assert_eq!(decode_body(&br_compress(PAGE), "br").unwrap(), PAGE);
+        assert_eq!(decode_body(&br_compress(PAGE), "BR").unwrap(), PAGE);
+        assert_eq!(decode_body(&gzip_compress(PAGE), "gzip").unwrap(), PAGE);
+        assert_eq!(decode_body(&gzip_compress(PAGE), "x-gzip").unwrap(), PAGE);
+        assert_eq!(decode_body(&zlib_compress(PAGE), "deflate").unwrap(), PAGE);
+        // Some servers send a raw deflate stream although `deflate` means zlib-wrapped data.
+        assert_eq!(decode_body(&raw_deflate_compress(PAGE), "deflate").unwrap(), PAGE);
+    }
+
+    #[test]
+    fn decode_body_removes_chained_codings_in_reverse_order() {
+        // `gzip, br` = gzip was applied first, then Brotli.
+        let body = br_compress(&gzip_compress(PAGE));
+        assert_eq!(decode_body(&body, "gzip, br").unwrap(), PAGE);
+    }
+
+    #[test]
+    fn decode_body_keeps_identity_unknown_and_empty_bodies() {
+        assert_eq!(decode_body(PAGE, "identity").unwrap(), PAGE);
+        assert_eq!(decode_body(PAGE, "").unwrap(), PAGE);
+        // zstd is not decoded: the body stays exactly as received, as before.
+        let zstd_like = b"\x28\xb5\x2f\xfd raw zstd frame";
+        assert_eq!(decode_body(zstd_like, "zstd").unwrap(), zstd_like);
+        assert_eq!(decode_body(PAGE, "br, zstd").unwrap(), PAGE);
+        // Empty bodies (HEAD, 204, 304) pass through.
+        assert!(decode_body(b"", "br").unwrap().is_empty());
+    }
+
+    #[test]
+    fn decode_body_reports_corrupt_data() {
+        assert!(decode_body(b"definitely not brotli", "br").is_err());
+        assert!(decode_body(b"definitely not gzip", "gzip").is_err());
+    }
+
+    /// A complete HTTP/1.1 200 response; `headers` are CRLF-terminated header lines.
+    fn raw_response(headers: &str, body: &[u8]) -> Vec<u8> {
+        let mut response = format!(
+            "HTTP/1.1 200 OK\r\n{headers}Content-Length: {}\r\nConnection: close\r\n\r\n",
+            body.len()
+        )
+        .into_bytes();
+        response.extend_from_slice(body);
+        response
+    }
+
+    /// Answers the first connection with `response` and passes the received request head back,
+    /// so a test can also check what the client sent.
+    fn serve_once(response: Vec<u8>) -> (u16, std::sync::mpsc::Receiver<String>) {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut head = Vec::new();
+            let mut buf = [0u8; 1024];
+            while !head.windows(4).any(|window| window == b"\r\n\r\n") {
+                match std::io::Read::read(&mut stream, &mut buf) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => head.extend_from_slice(&buf[..n]),
+                }
+            }
+            sender.send(String::from_utf8_lossy(&head).into_owned()).ok();
+            std::io::Write::write_all(&mut stream, &response).ok();
+        });
+        (port, receiver)
+    }
+
+    /// The fallback used when the configured client cannot be built must not turn automatic
+    /// decompression back on: it would strip `Content-Encoding` again (#107).
+    #[tokio::test]
+    async fn fallback_client_keeps_automatic_decompression_off() {
+        let compressed = br_compress(PAGE);
+        let (port, _) = serve_once(raw_response(
+            "Content-Type: text/html\r\nContent-Encoding: br\r\n",
+            &compressed,
+        ));
+        let response = HttpClient::client_builder()
+            .build()
+            .unwrap()
+            .get(format!("http://127.0.0.1:{port}/"))
+            .header(reqwest::header::ACCEPT_ENCODING, "br")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            response.headers().get("content-encoding").map(|v| v.to_str().unwrap()),
+            Some("br")
+        );
+        assert_eq!(response.bytes().await.unwrap().as_ref(), compressed.as_slice());
+    }
+
+    #[tokio::test]
+    async fn brotli_body_is_decoded_and_content_encoding_is_kept() {
+        let page = PAGE.repeat(50);
+        let compressed = br_compress(&page);
+        let (port, request_head) = serve_once(raw_response(
+            "Content-Type: text/html\r\nContent-Encoding: br\r\nVary: Accept-Encoding\r\n",
+            &compressed,
+        ));
+
+        let client = HttpClient::new(None, None, None, false, None, false);
+        let response = client
+            .request(
+                "127.0.0.1",
+                port,
+                "http",
+                "/",
+                "GET",
+                5,
+                "test-agent",
+                "*/*",
+                "gzip, deflate, br",
+                None,
+                false,
+                None,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status_code, 200);
+        assert_eq!(response.body.as_deref(), Some(page.as_slice()), "the body is decoded");
+        assert_eq!(response.get_header("content-encoding").map(String::as_str), Some("br"));
+        assert_eq!(
+            response.get_header("content-length"),
+            Some(&compressed.len().to_string()),
+            "Content-Length keeps the size on the wire"
+        );
+        let head = request_head.recv().unwrap().to_ascii_lowercase();
+        assert!(head.contains("accept-encoding: gzip, deflate, br"), "{head}");
     }
 }

@@ -1,8 +1,12 @@
 // Shared helpers for integration tests
 
+use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Output, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::thread::JoinHandle;
 use std::time::Duration;
 
 /// Get path to the compiled binary.
@@ -82,6 +86,105 @@ impl Drop for LocalServer {
         self.child.kill().ok();
         self.child.wait().ok();
     }
+}
+
+/// One canned answer of a `RecordingServer`: the request path it serves and the response
+/// headers and body (`Content-Length` and `Connection: close` are added automatically).
+pub struct Route {
+    pub path: &'static str,
+    pub headers: Vec<(&'static str, String)>,
+    pub body: Vec<u8>,
+}
+
+/// A minimal HTTP/1.1 server on 127.0.0.1 for tests that need exact response bytes (e.g. a
+/// Brotli-encoded body, which the built-in server cannot produce) or need to see what the
+/// crawler sent. Unknown paths get a 404. Stopped when dropped.
+pub struct RecordingServer {
+    port: u16,
+    requests: Arc<Mutex<Vec<String>>>,
+    stop: Arc<AtomicBool>,
+    thread: Option<JoinHandle<()>>,
+}
+
+impl RecordingServer {
+    pub fn start(routes: Vec<Route>) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("a free port");
+        let port = listener.local_addr().expect("a bound address").port();
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let stop = Arc::new(AtomicBool::new(false));
+        let (recorded, stopped) = (requests.clone(), stop.clone());
+        let thread = std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                if stopped.load(Ordering::SeqCst) {
+                    break;
+                }
+                let Ok(mut stream) = stream else { continue };
+                let head = read_request_head(&mut stream);
+                let path = head
+                    .split_whitespace()
+                    .nth(1)
+                    .and_then(|target| target.split('?').next())
+                    .unwrap_or("/")
+                    .to_string();
+                recorded.lock().unwrap().push(head);
+                let response = match routes.iter().find(|route| route.path == path) {
+                    Some(route) => raw_http_response("200 OK", &route.headers, &route.body),
+                    None => raw_http_response("404 Not Found", &[], b""),
+                };
+                stream.write_all(&response).ok();
+            }
+        });
+        RecordingServer {
+            port,
+            requests,
+            stop,
+            thread: Some(thread),
+        }
+    }
+
+    pub fn url(&self) -> String {
+        format!("http://127.0.0.1:{}/", self.port)
+    }
+
+    /// The head (request line and headers) of every request received so far.
+    pub fn requests(&self) -> Vec<String> {
+        self.requests.lock().unwrap().clone()
+    }
+}
+
+impl Drop for RecordingServer {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::SeqCst);
+        // Wake the blocking `accept` so the thread sees the flag.
+        TcpStream::connect(("127.0.0.1", self.port)).ok();
+        if let Some(thread) = self.thread.take() {
+            thread.join().ok();
+        }
+    }
+}
+
+fn read_request_head(stream: &mut TcpStream) -> String {
+    stream.set_read_timeout(Some(Duration::from_secs(5))).ok();
+    let mut head = Vec::new();
+    let mut buf = [0u8; 1024];
+    while !head.windows(4).any(|window| window == b"\r\n\r\n") {
+        match stream.read(&mut buf) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => head.extend_from_slice(&buf[..n]),
+        }
+    }
+    String::from_utf8_lossy(&head).into_owned()
+}
+
+fn raw_http_response(status: &str, headers: &[(&str, String)], body: &[u8]) -> Vec<u8> {
+    let mut head = format!("HTTP/1.1 {status}\r\n");
+    for (name, value) in headers {
+        head.push_str(&format!("{name}: {value}\r\n"));
+    }
+    head.push_str(&format!("Content-Length: {}\r\nConnection: close\r\n\r\n", body.len()));
+    let mut response = head.into_bytes();
+    response.extend_from_slice(body);
+    response
 }
 
 /// Run crawler and parse stdout as JSON.
