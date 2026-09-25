@@ -162,6 +162,7 @@ pub struct CoreOptions {
     pub sitemap_txt_file: Option<String>,
     pub sitemap_base_priority: f64,
     pub sitemap_priority_increase: f64,
+    pub sitemap_changefreq: Option<String>,
 
     // offline export settings
     pub offline_export_dir: Option<String>,
@@ -465,6 +466,7 @@ impl CoreOptions {
             sitemap_txt_file: None,
             sitemap_base_priority: 0.5,
             sitemap_priority_increase: 0.1,
+            sitemap_changefreq: None,
 
             // offline export settings
             offline_export_dir: None,
@@ -1032,6 +1034,18 @@ impl CoreOptions {
             ));
         }
 
+        // The sitemaps.org protocol allows only these <changefreq> values.
+        if let Some(ref changefreq) = core.sitemap_changefreq {
+            const CHANGEFREQ: [&str; 7] = ["always", "hourly", "daily", "weekly", "monthly", "yearly", "never"];
+            if !CHANGEFREQ.contains(&changefreq.as_str()) {
+                return Err(CrawlerError::Config(format!(
+                    "Invalid --sitemap-changefreq '{}'. Use one of: {}.",
+                    changefreq,
+                    CHANGEFREQ.join(", ")
+                )));
+            }
+        }
+
         // Disable all assets if set
         if core.disable_all_assets {
             core.disable_javascript = true;
@@ -1546,6 +1560,11 @@ impl CoreOptions {
             "sitemapPriorityIncrease" => {
                 if let Some(n) = value.as_float() {
                     self.sitemap_priority_increase = n;
+                }
+            }
+            "sitemapChangefreq" => {
+                if let Some(s) = value.as_str() {
+                    self.sitemap_changefreq = Some(s.trim().to_ascii_lowercase());
                 }
             }
             // offline export options
@@ -3106,6 +3125,18 @@ pub fn get_options() -> Options {
                 false,
                 None,
             ),
+            CrawlerOption::new(
+                "--sitemap-changefreq",
+                None,
+                "sitemapChangefreq",
+                OptionType::String,
+                false,
+                "`<changefreq>` for all URLs in the XML sitemap: `always`, `hourly`, `daily`, `weekly`, `monthly`, `yearly` or `never`. Omitted when empty.",
+                None,
+                true,
+                false,
+                None,
+            ),
         ],
     ));
 
@@ -4339,6 +4370,7 @@ mod tests {
             sitemap_txt_file: None,
             sitemap_base_priority: 0.5,
             sitemap_priority_increase: 0.1,
+            sitemap_changefreq: None,
             offline_export_dir: None,
             offline_export_store_only_url_regex: Vec::new(),
             offline_export_remove_unwanted_code: true,
@@ -4871,7 +4903,7 @@ mod tests {
                 .values()
                 .map(|group| group.options.len())
                 .sum::<usize>(),
-            220
+            221
         );
     }
 
@@ -4952,6 +4984,23 @@ mod tests {
         assert!(
             parse_argv(&h01_argv(&config, &["--progress-interval=-1"])).is_err(),
             "the interval cannot be negative"
+        );
+    }
+
+    #[test]
+    fn sitemap_changefreq_is_validated_and_lowercased() {
+        let config = h01_config_file();
+
+        let options = parse_argv(&h01_argv(&config, &["--sitemap-changefreq=Weekly"])).unwrap();
+        assert_eq!(options.sitemap_changefreq.as_deref(), Some("weekly"));
+
+        let options = parse_argv(&h01_argv(&config, &[])).unwrap();
+        assert_eq!(options.sitemap_changefreq, None);
+
+        let error = parse_argv(&h01_argv(&config, &["--sitemap-changefreq=sometimes"])).unwrap_err();
+        assert!(
+            error.to_string().contains("Invalid --sitemap-changefreq 'sometimes'"),
+            "{error}"
         );
     }
 }

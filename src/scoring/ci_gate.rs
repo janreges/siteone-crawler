@@ -394,6 +394,7 @@ mod tests {
             sitemap_txt_file: None,
             sitemap_base_priority: 0.5,
             sitemap_priority_increase: 0.1,
+            sitemap_changefreq: None,
             offline_export_dir: None,
             offline_export_store_only_url_regex: Vec::new(),
             offline_export_remove_unwanted_code: true,

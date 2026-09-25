@@ -225,6 +225,12 @@ See all available [markdown exporter options](#markdown-exporter-options) and [H
 
 - will help you create a `sitemap.xml` and `sitemap.txt` for your website
 - you can set the priority of individual pages based on the number of slashes in the URL
+- `<lastmod>` is filled from each page's `Last-Modified` response header (written in UTC) and left
+  out when the header is missing, implausible (before 1995 or in the future) or only stamps the time
+  of the response, as dynamic pages do —
+  Google uses `lastmod` only when it is consistently and verifiably accurate
+- `--sitemap-changefreq` adds the same `<changefreq>` to every URL (Google ignores `changefreq` and
+  `priority`; other search engines may use them)
 
 ### 🤖 AI assistant (optional)
 
@@ -651,6 +657,7 @@ For a clearer list, I recommend going to the documentation: 🌐 https://crawler
 | `--sitemap-txt-file=<file>` | File path for generated TXT Sitemap. Extension `.txt` added if not specified. |
 | `--sitemap-base-priority=<num>` | Base priority for XML sitemap. Default is `0.5`. |
 | `--sitemap-priority-increase=<num>` | Priority increase based on slashes in URL. Default is `0.1`. |
+| `--sitemap-changefreq=<val>` | `<changefreq>` for all URLs in the XML sitemap: `always`, `hourly`, `daily`, `weekly`, `monthly`, `yearly` or `never`. Not written by default. |
 
 ### Expert options
 

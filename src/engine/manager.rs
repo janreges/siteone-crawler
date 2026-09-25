@@ -664,6 +664,7 @@ impl Manager {
                 options.sitemap_txt_file.clone(),
                 options.sitemap_base_priority,
                 options.sitemap_priority_increase,
+                options.sitemap_changefreq.clone(),
             );
             if sitemap.should_be_activated() {
                 exporters.push(Box::new(sitemap));

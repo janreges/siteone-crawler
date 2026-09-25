@@ -1636,3 +1636,23 @@ fn credentials_do_not_reach_another_port_of_an_ip_host() {
         assert!(!head.contains("authorization:"), "{head}");
     }
 }
+
+// ---------------------------------------------------------------------------
+// Sitemaps (#108, #106)
+// ---------------------------------------------------------------------------
+
+/// `--sitemap-changefreq` accepts only the values of the sitemaps.org protocol (#108).
+#[test]
+fn sitemap_changefreq_rejects_unknown_values() {
+    let output = run_built_crawler(&[
+        "--config-file=/dev/null",
+        "--url=https://example.com/",
+        "--sitemap-changefreq=sometimes",
+    ]);
+    assert_eq!(output.status.code(), Some(101));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("Invalid --sitemap-changefreq 'sometimes'"),
+        "stderr: {stderr}"
+    );
+}
