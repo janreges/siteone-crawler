@@ -3988,6 +3988,20 @@ const KEY_SENTINEL: &str = "sk-KEY_SENTINEL-0001-abcdefghijklmnopqrstuvwxyz";
 const PW_SENTINEL: &str = "PW_SENTINEL_0002";
 const QUERY_SENTINEL: &str = "QUERY_SENTINEL_0003";
 
+/// Every file below `dir`, in subdirectories too.
+fn files_under(dir: &Path) -> Vec<std::path::PathBuf> {
+    let mut files = Vec::new();
+    for entry in std::fs::read_dir(dir).expect("a directory") {
+        let path = entry.expect("an entry").path();
+        if path.is_dir() {
+            files.extend(files_under(&path));
+        } else {
+            files.push(path);
+        }
+    }
+    files
+}
+
 /// The lines of `texts` that carry one of the sentinels or the key's first 12 characters.
 fn credential_leaks(case: &str, texts: &[(String, String)]) -> Vec<String> {
     let mut leaks = Vec::new();
@@ -4013,14 +4027,34 @@ fn ai_diagnostics_never_carry_credentials() {
             "finish_reason": "stop"}],
         "usage": {"prompt_tokens": 20, "completion_tokens": 4}
     });
+    let report: &[&str] = &["--ai-report=ia"];
     let cases = [
-        // A provider or proxy that quotes the endpoint and the key it rejected.
+        // A provider or proxy that quotes the endpoint and the key it rejected, also userinfo
+        // that does not decode.
         (
             "echo",
             401,
-            echo,
+            echo.clone(),
             100,
             format!("http://review:{PW_SENTINEL}@127.0.0.1:{{port}}/v1?token={QUERY_SENTINEL}"),
+            report,
+        ),
+        (
+            "undecodable-echo",
+            401,
+            echo.replace("http://review:", "http://%FFreview:"),
+            100,
+            format!("http://%FFreview:{PW_SENTINEL}@127.0.0.1:{{port}}/v1?token={QUERY_SENTINEL}"),
+            report,
+        ),
+        // An answer: its events and the AI cache file written for it.
+        (
+            "answered",
+            200,
+            qwen_seo_answer(),
+            100,
+            format!("http://review:{PW_SENTINEL}@127.0.0.1:{{port}}/v1?token={QUERY_SENTINEL}"),
+            &[],
         ),
         // A timeout: the transport error names the request URL, query token included.
         (
@@ -4029,6 +4063,7 @@ fn ai_diagnostics_never_carry_credentials() {
             qwen_seo_answer(),
             2500,
             format!("http://127.0.0.1:{{port}}/v1?token={QUERY_SENTINEL}"),
+            report,
         ),
         // A long refusal or non-JSON body quoting the key where the 200-character cut falls.
         (
@@ -4037,6 +4072,7 @@ fn ai_diagnostics_never_carry_credentials() {
             refusal.to_string(),
             100,
             "http://127.0.0.1:{port}/v1".to_string(),
+            report,
         ),
         (
             "non-json",
@@ -4044,6 +4080,7 @@ fn ai_diagnostics_never_carry_credentials() {
             format!("<html>{}{KEY_SENTINEL}</html>", "x".repeat(180)),
             100,
             "http://127.0.0.1:{port}/v1".to_string(),
+            report,
         ),
         // A finish reason is quoted in the request's event and in the error of the stopped answer.
         (
@@ -4054,10 +4091,11 @@ fn ai_diagnostics_never_carry_credentials() {
             .to_string(),
             100,
             "http://127.0.0.1:{port}/v1".to_string(),
+            report,
         ),
     ];
     let mut leaks = Vec::new();
-    for (name, status, body, delay_ms, endpoint) in cases {
+    for (name, status, body, delay_ms, endpoint, extra) in cases {
         let mock = MockLlm::start(vec![MockResponse {
             path_prefix: "/v1",
             status,
@@ -4066,7 +4104,7 @@ fn ai_diagnostics_never_carry_credentials() {
         }]);
         let out = tmp.path.join(name);
         std::fs::create_dir_all(&out).expect("an output dir");
-        let args = [
+        let mut args = vec![
             "--config-file=/dev/null".to_string(),
             format!("--url={}", server.url()),
             LOCAL_ANALYZERS.to_string(),
@@ -4077,13 +4115,13 @@ fn ai_diagnostics_never_carry_credentials() {
             "--ai-model=m".to_string(),
             format!("--ai-api-key={KEY_SENTINEL}"),
             "--ai-actions=seo".to_string(),
-            "--ai-report=ia".to_string(),
             "--ai-max-pages=1".to_string(),
             "--ai-timeout=1".to_string(),
-            "--ai-cache-dir=".to_string(),
+            format!("--ai-cache-dir={}", out.join("ai-cache").display()),
             format!("--events-file={}", out.join("events.ndjson").display()),
             format!("--ai-report-dir={}", out.display()),
         ];
+        args.extend(extra.iter().map(|arg| arg.to_string()));
         let args: Vec<&str> = args.iter().map(String::as_str).collect();
         let output = run_crawler(&args);
         let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
@@ -4098,12 +4136,16 @@ fn ai_diagnostics_never_carry_credentials() {
             ),
             ("stderr".to_string(), stderr),
         ];
-        for entry in std::fs::read_dir(&out).expect("the output dir") {
-            let path = entry.expect("an entry").path();
+        for path in files_under(&out) {
             let text = String::from_utf8_lossy(&std::fs::read(&path).expect("a file")).into_owned();
             texts.push((path.display().to_string(), text));
         }
-        assert!(texts.len() > 3, "{name}: events and report files were written");
+        let written = if extra.is_empty() {
+            "events and the AI cache"
+        } else {
+            "events and report files"
+        };
+        assert!(texts.len() > 3, "{name}: {written} were written");
         leaks.extend(credential_leaks(name, &texts));
     }
     assert!(leaks.is_empty(), "{}", leaks.join("\n"));
@@ -5206,60 +5248,89 @@ fn ai_utility_modes_never_print_credentials() {
         ("check-rejected", "--ai-check", 401, rejected.to_string(), 1),
     ];
     let mut leaks = Vec::new();
-    for (name, mode, status, body, exit_code) in cases {
-        let mock = MockLlm::start(vec![MockResponse {
-            path_prefix: "/v1",
-            status,
-            body,
-            delay_ms: 0,
-        }]);
-        let endpoint = format!(
-            "--ai-endpoint=http://review:{PW_SENTINEL}@127.0.0.1:{}/v1?token={QUERY_SENTINEL}",
-            mock.port()
-        );
+    // Userinfo as usual, and userinfo that does not decode (reqwest leaves it in the URL).
+    for user in ["review", "%FFreview"] {
+        for (name, mode, status, body, exit_code) in &cases {
+            let name = format!("{name} ({user})");
+            let mock = MockLlm::start(vec![MockResponse {
+                path_prefix: "/v1",
+                status: *status,
+                body: body.clone(),
+                delay_ms: 0,
+            }]);
+            let endpoint = format!(
+                "--ai-endpoint=http://{user}:{PW_SENTINEL}@127.0.0.1:{}/v1?token={QUERY_SENTINEL}",
+                mock.port()
+            );
+            let output = run_crawler(&[
+                "--config-file=/dev/null",
+                "--no-color",
+                "--ai-provider=openai-compatible",
+                &endpoint,
+                "--ai-model=m",
+                &format!("--ai-api-key={KEY_SENTINEL}"),
+                mode,
+            ]);
+            let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+            let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+            assert_eq!(output.status.code(), Some(*exit_code), "{name}: {stdout}\n{stderr}");
+            assert_eq!(mock.request_heads().len(), 1, "{name}: one request");
+            leaks.extend(credential_leaks(
+                &name,
+                &[("stdout".to_string(), stdout), ("stderr".to_string(), stderr)],
+            ));
+        }
+
+        // An endpoint the options reject is quoted in the configuration error.
         let output = run_crawler(&[
             "--config-file=/dev/null",
             "--no-color",
             "--ai-provider=openai-compatible",
-            &endpoint,
+            &format!("--ai-endpoint=http://{user}:{PW_SENTINEL}@127.0.0.1:BAD/v1"),
             "--ai-model=m",
-            &format!("--ai-api-key={KEY_SENTINEL}"),
-            mode,
+            "--ai-check",
         ]);
-        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-        let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
-        assert_eq!(output.status.code(), Some(exit_code), "{name}: {stdout}\n{stderr}");
-        assert_eq!(mock.request_heads().len(), 1, "{name}: one request");
+        assert_eq!(output.status.code(), Some(101));
         leaks.extend(credential_leaks(
-            name,
-            &[("stdout".to_string(), stdout), ("stderr".to_string(), stderr)],
+            &format!("invalid endpoint ({user})"),
+            &[
+                (
+                    "stdout".to_string(),
+                    String::from_utf8_lossy(&output.stdout).into_owned(),
+                ),
+                (
+                    "stderr".to_string(),
+                    String::from_utf8_lossy(&output.stderr).into_owned(),
+                ),
+            ],
         ));
     }
+    assert!(leaks.is_empty(), "{}", leaks.join("\n"));
 
-    // An endpoint the options reject is quoted in the configuration error.
-    let output = run_crawler(&[
-        "--config-file=/dev/null",
-        "--no-color",
+    // A short key echoed by the provider is not blanked (the blanks would spell it out): the
+    // message is withheld.
+    let mock = MockLlm::start(vec![MockResponse {
+        path_prefix: "/v1",
+        status: 401,
+        body: r#"{"error":{"message":"Incorrect API key provided: k3y"}}"#.to_string(),
+        delay_ms: 0,
+    }]);
+    let (code, answer, stderr) = run_ai_tool(&[
         "--ai-provider=openai-compatible",
-        &format!("--ai-endpoint=http://review:{PW_SENTINEL}@127.0.0.1:BAD/v1"),
+        &format!("--ai-endpoint={}", mock.url()),
         "--ai-model=m",
+        "--ai-api-key=k3y",
         "--ai-check",
     ]);
-    assert_eq!(output.status.code(), Some(101));
-    leaks.extend(credential_leaks(
-        "invalid endpoint",
-        &[
-            (
-                "stdout".to_string(),
-                String::from_utf8_lossy(&output.stdout).into_owned(),
-            ),
-            (
-                "stderr".to_string(),
-                String::from_utf8_lossy(&output.stderr).into_owned(),
-            ),
-        ],
-    ));
-    assert!(leaks.is_empty(), "{}", leaks.join("\n"));
+    assert_eq!(code, Some(1), "{stderr}");
+    assert!(
+        !answer.to_string().contains("k3y") && !stderr.contains("k3y"),
+        "{answer}\n{stderr}"
+    );
+    assert!(
+        answer["error"].as_str().is_some_and(|error| error.contains("withheld")),
+        "{answer}"
+    );
 }
 
 #[test]
