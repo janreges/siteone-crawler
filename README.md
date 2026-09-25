@@ -630,7 +630,7 @@ For a clearer list, I recommend going to the documentation: 🌐 https://crawler
 | `--offline-export-store-only-url-regex=<regex>` | Debug: store only URLs matching these PCRE regexes. Can be specified multiple times. |
 | `--offline-export-remove-unwanted-code=<1/0>` | Remove unwanted code for offline mode (analytics, social networks, etc.). Default is `1`. |
 | `--offline-export-no-auto-redirect-html` | Disable automatic creation of redirect HTML files for subfolders containing `index.html`. |
-| `--offline-export-preserve-url-structure` | Preserve the original URL path structure. E.g. `/about` is stored as `about/index.html`<br>instead of `about.html`. Useful for web server deployment where the clone should maintain<br>the same URL hierarchy as the original site. |
+| `--offline-export-preserve-url-structure` | Preserve the original URL path structure. E.g. `/about` is stored as `about/index.html`<br>instead of `about.html` and links point to that file. Useful for web server deployment where<br>the clone should maintain the same URL hierarchy as the original site, see<br>[Static copy on the original URLs](#static-copy-on-the-original-urls). With this option the<br>markdown export (`--markdown-export-dir`) uses the same layout, e.g. `about/index.md`. |
 | `--offline-export-preserve-urls` | Preserve original URL format in exported HTML/CSS/JS — same-domain links become root-relative (`/path`), cross-domain links stay absolute. Ideal for processing with [siteone-chunker](https://github.com/janreges/siteone-chunker) and RAG pipelines where links must resolve to the production website. |
 | `--offline-export-no-url-rewriting` | Disable all URL rewriting in exported HTML/CSS/JS. URLs remain exactly as in the original source. Useful for RAG indexing or other processing where original URLs must be preserved verbatim. |
 | `--replace-content=<val>` | Replace content in HTML/JS/CSS with `foo -> bar` or PCRE regexp.<br>Can be specified multiple times. |
@@ -638,6 +638,51 @@ For a clearer list, I recommend going to the documentation: 🌐 https://crawler
 | `--offline-export-lowercase` | Convert all filenames to lowercase for offline export. Useful for case-insensitive filesystems. |
 | `--ignore-store-file-error` | Ignore any file storing errors and continue. |
 | `--disable-astro-inline-modules` | Disable inlining of Astro module scripts for offline export.<br>Scripts will remain as external files with corrected relative paths. |
+
+#### Static copy on the original URLs
+
+To host the export as a static copy of the website on its original URLs (e.g. as a fallback for a
+dynamic site), combine `--offline-export-preserve-url-structure` with `--offline-export-preserve-urls`.
+Pages are stored as `index.html` files in their own directories (`/about` → `about/index.html`) and links
+keep their original root-relative form (`/about`), so serve the export from the web root:
+
+```bash
+./siteone-crawler --url=https://example.com/ \
+  --offline-export-dir=/var/www/example.com \
+  --offline-export-preserve-url-structure \
+  --offline-export-preserve-urls \
+  --offline-export-no-auto-redirect-html
+```
+
+nginx:
+
+```nginx
+server {
+    server_name example.com;
+    root /var/www/example.com;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ $uri/index.html =404;
+    }
+}
+```
+
+Apache (`.htaccess` in the export directory; needs `mod_rewrite` and `AllowOverride All`):
+
+```apache
+Options -Indexes -MultiViews
+DirectoryIndex index.html
+# Serve /about from about/index.html without redirecting to /about/
+DirectorySlash Off
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME}/index.html -f
+RewriteRule ^(.*[^/])$ $1/index.html [L]
+```
+
+URLs with a query string are stored as `…/index.<hash>.html` and are not served on their original URLs
+by these rules. Without `--offline-export-preserve-urls`, links point to the exported files with relative
+paths (e.g. `../about/index.html`), so the copy also works when opened directly from disk.
 
 ### Markdown exporter options
 

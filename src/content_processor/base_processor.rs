@@ -35,6 +35,9 @@ pub struct ProcessorConfig {
     /// `--force-relative-urls`: http/https and www/non-www variants of the initial host are
     /// rewritten like the initial host in the offline export.
     pub force_relative_urls: bool,
+    /// `--offline-export-preserve-url-structure`: extension-less pages are stored as
+    /// `<path>/index.html` and links must point there.
+    pub offline_export_preserve_url_structure: bool,
     /// When true, URLs inside HTML comments (`<!-- ... -->`) are stripped before
     /// URL extraction, so commented links are not crawled or reported as broken.
     pub ignore_html_comments: bool,
@@ -67,6 +70,10 @@ impl std::fmt::Debug for ProcessorConfig {
             .field("offline_export_preserve_urls", &self.offline_export_preserve_urls)
             .field("offline_export_no_url_rewriting", &self.offline_export_no_url_rewriting)
             .field("force_relative_urls", &self.force_relative_urls)
+            .field(
+                "offline_export_preserve_url_structure",
+                &self.offline_export_preserve_url_structure,
+            )
             .field("ignore_html_comments", &self.ignore_html_comments)
             .field("initial_url", &self.initial_url)
             .field(
@@ -100,6 +107,7 @@ impl ProcessorConfig {
             offline_export_preserve_urls: false,
             offline_export_no_url_rewriting: false,
             force_relative_urls: false,
+            offline_export_preserve_url_structure: false,
             ignore_html_comments: false,
             initial_url,
             is_domain_allowed_for_static_files: None,
@@ -231,6 +239,7 @@ pub fn convert_url_to_relative(
         config.is_external_domain_allowed_for_crawling.clone(),
         attribute,
     );
+    converter.set_preserve_url_structure(config.offline_export_preserve_url_structure);
 
     converter.convert_url_to_relative(true)
 }
@@ -472,6 +481,27 @@ mod tests {
         assert_eq!(
             convert_url_to_relative(&base, "https://www.example.com/about", Some("href"), &cfg),
             "/about"
+        );
+    }
+
+    #[test]
+    fn preserve_url_structure_links_to_directory_index_files() {
+        // #55: links lead to the files the exporter writes, relative to where the page is stored
+        let mut cfg = config(false, false);
+        cfg.offline_export_preserve_url_structure = true;
+        let root = ParsedUrl::parse("https://example.com/", None);
+        assert_eq!(
+            convert_url_to_relative(&root, "/about", Some("href"), &cfg),
+            "about/index.html"
+        );
+        let guide = ParsedUrl::parse("https://example.com/docs/guide", None);
+        assert_eq!(
+            convert_url_to_relative(&guide, "/about", Some("href"), &cfg),
+            "../../about/index.html"
+        );
+        assert_eq!(
+            convert_url_to_relative(&guide, "../style.css", Some("href"), &cfg),
+            "../../style.css"
         );
     }
 }

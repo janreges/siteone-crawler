@@ -2293,3 +2293,217 @@ fn force_relative_urls_exports_www_and_scheme_variants_as_the_same_files() {
     let css = std::fs::read_to_string(export.join("style.css")).expect("style.css");
     assert!(css.contains("url(img/a.png)"), "{css}");
 }
+
+/// Writes a site whose pages live at extension-less URLs on several directory levels (#55).
+fn write_nested_site(dir: &Path) {
+    let files = [
+        (
+            "index.html",
+            r#"<html><head><title>Home</title><link rel="stylesheet" href="/style.css"></head><body>
+<a href="/about">About</a> <a href="/docs/">Docs</a> <a href="/docs/guide">Guide</a>
+<a href="/contact.html">Contact</a> <a href="/news?page=2">News</a> <img src="/img/logo.png" alt="logo">
+<a href="/moved">Moved</a>
+</body></html>"#,
+        ),
+        (
+            "moved.html",
+            r#"<html><head><meta http-equiv="refresh" content="0; url=/about"><title>Moved</title></head><body></body></html>"#,
+        ),
+        (
+            "about.html",
+            r#"<html><head><title>About</title><link rel="stylesheet" href="/style.css"></head><body>
+<a href="team">Team</a> <a href="/docs/guide#usage">Guide</a> <img src="img/photo.png" alt="photo">
+</body></html>"#,
+        ),
+        (
+            "team.html",
+            r#"<html><head><title>Team</title></head><body><a href="/">Home</a></body></html>"#,
+        ),
+        (
+            "docs/index.html",
+            r#"<html><head><title>Docs</title></head><body><a href="guide">Guide</a> <a href="../about">About</a></body></html>"#,
+        ),
+        (
+            "docs/guide.html",
+            r#"<html><head><title>Guide</title><link rel="stylesheet" href="../style.css"></head><body>
+<a href="intro">Intro</a> <a href="./">Docs</a> <img src="/img/logo.png" alt="logo">
+</body></html>"#,
+        ),
+        (
+            "docs/intro.html",
+            r#"<html><head><title>Intro</title></head><body><a href="/">Home</a></body></html>"#,
+        ),
+        (
+            "contact.html",
+            r#"<html><head><title>Contact</title></head><body><a href="/about">About</a></body></html>"#,
+        ),
+        (
+            "news.html",
+            r#"<html><head><title>News</title></head><body><a href="/news?page=3">Next</a> <a href="/">Home</a></body></html>"#,
+        ),
+        ("style.css", "body{background:url(/img/bg.png)}"),
+        ("img/logo.png", "PNG"),
+        ("img/photo.png", "PNG"),
+        ("img/bg.png", "PNG"),
+    ];
+    for (path, content) in files {
+        let file = dir.join(path);
+        std::fs::create_dir_all(file.parent().expect("parent dir")).expect("site dir");
+        std::fs::write(file, content).expect("site file");
+    }
+}
+
+/// #55: with --offline-export-preserve-url-structure every link and asset reference leads to a file
+/// that was actually written (about/index.html), with relative paths counted from where the page is
+/// stored — with and without the redirect stubs, and in the markdown export too.
+#[test]
+fn preserve_url_structure_links_resolve_to_exported_files() {
+    let tmp = TempDir::new("preserve-structure");
+    let site = tmp.path.join("site");
+    write_nested_site(&site);
+    let server = LocalServer::start(&site);
+
+    for (name, no_redirect_stubs) in [("with-stubs", false), ("no-stubs", true)] {
+        let export = tmp.path.join(format!("offline-{name}"));
+        let markdown = tmp.path.join(format!("markdown-{name}"));
+        let mut owned_args = vec![
+            "--config-file=/dev/null".to_string(),
+            format!("--url={}", server.url()),
+            LOCAL_ANALYZERS.to_string(),
+            "--http-cache-dir=".to_string(),
+            "--offline-export-preserve-url-structure".to_string(),
+            format!("--offline-export-dir={}", export.display()),
+            format!("--markdown-export-dir={}", markdown.display()),
+        ];
+        if no_redirect_stubs {
+            owned_args.push("--offline-export-no-auto-redirect-html".to_string());
+        }
+        let args: Vec<&str> = owned_args.iter().map(String::as_str).collect();
+        let output = run_built_crawler(&args);
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "{name}: stderr: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        assert!(
+            export.join("docs/guide/index.html").is_file(),
+            "{name}: /docs/guide is stored in its own directory"
+        );
+        let index = std::fs::read_to_string(export.join("index.html")).expect("index.html");
+        assert!(
+            index.contains(r#"href="about/index.html""#),
+            "{name}: links point to the stored file, not to a redirect stub: {index}"
+        );
+        assert_eq!(
+            dangling_references(&export),
+            Vec::<String>::new(),
+            "{name}: offline export"
+        );
+        assert_eq!(
+            dangling_references(&markdown),
+            Vec::<String>::new(),
+            "{name}: markdown export"
+        );
+    }
+}
+
+/// #55: with --offline-export-preserve-url-structure, /docs (a 301) and /docs/ are both stored as
+/// docs/index.html; the redirect record must not replace the page, whichever is crawled first and
+/// wherever it redirects to.
+#[test]
+fn preserve_url_structure_keeps_a_directory_index_over_its_redirect() {
+    let tmp = TempDir::new("preserve-redirect");
+    for (name, home_link, docs_link, location) in [
+        ("page-first", "/docs/", "/docs", "/docs/"),
+        ("redirect-first", "/docs", "/", "/docs/"),
+        ("redirect-elsewhere", "/docs/", "/docs", "/manual/"),
+    ] {
+        let site = tmp.path.join(format!("site-{name}"));
+        std::fs::create_dir_all(site.join("docs")).expect("site dir");
+        std::fs::create_dir_all(site.join("manual")).expect("site dir");
+        std::fs::write(
+            site.join("manual/index.html"),
+            r#"<html><head><title>Manual</title></head><body><a href="/">Home</a></body></html>"#,
+        )
+        .expect("manual/index.html");
+        std::fs::write(
+            site.join("index.html"),
+            format!(r#"<html><head><title>Home</title></head><body><a href="{home_link}">Docs</a></body></html>"#),
+        )
+        .expect("index.html");
+        std::fs::write(
+            site.join("docs/index.html"),
+            format!(
+                r#"<html><head><title>Docs</title></head><body><p>The docs index</p><a href="{docs_link}">Link</a></body></html>"#
+            ),
+        )
+        .expect("docs/index.html");
+        let server = RedirectServer::start(
+            &site,
+            vec![Redirect {
+                host: None,
+                path: Some("/docs"),
+                location,
+            }],
+        );
+        let export = tmp.path.join(format!("export-{name}"));
+
+        let output = run_built_crawler(&[
+            "--config-file=/dev/null",
+            &format!("--url=http://127.0.0.1:{}/", server.port()),
+            LOCAL_ANALYZERS,
+            "--http-cache-dir=",
+            "--offline-export-preserve-url-structure",
+            &format!("--offline-export-dir={}", export.display()),
+        ]);
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "{name}: stderr: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let docs = std::fs::read_to_string(export.join("docs/index.html")).expect("docs/index.html");
+        assert!(docs.contains("The docs index"), "{name}: {docs}");
+        assert_eq!(dangling_references(&export), Vec::<String>::new(), "{name}");
+    }
+
+    // /docs/ is missing (404): the record of /docs would be stored as docs/index.html and reload itself
+    let site = tmp.path.join("site-missing");
+    std::fs::create_dir_all(&site).expect("site dir");
+    std::fs::write(
+        site.join("index.html"),
+        r#"<html><head><title>Home</title></head><body><a href="/docs">Docs</a></body></html>"#,
+    )
+    .expect("index.html");
+    let server = RedirectServer::start(
+        &site,
+        vec![Redirect {
+            host: None,
+            path: Some("/docs"),
+            location: "/docs/",
+        }],
+    );
+    let export = tmp.path.join("export-missing");
+    let output = run_built_crawler(&[
+        "--config-file=/dev/null",
+        &format!("--url=http://127.0.0.1:{}/", server.port()),
+        LOCAL_ANALYZERS,
+        "--http-cache-dir=",
+        "--offline-export-preserve-url-structure",
+        &format!("--offline-export-dir={}", export.display()),
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(export.join("index.html").is_file(), "the home page is exported");
+    assert!(
+        !export.join("docs/index.html").exists(),
+        "no redirect record that reloads itself"
+    );
+}

@@ -12,6 +12,7 @@ use crate::content_processor::html_processor::JS_VARIABLE_NAME_URL_DEPTH;
 use crate::engine::found_url::UrlSource;
 use crate::engine::found_urls::FoundUrls;
 use crate::engine::parsed_url::ParsedUrl;
+use crate::export::utils::offline_url_converter::OfflineUrlConverter;
 use crate::types::ContentTypeId;
 
 static RE_MANIFEST_JS: Lazy<Regex> = Lazy::new(|| Regex::new(r#"(?is)["']([a-z0-9/._\-\[\]]\.js)["']"#).unwrap());
@@ -140,6 +141,10 @@ impl ContentProcessor for NextJsProcessor {
         if needs_index {
             depth += 1;
         }
+        // --offline-export-preserve-url-structure stores /docs/guide as docs/guide/index.html (#55)
+        if self.config.offline_export_preserve_url_structure && OfflineUrlConverter::is_stored_as_directory_index(url) {
+            depth += 1;
+        }
 
         let nextjs_prefix1 = if depth > 0 {
             "../".repeat(depth)
@@ -259,5 +264,18 @@ mod tests {
         let source = ParsedUrl::parse("https://example.com/page", None);
         processor.apply_content_changes_before_url_parsing(&mut content, ContentTypeId::Html, &source);
         assert!(!content.contains("?dpl="));
+    }
+
+    #[test]
+    fn preserved_page_next_assets_are_relative_to_its_own_directory() {
+        // #55: /docs/guide is stored as docs/guide/index.html, two levels below the export root
+        let mut config = make_config();
+        config.offline_export_preserve_url_structure = true;
+        let processor = NextJsProcessor::new(config);
+        let page = ParsedUrl::parse("https://example.com/docs/guide", None);
+        let mut content =
+            r#"<script>self.__next_f.push([1,"{\"src\":\"/_next/static/media/logo.png\"}"])</script>"#.to_string();
+        processor.apply_content_changes_for_offline_version(&mut content, ContentTypeId::Html, &page, false);
+        assert!(content.contains(r#"\"../../_next/static/media/logo.png"#), "{content}");
     }
 }

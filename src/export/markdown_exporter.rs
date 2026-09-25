@@ -42,6 +42,9 @@ pub struct MarkdownExporter {
     markdown_replace_content: Vec<String>,
     markdown_replace_query_string: Vec<String>,
     markdown_move_content_before_h1_to_end: bool,
+    /// `--offline-export-preserve-url-structure`: the shared content processors write links in that
+    /// layout, so pages are stored in it too (#55)
+    preserve_url_structure: bool,
     initial_parsed_url: Option<ParsedUrl>,
     ignore_regexes: Vec<String>,
     initial_url: String,
@@ -70,6 +73,7 @@ impl MarkdownExporter {
             markdown_replace_content: Vec::new(),
             markdown_replace_query_string: Vec::new(),
             markdown_move_content_before_h1_to_end: false,
+            preserve_url_structure: false,
             initial_parsed_url: None,
             ignore_regexes: Vec::new(),
             initial_url: String::new(),
@@ -120,6 +124,10 @@ impl MarkdownExporter {
 
     pub fn set_markdown_move_content_before_h1_to_end(&mut self, move_content: bool) {
         self.markdown_move_content_before_h1_to_end = move_content;
+    }
+
+    pub fn set_preserve_url_structure(&mut self, preserve: bool) {
+        self.preserve_url_structure = preserve;
     }
 
     pub fn set_initial_parsed_url(&mut self, url: ParsedUrl) {
@@ -928,6 +936,7 @@ impl MarkdownExporter {
         };
 
         let mut converter = OfflineUrlConverter::new(initial_url, base_url, target_url, None, None, Some(attribute));
+        converter.set_preserve_url_structure(self.preserve_url_structure);
 
         let relative_url = converter.convert_url_to_relative(false);
         let relative_target_url = converter.get_relative_target_url();

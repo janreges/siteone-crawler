@@ -144,6 +144,14 @@ impl OfflineUrlConverter {
         trimmed.matches('/').count()
     }
 
+    /// With `--offline-export-preserve-url-structure`: is the page at `url` stored as
+    /// `<path>/index.html`? True for extension-less paths that are neither the root nor end with `/`
+    /// (those are stored as `<path>index.html` anyway).
+    pub fn is_stored_as_directory_index(url: &ParsedUrl) -> bool {
+        let trimmed_path = url.path.trim_matches(|c: char| c == '/' || c == ' ');
+        !trimmed_path.is_empty() && !url.path.ends_with('/') && url.estimate_extension().is_none()
+    }
+
     /// Check if URL needs to be forced (not converted to relative).
     fn get_forced_url_if_needed(&self) -> Option<String> {
         if self.relative_target_url.is_only_fragment()
@@ -248,7 +256,7 @@ impl OfflineUrlConverter {
                 self.relative_target_url
                     .set_path(format!("{}{}.{}", self.relative_target_url.path, base_name, extension));
             }
-        } else if self.preserve_url_structure && self.target_url.estimate_extension().is_none() {
+        } else if self.preserve_url_structure && Self::is_stored_as_directory_index(&self.target_url) {
             // Preserve URL structure: /about → /about/index.html (instead of /about.html)
             // Only for page-like URLs without a real file extension
             if let Some(ref hash) = query_hash {
@@ -276,11 +284,18 @@ impl OfflineUrlConverter {
     /// Calculate and apply depth for relative path conversion.
     fn calculate_and_apply_depth(&mut self) {
         let base_path_trimmed = self.base_url.path.trim_start_matches(['/', ' ']);
-        let base_depth = if base_path_trimmed.is_empty() {
+        let mut base_depth = if base_path_trimmed.is_empty() {
             0usize
         } else {
             base_path_trimmed.matches('/').count()
         };
+        // With --offline-export-preserve-url-structure an extension-less page such as /docs/guide is
+        // stored as docs/guide/index.html, one directory below the one its URL points to (#55)
+        let base_stored_one_level_deeper =
+            self.preserve_url_structure && Self::is_stored_as_directory_index(&self.base_url);
+        if base_stored_one_level_deeper {
+            base_depth += 1;
+        }
 
         match self.target_domain_relation {
             TargetDomainRelation::InitialSameBaseSame | TargetDomainRelation::InitialDifferentBaseSame => {
@@ -291,6 +306,11 @@ impl OfflineUrlConverter {
                         let new_path = self.relative_target_url.path.trim_start_matches('/').to_string();
                         self.relative_target_url.set_path(new_path);
                     }
+                } else if base_stored_one_level_deeper && !self.relative_target_url.path.is_empty() {
+                    // A path relative to the page's URL (e.g. ../style.css) starts one level above
+                    // the directory the page is stored in
+                    let new_path = format!("../{}", self.relative_target_url.path);
+                    self.relative_target_url.set_path(new_path);
                 }
             }
             TargetDomainRelation::InitialSameBaseDifferent => {
@@ -1598,5 +1618,66 @@ mod tests {
             "start-1_sort-asc_"
         );
         assert_eq!(apply_query_string_replacements("start=2", &rules), "start-2_");
+    }
+
+    /// Link from the page at `base` to `target` with --offline-export-preserve-url-structure.
+    fn convert_preserve_from(base: &str, target: &str) -> String {
+        let base_url = ParsedUrl::parse(base, None);
+        let target_url = ParsedUrl::parse(target, Some(&base_url));
+        let mut converter = OfflineUrlConverter::new(
+            ParsedUrl::parse("https://example.com/", None),
+            base_url,
+            target_url,
+            None,
+            None,
+            Some("href"),
+        );
+        converter.set_preserve_url_structure(true);
+        converter.convert_url_to_relative(true)
+    }
+
+    #[test]
+    fn preserve_links_from_a_moved_page_start_in_its_own_directory() {
+        // #55: /docs/guide is stored as docs/guide/index.html, two directories below the root
+        let guide = "https://example.com/docs/guide";
+        assert_eq!(convert_preserve_from(guide, "/style.css"), "../../style.css");
+        assert_eq!(convert_preserve_from(guide, "../style.css"), "../../style.css");
+        assert_eq!(convert_preserve_from(guide, "intro"), "../../docs/intro/index.html");
+        assert_eq!(convert_preserve_from(guide, "./"), "../../docs/index.html");
+        assert_eq!(
+            convert_preserve_from("https://example.com/about", "/about"),
+            "../about/index.html"
+        );
+    }
+
+    #[test]
+    fn preserve_links_from_directory_and_file_pages_are_unchanged() {
+        assert_eq!(
+            convert_preserve_from("https://example.com/docs/", "guide"),
+            "../docs/guide/index.html"
+        );
+        assert_eq!(
+            convert_preserve_from("https://example.com/docs/", "../about"),
+            "../about/index.html"
+        );
+        assert_eq!(
+            convert_preserve_from("https://example.com/contact.html", "/about"),
+            "about/index.html"
+        );
+        assert_eq!(
+            convert_preserve_from("https://example.com/", "/docs/guide#usage"),
+            "docs/guide/index.html#usage"
+        );
+    }
+
+    #[test]
+    fn stored_as_directory_index_only_for_extensionless_non_directory_paths() {
+        let stored = |url: &str| OfflineUrlConverter::is_stored_as_directory_index(&ParsedUrl::parse(url, None));
+        assert!(stored("https://example.com/about"));
+        assert!(stored("https://example.com/news?page=2"));
+        assert!(!stored("https://example.com/"));
+        assert!(!stored("https://example.com/docs/"));
+        assert!(!stored("https://example.com/contact.html"));
+        assert!(!stored("https://example.com/style.css"));
     }
 }

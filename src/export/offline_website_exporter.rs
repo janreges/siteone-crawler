@@ -3,7 +3,7 @@
 //
 // Saves all crawled pages to local filesystem for offline browsing.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -52,6 +52,8 @@ pub struct OfflineWebsiteExporter {
     is_external_domain_allowed_for_crawling: Option<Arc<dyn Fn(&str) -> bool + Send + Sync>>,
     /// Maps URL -> relative file path for successfully exported files
     exported_file_paths: HashMap<String, String>,
+    /// Relative file paths written by records other than redirects
+    stored_page_file_paths: HashSet<String>,
 }
 
 impl Default for OfflineWebsiteExporter {
@@ -77,6 +79,7 @@ impl OfflineWebsiteExporter {
             is_domain_allowed_for_static_files: None,
             is_external_domain_allowed_for_crawling: None,
             exported_file_paths: HashMap::new(),
+            stored_page_file_paths: HashSet::new(),
         }
     }
 
@@ -215,10 +218,18 @@ impl OfflineWebsiteExporter {
 
         // Build store file path
         let relative_path = self.get_relative_file_path_for_file_by_url(visited_url, status);
-        let sanitized_path = OfflineUrlConverter::sanitize_file_path(&relative_path, false);
-        // Path traversal protection: strip "../" sequences from sanitized path
-        let sanitized_path = sanitized_path.replace("../", "").replace("..\\", "");
+        let sanitized_path = Self::get_store_file_path(&relative_path);
         let store_file_path = format!("{}/{}", export_dir, sanitized_path);
+
+        // A redirect record never replaces a page stored under the same file, and is not stored when
+        // its target is stored under this very file (it would reload itself), e.g. /docs -> /docs/
+        // with --offline-export-preserve-url-structure (#55)
+        if visited_url.content_type == ContentTypeId::Redirect
+            && (self.stored_page_file_paths.contains(&sanitized_path)
+                || self.get_redirect_target_file_path(visited_url).as_deref() == Some(sanitized_path.as_str()))
+        {
+            return Ok(());
+        }
 
         // Create directory structure
         let dir_path = Path::new(&store_file_path).parent().ok_or_else(|| {
@@ -251,6 +262,9 @@ impl OfflineWebsiteExporter {
                 Ok(()) => {
                     self.exported_file_paths
                         .insert(visited_url.url.clone(), sanitized_path.clone());
+                    if visited_url.content_type != ContentTypeId::Redirect {
+                        self.stored_page_file_paths.insert(sanitized_path.clone());
+                    }
                 }
                 Err(e) => {
                     let has_extension = Regex::new(r"(?i)\.[a-z0-9\-]{1,15}$")
@@ -320,11 +334,6 @@ impl OfflineWebsiteExporter {
 
     /// Get relative file path for storing a visited URL.
     fn get_relative_file_path_for_file_by_url(&self, visited_url: &VisitedUrl, status: &Status) -> String {
-        let initial_url = self
-            .initial_parsed_url
-            .clone()
-            .unwrap_or_else(|| ParsedUrl::parse(&visited_url.url, None));
-
         let source_url = if !visited_url.source_uq_id.is_empty() {
             status
                 .get_url_by_uq_id(&visited_url.source_uq_id)
@@ -333,15 +342,41 @@ impl OfflineWebsiteExporter {
             visited_url.url.clone()
         };
 
-        let base_url = ParsedUrl::parse(&source_url, None);
-        let target_url = ParsedUrl::parse(&visited_url.url, None);
-
         // Determine source attribute hint
         let attribute = if visited_url.content_type == ContentTypeId::Image {
             "src"
         } else {
             "href"
         };
+
+        self.get_relative_file_path_for_url(&visited_url.url, &source_url, attribute)
+    }
+
+    /// Store file path (relative to the export directory) of a relative file path: sanitized, with
+    /// "../" sequences stripped (path traversal protection).
+    fn get_store_file_path(relative_path: &str) -> String {
+        OfflineUrlConverter::sanitize_file_path(relative_path, false)
+            .replace("../", "")
+            .replace("..\\", "")
+    }
+
+    /// Store file path of the target of a redirect record (its Location header).
+    fn get_redirect_target_file_path(&self, visited_url: &VisitedUrl) -> Option<String> {
+        let location = visited_url.extras.as_ref()?.get("Location")?;
+        let target_url = utils::get_absolute_url_by_base_url(&visited_url.url, location);
+        let relative_path = self.get_relative_file_path_for_url(&target_url, &visited_url.url, "href");
+        Some(Self::get_store_file_path(&relative_path))
+    }
+
+    /// Get relative file path for storing `url` found on the page at `source_url`.
+    fn get_relative_file_path_for_url(&self, url: &str, source_url: &str, attribute: &str) -> String {
+        let initial_url = self
+            .initial_parsed_url
+            .clone()
+            .unwrap_or_else(|| ParsedUrl::parse(url, None));
+
+        let base_url = ParsedUrl::parse(source_url, None);
+        let target_url = ParsedUrl::parse(url, None);
 
         let mut converter = OfflineUrlConverter::new(
             initial_url,

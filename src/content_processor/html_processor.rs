@@ -11,6 +11,7 @@ use crate::content_processor::content_processor::ContentProcessor;
 use crate::engine::found_url::UrlSource;
 use crate::engine::found_urls::FoundUrls;
 use crate::engine::parsed_url::ParsedUrl;
+use crate::export::utils::offline_url_converter::OfflineUrlConverter;
 use crate::types::ContentTypeId;
 use crate::utils;
 
@@ -443,18 +444,19 @@ impl HtmlProcessor {
     }
 
     /// Set JS variable _SiteOneUrlDepth with number of levels before </head>
-    fn set_js_variable_with_url_depth(&self, html: &str, base_url: &str) -> String {
-        let base_path = if let Ok(parsed) = url::Url::parse(base_url) {
-            parsed.path().to_string()
-        } else {
-            "/".to_string()
-        };
+    fn set_js_variable_with_url_depth(&self, html: &str, url: &ParsedUrl) -> String {
+        let base_path = if url.path.is_empty() { "/" } else { url.path.as_str() };
 
         let trimmed = base_path.trim_start_matches('/');
         let mut depth = trimmed.matches('/').count();
 
         let needs_index_html = base_path != "/" && base_path.ends_with('/');
         if needs_index_html {
+            depth += 1;
+        }
+
+        // --offline-export-preserve-url-structure stores /docs/guide as docs/guide/index.html (#55)
+        if self.config.offline_export_preserve_url_structure && OfflineUrlConverter::is_stored_as_directory_index(url) {
             depth += 1;
         }
 
@@ -859,8 +861,6 @@ impl ContentProcessor for HtmlProcessor {
         url: &ParsedUrl,
         remove_unwanted_code: bool,
     ) {
-        let base_url = url.get_full_url(true, false);
-
         if !self.config.offline_export_no_url_rewriting {
             // Remove schema and host from full origin URLs
             *content = self.remove_schema_and_host_from_full_origin_urls(url, content);
@@ -874,8 +874,11 @@ impl ContentProcessor for HtmlProcessor {
             *content = self.update_html_paths_to_relative(content, url);
         }
 
-        // Meta redirects (e.g., in Astro projects)
-        if let Some(caps) = RE_META_REFRESH.captures(content) {
+        // Meta redirects (e.g., in Astro projects) whose URL RE_META_URL has not converted above (e.g. a
+        // single-quoted content); converting it twice would add another ../ (#55)
+        if let Some(caps) = RE_META_REFRESH.captures(content)
+            && !RE_META_URL.is_match(&caps[0])
+        {
             let full_match = caps.get(0).map_or("", |m| m.as_str());
             let prefix = caps.get(1).map_or("", |m| m.as_str());
             let meta_url = caps.get(2).map_or("", |m| m.as_str());
@@ -899,7 +902,7 @@ impl ContentProcessor for HtmlProcessor {
         // Set JS variable and remove anchor listeners
         if self.config.scripts_enabled {
             if !self.config.offline_export_preserve_urls && !self.config.offline_export_no_url_rewriting {
-                *content = self.set_js_variable_with_url_depth(content, &base_url);
+                *content = self.set_js_variable_with_url_depth(content, url);
             }
             if self.config.remove_all_anchor_listeners || self.is_forced_to_remove_anchor_listeners(content) {
                 *content = self.set_js_function_to_remove_all_anchor_listeners(content);
@@ -1517,5 +1520,60 @@ mod tests {
             assert!(html.contains(expected), "missing {expected} in {html}");
         }
         assert!(!html.contains("_www.example.com"), "{html}");
+    }
+
+    #[test]
+    fn preserved_page_url_depth_counts_its_own_directory() {
+        // #55: /docs/guide is stored as docs/guide/index.html, two levels below the export root
+        let html = "<html><head></head><body></body></html>";
+        let page = ParsedUrl::parse("https://example.com/docs/guide", None);
+
+        let mut config = make_config();
+        config.offline_export_preserve_url_structure = true;
+        let mut preserved = html.to_string();
+        HtmlProcessor::new(config).apply_content_changes_for_offline_version(
+            &mut preserved,
+            ContentTypeId::Html,
+            &page,
+            false,
+        );
+        assert!(preserved.contains("var _SiteOneUrlDepth = 2;"), "{preserved}");
+
+        let mut unpreserved = html.to_string();
+        HtmlProcessor::new(make_config()).apply_content_changes_for_offline_version(
+            &mut unpreserved,
+            ContentTypeId::Html,
+            &page,
+            false,
+        );
+        assert!(unpreserved.contains("var _SiteOneUrlDepth = 1;"), "{unpreserved}");
+    }
+
+    #[test]
+    fn preserved_page_meta_refresh_is_converted_once() {
+        // #55: /old-about is stored as old-about/index.html, so its meta refresh to /about leads one
+        // level up to about/index.html, once (a second conversion added another ../)
+        let mut config = make_config();
+        config.offline_export_preserve_url_structure = true;
+        let processor = HtmlProcessor::new(config);
+        let page = ParsedUrl::parse("https://example.com/old-about", None);
+        for (content_type, meta) in [
+            (
+                ContentTypeId::Html,
+                r#"<meta http-equiv="refresh" content="0; url=/about">"#,
+            ),
+            (
+                ContentTypeId::Html,
+                r#"<meta http-equiv='refresh' content='0; url=/about'>"#,
+            ),
+            (
+                ContentTypeId::Redirect,
+                r#"<meta http-equiv="refresh" content="0; url=https://example.com/about"> Redirecting to https://example.com/about ..."#,
+            ),
+        ] {
+            let mut html = format!("<html><head>{meta}</head><body></body></html>");
+            processor.apply_content_changes_for_offline_version(&mut html, content_type, &page, false);
+            assert!(html.contains("url=../about/index.html"), "{meta} -> {html}");
+        }
     }
 }
