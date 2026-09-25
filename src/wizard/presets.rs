@@ -20,6 +20,7 @@ pub struct Preset {
     pub offline_export_dir: Option<&'static str>,
     pub markdown_export_dir: Option<&'static str>,
     pub sitemap_xml_file: Option<&'static str>,
+    pub sitemap_txt_file: Option<&'static str>,
     pub http_cache_enabled: bool,
     pub result_storage_file: bool,
     pub extra_columns: Option<&'static str>,
@@ -53,6 +54,7 @@ pub const PRESETS: &[Preset] = &[
         offline_export_dir: None,
         markdown_export_dir: None,
         sitemap_xml_file: None,
+        sitemap_txt_file: None,
         http_cache_enabled: true,
         result_storage_file: false,
         extra_columns: Some("Title(20)"),
@@ -78,6 +80,7 @@ pub const PRESETS: &[Preset] = &[
         offline_export_dir: None,
         markdown_export_dir: None,
         sitemap_xml_file: None,
+        sitemap_txt_file: None,
         http_cache_enabled: true,
         result_storage_file: false,
         extra_columns: Some("Title(20),Description(20),H1=xpath://h1/text()(40)"),
@@ -103,6 +106,7 @@ pub const PRESETS: &[Preset] = &[
         offline_export_dir: None,
         markdown_export_dir: None,
         sitemap_xml_file: None,
+        sitemap_txt_file: None,
         http_cache_enabled: false,
         result_storage_file: false,
         extra_columns: Some("Title(30),DOM"),
@@ -128,6 +132,7 @@ pub const PRESETS: &[Preset] = &[
         offline_export_dir: None,
         markdown_export_dir: None,
         sitemap_xml_file: None,
+        sitemap_txt_file: None,
         http_cache_enabled: true,
         result_storage_file: false,
         extra_columns: Some("Title(30)"),
@@ -153,6 +158,7 @@ pub const PRESETS: &[Preset] = &[
         offline_export_dir: Some("./tmp/offline-{domain}-{date}/"),
         markdown_export_dir: None,
         sitemap_xml_file: None,
+        sitemap_txt_file: None,
         http_cache_enabled: false,
         result_storage_file: false,
         extra_columns: None,
@@ -178,6 +184,7 @@ pub const PRESETS: &[Preset] = &[
         offline_export_dir: None,
         markdown_export_dir: Some("./tmp/markdown-{domain}-{date}/"),
         sitemap_xml_file: None,
+        sitemap_txt_file: None,
         http_cache_enabled: true,
         result_storage_file: false,
         extra_columns: Some("Title(40)"),
@@ -203,6 +210,7 @@ pub const PRESETS: &[Preset] = &[
         offline_export_dir: None,
         markdown_export_dir: None,
         sitemap_xml_file: None,
+        sitemap_txt_file: None,
         http_cache_enabled: false,
         result_storage_file: false,
         extra_columns: Some("Title(30)"),
@@ -228,6 +236,7 @@ pub const PRESETS: &[Preset] = &[
         offline_export_dir: None,
         markdown_export_dir: None,
         sitemap_xml_file: None,
+        sitemap_txt_file: None,
         http_cache_enabled: true,
         result_storage_file: false,
         extra_columns: Some("Title(50),Description(50),Keywords(30),DOM"),
@@ -253,6 +262,7 @@ pub const PRESETS: &[Preset] = &[
         offline_export_dir: None,
         markdown_export_dir: None,
         sitemap_xml_file: Some("./sitemap.xml"),
+        sitemap_txt_file: None,
         http_cache_enabled: true,
         result_storage_file: false,
         extra_columns: Some("Title(40)"),
@@ -278,6 +288,7 @@ pub const PRESETS: &[Preset] = &[
         offline_export_dir: None,
         markdown_export_dir: None,
         sitemap_xml_file: Some("./{domain}.sitemap.xml"),
+        sitemap_txt_file: Some("./{domain}.sitemap.txt"),
         http_cache_enabled: true,
         result_storage_file: false,
         extra_columns: None,
@@ -303,6 +314,7 @@ pub const PRESETS: &[Preset] = &[
         offline_export_dir: None,
         markdown_export_dir: None,
         sitemap_xml_file: None,
+        sitemap_txt_file: None,
         http_cache_enabled: true,
         result_storage_file: false,
         extra_columns: None,
@@ -331,6 +343,7 @@ pub struct WizardState {
     pub offline_export_dir: Option<String>,
     pub markdown_export_dir: Option<String>,
     pub sitemap_xml_file: Option<String>,
+    pub sitemap_txt_file: Option<String>,
     pub http_cache_enabled: bool,
     pub result_storage_file: bool,
     pub ignore_robots_txt: bool,
@@ -361,6 +374,7 @@ impl WizardState {
             offline_export_dir: preset.offline_export_dir.map(String::from),
             markdown_export_dir: preset.markdown_export_dir.map(String::from),
             sitemap_xml_file: preset.sitemap_xml_file.map(String::from),
+            sitemap_txt_file: preset.sitemap_txt_file.map(String::from),
             http_cache_enabled: preset.http_cache_enabled,
             result_storage_file: preset.result_storage_file,
             ignore_robots_txt: preset.ignore_robots_txt,
@@ -428,6 +442,9 @@ impl WizardState {
         }
         if let Some(ref file) = self.sitemap_xml_file {
             args.push(format!("--sitemap-xml-file='{}'", file));
+        }
+        if let Some(ref file) = self.sitemap_txt_file {
+            args.push(format!("--sitemap-txt-file='{}'", file));
         }
 
         // Caching (default: enabled)
@@ -648,6 +665,26 @@ mod tests {
         assert!(argv.contains(&"--timeout=3".to_string()));
         assert!(argv.contains(&"--ignore-robots-txt".to_string()));
         assert!(argv.contains(&"--sitemap-xml-file='./sitemap.xml'".to_string()));
+    }
+
+    #[test]
+    fn build_argv_sitemap_generator_writes_both_formats() {
+        let preset = PRESETS
+            .iter()
+            .find(|p| p.name == "Sitemap Generator")
+            .expect("Sitemap Generator preset exists");
+        let mut state = WizardState::from_preset(preset);
+        state.url = "https://example.com".to_string();
+        super::super::resolve_export_paths(&mut state);
+        let argv = state.build_argv();
+        assert!(
+            argv.contains(&"--sitemap-xml-file='./example.com.sitemap.xml'".to_string()),
+            "{argv:?}"
+        );
+        assert!(
+            argv.contains(&"--sitemap-txt-file='./example.com.sitemap.txt'".to_string()),
+            "{argv:?}"
+        );
     }
 
     #[test]

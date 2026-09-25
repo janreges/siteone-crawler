@@ -1656,3 +1656,174 @@ fn sitemap_changefreq_rejects_unknown_values() {
         "stderr: {stderr}"
     );
 }
+
+/// Crawls `url` on a local server with JSON output and returns the visited URLs.
+fn crawled_urls(url: &str) -> Vec<String> {
+    let output = run_built_crawler(&[
+        "--config-file=/dev/null",
+        &format!("--url={url}"),
+        "--output=json",
+        LOCAL_ANALYZERS,
+        "--http-cache-dir=",
+        "--output-html-report=",
+        "--output-json-file=",
+        "--output-text-file=",
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).expect("JSON on stdout");
+    json["results"]
+        .as_array()
+        .expect("results")
+        .iter()
+        .filter_map(|result| result["url"].as_str().map(str::to_string))
+        .collect()
+}
+
+/// Gzip-compresses `data` like a `.gz` sitemap file.
+fn gzip_bytes(data: &str) -> Vec<u8> {
+    use std::io::Write;
+    let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+    encoder.write_all(data.as_bytes()).expect("gzip");
+    encoder.finish().expect("gzip")
+}
+
+/// A gzipped sitemap is read even when its URL does not end in `.xml.gz` (#106).
+#[test]
+fn gzipped_sitemap_at_plain_gz_url_is_crawled() {
+    let tmp = TempDir::new("sitemap-gz-input");
+    let site = tmp.path.join("site");
+    write_site(&site, 2);
+    let server = LocalServer::start(&site);
+    let base = server.url();
+    std::fs::write(
+        site.join("sitemap.gz"),
+        gzip_bytes(&format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>{base}page-1.html</loc></url><url><loc>{base}page-2.html</loc></url></urlset>"#
+        )),
+    )
+    .expect("sitemap.gz");
+
+    let urls = crawled_urls(&format!("{base}sitemap.gz"));
+
+    assert!(urls.contains(&format!("{base}page-1.html")), "{urls:?}");
+    assert!(urls.contains(&format!("{base}page-2.html")), "{urls:?}");
+}
+
+/// A sitemap index entry with a query string (Shopify's `?from=…&to=…`) is followed with the
+/// whole query (#106).
+#[test]
+fn sitemap_index_entry_with_query_string_is_crawled() {
+    let tmp = TempDir::new("sitemap-index-query");
+    let site = tmp.path.join("site");
+    write_site(&site, 2);
+    let server = LocalServer::start(&site);
+    let base = server.url();
+    std::fs::write(
+        site.join("sitemap_index.xml"),
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><sitemap><loc>{base}sitemap_products_1.xml?from=1&amp;to=2</loc></sitemap></sitemapindex>"#
+        ),
+    )
+    .expect("sitemap_index.xml");
+    std::fs::write(
+        site.join("sitemap_products_1.xml"),
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>{base}page-1.html</loc></url><url><loc>{base}page-2.html</loc></url></urlset>"#
+        ),
+    )
+    .expect("sitemap_products_1.xml");
+
+    let urls = crawled_urls(&format!("{base}sitemap_index.xml"));
+
+    assert!(
+        urls.contains(&format!("{base}sitemap_products_1.xml?from=1&to=2")),
+        "{urls:?}"
+    );
+    assert!(urls.contains(&format!("{base}page-1.html")), "{urls:?}");
+    assert!(urls.contains(&format!("{base}page-2.html")), "{urls:?}");
+}
+
+/// A sitemap index entry at a plain `.gz` path is followed (#106).
+#[test]
+fn sitemap_index_entry_at_gz_path_is_crawled() {
+    let tmp = TempDir::new("sitemap-index-gz");
+    let site = tmp.path.join("site");
+    write_site(&site, 2);
+    let server = LocalServer::start(&site);
+    let base = server.url();
+    std::fs::write(
+        site.join("sitemap_index.xml"),
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><sitemap><loc>{base}sitemap-1.gz</loc></sitemap></sitemapindex>"#
+        ),
+    )
+    .expect("sitemap_index.xml");
+    std::fs::write(
+        site.join("sitemap-1.gz"),
+        gzip_bytes(&format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>{base}page-1.html</loc></url><url><loc>{base}page-2.html</loc></url></urlset>"#
+        )),
+    )
+    .expect("sitemap-1.gz");
+
+    let urls = crawled_urls(&format!("{base}sitemap_index.xml"));
+
+    assert!(urls.contains(&format!("{base}sitemap-1.gz")), "{urls:?}");
+    assert!(urls.contains(&format!("{base}page-1.html")), "{urls:?}");
+    assert!(urls.contains(&format!("{base}page-2.html")), "{urls:?}");
+}
+
+/// `--sitemap-xml-file` ending in `.xml.gz` writes gzip-compressed XML to exactly that path
+/// (it used to write plain XML to `….xml.gz.xml`) (#106), with `--sitemap-changefreq` applied to
+/// every URL (#108).
+#[test]
+fn sitemap_xml_gz_export_is_gzip_compressed() {
+    use std::io::Read;
+
+    let tmp = TempDir::new("sitemap-gz-export");
+    let site = tmp.path.join("site");
+    write_site(&site, 2);
+    let server = LocalServer::start(&site);
+    let sitemap = tmp.path.join("out").join("sitemap.xml.gz");
+
+    let output = run_built_crawler(&[
+        "--config-file=/dev/null",
+        &format!("--url={}", server.url()),
+        LOCAL_ANALYZERS,
+        "--http-cache-dir=",
+        "--output-html-report=",
+        "--output-json-file=",
+        "--output-text-file=",
+        &format!("--sitemap-xml-file={}", sitemap.display()),
+        "--sitemap-changefreq=weekly",
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    assert!(!tmp.path.join("out").join("sitemap.xml.gz.xml").exists());
+    let bytes = std::fs::read(&sitemap).expect("the sitemap is written to the given path");
+    assert!(bytes.starts_with(&[0x1f, 0x8b]), "gzip magic bytes");
+    let mut xml = String::new();
+    flate2::read::GzDecoder::new(&bytes[..])
+        .read_to_string(&mut xml)
+        .expect("valid gzip");
+    assert!(
+        xml.contains(r#"<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">"#),
+        "{xml}"
+    );
+    assert_eq!(xml.matches("<loc>").count(), 3, "index + 2 pages: {xml}");
+    assert_eq!(
+        xml.matches("<changefreq>weekly</changefreq>").count(),
+        3,
+        "one per URL: {xml}"
+    );
+}

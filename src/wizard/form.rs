@@ -147,12 +147,8 @@ pub fn build_form_settings(state: &WizardState) -> Vec<FormSetting> {
         ),
         FormSetting::new(
             "Sitemap XML",
-            vec!["disabled", "./sitemap.xml"],
-            if state.sitemap_xml_file.is_some() {
-                "./sitemap.xml"
-            } else {
-                "disabled"
-            },
+            vec!["disabled", "./sitemap.xml", "./sitemap.xml.gz"],
+            sitemap_setting_value(state.sitemap_xml_file.as_deref()),
         ),
         // Caching
         FormSetting::new(
@@ -229,6 +225,15 @@ fn format_static_max_urls(val: u32) -> &'static str {
     }
 }
 
+/// Form value for a sitemap path: disabled, plain XML or gzip-compressed XML.
+fn sitemap_setting_value(path: Option<&str>) -> &'static str {
+    match path {
+        None => "disabled",
+        Some(path) if path.to_ascii_lowercase().ends_with(".gz") => "./sitemap.xml.gz",
+        Some(_) => "./sitemap.xml",
+    }
+}
+
 // ── Apply form values back to WizardState ───────────────────────────────────
 
 pub fn apply_form_to_state(settings: &[FormSetting], state: &mut WizardState) {
@@ -261,11 +266,11 @@ pub fn apply_form_to_state(settings: &[FormSetting], state: &mut WizardState) {
     } else {
         Some("./tmp/markdown-{domain}-{date}/".to_string())
     };
-    state.sitemap_xml_file = if settings[S_SITEMAP].value() == "disabled" {
-        None
-    } else {
-        Some(settings[S_SITEMAP].value().to_string())
-    };
+    state.sitemap_xml_file = sitemap_path_for_choice(settings[S_SITEMAP].value(), state.sitemap_xml_file.as_deref());
+    // The TXT sitemap has no setting of its own: it is written only while the sitemap is enabled.
+    if state.sitemap_xml_file.is_none() {
+        state.sitemap_txt_file = None;
+    }
     // Caching
     state.http_cache_enabled = settings[S_CACHE].value() == "enabled";
     state.result_storage_file = settings[S_STORAGE].value() == "file";
@@ -290,6 +295,21 @@ fn parse_max_urls(val: &str) -> u32 {
         0
     } else {
         val.parse().unwrap_or(10000)
+    }
+}
+
+/// Sitemap path for the form's choice. A path the state already has (e.g. the Sitemap Generator
+/// preset's `./example.com.sitemap.xml`) is kept and only switched between `.xml` and `.xml.gz`;
+/// without one, the choice itself is the path.
+fn sitemap_path_for_choice(choice: &str, current: Option<&str>) -> Option<String> {
+    let is_gz = |path: &str| path.to_ascii_lowercase().ends_with(".gz");
+    match (choice, current) {
+        ("disabled", _) => None,
+        (choice, None) => Some(choice.to_string()),
+        ("./sitemap.xml.gz", Some(path)) if !is_gz(path) => Some(format!("{}.gz", path)),
+        // `.gz` is ASCII, so cutting its three bytes keeps a valid string.
+        ("./sitemap.xml", Some(path)) if is_gz(path) => Some(path[..path.len() - 3].to_string()),
+        (_, Some(path)) => Some(path.to_string()),
     }
 }
 
@@ -514,5 +534,66 @@ mod tests {
         assert_eq!(state.workers, 5);
         assert_eq!(state.timeout, 5);
         assert!(!state.disable_javascript);
+    }
+
+    fn sitemap_generator_state() -> WizardState {
+        let preset = super::super::presets::PRESETS
+            .iter()
+            .find(|p| p.name == "Sitemap Generator")
+            .expect("Sitemap Generator preset exists");
+        let mut state = WizardState::from_preset(preset);
+        state.url = "https://example.com/".to_string();
+        super::super::resolve_export_paths(&mut state);
+        state
+    }
+
+    #[test]
+    fn sitemap_generator_keeps_its_file_names_through_the_form() {
+        let mut state = sitemap_generator_state();
+        let settings = build_form_settings(&state);
+        assert_eq!(settings[S_SITEMAP].value(), "./sitemap.xml");
+
+        apply_form_to_state(&settings, &mut state);
+
+        assert_eq!(state.sitemap_xml_file.as_deref(), Some("./example.com.sitemap.xml"));
+        assert_eq!(state.sitemap_txt_file.as_deref(), Some("./example.com.sitemap.txt"));
+    }
+
+    #[test]
+    fn sitemap_setting_offers_gzip_and_disabling_drops_both_files() {
+        let mut state = sitemap_generator_state();
+        let mut settings = build_form_settings(&state);
+        settings[S_SITEMAP].cycle_right(); // ./sitemap.xml -> ./sitemap.xml.gz
+        apply_form_to_state(&settings, &mut state);
+        assert_eq!(state.sitemap_xml_file.as_deref(), Some("./example.com.sitemap.xml.gz"));
+
+        let mut settings = build_form_settings(&state);
+        assert_eq!(settings[S_SITEMAP].value(), "./sitemap.xml.gz");
+        settings[S_SITEMAP].cycle_right(); // ./sitemap.xml.gz -> disabled
+        apply_form_to_state(&settings, &mut state);
+        assert_eq!(state.sitemap_xml_file, None);
+        assert_eq!(state.sitemap_txt_file, None);
+    }
+
+    #[test]
+    fn sitemap_choice_without_a_preset_path_is_used_as_is() {
+        assert_eq!(
+            sitemap_path_for_choice("./sitemap.xml.gz", None).as_deref(),
+            Some("./sitemap.xml.gz")
+        );
+        assert_eq!(
+            sitemap_path_for_choice("./sitemap.xml", Some("./a.sitemap.xml.gz")).as_deref(),
+            Some("./a.sitemap.xml")
+        );
+        assert_eq!(sitemap_path_for_choice("disabled", Some("./a.sitemap.xml")), None);
+        // The suffix is matched case-insensitively.
+        assert_eq!(
+            sitemap_path_for_choice("./sitemap.xml", Some("./A.SITEMAP.XML.GZ")).as_deref(),
+            Some("./A.SITEMAP.XML")
+        );
+        assert_eq!(
+            sitemap_path_for_choice("./sitemap.xml.gz", Some("./A.SITEMAP.XML.GZ")).as_deref(),
+            Some("./A.SITEMAP.XML.GZ")
+        );
     }
 }

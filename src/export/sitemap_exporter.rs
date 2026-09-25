@@ -127,18 +127,9 @@ impl SitemapExporter {
         xml
     }
 
-    /// Generate an XML sitemap file.
+    /// Generate an XML sitemap file; a path ending in `.xml.gz` is written gzip-compressed.
     fn generate_xml_sitemap(&self, output_file: &str, entries: &[SitemapEntry]) -> CrawlerResult<String> {
-        // Ensure .xml extension
-        let output_file = if output_file.to_lowercase().ends_with(".xml") {
-            output_file.to_string()
-        } else {
-            let stripped = regex::Regex::new(r"\.xml$")
-                .ok()
-                .map(|re| re.replace(output_file, "").to_string())
-                .unwrap_or_else(|| output_file.to_string());
-            format!("{}.xml", stripped)
-        };
+        let (output_file, gzip) = xml_output_path(output_file);
 
         // Ensure parent directory exists
         let path = Path::new(&output_file);
@@ -155,7 +146,15 @@ impl SitemapExporter {
         // Write to file
         let mut file = fs::File::create(&output_file)
             .map_err(|e| CrawlerError::Export(format!("Failed to create XML sitemap file '{}': {}", output_file, e)))?;
-        file.write_all(xml.as_bytes())
+        let written = if gzip {
+            let mut encoder = flate2::write::GzEncoder::new(file, flate2::Compression::default());
+            encoder
+                .write_all(xml.as_bytes())
+                .and_then(|_| encoder.finish().map(|_| ()))
+        } else {
+            file.write_all(xml.as_bytes())
+        };
+        written
             .map_err(|e| CrawlerError::Export(format!("Failed to write XML sitemap to '{}': {}", output_file, e)))?;
 
         Ok(output_file)
@@ -264,6 +263,19 @@ fn lastmod_from_headers(
             .format("%Y-%m-%dT%H:%M:%S+00:00")
             .to_string(),
     )
+}
+
+/// Output path of the XML sitemap and whether to gzip it: a path ending in `.xml.gz` is kept and
+/// written compressed, a path ending in `.xml` is kept, any other path gets `.xml` appended.
+fn xml_output_path(output_file: &str) -> (String, bool) {
+    let lower = output_file.to_lowercase();
+    if lower.ends_with(".xml.gz") {
+        (output_file.to_string(), true)
+    } else if lower.ends_with(".xml") {
+        (output_file.to_string(), false)
+    } else {
+        (format!("{}.xml", output_file), false)
+    }
 }
 
 /// Escape special XML characters in a string.
@@ -457,5 +469,35 @@ mod tests {
         assert_eq!(entries[0].lastmod.as_deref(), Some("2026-07-17T17:29:24+00:00"));
         assert_eq!(entries[1].url, "https://example.com/news");
         assert_eq!(entries[1].lastmod, None);
+    }
+
+    #[test]
+    fn xml_output_path_keeps_xml_and_xml_gz_and_adds_xml_otherwise() {
+        assert_eq!(
+            xml_output_path("/tmp/sitemap.xml"),
+            ("/tmp/sitemap.xml".to_string(), false)
+        );
+        assert_eq!(
+            xml_output_path("/tmp/sitemap.XML.GZ"),
+            ("/tmp/sitemap.XML.GZ".to_string(), true)
+        );
+        assert_eq!(xml_output_path("/tmp/sitemap"), ("/tmp/sitemap.xml".to_string(), false));
+    }
+
+    #[test]
+    fn xml_gz_sitemap_is_written_gzip_compressed() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("sitemap.xml.gz");
+
+        let written = exporter(None)
+            .generate_xml_sitemap(path.to_str().unwrap(), &[page("https://example.com/")])
+            .unwrap();
+
+        assert_eq!(written, path.to_str().unwrap());
+        let bytes = std::fs::read(&path).unwrap();
+        assert!(bytes.starts_with(&[0x1f, 0x8b]), "gzip magic bytes");
+        let mut xml = String::new();
+        std::io::Read::read_to_string(&mut flate2::read::GzDecoder::new(&bytes[..]), &mut xml).unwrap();
+        assert!(xml.contains("<loc>https://example.com/</loc>"), "{xml}");
     }
 }

@@ -49,6 +49,7 @@ static RE_DOM_COUNT: Lazy<Regex> = Lazy::new(|| Regex::new(r"<\w+").unwrap());
 use crate::analysis::manager::AnalysisManager;
 use crate::content_processor::html_processor::HTML_PAGES_EXTENSIONS;
 use crate::content_processor::manager::ContentProcessorManager;
+use crate::content_processor::xml_processor::XmlProcessor;
 use crate::engine::fetcher::Fetcher;
 use crate::engine::found_url::UrlSource;
 use crate::engine::found_urls::FoundUrls;
@@ -624,23 +625,24 @@ impl Crawler {
         let response_status = http_response.status_code;
         let elapsed_time = http_response.exec_time;
 
-        // Handle gzip-compressed sitemaps (.xml.gz): decompress body before processing
-        let is_gzip_sitemap = parsed_url.path.to_lowercase().ends_with(".xml.gz");
-        let (body, body_text) = if is_gzip_sitemap
-            && let Some(ref raw_body) = http_response.body
-            && !raw_body.is_empty()
-        {
-            use flate2::read::GzDecoder;
-            let mut decoder = GzDecoder::new(&raw_body[..]);
-            let mut decompressed = Vec::new();
-            if std::io::Read::read_to_end(&mut decoder, &mut decompressed).is_ok() {
-                let text = String::from_utf8_lossy(&decompressed).to_string();
-                (Some(decompressed), Some(text))
-            } else {
-                (http_response.body.clone(), http_response.body_text())
+        // Gzip-compressed sitemaps: decompress the body before processing. Besides `.xml.gz` URLs
+        // this covers a gzipped sitemap at any `.gz` URL or served as application/(x-)gzip, and one
+        // whose body the HTTP client already decoded (a `.gz` file sent with Content-Encoding: gzip).
+        let raw_body = http_response.body.as_deref().unwrap_or_default();
+        let response_content_type = http_response
+            .get_header("content-type")
+            .map(String::as_str)
+            .unwrap_or("");
+        let gunzipped_sitemap = XmlProcessor::gunzip_sitemap(&parsed_url.path, response_content_type, raw_body);
+        let is_gzip_sitemap = gunzipped_sitemap.is_some()
+            || XmlProcessor::is_decoded_gzip_sitemap(&parsed_url.path, response_content_type, raw_body)
+            || parsed_url.path.to_lowercase().ends_with(".xml.gz");
+        let (body, body_text) = match gunzipped_sitemap {
+            Some(xml) => {
+                let text = String::from_utf8_lossy(&xml).to_string();
+                (Some(xml), Some(text))
             }
-        } else {
-            (http_response.body.clone(), http_response.body_text())
+            None => (http_response.body.clone(), http_response.body_text()),
         };
 
         let body_size = Self::get_body_size(is_asset_url, &http_response, body.as_deref());
@@ -1317,9 +1319,7 @@ impl Crawler {
         let is_already_visited = visited.contains_key(&url_key);
         let is_url_with_html = url.extension.is_none()
             || HTML_PAGES_EXTENSIONS.contains(&url.extension.as_deref().unwrap_or("").to_lowercase().as_str());
-        let path_lower = url.path.to_lowercase();
-        let is_url_with_sitemap =
-            path_lower.contains("sitemap") && (path_lower.ends_with(".xml") || path_lower.ends_with(".xml.gz"));
+        let is_url_with_sitemap = Self::is_sitemap_url(url);
         let is_url_too_long = full_url.len() as i64 > options.max_url_length;
         let allowed_only_html = options.crawl_only_html_files();
 
@@ -1686,10 +1686,10 @@ impl Crawler {
         crate::utils::to_lower_hex(hasher.finalize())
     }
 
-    /// Check if URL points to a sitemap.xml or sitemap.xml.gz file
+    /// Check if URL points to a sitemap file: `sitemap` in the path and a `.xml` or `.gz`
+    /// extension (`sitemap.xml`, `sitemap.xml.gz`, `sitemap.gz`; not a `.tar.gz` archive)
     fn is_sitemap_url(url: &ParsedUrl) -> bool {
-        let path_lower = url.path.to_lowercase();
-        path_lower.contains("sitemap") && (path_lower.ends_with(".xml") || path_lower.ends_with(".xml.gz"))
+        url.path.to_lowercase().contains("sitemap") && XmlProcessor::has_sitemap_extension(&url.path)
     }
 
     /// Compute short unique ID for a URL (first 8 chars of MD5)
@@ -2240,9 +2240,20 @@ mod tests {
     }
 
     #[test]
+    fn sitemap_url_plain_gz() {
+        let url = ParsedUrl::parse("https://example.com/sitemap.gz", None);
+        assert!(Crawler::is_sitemap_url(&url));
+    }
+
+    #[test]
     fn not_sitemap_tar_gz() {
-        let url = ParsedUrl::parse("https://example.com/archive.tar.gz", None);
-        assert!(!Crawler::is_sitemap_url(&url));
+        for url in [
+            "https://example.com/archive.tar.gz",
+            "https://example.com/downloads/sitemap-backup.tar.gz",
+            "https://example.com/downloads/sitemap-backup.TGZ",
+        ] {
+            assert!(!Crawler::is_sitemap_url(&ParsedUrl::parse(url, None)), "{url}");
+        }
     }
 
     // =========================================================================

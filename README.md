@@ -7,7 +7,7 @@ SiteOne Crawler is a powerful and easy-to-use **website analyzer, cloner, and co
 **Discover the SiteOne Crawler advantage:**
 
 *   **Run Anywhere:** Single native binary for **🪟 Windows**, **🍎 macOS**, and **🐧 Linux** (x64 & arm64). No runtime dependencies.
-*   **Work Your Way:** Launch the binary without arguments for an **interactive wizard** 🧙 with 10 preset modes, use the extensive **command-line interface** 📟 ([releases](https://github.com/janreges/siteone-crawler/releases), [▶️ video](https://www.youtube.com/watch?v=25T_yx13naA&list=PL9mElgTe-s1Csfg0jXWmDS0MHFN7Cpjwp)) for automation and power, or enjoy the intuitive **desktop GUI application** 💻 ([GUI app](https://github.com/janreges/siteone-crawler-gui), [▶️ video](https://www.youtube.com/watch?v=rFW8LNEVNdw)) for visual control.
+*   **Work Your Way:** Launch the binary without arguments for an **interactive wizard** 🧙 with 11 preset modes, use the extensive **command-line interface** 📟 ([releases](https://github.com/janreges/siteone-crawler/releases), [▶️ video](https://www.youtube.com/watch?v=25T_yx13naA&list=PL9mElgTe-s1Csfg0jXWmDS0MHFN7Cpjwp)) for automation and power, or enjoy the intuitive **desktop GUI application** 💻 ([GUI app](https://github.com/janreges/siteone-crawler-gui), [▶️ video](https://www.youtube.com/watch?v=rFW8LNEVNdw)) for visual control.
 *   **Rich Output Formats:** Interactive **HTML audit report** 📊 with sortable tables and quality scoring (0.0-10.0) (see [nextjs.org sample](https://crawler.siteone.io/html/2024-08-23/forever/cl8xw4r-fdag8wg-44dd.html)), detailed **JSON** for programmatic consumption, and human-readable **text** for terminal. Send HTML reports directly to your inbox via **built-in SMTP mailer** 📧.
 *   **CI/CD Integration:** Built-in **quality gate** (`--ci`) with configurable thresholds — exit code 10 on failure enables automated deployment blocking. Also useful for **cache warming** — crawling the entire site after deployment populates your reverse proxy/CDN cache.
 *   **Offline & Markdown Power:** Create complete **offline clones** 💾 for browsing without a server ([nextjs.org clone](https://crawler.siteone.io/examples-exports/nextjs.org/)) or convert entire websites into clean **Markdown** 📝 — perfect for backups, documentation, or feeding content to AI models ([examples](https://github.com/janreges/siteone-crawler-markdown-examples/)).
@@ -108,9 +108,13 @@ The following features are summarized in greater detail:
 - has a **beautiful interactive** and **🎨 colourful output**
 - it will **clearly warn you** ⚠️ of any wrong use of the tool (e.g. input parameters validation or wrong permissions)
 - as `--url` parameter, you can specify also a `sitemap.xml` file (or [sitemap index](https://www.sitemaps.org/protocol.html#index)),
-  which will be processed as a list of URLs. In sitemap-only mode, the crawler follows only URLs from
-  the sitemap — it does not discover additional links from HTML pages. Gzip-compressed sitemaps (`*.xml.gz`)
-  are fully supported, both as direct URLs and when referenced from sitemap index files.
+  which will be processed as a list of URLs. Such a URL may end in `.xml`, `.xml.gz` or any other `.gz`,
+  or be served as `application/gzip` / `application/x-gzip`; gzip-compressed sitemaps are decompressed.
+  Entries of a sitemap index may point to `.xml`, `.xml.gz` or `.gz` files (not `.tar.gz`), also with a
+  query string (e.g. Shopify's `sitemap_products_1.xml?from=1&to=100`). When the URL path contains
+  `sitemap` and ends in `.xml` or `.gz` (e.g. `/sitemap.xml`, `/sitemap-products.gz`), the crawler runs
+  in sitemap-only mode: it follows only URLs from the sitemap and does not discover additional links
+  from HTML pages.
 - with `--url-list=<file>` you can crawl a **bounded list of URLs** from a plain-text file (one URL per line).
   The first URL in the file becomes the crawl base when `--url` is omitted. Combine it with `--single-page`
   to crawl exactly the listed URLs without discovering additional links.
@@ -231,6 +235,7 @@ See all available [markdown exporter options](#markdown-exporter-options) and [H
   Google uses `lastmod` only when it is consistently and verifiably accurate
 - `--sitemap-changefreq` adds the same `<changefreq>` to every URL (Google ignores `changefreq` and
   `priority`; other search engines may use them)
+- a `--sitemap-xml-file` path ending in `.xml.gz` writes a gzip-compressed sitemap
 
 ### 🤖 AI assistant (optional)
 
@@ -377,7 +382,7 @@ cargo build --release --target x86_64-unknown-linux-musl
 ### Interactive wizard
 
 Run the binary **without any arguments** and an interactive wizard will guide you through the
-configuration. Choose from 10 preset modes, enter the target URL, fine-tune settings with
+configuration. Choose from 11 preset modes, enter the target URL, fine-tune settings with
 arrow keys, and the crawler starts immediately — no need to remember CLI flags.
 
 ```
@@ -391,6 +396,7 @@ arrow keys, and the crawler starts immediately — no need to remember CLI flags
   Stress Test                High-concurrency load test with cache-busting random params
   Single Page                Deep analysis of a single URL — SEO, security, performance
   Large Site Crawl           High-throughput HTML-only crawl for large sites (100k+ pages)
+  Sitemap Generator          Crawl pages only and write XML and TXT sitemap files
   Custom                     Start from defaults and configure every option manually
   ──────────────────────────────────────
   Browse offline export      Serve a previously exported offline site via HTTP
@@ -653,7 +659,7 @@ For a clearer list, I recommend going to the documentation: 🌐 https://crawler
 
 | Parameter | Description |
 |-----------|-------------|
-| `--sitemap-xml-file=<file>` | File path for generated XML Sitemap. Extension `.xml` added if not specified. |
+| `--sitemap-xml-file=<file>` | File path for generated XML Sitemap. Extension `.xml` added if not specified; a path ending in `.xml.gz` writes a gzip-compressed sitemap. |
 | `--sitemap-txt-file=<file>` | File path for generated TXT Sitemap. Extension `.txt` added if not specified. |
 | `--sitemap-base-priority=<num>` | Base priority for XML sitemap. Default is `0.5`. |
 | `--sitemap-priority-increase=<num>` | Priority increase based on slashes in URL. Default is `0.1`. |

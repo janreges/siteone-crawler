@@ -3083,7 +3083,7 @@ pub fn get_options() -> Options {
                 "outputSitemapXml",
                 OptionType::File,
                 false,
-                "Save sitemap to XML. `.xml` added if missing.",
+                "Save sitemap to XML. `.xml` added if missing; a path ending in `.xml.gz` is written gzip-compressed.",
                 None,
                 true,
                 false,

@@ -250,7 +250,7 @@ fn find_export_dirs(kind: &str) -> Vec<ExportDir> {
 
 // ── Export path resolution ──────────────────────────────────────────────────
 
-/// Replace `{domain}` and `{date}` placeholders in export dir paths after URL is known.
+/// Replace `{domain}` and `{date}` placeholders in export dir and sitemap paths after URL is known.
 fn resolve_export_paths(state: &mut WizardState) {
     let url = &state.url;
     if let Some(ref dir) = state.offline_export_dir
@@ -262,6 +262,16 @@ fn resolve_export_paths(state: &mut WizardState) {
         && (dir.contains("{domain}") || dir.contains("{date}"))
     {
         state.markdown_export_dir = Some(presets::resolve_export_path(dir, url));
+    }
+    if let Some(ref file) = state.sitemap_xml_file
+        && (file.contains("{domain}") || file.contains("{date}"))
+    {
+        state.sitemap_xml_file = Some(presets::resolve_export_path(file, url));
+    }
+    if let Some(ref file) = state.sitemap_txt_file
+        && (file.contains("{domain}") || file.contains("{date}"))
+    {
+        state.sitemap_txt_file = Some(presets::resolve_export_path(file, url));
     }
 }
 
@@ -315,7 +325,9 @@ fn print_banner() {
 fn prompt_url() -> Result<String, WizardError> {
     let url = Text::new("Enter the website URL to crawl:")
         .with_placeholder("https://example.com")
-        .with_help_message("Enter a domain (e.g. example.com) or full URL (https://...)")
+        .with_help_message(
+            "Enter a domain (e.g. example.com), a full URL (https://...) or a sitemap URL (.../sitemap.xml or .xml.gz) to crawl the URLs it lists",
+        )
         .with_validator(|input: &str| {
             let trimmed = input.trim();
             if trimmed.is_empty() {
@@ -386,6 +398,9 @@ fn print_summary(state: &WizardState, argv: &[String]) {
     }
     if let Some(ref file) = state.sitemap_xml_file {
         print_row("Sitemap XML:", file, label_width);
+    }
+    if let Some(ref file) = state.sitemap_txt_file {
+        print_row("Sitemap TXT:", file, label_width);
     }
     if let Some(ref cols) = state.extra_columns {
         print_row("Extra columns:", cols, label_width);
