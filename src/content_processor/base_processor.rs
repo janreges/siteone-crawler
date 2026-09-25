@@ -217,8 +217,15 @@ pub fn convert_url_to_relative(
         let initial_host = config.initial_url.host.as_deref().unwrap_or("");
         if target_host.is_empty() || target_host == initial_host {
             // Same domain → root-relative (path + query + fragment)
+            // A path relative to the page (../sibling on /a/b/page) starts in the page's directory
+            let path = if parsed_target.path.is_empty() || parsed_target.path.starts_with('/') {
+                parsed_target.path.clone()
+            } else {
+                let base_directory = base_url.path.rfind('/').map_or("/", |i| &base_url.path[..=i]);
+                format!("{}{}", base_directory, parsed_target.path)
+            };
             // Normalize path segments (resolve .. and .)
-            let normalized_path = normalize_path(&parsed_target.path);
+            let normalized_path = normalize_path(&path);
             let mut result = normalized_path;
             if let Some(ref q) = parsed_target.query {
                 result.push('?');
@@ -334,6 +341,35 @@ mod tests {
         let base = ParsedUrl::parse("https://example.com/blog/post", None);
         let result = convert_url_to_relative(&base, "../images/logo.png", Some("src"), &config(true, false));
         assert_eq!(result, "/images/logo.png");
+    }
+
+    #[test]
+    fn preserve_urls_parent_relative_starts_in_the_page_directory() {
+        // #55: ../sibling on /a/b/page is /a/sibling, as the browser resolves it
+        let page = ParsedUrl::parse("https://example.com/a/b/page", None);
+        assert_eq!(
+            convert_url_to_relative(&page, "../sibling", Some("href"), &config(true, false)),
+            "/a/sibling"
+        );
+        assert_eq!(
+            convert_url_to_relative(&page, "../../img/logo.png?v=2#x", Some("src"), &config(true, false)),
+            "/img/logo.png?v=2#x"
+        );
+        let directory = ParsedUrl::parse("https://example.com/a/b/", None);
+        assert_eq!(
+            convert_url_to_relative(&directory, "../sibling", Some("href"), &config(true, false)),
+            "/a/sibling"
+        );
+        let css = ParsedUrl::parse("https://example.com/assets/css/site.css", None);
+        assert_eq!(
+            convert_url_to_relative(&css, "../img/bg.png", None, &config(true, false)),
+            "/assets/img/bg.png"
+        );
+        let root = ParsedUrl::parse("https://example.com/", None);
+        assert_eq!(
+            convert_url_to_relative(&root, "../about", Some("href"), &config(true, false)),
+            "/about"
+        );
     }
 
     #[test]

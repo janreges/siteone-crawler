@@ -2151,7 +2151,10 @@ fn dangling_references(export: &Path) -> Vec<String> {
             Some("md") => vec![&markdown_reference],
             _ => continue,
         };
-        let text = std::fs::read_to_string(&file).expect("exported text file");
+        // not text: an extension-less image stored as photo/index.html (#55)
+        let Ok(text) = std::fs::read_to_string(&file) else {
+            continue;
+        };
         let directory = file.parent().expect("parent dir");
         for pattern in patterns {
             for caps in pattern.captures_iter(&text) {
@@ -2551,4 +2554,148 @@ fn preserve_url_structure_keeps_a_directory_index_over_its_redirect() {
         !export.join("docs/index.html").exists(),
         "no redirect record that reloads itself"
     );
+}
+
+/// #55: the static copy on the original URLs (README: --offline-export-preserve-url-structure with
+/// --offline-export-preserve-urls) keeps links root-relative, so each one must be served from the
+/// export by the README's `try_files $uri $uri/ $uri/index.html`, also a ../ link on a nested page.
+#[test]
+fn preserve_url_structure_with_original_urls_serves_every_link() {
+    let tmp = TempDir::new("preserve-original-urls");
+    let site = tmp.path.join("site");
+    let files = [
+        (
+            "index.html",
+            r#"<html><head><title>Home</title></head><body><a href="/a/b/page">Page</a></body></html>"#,
+        ),
+        (
+            "a/b/page.html",
+            r#"<html><head><title>Page</title><link rel="stylesheet" href="../../css/site.css"></head><body>
+<a href="../sibling">Sibling</a> <a href="../../">Home</a> <img src="../img/pic.png" alt="pic">
+</body></html>"#,
+        ),
+        (
+            "a/sibling.html",
+            r#"<html><head><title>Sibling</title></head><body><a href="b/page">Page</a></body></html>"#,
+        ),
+        ("a/img/pic.png", "PNG"),
+        ("css/site.css", "body{background:url(../img/bg.png)}"),
+        ("img/bg.png", "PNG"),
+    ];
+    for (path, content) in files {
+        let file = site.join(path);
+        std::fs::create_dir_all(file.parent().expect("parent dir")).expect("site dir");
+        std::fs::write(file, content).expect("site file");
+    }
+    let server = LocalServer::start(&site);
+    let export = tmp.path.join("export");
+
+    let output = run_crawler(&[
+        "--config-file=/dev/null",
+        &format!("--url={}", server.url()),
+        LOCAL_ANALYZERS,
+        "--http-cache-dir=",
+        "--offline-export-preserve-url-structure",
+        "--offline-export-preserve-urls",
+        "--offline-export-no-auto-redirect-html",
+        &format!("--offline-export-dir={}", export.display()),
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let page = std::fs::read_to_string(export.join("a/b/page/index.html")).expect("a/b/page/index.html");
+    assert!(page.contains(r#"href="/a/sibling""#), "{page}");
+    let reference = regex::Regex::new(r#"(?:\s(?:href|src)="|url\()(/[^")]*)"#).unwrap();
+    let mut unserved = Vec::new();
+    for file in exported_files(&export) {
+        let text = std::fs::read_to_string(&file).expect("exported text file");
+        for caps in reference.captures_iter(&text) {
+            let path = caps[1].split(['#', '?']).next().unwrap_or("");
+            let local = export.join(path.trim_start_matches('/'));
+            if !local.is_file() && !local.join("index.html").is_file() {
+                unserved.push(format!(
+                    "{} -> {}",
+                    file.strip_prefix(&export).unwrap().display(),
+                    &caps[1]
+                ));
+            }
+        }
+    }
+    assert_eq!(unserved, Vec::<String>::new());
+}
+
+/// A 1×1 PNG: binary, not valid UTF-8.
+const PNG_1X1: [u8; 68] = [
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00,
+    0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x04, 0x00, 0x00, 0x00, 0xb5, 0x1c, 0x0c, 0x02, 0x00, 0x00, 0x00, 0x0b, 0x49,
+    0x44, 0x41, 0x54, 0x78, 0xda, 0x63, 0xfc, 0xff, 0x1f, 0x00, 0x03, 0x03, 0x02, 0x00, 0xef, 0x9a, 0xde, 0x2a, 0x00,
+    0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+];
+
+/// #55: with --offline-export-preserve-url-structure an image on an extension-less URL (/photo) is
+/// stored in the page layout (photo/index.html), so the original-URL copy serves it at /photo. The
+/// markdown export must keep its bytes there instead of converting it to an empty photo/index.md.
+#[test]
+fn preserve_url_structure_keeps_extensionless_images_intact() {
+    let tmp = TempDir::new("preserve-extensionless-image");
+    let server = RecordingServer::start(vec![
+        Route {
+            path: "/",
+            headers: vec![("Content-Type", "text/html; charset=utf-8".to_string())],
+            body: br#"<html><head><title>Home</title></head><body><h1>Home</h1><img src="/photo" alt="Photo"></body></html>"#
+                .to_vec(),
+        },
+        Route {
+            path: "/photo",
+            headers: vec![("Content-Type", "image/png".to_string())],
+            body: PNG_1X1.to_vec(),
+        },
+    ]);
+    let export = tmp.path.join("offline");
+    let markdown = tmp.path.join("markdown");
+
+    let output = run_crawler(&[
+        "--config-file=/dev/null",
+        &format!("--url={}", server.url()),
+        LOCAL_ANALYZERS,
+        "--http-cache-dir=",
+        "--offline-export-preserve-url-structure",
+        &format!("--offline-export-dir={}", export.display()),
+        &format!("--markdown-export-dir={}", markdown.display()),
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let index = std::fs::read_to_string(export.join("index.html")).expect("index.html");
+    let src = regex::Regex::new(r#"<img src="([^"]+)""#)
+        .unwrap()
+        .captures(&index)
+        .expect("an <img> in index.html")[1]
+        .to_string();
+    assert_eq!(
+        std::fs::read(export.join(&src)).expect("the offline image"),
+        PNG_1X1,
+        "offline {src}"
+    );
+    let index_md = std::fs::read_to_string(markdown.join("index.md")).expect("index.md");
+    let image = regex::Regex::new(r"!\[Photo\]\(([^)]+)\)")
+        .unwrap()
+        .captures(&index_md)
+        .expect("an image in index.md")[1]
+        .to_string();
+    assert_eq!(
+        std::fs::read(markdown.join(&image)).expect("the markdown image"),
+        PNG_1X1,
+        "markdown {image}"
+    );
+    assert_eq!(dangling_references(&export), Vec::<String>::new(), "offline export");
+    assert_eq!(dangling_references(&markdown), Vec::<String>::new(), "markdown export");
 }

@@ -257,8 +257,11 @@ impl MarkdownExporter {
             }
         }
 
-        // Convert HTML to Markdown
-        if store_file_path.ends_with(".html") {
+        // Convert HTML to Markdown. Only an HTML response: with --offline-export-preserve-url-structure
+        // an extension-less image is stored as photo/index.html too (#55)
+        let is_converted_to_markdown =
+            store_file_path.ends_with(".html") && CONTENT_TYPES_REQUIRING_CHANGES.contains(&visited_url.content_type);
+        if is_converted_to_markdown {
             let md_file_path = format!("{}md", &store_file_path[..store_file_path.len() - 4]);
 
             let html_content = fs::read_to_string(&store_file_path).unwrap_or_default();
@@ -294,7 +297,7 @@ impl MarkdownExporter {
         }
 
         // Record the mapping — for HTML files, use the .md path
-        let final_relative_path = if sanitized_path.ends_with(".html") {
+        let final_relative_path = if is_converted_to_markdown {
             format!("{}md", &sanitized_path[..sanitized_path.len() - 4])
         } else {
             sanitized_path.clone()
@@ -323,12 +326,18 @@ impl MarkdownExporter {
         let mut md_content = content.to_string();
 
         // Replace .html with .md in links (only when exporting a full site)
-        if replace_html_links_with_md && let Ok(link_re) = Regex::new(r"\[([^\]]*)\]\(([^)]+)\)") {
+        if replace_html_links_with_md && let Ok(link_re) = Regex::new(r"(!?)\[([^\]]*)\]\(([^)]+)\)") {
             let ignore_regexes = &self.ignore_regexes;
             md_content = link_re
                 .replace_all(&md_content, |caps: &regex::Captures| {
-                    let link_text = caps.get(1).map_or("", |m| m.as_str());
-                    let url = caps.get(2).map_or("", |m| m.as_str());
+                    let link_text = caps.get(2).map_or("", |m| m.as_str());
+                    let url = caps.get(3).map_or("", |m| m.as_str());
+
+                    // An image (also one inside a link, `[![alt](src)](href)`) is stored unconverted,
+                    // so an extension-less image stored as photo/index.html keeps that name (#55)
+                    if !caps[1].is_empty() || link_text.starts_with("![") {
+                        return caps[0].to_string();
+                    }
 
                     // Check if URL matches any ignore pattern
                     for ignore_regex in ignore_regexes {
@@ -1238,6 +1247,20 @@ mod tests {
 
     fn normalize(exporter: &MarkdownExporter, content: &str) -> String {
         exporter.normalize_markdown_content(content, true)
+    }
+
+    #[test]
+    fn image_sources_keep_their_html_file_name() {
+        // #55: with --offline-export-preserve-url-structure an extension-less image is stored as
+        // photo/index.html; it is not converted, so its reference must not become photo/index.md
+        let exporter = MarkdownExporter::new();
+        let result = normalize(
+            &exporter,
+            "![Photo](photo/index.html)\n\n[![Logo](logo/index.html)](about/index.html)\n\n[About](about/index.html#team)",
+        );
+        assert!(result.contains("![Photo](photo/index.html)"), "{result:?}");
+        assert!(result.contains("![Logo](logo/index.html)"), "{result:?}");
+        assert!(result.contains("[About](about/index.md#team)"), "{result:?}");
     }
 
     // --- Tests for d2f9e51: preserve heading markers when trimming ---
