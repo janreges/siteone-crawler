@@ -2370,6 +2370,30 @@ function render(){
 render();addEventListener('resize',render);
 </script></body></html>"#;
 
+/// `REMOUNTING_COOKIE_BANNER_PAGE` hardened against a hiding style sheet: the page's own CSS shows
+/// the banner with `!important` at ID specificity, the re-created banner shows itself with an inline
+/// `display:block!important`, and a CSP lets only the page's own nonce'd styles apply.
+#[cfg(feature = "browser")]
+const HARDENED_REMOUNTING_COOKIE_BANNER_PAGE: &str = r#"<!doctype html>
+<html><head><title>Hardened banner</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'nonce-t'; script-src 'nonce-t'">
+<style nonce="t">
+html,body{margin:0;background:rgb(0,180,0)}
+.spacer{height:1800px}
+#cookie-banner{position:fixed;inset:0;background:rgb(220,0,0);z-index:9999;display:block!important}
+</style></head><body><h1>Content</h1><div class="spacer"></div><script nonce="t">
+function render(){
+  document.querySelectorAll('#cookie-banner').forEach(function(e){e.remove();});
+  if(innerWidth<500){
+    var e=document.createElement('div');
+    e.id='cookie-banner';e.className='site-overlay';e.textContent='Cookie consent';
+    e.style.setProperty('display','block','important');
+    document.body.append(e);
+  }
+}
+render();addEventListener('resize',render);
+</script></body></html>"#;
+
 /// The color at (100, 100) of the desktop and the mobile screenshot of `page` captured with
 /// `--screenshot-viewport=desktop,mobile` and the given options.
 #[cfg(feature = "browser")]
@@ -2453,6 +2477,29 @@ fn banners_stay_hidden_in_full_page_screenshots() {
     ] {
         let (desktop, mobile) = banner_screenshot_colors(
             REMOUNTING_COOKIE_BANNER_PAGE,
+            &["--screenshot-mode=full-page", hide_option],
+        );
+        assert_eq!(desktop, [0, 180, 0], "{hide_option}");
+        assert_eq!(
+            mobile,
+            [0, 180, 0],
+            "{hide_option}: the banner covers the mobile screenshot"
+        );
+    }
+}
+
+/// A banner the page mounts again stays hidden also when the page's CSS or the re-created element
+/// shows it with `!important` and a CSP blocks injected style sheets (#46).
+#[cfg(feature = "browser")]
+#[test]
+#[ignore]
+fn banners_stay_hidden_despite_important_styles_and_csp() {
+    for hide_option in [
+        "--screenshot-hide-cookie-banners",
+        "--screenshot-hide-selector=.site-overlay",
+    ] {
+        let (desktop, mobile) = banner_screenshot_colors(
+            HARDENED_REMOUNTING_COOKIE_BANNER_PAGE,
             &["--screenshot-mode=full-page", hide_option],
         );
         assert_eq!(desktop, [0, 180, 0], "{hide_option}");

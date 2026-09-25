@@ -8,8 +8,10 @@
 // fixed/sticky high-z-index overlay whose text matches cookie/consent keywords
 // (English + Czech). Also honours a user-supplied list of CSS selectors
 // (--screenshot-hide-selector). The hidden selectors (and the ids of heuristically hidden
-// overlays) also go into a style sheet, so an element the page mounts again (e.g. a responsive
-// banner re-rendered on the resize to a full-page capture) stays hidden.
+// overlays) stay hidden when the page mounts such an element again (e.g. a responsive banner
+// re-rendered on the resize to a full-page capture): a style sheet hides them, and an observer
+// hides every added element that matches with the same inline `!important` style as above, which
+// also works where the page's own `!important` CSS or its CSP defeats the style sheet.
 //
 // Caveats — this is a screenshot-cleanliness helper, not a privacy tool: the accept-all
 // fallback can GRANT cookie consent on sites that expose no reject control, and the
@@ -37,16 +39,20 @@ __keep_hidden__(__hide__);
 try{var __kw__=/cookie|consent|gdpr|souhlas|p[řr]ijmout|odm[íi]tnout|soukrom|z[áa]sady ochrany|personaliz/i;var __all__=document.querySelectorAll('body *');for(var i=0;i<__all__.length;i++){var el=__all__[i];var st=getComputedStyle(el);if((st.position==='fixed'||st.position==='sticky')&&((parseInt(st.zIndex,10)||0)>=1000)){var t=(el.innerText||'').slice(0,400);if(__kw__.test(t)){el.style.setProperty('display','none','important');if(el.id){__keep_hidden__(['#'+CSS.escape(el.id)]);}}}}}catch(x){}
 "#;
 
-/// Adds `display:none` rules for the given selectors to one style sheet of the page, so elements
-/// matching them stay hidden when the page mounts them again. Invalid selectors are skipped (each
-/// rule on its own, so one cannot void the others).
+/// Keeps elements matching the given selectors hidden when the page mounts them again: a
+/// `display:none` rule per selector in one style sheet of the page (invalid selectors are skipped,
+/// so one cannot void the others), and one observer per page that hides every added element (and
+/// element inside it) matching a kept selector with an inline `display:none !important` — the
+/// style sheet alone loses against the page's own `!important` CSS or an inline style, and a CSP
+/// can block it.
 const KEEP_HIDDEN_JS: &str = r#"
-function __keep_hidden__(sels){try{var st=document.getElementById('__siteone_hide__');if(!st){st=document.createElement('style');st.id='__siteone_hide__';(document.head||document.documentElement).appendChild(st);}sels.forEach(function(sel){try{document.querySelector(sel);st.appendChild(document.createTextNode(sel+'{display:none!important}'));}catch(x){}});}catch(x){}}
+function __keep_hidden__(sels){var w=window;var kept=w.__siteone_hide_sels__||(w.__siteone_hide_sels__=[]);try{var st=document.getElementById('__siteone_hide__');if(!st){st=document.createElement('style');st.id='__siteone_hide__';(document.head||document.documentElement).appendChild(st);}sels.forEach(function(sel){try{document.querySelector(sel);st.appendChild(document.createTextNode(sel+'{display:none!important}'));if(kept.indexOf(sel)<0){kept.push(sel);}}catch(x){}});}catch(x){}
+try{if(!w.__siteone_hide_observer__){w.__siteone_hide_observer__=new MutationObserver(function(records){records.forEach(function(r){r.addedNodes.forEach(function(n){if(n.nodeType!==1){return;}kept.forEach(function(sel){try{if(n.matches(sel)){n.style.setProperty('display','none','important');}n.querySelectorAll(sel).forEach(function(el){el.style.setProperty('display','none','important');});}catch(x){}});});});});w.__siteone_hide_observer__.observe(document.documentElement,{childList:true,subtree:true});}}catch(x){}}
 "#;
 
 /// Build the injectable script. Always hides the user-supplied `selectors`; when `full`
 /// is true, also runs the CMP dismissal + curated hide + heuristic logic. What it hides stays
-/// hidden through a style sheet (see `KEEP_HIDDEN_JS`).
+/// hidden when the page mounts it again (see `KEEP_HIDDEN_JS`).
 fn build_script(selectors: &[String], full: bool) -> String {
     let user_json = serde_json::to_string(selectors).unwrap_or_else(|_| "[]".to_string());
     let mut s = String::new();
@@ -96,8 +102,9 @@ mod tests {
         let minimal = build_script(&[".only".to_string()], false);
         assert!(minimal.contains(".only"));
         assert!(!minimal.contains("onetrust")); // CMP logic omitted when not full
-        // user selectors stay hidden through the style sheet in both modes
+        // user selectors stay hidden through the style sheet and the observer in both modes
         assert!(minimal.contains("__keep_hidden__(__user__);"));
         assert!(full.contains("__keep_hidden__(__hide__);"));
+        assert!(minimal.contains("new MutationObserver"));
     }
 }
