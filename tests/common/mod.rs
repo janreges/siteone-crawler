@@ -157,6 +157,166 @@ impl Drop for RecordingServer {
     }
 }
 
+/// One canned answer of a `MockLlm`: requests whose path starts with `path_prefix` get `status`
+/// and the JSON `body`, after `delay_ms` milliseconds.
+pub struct MockResponse {
+    pub path_prefix: &'static str,
+    pub status: u16,
+    pub body: String,
+    pub delay_ms: u64,
+}
+
+/// A minimal OpenAI-compatible LLM endpoint on 127.0.0.1 (base URL `url()`, e.g. for
+/// `--ai-endpoint`) that answers with canned bodies such as the captured provider responses in
+/// `tests/fixtures/ai-responses/`. The responses of one path prefix are served in order and the
+/// last one repeats once they are used up; the first prefix (in the order given) that matches a
+/// request path serves it, other paths get a 404. Every request body is recorded. Each connection
+/// is answered on its own thread, so concurrent AI requests are not serialized. Stopped when
+/// dropped.
+pub struct MockLlm {
+    port: u16,
+    requests: Arc<Mutex<Vec<String>>>,
+    stop: Arc<AtomicBool>,
+    thread: Option<JoinHandle<()>>,
+}
+
+impl MockLlm {
+    pub fn start(responses: Vec<MockResponse>) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("a free port");
+        let port = listener.local_addr().expect("a bound address").port();
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let stop = Arc::new(AtomicBool::new(false));
+        let responses = Arc::new(responses);
+        // How many requests each path prefix has answered so far.
+        let served: Arc<Mutex<Vec<(&'static str, usize)>>> = Arc::new(Mutex::new(Vec::new()));
+        let (recorded, stopped) = (requests.clone(), stop.clone());
+        let thread = std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                if stopped.load(Ordering::SeqCst) {
+                    break;
+                }
+                let Ok(mut stream) = stream else { continue };
+                let (responses, served, recorded) = (responses.clone(), served.clone(), recorded.clone());
+                std::thread::spawn(move || {
+                    let (head, body) = read_request(&mut stream);
+                    let path = head.split_whitespace().nth(1).unwrap_or("/").to_string();
+                    recorded.lock().unwrap().push(body);
+                    let answer = responses
+                        .iter()
+                        .find(|response| path.starts_with(response.path_prefix))
+                        .map(|first| {
+                            let prefix = first.path_prefix;
+                            let candidates: Vec<&MockResponse> =
+                                responses.iter().filter(|r| r.path_prefix == prefix).collect();
+                            let mut served = served.lock().unwrap();
+                            let index = match served.iter_mut().find(|(p, _)| *p == prefix) {
+                                Some((_, count)) => {
+                                    *count += 1;
+                                    *count - 1
+                                }
+                                None => {
+                                    served.push((prefix, 1));
+                                    0
+                                }
+                            };
+                            candidates[index.min(candidates.len() - 1)]
+                        });
+                    let response = match answer {
+                        Some(answer) => {
+                            std::thread::sleep(Duration::from_millis(answer.delay_ms));
+                            let status = format!("{} {}", answer.status, reason_phrase(answer.status));
+                            raw_http_response(
+                                &status,
+                                &[("Content-Type", "application/json".to_string())],
+                                answer.body.as_bytes(),
+                            )
+                        }
+                        None => raw_http_response("404 Not Found", &[], b""),
+                    };
+                    stream.write_all(&response).ok();
+                });
+            }
+        });
+        MockLlm {
+            port,
+            requests,
+            stop,
+            thread: Some(thread),
+        }
+    }
+
+    /// The OpenAI-style base URL, `http://127.0.0.1:<port>/v1`.
+    pub fn url(&self) -> String {
+        format!("http://127.0.0.1:{}/v1", self.port)
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    /// The body of every request received so far, in arrival order.
+    pub fn request_bodies(&self) -> Vec<String> {
+        self.requests.lock().unwrap().clone()
+    }
+}
+
+impl Drop for MockLlm {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::SeqCst);
+        // Wake the blocking `accept` so the thread sees the flag.
+        TcpStream::connect(("127.0.0.1", self.port)).ok();
+        if let Some(thread) = self.thread.take() {
+            thread.join().ok();
+        }
+    }
+}
+
+fn reason_phrase(status: u16) -> &'static str {
+    match status {
+        200 => "OK",
+        400 => "Bad Request",
+        401 => "Unauthorized",
+        404 => "Not Found",
+        429 => "Too Many Requests",
+        500 => "Internal Server Error",
+        503 => "Service Unavailable",
+        _ => "Mock",
+    }
+}
+
+/// Reads one request: its head and, per `Content-Length`, its body.
+fn read_request(stream: &mut TcpStream) -> (String, String) {
+    stream.set_read_timeout(Some(Duration::from_secs(5))).ok();
+    let mut data = Vec::new();
+    let mut buf = [0u8; 4096];
+    let head_end = loop {
+        if let Some(pos) = data.windows(4).position(|window| window == b"\r\n\r\n") {
+            break pos + 4;
+        }
+        match stream.read(&mut buf) {
+            Ok(0) | Err(_) => break data.len(),
+            Ok(n) => data.extend_from_slice(&buf[..n]),
+        }
+    };
+    let head = String::from_utf8_lossy(&data[..head_end]).into_owned();
+    let length = head
+        .lines()
+        .find_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            name.eq_ignore_ascii_case("content-length")
+                .then(|| value.trim().parse::<usize>().ok())?
+        })
+        .unwrap_or(0);
+    while data.len() < head_end + length {
+        match stream.read(&mut buf) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => data.extend_from_slice(&buf[..n]),
+        }
+    }
+    let body = String::from_utf8_lossy(&data[head_end..data.len().min(head_end + length)]).into_owned();
+    (head, body)
+}
+
 fn read_request_head(stream: &mut TcpStream) -> String {
     stream.set_read_timeout(Some(Duration::from_secs(5))).ok();
     let mut head = Vec::new();

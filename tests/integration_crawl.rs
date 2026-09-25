@@ -10,7 +10,10 @@
 
 mod common;
 
-use common::{LocalServer, RecordingServer, Redirect, RedirectServer, Route, TempDir, run_crawler, run_crawler_json};
+use common::{
+    LocalServer, MockLlm, MockResponse, RecordingServer, Redirect, RedirectServer, Route, TempDir, run_crawler,
+    run_crawler_json,
+};
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -3566,3 +3569,82 @@ fn preserve_url_structure_keeps_extensionless_images_intact() {
 
 const SVG_LOGO: &[u8] =
     br#"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="red"/></svg>"#;
+
+// ---------------------------------------------------------------------------
+// Mock LLM server (`common::MockLlm`) used by the offline AI tests
+// ---------------------------------------------------------------------------
+
+/// Sends one POST with `body` to the mock and returns the raw response (head and body).
+fn post_to_mock(mock: &MockLlm, path: &str, body: &str) -> String {
+    use std::io::{Read, Write};
+    let mut stream = std::net::TcpStream::connect(("127.0.0.1", mock.port())).expect("the mock accepts");
+    let request = format!(
+        "POST {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
+        body.len()
+    );
+    stream.write_all(request.as_bytes()).expect("the request is sent");
+    let mut response = String::new();
+    stream.read_to_string(&mut response).expect("the response is read");
+    response
+}
+
+#[test]
+fn mock_llm_serves_its_responses_in_order_per_path() {
+    let fixture = include_str!("fixtures/ai-responses/vllm-qwen-think.json");
+    let mock = MockLlm::start(vec![
+        MockResponse {
+            path_prefix: "/v1/chat/completions",
+            status: 429,
+            body: r#"{"error":{"message":"slow down"}}"#.to_string(),
+            delay_ms: 0,
+        },
+        MockResponse {
+            path_prefix: "/v1/chat/completions",
+            status: 200,
+            body: fixture.to_string(),
+            delay_ms: 0,
+        },
+        MockResponse {
+            path_prefix: "/v1/models",
+            status: 200,
+            body: r#"{"data":[]}"#.to_string(),
+            delay_ms: 0,
+        },
+    ]);
+    assert_eq!(mock.url(), format!("http://127.0.0.1:{}/v1", mock.port()));
+
+    let first = post_to_mock(&mock, "/v1/chat/completions", r#"{"n":1}"#);
+    assert!(first.starts_with("HTTP/1.1 429 "), "{first}");
+    let second = post_to_mock(&mock, "/v1/chat/completions", r#"{"n":2}"#);
+    assert!(second.starts_with("HTTP/1.1 200 "), "{second}");
+    assert!(second.ends_with(fixture), "the fixture body is served verbatim");
+    let models = post_to_mock(&mock, "/v1/models", "");
+    assert!(models.ends_with(r#"{"data":[]}"#), "{models}");
+    let third = post_to_mock(&mock, "/v1/chat/completions", r#"{"n":3}"#);
+    assert!(
+        third.starts_with("HTTP/1.1 200 ") && third.ends_with(fixture),
+        "the last response repeats once the others are used up"
+    );
+    let unknown = post_to_mock(&mock, "/other", "x");
+    assert!(unknown.starts_with("HTTP/1.1 404 "), "{unknown}");
+
+    assert_eq!(
+        mock.request_bodies(),
+        vec![r#"{"n":1}"#, r#"{"n":2}"#, "", r#"{"n":3}"#, "x"],
+        "every request body is recorded in arrival order"
+    );
+}
+
+#[test]
+fn mock_llm_delays_its_answer() {
+    let mock = MockLlm::start(vec![MockResponse {
+        path_prefix: "/v1/",
+        status: 200,
+        body: "{}".to_string(),
+        delay_ms: 300,
+    }]);
+    let started = std::time::Instant::now();
+    let response = post_to_mock(&mock, "/v1/chat/completions", "{}");
+    assert!(response.ends_with("{}"), "{response}");
+    assert!(started.elapsed() >= std::time::Duration::from_millis(300));
+}
