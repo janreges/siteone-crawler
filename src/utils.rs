@@ -50,6 +50,21 @@ pub fn extract_pcre_regex_pattern(s: &str) -> String {
     s.to_string()
 }
 
+/// Make numbered group references of a regex replacement unambiguous for the `regex` crate, which
+/// reads `$2_` as the (missing) named group `2_`: every `$N` directly followed by a letter or `_`
+/// becomes `${N}`, so `$1-$2_` means group 1, `-`, group 2, `_` as in PCRE (#30).
+/// `$$` (a literal dollar), `${…}`, `$name` and `$N` followed by anything else stay as they are.
+pub fn normalize_replacement_groups(to: &str) -> String {
+    use once_cell::sync::Lazy;
+    static RE_NUMBERED_GROUP: Lazy<Regex> = Lazy::new(|| Regex::new(r"\$\$|\$([0-9]+)([A-Za-z_])").unwrap());
+    RE_NUMBERED_GROUP
+        .replace_all(to, |caps: &regex::Captures| match caps.get(1) {
+            Some(number) => format!("${{{}}}{}", number.as_str(), &caps[2]),
+            None => caps[0].to_string(),
+        })
+        .into_owned()
+}
+
 /// Lowercase hex encoding (2 digits per byte, no separators) of arbitrary bytes.
 /// Used for md5 digests after the RustCrypto 0.11 output type dropped `LowerHex`.
 pub fn to_lower_hex(bytes: impl AsRef<[u8]>) -> String {
@@ -1338,6 +1353,25 @@ mod tests {
         // Only 'i' flag is converted to (?i); other flags are silently ignored
         let result = extract_pcre_regex_pattern("~foo~ms");
         assert_eq!(result, "foo");
+    }
+
+    // -- normalize_replacement_groups --
+
+    #[test]
+    fn replacement_group_followed_by_name_char_is_braced() {
+        assert_eq!(normalize_replacement_groups("$1-$2_"), "$1-${2}_");
+        assert_eq!(normalize_replacement_groups("$1__$2"), "${1}__$2");
+        assert_eq!(normalize_replacement_groups("$1a"), "${1}a");
+        assert_eq!(normalize_replacement_groups("$10b"), "${10}b");
+    }
+
+    #[test]
+    fn replacement_escapes_braced_and_named_groups_are_kept() {
+        assert_eq!(normalize_replacement_groups("$12"), "$12");
+        assert_eq!(normalize_replacement_groups("$$1_"), "$$1_");
+        assert_eq!(normalize_replacement_groups("${1}_"), "${1}_");
+        assert_eq!(normalize_replacement_groups("$name_x"), "$name_x");
+        assert_eq!(normalize_replacement_groups("price: 5$"), "price: 5$");
     }
 
     // -- strip_javascript --

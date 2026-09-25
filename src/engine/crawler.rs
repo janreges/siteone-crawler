@@ -1753,7 +1753,9 @@ impl Crawler {
 
             if is_regex {
                 if let Ok(re) = Regex::new(&utils::extract_pcre_regex_pattern(from)) {
-                    full_url = re.replace_all(&full_url, to).to_string();
+                    // `$1_` means group 1 followed by `_` (#30)
+                    let to = utils::normalize_replacement_groups(to);
+                    full_url = re.replace_all(&full_url, to.as_str()).to_string();
                 }
             } else {
                 full_url = full_url.replace(from, to);
@@ -2393,5 +2395,14 @@ mod tests {
             11,
             "pages always use the body length"
         );
+    }
+
+    #[test]
+    fn transform_url_group_followed_by_underscore() {
+        // #30: `$1_` in a --transform-url replacement is group 1 followed by `_`
+        let rules = vec!["/page-([0-9]+)/ -> p$1_x".to_string()];
+        let (host, path) = Crawler::apply_http_request_transformations("example.com", "/page-7", &rules);
+        assert_eq!(host, "example.com");
+        assert_eq!(path, "/p7_x");
     }
 }

@@ -181,7 +181,9 @@ impl MarkdownExporter {
                             if let Some(pattern) = extract_regex_pattern(replace_from)
                                 && let Ok(re) = Regex::new(&pattern)
                             {
-                                content = re.replace_all(&content, replace_to).to_string();
+                                // `$1_` means group 1 followed by `_` (#30)
+                                let replace_to = utils::normalize_replacement_groups(replace_to);
+                                content = re.replace_all(&content, replace_to.as_str()).to_string();
                             }
                         } else {
                             content = content.replace(replace_from, replace_to);

@@ -477,31 +477,8 @@ impl OfflineUrlConverter {
         let has_replacements = !replace_qs.is_empty();
 
         if has_replacements {
-            let replacements = &replace_qs;
-            let mut qs = query_string.to_string();
-
-            for replace in replacements.iter() {
-                let parts: Vec<&str> = replace.splitn(2, "->").collect();
-                let replace_from = parts[0].trim();
-                let replace_to = if parts.len() > 1 { parts[1].trim() } else { "" };
-
-                // Check if it's a regex
-                let is_regex = crate::utils::is_regex_pattern(replace_from);
-
-                if is_regex {
-                    // Extract the pattern from delimiters
-                    if let Some(pattern) = extract_regex_pattern(replace_from)
-                        && let Ok(re) = Regex::new(&pattern)
-                    {
-                        qs = re.replace_all(&qs, replace_to).to_string();
-                    }
-                } else {
-                    qs = qs.replace(replace_from, replace_to);
-                }
-            }
-
             // replace slashes with '~'
-            qs.replace('/', "~")
+            apply_query_string_replacements(query_string, &replace_qs).replace('/', "~")
         } else {
             // Use MD5 hash (first 10 chars)
             let decoded = html_entities_decode(&percent_encoding::percent_decode_str(query_string).decode_utf8_lossy());
@@ -538,6 +515,35 @@ fn extract_regex_pattern(input: &str) -> Option<String> {
     } else {
         None
     }
+}
+
+/// Apply `--replace-query-string` rules (`from -> to`, `from` optionally a `/regex/flags`) in order.
+fn apply_query_string_replacements(query_string: &str, replacements: &[String]) -> String {
+    let mut qs = query_string.to_string();
+
+    for replace in replacements {
+        let parts: Vec<&str> = replace.splitn(2, "->").collect();
+        let replace_from = parts[0].trim();
+        let replace_to = if parts.len() > 1 { parts[1].trim() } else { "" };
+
+        // Check if it's a regex
+        let is_regex = crate::utils::is_regex_pattern(replace_from);
+
+        if is_regex {
+            // Extract the pattern from delimiters
+            if let Some(pattern) = extract_regex_pattern(replace_from)
+                && let Ok(re) = Regex::new(&pattern)
+            {
+                // `$1_` means group 1 followed by `_` (#30)
+                let replace_to = utils::normalize_replacement_groups(replace_to);
+                qs = re.replace_all(&qs, replace_to.as_str()).to_string();
+            }
+        } else {
+            qs = qs.replace(replace_from, replace_to);
+        }
+    }
+
+    qs
 }
 
 /// Parse file path into path, query, and fragment components
@@ -1581,5 +1587,16 @@ mod tests {
             convert_preserve("https://example.com/", "https://example.com/", "https://example.com/"),
             "index.html"
         );
+    }
+
+    #[test]
+    fn replace_query_string_group_followed_by_underscore() {
+        // #30: `$2_` is group 2 followed by `_`, not a (missing) group named `2_`
+        let rules = vec!["/([^&]+)=([^&]*)(&|$)/ -> $1-$2_".to_string()];
+        assert_eq!(
+            apply_query_string_replacements("start=1&sort=asc", &rules),
+            "start-1_sort-asc_"
+        );
+        assert_eq!(apply_query_string_replacements("start=2", &rules), "start-2_");
     }
 }

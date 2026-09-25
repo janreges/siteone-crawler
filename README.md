@@ -489,7 +489,7 @@ echo $?  # 0 = pass, 10 = fail
   --markdown-remove-links-and-images-from-single-file \
   --markdown-exclude-selector='.exclude-me' \
   --markdown-replace-content='/<foo[^>]+>/ -> <bar>' \
-  --markdown-replace-query-string='/[a-z]+=[^&]*(&|$)/i -> $1__$2' \
+  --markdown-replace-query-string='/([^&]+)=([^&]*)(&|$)/ -> $1-$2_' \
   --mail-to=your.name@my-mail.tld \
   --mail-to=your.friend.name@my-mail.tld \
   --mail-from=crawler@my-mail.tld \
@@ -634,7 +634,7 @@ For a clearer list, I recommend going to the documentation: 🌐 https://crawler
 | `--offline-export-preserve-urls` | Preserve original URL format in exported HTML/CSS/JS — same-domain links become root-relative (`/path`), cross-domain links stay absolute. Ideal for processing with [siteone-chunker](https://github.com/janreges/siteone-chunker) and RAG pipelines where links must resolve to the production website. |
 | `--offline-export-no-url-rewriting` | Disable all URL rewriting in exported HTML/CSS/JS. URLs remain exactly as in the original source. Useful for RAG indexing or other processing where original URLs must be preserved verbatim. |
 | `--replace-content=<val>` | Replace content in HTML/JS/CSS with `foo -> bar` or PCRE regexp.<br>Can be specified multiple times. |
-| `--replace-query-string=<val>` | Replace characters in query string filenames.<br>Can be specified multiple times. |
+| `--replace-query-string=<val>` | Replace characters in query string filenames.<br>Can be specified multiple times. E.g. `'/([^&]+)=([^&]*)(&\|$)/ -> $1-$2_'`<br>stores `/news?start=1&sort=asc` as `news.start-1_sort-asc_.html`. |
 | `--offline-export-lowercase` | Convert all filenames to lowercase for offline export. Useful for case-insensitive filesystems. |
 | `--ignore-store-file-error` | Ignore any file storing errors and continue. |
 | `--disable-astro-inline-modules` | Disable inlining of Astro module scripts for offline export.<br>Scripts will remain as external files with corrected relative paths. |
@@ -651,7 +651,7 @@ For a clearer list, I recommend going to the documentation: 🌐 https://crawler
 | `--markdown-remove-links-and-images-from-single-file` | Remove links and images from combined single file. |
 | `--markdown-exclude-selector=<val>` | Exclude DOM elements by CSS selector from markdown export.<br>Can be specified multiple times. |
 | `--markdown-replace-content=<val>` | Replace text content with `foo -> bar` or PCRE regexp.<br>Can be specified multiple times. |
-| `--markdown-replace-query-string=<val>` | Replace characters in query string filenames.<br>Can be specified multiple times. |
+| `--markdown-replace-query-string=<val>` | Replace characters in query string filenames.<br>Can be specified multiple times. Same syntax as `--replace-query-string`. |
 | `--markdown-export-store-only-url-regex=<regex>` | Debug: store only URLs matching these PCRE regexes. Can be specified multiple times. |
 | `--markdown-ignore-store-file-error` | Ignore any file storing errors and continue. |
 
