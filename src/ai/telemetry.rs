@@ -34,7 +34,8 @@ pub fn current_subject() -> Option<Subject> {
     SUBJECT.try_with(Subject::clone).ok()
 }
 
-/// The AI task a request belongs to: its stable key, human label and progress (done, total).
+/// The AI task a request belongs to: its stable key, human label and progress (units done, total)
+/// when the request is reported.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TaskRef {
     pub key: String,
@@ -42,12 +43,12 @@ pub struct TaskRef {
     pub progress: Option<(u64, u64)>,
 }
 
-/// The task of `key` as known when a request is reported.
+/// The task of `key` as known when a request is reported (named by its key if never started).
 pub fn task_ref(key: &str) -> TaskRef {
     TaskRef {
         key: key.to_string(),
-        label: key.to_string(),
-        progress: None,
+        label: super::progress::label(key).unwrap_or_else(|| key.to_string()),
+        progress: super::progress::current(key),
     }
 }
 
@@ -118,8 +119,9 @@ impl RequestRecord {
         match &self.task {
             Some(task) => {
                 head.push_str(&task.label);
+                // The unit the request works on: the one after those already done.
                 if let Some((done, total)) = task.progress {
-                    head.push_str(&format!(" {}/{}", done, total));
+                    head.push_str(&format!(" {}/{}", done.saturating_add(1).min(total), total));
                 }
             }
             None => head.push_str(&self.category),
@@ -254,7 +256,8 @@ mod tests {
             task: Some(TaskRef {
                 key: "seo".to_string(),
                 label: "SEO".to_string(),
-                progress: Some((12, 40)),
+                // 11 pages done: the request works on the 12th.
+                progress: Some((11, 40)),
             }),
             category: "SEO analysis".to_string(),
             subject: Some("/blog/post".to_string()),
@@ -300,7 +303,7 @@ mod tests {
             task: Some(TaskRef {
                 key: "profile:chapters".to_string(),
                 label: "Profile: chapters".to_string(),
-                progress: Some((3, 12)),
+                progress: Some((2, 12)),
             }),
             subject: Some("Services".to_string()),
             usage: usage(Some(9870), Some(1944), None),
@@ -321,7 +324,7 @@ mod tests {
             task: Some(TaskRef {
                 key: "typos".to_string(),
                 label: "Typos".to_string(),
-                progress: Some((3, 40)),
+                progress: Some((2, 40)),
             }),
             subject: Some("/about".to_string()),
             duration_ms: Some(2100),
@@ -346,7 +349,7 @@ mod tests {
         };
         let r = RequestRecord {
             task: Some(TaskRef {
-                progress: Some((13, 40)),
+                progress: Some((12, 40)),
                 ..r.task.clone().expect("a task")
             }),
             ..r
@@ -368,7 +371,7 @@ mod tests {
         };
         let r = RequestRecord {
             task: Some(TaskRef {
-                progress: Some((13, 40)),
+                progress: Some((12, 40)),
                 ..r.task.clone().expect("a task")
             }),
             ..r
@@ -391,7 +394,7 @@ mod tests {
         };
         let r = RequestRecord {
             task: Some(TaskRef {
-                progress: Some((14, 40)),
+                progress: Some((13, 40)),
                 ..r.task.clone().expect("a task")
             }),
             ..r
@@ -490,6 +493,51 @@ mod tests {
             ..r
         };
         assert_eq!(huge.total_tokens_per_second(), Some(u64::MAX as f64));
+    }
+
+    #[test]
+    fn the_line_numbers_the_unit_in_progress() {
+        let line = |done, total| {
+            RequestRecord {
+                task: Some(TaskRef {
+                    key: "seo".to_string(),
+                    label: "SEO".to_string(),
+                    progress: Some((done, total)),
+                }),
+                subject: None,
+                usage: None,
+                duration_ms: Some(100),
+                ..record(RequestOutcome::Ok)
+            }
+            .console_line()
+        };
+        assert_eq!(line(0, 3), "  AI ✓ #12 SEO 1/3 · tokens not reported · 0.1 s");
+        assert_eq!(line(2, 3), "  AI ✓ #12 SEO 3/3 · tokens not reported · 0.1 s");
+        // Never past the total, e.g. for a request of a task whose units are all counted.
+        assert_eq!(line(3, 3), "  AI ✓ #12 SEO 3/3 · tokens not reported · 0.1 s");
+    }
+
+    #[test]
+    fn a_request_names_the_label_and_progress_of_its_task() {
+        super::super::progress::start("test:telemetry-ref", "Telemetry ref", 3);
+        super::super::progress::advance("test:telemetry-ref");
+        assert_eq!(
+            task_ref("test:telemetry-ref"),
+            TaskRef {
+                key: "test:telemetry-ref".to_string(),
+                label: "Telemetry ref".to_string(),
+                progress: Some((1, 3)),
+            }
+        );
+        assert_eq!(
+            task_ref("test:no-such-task"),
+            TaskRef {
+                key: "test:no-such-task".to_string(),
+                label: "test:no-such-task".to_string(),
+                progress: None,
+            },
+            "a task never started is named by its key"
+        );
     }
 
     #[test]

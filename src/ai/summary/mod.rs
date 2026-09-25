@@ -17,6 +17,7 @@ use serde_json::{Value, json};
 use super::client::AiClient;
 use super::config::build_config;
 use super::normalize::normalize_json_response;
+use super::progress;
 use super::prompt::sanitize_for_prompt;
 use super::provider::{ChatMessage, ChatRequest};
 use crate::options::core_options::CoreOptions;
@@ -28,6 +29,8 @@ use crate::utils;
 // Per-type token-accounting labels for the executive summary's two prompt stages.
 const CAT_SUMMARY_AREAS: &str = "Executive summary (area evals)";
 const CAT_SUMMARY_SYNTHESIS: &str = "Executive summary (synthesis)";
+/// Progress task: one unit per area evaluation plus the synthesis.
+const TASK: &str = "summary";
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AreaFinding {
@@ -145,6 +148,7 @@ pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, _output: &A
     );
 
     // --- Phase B (1): area evaluations in parallel ---
+    progress::start(TASK, "Executive summary", area_inputs.len() as u64 + 1);
     let mut handles = Vec::new();
     for input in area_inputs {
         let client = client.clone();
@@ -154,7 +158,7 @@ pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, _output: &A
             "<area_data>\n{}\n</area_data>",
             sanitize_for_prompt(&serde_json::to_string_pretty(&input.json).unwrap_or_default())
         );
-        handles.push(tokio::spawn(async move {
+        handles.push(tokio::spawn(progress::unit(TASK, area, async move {
             let req = ChatRequest {
                 system: Some(system),
                 messages: vec![ChatMessage::user(data)],
@@ -177,7 +181,7 @@ pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, _output: &A
                 }
                 a
             })
-        }));
+        })));
     }
 
     let mut assessments: Vec<AreaAssessment> = Vec::new();
@@ -192,6 +196,7 @@ pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, _output: &A
             "{}",
             utils::get_color_text("AI summary: no area assessments produced; skipping.", "yellow", true)
         );
+        progress::finish(TASK);
         return;
     }
 
@@ -246,13 +251,17 @@ pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, _output: &A
         json_schema: None,
         schema_name: None,
     };
-    let synth_result = if options.ai_synthesis_extra_body.is_some() {
-        client
-            .complete_with(&synth_req, synth_extra.as_ref(), CAT_SUMMARY_SYNTHESIS)
-            .await
-    } else {
-        client.complete(&synth_req, CAT_SUMMARY_SYNTHESIS).await
-    };
+    let synth_result = progress::unit(TASK, "synthesis", async {
+        if options.ai_synthesis_extra_body.is_some() {
+            client
+                .complete_with(&synth_req, synth_extra.as_ref(), CAT_SUMMARY_SYNTHESIS)
+                .await
+        } else {
+            client.complete(&synth_req, CAT_SUMMARY_SYNTHESIS).await
+        }
+    })
+    .await;
+    progress::finish(TASK);
 
     let report = match synth_result {
         Ok(c) => match serde_json::from_str::<ReportSummary>(&normalize_json_response(&c.text)) {

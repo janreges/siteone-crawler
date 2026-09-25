@@ -3681,6 +3681,13 @@ fn one_page_site(tmp: &TempDir) -> LocalServer {
 
 /// Crawls `server` with the SEO action against `mock`; returns stderr.
 fn crawl_with_ai_seo(server: &LocalServer, mock: &MockLlm, extra: &[&str]) -> String {
+    let mut args = vec!["--ai-actions=seo", "--ai-max-pages=1"];
+    args.extend(extra);
+    crawl_with_ai(server, mock, &args)
+}
+
+/// Crawls `server` with the AI features of `extra` against `mock`; returns stderr.
+fn crawl_with_ai(server: &LocalServer, mock: &MockLlm, extra: &[&str]) -> String {
     let mut args = vec![
         "--config-file=/dev/null".to_string(),
         format!("--url={}", server.url()),
@@ -3690,8 +3697,6 @@ fn crawl_with_ai_seo(server: &LocalServer, mock: &MockLlm, extra: &[&str]) -> St
         "--ai-provider=openai-compatible".to_string(),
         format!("--ai-endpoint={}", mock.url()),
         "--ai-model=m".to_string(),
-        "--ai-actions=seo".to_string(),
-        "--ai-max-pages=1".to_string(),
     ];
     args.extend(extra.iter().map(|arg| arg.to_string()));
     if !extra.iter().any(|arg| arg.starts_with("--ai-cache-dir=")) {
@@ -3716,7 +3721,7 @@ fn ai_request_is_reported_with_tokens_reasoning_time_and_speed() {
     let stderr = crawl_with_ai_seo(&one_page_site(&tmp), &mock, &[]);
     assert_line(
         &stderr,
-        r"  AI ✓ #1 SEO analysis · 17 in · 37 out \(33 reasoning\) · \d+\.\d s · \d+ tok/s",
+        r"  AI ✓ #1 SEO 1/1 · / · 17 in · 37 out \(33 reasoning\) · \d+\.\d s · \d+ tok/s",
     );
     assert_eq!(mock.request_bodies().len(), 1);
 }
@@ -3733,7 +3738,7 @@ fn ai_request_with_uncounted_reasoning_says_so() {
     let stderr = crawl_with_ai_seo(&one_page_site(&tmp), &mock, &[]);
     assert_line(
         &stderr,
-        r"  AI ✓ #1 SEO analysis · 183 in · 30 out \(reasoning n/a\) · \d+\.\d s · \d+ tok/s",
+        r"  AI ✓ #1 SEO 1/1 · / · 183 in · 30 out \(reasoning n/a\) · \d+\.\d s · \d+ tok/s",
     );
 }
 
@@ -3743,7 +3748,7 @@ fn ai_request_without_usage_is_still_reported() {
     let body = serde_json::json!({"id": "x", "choices": [{"message": {"content": r#"{"scores":{"overall":80}}"#}}]});
     let mock = MockLlm::start(vec![chat_response(200, body.to_string())]);
     let stderr = crawl_with_ai_seo(&one_page_site(&tmp), &mock, &[]);
-    assert_line(&stderr, r"  AI ✓ #1 SEO analysis · tokens not reported · \d+\.\d s");
+    assert_line(&stderr, r"  AI ✓ #1 SEO 1/1 · / · tokens not reported · \d+\.\d s");
 }
 
 #[test]
@@ -3757,12 +3762,12 @@ fn ai_request_retry_and_success_are_both_reported() {
     let stderr = crawl_with_ai_seo(&one_page_site(&tmp), &mock, &["--ai-max-reqs-per-sec=0.5"]);
     assert_line(
         &stderr,
-        r"  AI ↻ #1 SEO analysis · HTTP 429 · \d+\.\d s · retrying \(attempt 2/3\)",
+        r"  AI ↻ #1 SEO 1/1 · / · HTTP 429 · \d+\.\d s · retrying \(attempt 2/3\)",
     );
     // The mock answers in 0.1 s; neither the backoff nor the rate-limit wait is part of that time.
     assert_line(
         &stderr,
-        r"  AI ✓ #2 SEO analysis · 17 in · 37 out \(33 reasoning\) · 0\.\d s · \d+ tok/s",
+        r"  AI ✓ #2 SEO 1/1 · / · 17 in · 37 out \(33 reasoning\) · 0\.\d s · \d+ tok/s",
     );
     assert!(stderr.find("AI ↻ #1") < stderr.find("AI ✓ #2"), "in arrival order");
 }
@@ -3777,7 +3782,7 @@ fn ai_provider_error_is_reported() {
     let stderr = crawl_with_ai_seo(&one_page_site(&tmp), &mock, &[]);
     assert_line(
         &stderr,
-        r"  AI ✗ #1 SEO analysis · AI provider error: The model `no-such-model` does not exist\. · \d+\.\d s",
+        r"  AI ✗ #1 SEO 1/1 · / · AI provider error: The model `no-such-model` does not exist\. · \d+\.\d s",
     );
 }
 
@@ -3793,7 +3798,7 @@ fn ai_request_that_timed_out_is_not_retried() {
     assert_eq!(mock.request_bodies().len(), 1, "a timed-out request is sent once");
     assert_line(
         &stderr,
-        r"  AI ✗ #1 SEO analysis · AI request error: .*timed out.* · 1\.\d s",
+        r"  AI ✗ #1 SEO 1/1 · / · AI request error: .*timed out.* · 1\.\d s",
     );
     assert!(!stderr.contains("AI ↻"), "stderr: {stderr}");
 }
@@ -3810,7 +3815,7 @@ fn ai_cache_hit_is_reported() {
     let stderr = crawl_with_ai_seo(&server, &mock, &[&cache_arg]);
     assert_line(
         &stderr,
-        r"  AI ⇢ #1 SEO analysis · cache hit · 17 in · 37 out \(33 reasoning\)",
+        r"  AI ⇢ #1 SEO 1/1 · / · cache hit · 17 in · 37 out \(33 reasoning\)",
     );
     assert_eq!(
         mock.request_bodies().len(),
@@ -3826,4 +3831,225 @@ fn ai_request_lines_are_hidden_with_hide_progress_bar() {
     let stderr = crawl_with_ai_seo(&one_page_site(&tmp), &mock, &["--hide-progress-bar"]);
     assert_eq!(mock.request_bodies().len(), 1, "the request is made");
     assert!(!stderr.contains("AI ✓"), "stderr: {stderr}");
+}
+
+// ---------------------------------------------------------------------------
+// AI task progress on stderr: every request names its task, progress and subject
+// ---------------------------------------------------------------------------
+
+/// Every per-request line names a task with its progress and a subject: `#n Label d/t · subject · …`.
+fn assert_every_request_names_its_task(stderr: &str) {
+    let request = regex::Regex::new(r"^  AI [✓↻✗⇢] #\d+ ").expect("a valid pattern");
+    let with_task = regex::Regex::new(r"^  AI [✓↻✗⇢] #\d+ .+? \d+/\d+ · [^·]+ · ").expect("a valid pattern");
+    let lines: Vec<&str> = stderr.lines().filter(|line| request.is_match(line)).collect();
+    assert!(!lines.is_empty(), "no AI request lines in stderr:\n{stderr}");
+    for line in lines {
+        assert!(
+            with_task.is_match(line),
+            "a request without its task: {line:?}\n{stderr}"
+        );
+    }
+}
+
+#[test]
+fn ai_request_lines_carry_their_task_and_progress() {
+    let tmp = TempDir::new("ai-progress-actions");
+    let site = tmp.path.join("site");
+    write_site(&site, 2);
+    let server = LocalServer::start(&site);
+    let mock = MockLlm::start(vec![chat_response(200, qwen_seo_answer())]);
+    // One request at a time, so the progress numbers arrive in order.
+    let stderr = crawl_with_ai(
+        &server,
+        &mock,
+        &["--ai-actions=seo,typos", "--ai-max-pages=3", "--ai-max-concurrency=1"],
+    );
+    for n in 1..=3 {
+        assert_line(
+            &stderr,
+            &format!(r"  AI ✓ #\d+ SEO {n}/3 · /\S* · 17 in · 37 out \(33 reasoning\) · \d+\.\d s · \d+ tok/s"),
+        );
+        assert_line(
+            &stderr,
+            &format!(r"  AI ✓ #\d+ Typos {n}/3 · /\S* · 17 in · 37 out \(33 reasoning\) · \d+\.\d s · \d+ tok/s"),
+        );
+    }
+    assert_line(&stderr, r"  AI ✓ #\d+ SEO \d/3 · /page-1\.html · .*");
+    assert_every_request_names_its_task(&stderr);
+}
+
+/// A valid `ia` report row (vLLM Qwen usage: 17 in, 37 out).
+fn qwen_ia_answer() -> String {
+    let mut response: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/ai-responses/vllm-qwen-think.json")).expect("JSON");
+    let answer = serde_json::json!({
+        "description": "A test page of the local sample site that holds a short heading and one paragraph of placeholder text; it plays the role of a simple content page within the site structure and links to nothing else of note.",
+        "section": "Other",
+        "pageType": "detail",
+        "primaryEntity": null
+    });
+    response["choices"][0]["message"]["content"] = serde_json::json!(answer.to_string());
+    response.to_string()
+}
+
+#[test]
+fn ai_report_requests_carry_their_task_and_page() {
+    let tmp = TempDir::new("ai-progress-report");
+    let site = tmp.path.join("site");
+    write_site(&site, 1);
+    let server = LocalServer::start(&site);
+    let mock = MockLlm::start(vec![chat_response(200, qwen_ia_answer())]);
+    let report_dir = format!("--ai-report-dir={}", tmp.path.display());
+    let stderr = crawl_with_ai(
+        &server,
+        &mock,
+        &[
+            "--ai-report=ia",
+            "--ai-max-pages=2",
+            "--ai-max-concurrency=1",
+            &report_dir,
+        ],
+    );
+    for n in 1..=2 {
+        assert_line(&stderr, &format!(r"  AI ✓ #\d+ Report 'ia' {n}/2 · /\S* · 17 in · .*"));
+    }
+    assert_every_request_names_its_task(&stderr);
+}
+
+#[test]
+fn ai_summary_requests_carry_their_task_and_area() {
+    let tmp = TempDir::new("ai-progress-summary");
+    let mock = MockLlm::start(vec![chat_response(200, qwen_seo_answer())]);
+    let stderr = crawl_with_ai(&one_page_site(&tmp), &mock, &["--ai-actions=summary"]);
+    for area in ["security", "accessibility", "seo", "performance", "infrastructure"] {
+        assert_line(
+            &stderr,
+            &format!(r"  AI ✓ #\d+ Executive summary [1-5]/6 · {area} · .*"),
+        );
+    }
+    assert_line(&stderr, r"  AI ✓ #6 Executive summary 6/6 · synthesis · .*");
+    assert_every_request_names_its_task(&stderr);
+}
+
+/// An answer every brand-elaborate stage but the correction accepts: an IA map with no sections,
+/// a page essence, and an `abstract` prose section.
+fn elaborate_answer() -> String {
+    let mut response: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/ai-responses/vllm-qwen-think.json")).expect("JSON");
+    let answer = serde_json::json!({
+        "page_role": "homepage",
+        "essence": "Acme builds tools for builders.",
+        "abstract": "Acme builds tools for builders."
+    });
+    response["choices"][0]["message"]["content"] = serde_json::json!(answer.to_string());
+    response.to_string()
+}
+
+#[test]
+fn ai_elaborate_requests_carry_their_stage() {
+    let tmp = TempDir::new("ai-progress-elaborate");
+    let site = tmp.path.join("site");
+    // More than 40 candidate pages, so the model selects them.
+    write_site(&site, 45);
+    let server = LocalServer::start(&site);
+    let mock = MockLlm::start(vec![chat_response(200, elaborate_answer())]);
+    let report_dir = format!("--ai-report-dir={}", tmp.path.display());
+    let stderr = crawl_with_ai(
+        &server,
+        &mock,
+        &[
+            "--ai-elaborate",
+            "--ai-max-pages=3",
+            "--ai-max-concurrency=1",
+            "--ai-elaborate-gap-fill=0",
+            &report_dir,
+        ],
+    );
+    assert_line(&stderr, r"  AI ✓ #1 Elaborate: select 1/2 · round 1 · .*");
+    for n in 1..=3 {
+        assert_line(&stderr, &format!(r"  AI ✓ #\d+ Elaborate: extract {n}/3 · /\S* · .*"));
+    }
+    // One request per prose section, each named by its section.
+    let synthesis =
+        regex::Regex::new(r"(?m)^  AI ✓ #\d+ Elaborate: synthesis (\d+)/(\d+) · (\w+) · ").expect("a pattern");
+    let sections: Vec<(usize, usize)> = synthesis
+        .captures_iter(&stderr)
+        .map(|c| (c[1].parse().expect("done"), c[2].parse().expect("total")))
+        .collect();
+    let total = sections.first().map(|(_, total)| *total).expect("synthesis requests");
+    assert_eq!(
+        sections,
+        (1..=total).map(|n| (n, total)).collect::<Vec<_>>(),
+        "{stderr}"
+    );
+    // The mock's answer is no list of edits: both correction attempts are reported.
+    assert_eq!(
+        stderr.matches("Elaborate: correction 1/1 · prose · ").count(),
+        2,
+        "stderr:\n{stderr}"
+    );
+    assert_every_request_names_its_task(&stderr);
+}
+
+/// An answer every AI profile stage accepts: a type pick, the page ids `[1]` (the first array in
+/// it) and an empty list of edits.
+fn profile_answer() -> String {
+    let mut response: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/ai-responses/vllm-qwen-think.json")).expect("JSON");
+    response["choices"][0]["message"]["content"] = serde_json::json!(r#"{"ids":[1],"type":1,"edits":[]}"#);
+    response.to_string()
+}
+
+#[test]
+fn ai_profile_requests_carry_their_stage() {
+    let tmp = TempDir::new("ai-progress-profile");
+    let site = tmp.path.join("site");
+    write_site(&site, 2);
+    let server = LocalServer::start(&site);
+    let mock = MockLlm::start(vec![chat_response(200, profile_answer())]);
+    let report_dir = format!("--ai-report-dir={}", tmp.path.display());
+    let stderr = crawl_with_ai(
+        &server,
+        &mock,
+        &[
+            "--ai-profile",
+            "--ai-max-pages=3",
+            "--ai-max-concurrency=1",
+            "--ai-report-language=cs",
+            &report_dir,
+        ],
+    );
+    assert_line(&stderr, r"  AI ✓ #1 Profile: summary 1/1 · 127\.0\.0\.1 · .*");
+    assert_line(&stderr, r"  AI ✓ #2 Profile: classify 1/1 · 127\.0\.0\.1 · .*");
+    for n in 1..=3 {
+        assert_line(&stderr, &format!(r"  AI ✓ #\d+ Profile: describe {n}/3 · /\S* · .*"));
+    }
+    assert_line(&stderr, r"  AI ✓ #\d+ Profile: headings 1/1 · cs · .*");
+    assert_line(&stderr, r"  AI ✓ #\d+ Profile: chapters \d+/\d+ · \S.* · .*");
+    assert_line(
+        &stderr,
+        r"  AI ✓ #\d+ Profile: executive summary 1/1 · 127\.0\.0\.1 · .*",
+    );
+    assert_line(&stderr, r"  AI ✓ #\d+ Profile: correction 1/1 · executive summary · .*");
+    assert_every_request_names_its_task(&stderr);
+}
+
+#[test]
+fn ai_custom_and_llms_requests_carry_their_task_and_page() {
+    let tmp = TempDir::new("ai-progress-custom-llms");
+    let mock = MockLlm::start(vec![chat_response(200, qwen_seo_answer())]);
+    // llms.txt is written next to the markdown export.
+    let export_dir = format!("--markdown-export-dir={}", tmp.path.join("md").display());
+    let stderr = crawl_with_ai(
+        &one_page_site(&tmp),
+        &mock,
+        &[
+            "--ai-actions=custom,llms-txt",
+            "--ai-prompt=Check the page.",
+            &export_dir,
+        ],
+    );
+    assert_line(&stderr, r"  AI ✓ #\d+ Custom check 1/1 · / · 17 in · .*");
+    assert_line(&stderr, r"  AI ✓ #\d+ llms\.txt 1/1 · / · 17 in · .*");
+    assert_every_request_names_its_task(&stderr);
 }

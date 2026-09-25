@@ -14,6 +14,7 @@ use std::time::Duration;
 
 use md5::{Digest, Md5};
 
+use crate::ai::progress;
 use crate::engine::crawler::Crawler;
 use crate::engine::http_client::HttpClient;
 use crate::engine::parsed_url::ParsedUrl;
@@ -22,6 +23,9 @@ use crate::options::core_options::CoreOptions;
 use crate::result::status::Status;
 use crate::result::visited_url::{SOURCE_A_HREF, VisitedUrl};
 use crate::types::ContentTypeId;
+
+/// Progress task: one unit per page to fetch.
+const TASK: &str = "elaborate:gapfill";
 
 const ACCEPT_HEADER: &str = "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7";
 
@@ -124,7 +128,10 @@ pub async fn fetch_missing(
     let timeout = options.timeout.clamp(1, 3600) as u64;
     let initial_url = ParsedUrl::parse(&options.url, None);
 
+    progress::start(TASK, "Elaborate: gap-fill", targets.len() as u64);
     for (i, target) in targets.iter().enumerate() {
+        // Every target counts once, fetched or not.
+        let _counted = progress::advance_on_drop(TASK);
         if i > 0 {
             tokio::time::sleep(delay).await;
         }
@@ -186,6 +193,7 @@ pub async fn fetch_missing(
             _ => report.failed += 1,
         }
     }
+    progress::finish(TASK);
     report
 }
 

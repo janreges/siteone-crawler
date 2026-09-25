@@ -35,6 +35,7 @@ use tokio::sync::Semaphore;
 use crate::ai::client::AiClient;
 use crate::ai::config::build_config;
 use crate::ai::page::PageContext;
+use crate::ai::progress;
 use crate::ai::provider::{ChatMessage, ChatRequest};
 use crate::ai::report::locale::ReportLocale;
 use crate::ai::selection::build_candidates;
@@ -56,6 +57,10 @@ const CAT_SYNTH: &str = "AI profile (synthesis)";
 const CAT_CORRECT: &str = "AI profile (correction)";
 const CAT_LOCALIZE: &str = "AI profile (localize)";
 const PARSE_ATTEMPTS: u32 = 2;
+// Progress tasks of the stages. A chapter's select, synthesis and correction are one unit of
+// `profile:chapters`; `profile:correct` is the executive summary's correction.
+const TASK_DESCRIBE: &str = "profile:describe";
+const TASK_CHAPTERS: &str = "profile:chapters";
 
 /// The path portion of a URL, used as a short human-readable page label.
 fn path_hint(url: &str) -> String {
@@ -279,7 +284,8 @@ pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, output: &Ar
     let site_description = {
         let req = summarize::build_request(&summary_input, &lang, out_tokens, temperature);
         calls += 1;
-        match client.complete(&req, CAT_SUMMARY).await {
+        let call = client.complete(&req, CAT_SUMMARY);
+        match progress::single_unit("profile:summary", "Profile: summary", host.clone(), call).await {
             Ok(c) => summarize::parse(&c.text),
             Err(e) => {
                 eprintln!(
@@ -310,10 +316,8 @@ pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, output: &Ar
     } else {
         let req = classify::build_request(&host, &site_description, out_tokens);
         calls += 1;
-        match client
-            .complete_parsed_n(&req, CAT_CLASSIFY, PARSE_ATTEMPTS, classify::parse)
-            .await
-        {
+        let call = client.complete_parsed_n(&req, CAT_CLASSIFY, PARSE_ATTEMPTS, classify::parse);
+        match progress::single_unit("profile:classify", "Profile: classify", host.clone(), call).await {
             Ok((id, _)) => (classify::key_for(id).unwrap_or("general").to_string(), true),
             Err(e) => {
                 eprintln!(
@@ -355,6 +359,7 @@ pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, output: &Ar
     let markdowns = Arc::new(markdowns);
     {
         let mut handles = Vec::new();
+        progress::start(TASK_DESCRIBE, "Profile: describe", pages.len() as u64);
         for (i, page) in pages.iter().enumerate() {
             let permit_sem = sem.clone();
             let client = client.clone();
@@ -362,7 +367,8 @@ pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, output: &Ar
             let url = page.url.clone();
             let lang = lang.clone();
             let cap = budget.describe_input();
-            handles.push(tokio::spawn(async move {
+            let subject = crate::ai::runner::url_path_and_query(&page.url);
+            handles.push(tokio::spawn(progress::unit(TASK_DESCRIBE, subject, async move {
                 let _permit = permit_sem.acquire_owned().await.ok();
                 let md = crate::ai::prompt::truncate_chars(&summarize::strip_md_links(&markdowns[i]), cap);
                 let req = describe::build_request(&md, &url, &lang, out_tokens);
@@ -370,7 +376,7 @@ pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, output: &Ar
                     .complete_parsed_n(&req, CAT_DESCRIBE, PARSE_ATTEMPTS, describe::parse)
                     .await;
                 (i, result.ok().map(|(d, _)| d))
-            }));
+            })));
         }
         let mut fallbacks = 0usize;
         for h in handles {
@@ -383,6 +389,7 @@ pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, output: &Ar
                 });
             }
         }
+        progress::finish(TASK_DESCRIBE);
         eprintln!(
             "{}",
             utils::get_color_text(
@@ -420,6 +427,7 @@ pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, output: &Ar
     });
 
     let mut handles = Vec::new();
+    progress::start(TASK_CHAPTERS, "Profile: chapters", type_spec.chapters.len() as u64);
     for chapter in type_spec.chapters.iter().cloned() {
         let shared = shared.clone();
         let heading = localized_headings
@@ -427,9 +435,11 @@ pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, output: &Ar
             .cloned()
             .unwrap_or_else(|| chapter.heading.clone());
         let page_cap = budget.page_cap(chapter.max_pages, 3);
-        handles.push(tokio::spawn(async move {
-            build_chapter(&shared, chapter, heading, page_cap).await
-        }));
+        handles.push(tokio::spawn(progress::unit(
+            TASK_CHAPTERS,
+            heading.clone(),
+            async move { build_chapter(&shared, chapter, heading, page_cap).await },
+        )));
     }
     let mut chapters: Vec<ProfileChapter> = Vec::new();
     for h in handles {
@@ -437,6 +447,7 @@ pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, output: &Ar
             chapters.push(ch);
         }
     }
+    progress::finish(TASK_CHAPTERS);
     // Restore template order (join order is nondeterministic).
     let order: BTreeMap<&str, usize> = type_spec
         .chapters
@@ -457,6 +468,7 @@ pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, output: &Ar
     // --- P6: executive summary from the visible chapters. ---
     let exec_summary = build_exec_summary(
         &client,
+        &host,
         &chapters,
         &site_description,
         &lang,
@@ -758,10 +770,8 @@ async fn localize_headings(
             .or_else(|_| serde_json::from_str(&crate::ai::normalize::repair_json(raw)))
             .map_err(|e| e.to_string())
     };
-    match client
-        .complete_parsed_n(&req, CAT_LOCALIZE, PARSE_ATTEMPTS, parse)
-        .await
-    {
+    let call = client.complete_parsed_n(&req, CAT_LOCALIZE, PARSE_ATTEMPTS, parse);
+    match progress::single_unit("profile:localize", "Profile: headings", lang, call).await {
         Ok((m, _)) => m.into_iter().filter(|(_, v)| !v.trim().is_empty()).collect(),
         Err(_) => BTreeMap::new(),
     }
@@ -771,6 +781,7 @@ async fn localize_headings(
 #[allow(clippy::too_many_arguments)]
 async fn build_exec_summary(
     client: &Arc<AiClient>,
+    host: &str,
     chapters: &[ProfileChapter],
     site_description: &str,
     lang: &str,
@@ -804,7 +815,8 @@ async fn build_exec_summary(
         json_schema: None,
         schema_name: None,
     };
-    let body = match client.complete_with(&req, None, CAT_SYNTH).await {
+    let call = client.complete_with(&req, None, CAT_SYNTH);
+    let body = match progress::single_unit("profile:executive", "Profile: executive summary", host, call).await {
         Ok(c) => crate::ai::normalize::strip_think(&c.text).trim().to_string(),
         Err(_) => return String::new(),
     };
@@ -827,10 +839,8 @@ async fn build_exec_summary(
         json_schema: None,
         schema_name: None,
     };
-    match client
-        .complete_parsed_n(&req, CAT_CORRECT, PARSE_ATTEMPTS, correct::parse_edits)
-        .await
-    {
+    let call = client.complete_parsed_n(&req, CAT_CORRECT, PARSE_ATTEMPTS, correct::parse_edits);
+    match progress::single_unit("profile:correct", "Profile: correction", "executive summary", call).await {
         Ok((edits, _)) => synthesize::clean_markdown(&correct::apply(&body, &edits).0),
         Err(_) => synthesize::clean_markdown(&body),
     }

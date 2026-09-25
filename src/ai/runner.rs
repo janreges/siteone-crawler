@@ -15,6 +15,7 @@ use super::actions::{custom, extract, llms_txt, seo, typos};
 use super::client::AiClient;
 use super::config::{AiConfig, resolve_api_key};
 use super::page::PageContext;
+use super::progress;
 use super::provider::Provider;
 use super::report::locale::ReportLocale;
 use super::report::model::{AiReportModel, AiUsageMeta, CoverageMeta, ReportRow, RulePackMeta, SiteMeta};
@@ -36,6 +37,11 @@ const CAT_TYPOS: &str = "Content issues (typos)";
 const CAT_CUSTOM: &str = "Custom check";
 const CAT_LLMS: &str = "llms.txt summaries";
 const CAT_EXTRACT: &str = "AI report (extract)";
+
+// Progress task keys of the per-page actions (see `progress`).
+const TASK_SEO: &str = "seo";
+const TASK_TYPOS: &str = "typos";
+const TASK_CUSTOM: &str = "custom";
 
 /// Entry point for the post-crawl AI phase. Fail-soft: never panics, never aborts the crawl.
 pub async fn run_ai(options: &CoreOptions, status: &Arc<Mutex<Status>>, output: &Arc<Mutex<Box<dyn Output>>>) {
@@ -421,6 +427,8 @@ async fn run_extract_action(
     let report_language = Arc::new(locale.code().to_string());
     let sem = Arc::new(Semaphore::new(concurrency));
     let mut handles = Vec::new();
+    let task = format!("report:{}", report_key);
+    progress::start(&task, &format!("Report '{}'", report_key), pages.len() as u64);
 
     for (_rp, ctx) in pages.iter() {
         let permit = match sem.clone().acquire_owned().await {
@@ -434,9 +442,10 @@ async fn run_extract_action(
         let report_language = report_language.clone();
         let report_key_for_task = report_key.clone();
         let task_ctx = ctx.clone();
+        let subject = url_path_and_query(&ctx.url);
         handles.push((
             task_ctx,
-            tokio::spawn(async move {
+            tokio::spawn(progress::unit(task.clone(), subject, async move {
                 let _permit = permit;
                 let req = extract::build_request(
                     &extraction_fields,
@@ -479,7 +488,7 @@ async fn run_extract_action(
                     })
                     .await;
                 (ctx, result)
-            }),
+            })),
         ));
     }
 
@@ -572,6 +581,7 @@ async fn run_extract_action(
             }
         }
     }
+    progress::finish(&task);
 
     let analyzed = rows.len().saturating_sub(error_count);
     let content_truncated = rows.iter().filter(|row| row.input_truncated).count();
@@ -844,6 +854,7 @@ async fn run_seo_action(
 
     let sem = Arc::new(Semaphore::new(concurrency));
     let mut handles = Vec::new();
+    progress::start(TASK_SEO, "SEO", pages.len() as u64);
 
     for (rp, ctx) in pages.iter() {
         let permit = match sem.clone().acquire_owned().await {
@@ -855,7 +866,8 @@ async fn run_seo_action(
         let ctx = ctx.clone();
         let site_name = site_name.clone();
         let is_homepage = url_is_homepage(&ctx.url);
-        handles.push(tokio::spawn(async move {
+        let subject = url_path_and_query(&ctx.url);
+        handles.push(tokio::spawn(progress::unit(TASK_SEO, subject, async move {
             let _permit = permit;
             let req = seo::build_request(&ctx, &site_name, is_homepage, max_tokens, temperature);
             // Retries once after a short delay on any failure (network, provider, or a malformed
@@ -870,7 +882,7 @@ async fn run_seo_action(
                 Err(e) => SeoOutcome::CallError(e.to_string()),
             };
             (rp, ctx, outcome)
-        }));
+        })));
     }
 
     let mut rows: Vec<HashMap<String, String>> = Vec::new();
@@ -933,6 +945,7 @@ async fn run_seo_action(
             }
         }
     }
+    progress::finish(TASK_SEO);
 
     eprintln!(
         "{}",
@@ -1095,7 +1108,8 @@ fn build_seo_table(rows: Vec<HashMap<String, String>>) -> SuperTable {
     table
 }
 
-fn url_path_and_query(url: &str) -> String {
+/// The path and query of `url`, e.g. `/blog/post?page=2`; also the subject of a page's AI requests.
+pub(crate) fn url_path_and_query(url: &str) -> String {
     match url::Url::parse(url) {
         Ok(u) => {
             let mut s = u.path().to_string();
@@ -1131,6 +1145,13 @@ async fn run_llms_action(
 
     let sem = Arc::new(Semaphore::new(concurrency));
     let mut handles = Vec::new();
+    // llms.txt and llms-full.txt share one summary per page, so one task tracks both.
+    let (task, label) = if options.ai_actions.iter().any(|a| a == "llms-txt") {
+        ("llms-txt", "llms.txt")
+    } else {
+        ("llms-full", "llms-full.txt")
+    };
+    progress::start(task, label, pages.len() as u64);
 
     for (rp, ctx) in pages.iter() {
         let permit = match sem.clone().acquire_owned().await {
@@ -1140,7 +1161,8 @@ async fn run_llms_action(
         let client = client.clone();
         let rp = rp.clone();
         let ctx = ctx.clone();
-        handles.push(tokio::spawn(async move {
+        let subject = url_path_and_query(&ctx.url);
+        handles.push(tokio::spawn(progress::unit(task, subject, async move {
             let _permit = permit;
             let req = llms_txt::build_summary_request(&ctx, max_tokens, temperature);
             // Retry once on any failure (network, provider, or malformed summary JSON).
@@ -1159,7 +1181,7 @@ async fn run_llms_action(
                 }
             };
             (rp, ctx, summary)
-        }));
+        })));
     }
 
     let mut collected: Vec<(RankedPage, PageContext, llms_txt::PageSummary)> = Vec::new();
@@ -1176,6 +1198,7 @@ async fn run_llms_action(
             collected.push((rp, ctx, s));
         }
     }
+    progress::finish(task);
     if collected.is_empty() {
         return;
     }
@@ -1438,6 +1461,7 @@ async fn run_typos_action(
 
     let sem = Arc::new(Semaphore::new(concurrency));
     let mut handles = Vec::new();
+    progress::start(TASK_TYPOS, "Typos", pages.len() as u64);
 
     for (rp, ctx) in pages.iter() {
         let permit = match sem.clone().acquire_owned().await {
@@ -1448,7 +1472,8 @@ async fn run_typos_action(
         let rp = rp.clone();
         let ctx = ctx.clone();
         let lang = forced_lang.clone();
-        handles.push(tokio::spawn(async move {
+        let subject = url_path_and_query(&ctx.url);
+        handles.push(tokio::spawn(progress::unit(TASK_TYPOS, subject, async move {
             let _permit = permit;
             let req = typos::build_request(&ctx, lang.as_deref(), max_tokens, temperature);
             // Retry once on any failure; surface a persistent failure instead of silently
@@ -1469,7 +1494,7 @@ async fn run_typos_action(
                 }
             };
             (rp, ctx, res)
-        }));
+        })));
     }
 
     let mut rows: Vec<HashMap<String, String>> = Vec::new();
@@ -1497,6 +1522,7 @@ async fn run_typos_action(
             Err(_) => fail_count += 1,
         }
     }
+    progress::finish(TASK_TYPOS);
 
     let fail_note = if fail_count > 0 {
         format!(" ({} page(s) failed)", fail_count)
@@ -1595,6 +1621,7 @@ async fn run_custom_action(
     let prompt = Arc::new(user_prompt);
     let sem = Arc::new(Semaphore::new(concurrency));
     let mut handles = Vec::new();
+    progress::start(TASK_CUSTOM, "Custom check", pages.len() as u64);
 
     for (rp, ctx) in pages.iter() {
         let permit = match sem.clone().acquire_owned().await {
@@ -1605,7 +1632,8 @@ async fn run_custom_action(
         let rp = rp.clone();
         let ctx = ctx.clone();
         let prompt = prompt.clone();
-        handles.push(tokio::spawn(async move {
+        let subject = url_path_and_query(&ctx.url);
+        handles.push(tokio::spawn(progress::unit(TASK_CUSTOM, subject, async move {
             let _permit = permit;
             let req = custom::build_request(&prompt, &ctx, max_tokens, temperature);
             // custom::parse is infallible, so this retries once only on a transport/provider error.
@@ -1622,7 +1650,7 @@ async fn run_custom_action(
                 }],
             };
             (rp, ctx, findings)
-        }));
+        })));
     }
 
     let mut rows: Vec<HashMap<String, String>> = Vec::new();
@@ -1645,6 +1673,7 @@ async fn run_custom_action(
             }
         }
     }
+    progress::finish(TASK_CUSTOM);
 
     eprintln!(
         "{}",

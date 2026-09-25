@@ -30,6 +30,7 @@ use tokio::sync::Semaphore;
 use crate::ai::client::AiClient;
 use crate::ai::config::build_config;
 use crate::ai::page::PageContext;
+use crate::ai::progress;
 use crate::ai::provider::{ChatMessage, ChatRequest};
 use crate::ai::report::locale::ReportLocale;
 use crate::ai::selection::{Candidate, build_candidates};
@@ -46,6 +47,12 @@ const CAT_SELECT: &str = "Brand elaborate (select)";
 const CAT_EXTRACT: &str = "Brand elaborate (extract)";
 const CAT_SYNTH: &str = "Brand elaborate (synthesis)";
 const CAT_CORRECT: &str = "Brand elaborate (correction)";
+// Progress tasks of the LLM stages (the gap-fill's is in `gapfill`).
+const TASK_SELECT: &str = "elaborate:select";
+const TASK_EXTRACT: &str = "elaborate:extract";
+const TASK_SYNTH: &str = "elaborate:synthesize";
+const SYNTH_LABEL: &str = "Elaborate: synthesis";
+const TASK_CORRECT: &str = "elaborate:correct";
 const EXTRACT_ATTEMPTS: u32 = 3;
 const SELECT_ATTEMPTS: u32 = 2;
 /// How many stored HTML bodies to re-parse for global-nav detection.
@@ -290,6 +297,7 @@ pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, output: &Ar
     );
     let sem = Arc::new(Semaphore::new(concurrency));
     let mut handles = Vec::new();
+    progress::start(TASK_EXTRACT, "Elaborate: extract", contexts.len() as u64);
     for (url, ctx) in contexts.iter().cloned() {
         let permit = match sem.clone().acquire_owned().await {
             Ok(p) => p,
@@ -297,14 +305,15 @@ pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, output: &Ar
         };
         let client = client.clone();
         let lang = report_language.clone();
-        handles.push(tokio::spawn(async move {
+        let subject = crate::ai::runner::url_path_and_query(&url);
+        handles.push(tokio::spawn(progress::unit(TASK_EXTRACT, subject, async move {
             let _permit = permit;
             let req = extract::build_request(&ctx, template, &lang, max_tokens, temperature);
             let result = client
                 .complete_parsed_n(&req, CAT_EXTRACT, EXTRACT_ATTEMPTS, extract::parse)
                 .await;
             (url, result)
-        }));
+        })));
     }
 
     let mut essences: Vec<(String, extract::PageEssence)> = Vec::new();
@@ -329,6 +338,7 @@ pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, output: &Ar
             Err(_) => {} // task join error — counted implicitly by the missing page
         }
     }
+    progress::finish(TASK_EXTRACT);
 
     if essences.is_empty() {
         report_error(
@@ -453,6 +463,8 @@ async fn run_selection(
     budget: usize,
 ) -> select::SelectionPlan {
     let floor = (budget / 4).clamp(10, 40);
+    // Two rounds; the second only runs when a section of the first asks for more pages.
+    progress::start(TASK_SELECT, "Elaborate: select", 2);
 
     let user = format!(
         "<candidates>\n{}</candidates>\n<clusters>\n{}</clusters>",
@@ -468,13 +480,17 @@ async fn run_selection(
         json_schema: None,
         schema_name: None,
     };
-    let ia = match client
-        .complete_parsed_n(&ia_req, CAT_SELECT, SELECT_ATTEMPTS, select::parse_ia_map)
-        .await
+    let ia = match progress::unit(
+        TASK_SELECT,
+        "round 1",
+        client.complete_parsed_n(&ia_req, CAT_SELECT, SELECT_ATTEMPTS, select::parse_ia_map),
+    )
+    .await
     {
         Ok((ia, _)) => ia,
         Err(_) => {
             // Fall back to deterministic ranking + clustering.
+            progress::finish(TASK_SELECT);
             return select::SelectionPlan {
                 selected: all.iter().take(budget).cloned().collect(),
                 clusters: Vec::new(),
@@ -484,33 +500,40 @@ async fn run_selection(
         }
     };
 
-    // Round 2: if any section wants expanding, present the second tier of candidates.
-    let mut expand_ids: Vec<usize> = Vec::new();
-    if ia.sections.iter().any(|s| s.expand) && shown.len() > 40 {
-        let second_tier: Vec<(String, Candidate)> = shown.iter().skip(40).take(120).cloned().collect();
-        if !second_tier.is_empty() {
-            let user = format!(
-                "<candidates>\n{}</candidates>",
-                select::render_candidate_list(&second_tier)
-            );
-            let req = ChatRequest {
-                system: Some(select::SELECT_EXPAND_SYSTEM_PROMPT.to_string()),
-                messages: vec![ChatMessage::user(user)],
-                max_tokens,
-                temperature,
-                json_mode: true,
-                json_schema: None,
-                schema_name: None,
-            };
-            if let Ok((ids, _)) = client
-                .complete_parsed_n(&req, CAT_SELECT, SELECT_ATTEMPTS, select::parse_expand_ids)
-                .await
-            {
-                // Map second-tier ids (offset by 40) back to `shown` indexes.
-                expand_ids = ids.into_iter().map(|id| id + 40).collect();
-            }
+    // Round 2: if any section wants expanding, present the second tier of candidates. The round
+    // counts as done also when it is not needed.
+    let expand_ids = progress::unit(TASK_SELECT, "round 2", async {
+        if !(ia.sections.iter().any(|s| s.expand) && shown.len() > 40) {
+            return Vec::new();
         }
-    }
+        let second_tier: Vec<(String, Candidate)> = shown.iter().skip(40).take(120).cloned().collect();
+        if second_tier.is_empty() {
+            return Vec::new();
+        }
+        let user = format!(
+            "<candidates>\n{}</candidates>",
+            select::render_candidate_list(&second_tier)
+        );
+        let req = ChatRequest {
+            system: Some(select::SELECT_EXPAND_SYSTEM_PROMPT.to_string()),
+            messages: vec![ChatMessage::user(user)],
+            max_tokens,
+            temperature,
+            json_mode: true,
+            json_schema: None,
+            schema_name: None,
+        };
+        match client
+            .complete_parsed_n(&req, CAT_SELECT, SELECT_ATTEMPTS, select::parse_expand_ids)
+            .await
+        {
+            // Map second-tier ids (offset by 40) back to `shown` indexes.
+            Ok((ids, _)) => ids.into_iter().map(|id| id + 40).collect(),
+            Err(_) => Vec::new(),
+        }
+    })
+    .await;
+    progress::finish(TASK_SELECT);
 
     select::merge_selection(shown, &ia, &expand_ids, all, clusters, reps, floor, budget)
 }
@@ -544,7 +567,8 @@ async fn synthesize_prose(
         synthesize::SynthMode::SingleShot => {
             let ids = prose_ids(template);
             let sys = synthesize::build_system_prompt(sk, &ids, report_language);
-            if let Some(map) = one_synthesis_call(client, &sys, &material, synth_max).await {
+            let call = one_synthesis_call(client, &sys, &material, synth_max);
+            if let Some(map) = progress::single_unit(TASK_SYNTH, SYNTH_LABEL, "all sections", call).await {
                 prose.extend(map);
             }
         }
@@ -561,6 +585,7 @@ async fn synthesize_prose(
                     false
                 )
             );
+            progress::start(TASK_SYNTH, SYNTH_LABEL, ids.len() as u64);
             for id in ids {
                 // Route only relevant essences for this section (+ the model).
                 let routed: Vec<(String, extract::PageEssence)> = essences
@@ -570,12 +595,14 @@ async fn synthesize_prose(
                     .collect();
                 let mat = synthesize::build_material(model, &routed, 60);
                 let sys = synthesize::build_system_prompt(sk, &[id], report_language);
-                if let Some(map) = one_synthesis_call(client, &sys, &mat, synth_max).await
+                let call = one_synthesis_call(client, &sys, &mat, synth_max);
+                if let Some(map) = progress::unit(TASK_SYNTH, id, call).await
                     && let Some(text) = map.get(id)
                 {
                     prose.insert(id.to_string(), text.clone());
                 }
             }
+            progress::finish(TASK_SYNTH);
         }
     }
     // Keep only known prose ids (ignore any invented keys).
@@ -652,10 +679,8 @@ sentence or >=40 chars, occurring exactly once. "to" is the replacement ("" dele
         json_schema: None,
         schema_name: None,
     };
-    match client
-        .complete_parsed_n(&req, CAT_CORRECT, 2, correct::parse_edits)
-        .await
-    {
+    let call = client.complete_parsed_n(&req, CAT_CORRECT, 2, correct::parse_edits);
+    match progress::single_unit(TASK_CORRECT, "Elaborate: correction", "prose", call).await {
         Ok((edits, _)) => {
             let (new_prose, report) = apply_corrections_to_prose(prose, &edits);
             eprintln!(
