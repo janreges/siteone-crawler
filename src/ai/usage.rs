@@ -2,10 +2,8 @@
 // (c) Jan Reges <jan.reges@siteone.cz>
 //
 // Process-global accumulator for ALL LLM calls made during a run (per-page actions + the
-// report summary), across every provider. Tokens come from each provider's usage block
-// (OpenAI/compatible: prompt_tokens/completion_tokens; Anthropic: input_tokens/output_tokens;
-// Gemini: promptTokenCount/candidatesTokenCount) — completion/output already includes any
-// reasoning/thinking tokens.
+// report summary), across every provider. Tokens come from each provider's usage block, parsed
+// by `provider::parse_usage` — completion/output already includes any reasoning/thinking tokens.
 
 use std::collections::BTreeMap;
 use std::sync::Mutex;
@@ -13,10 +11,15 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use once_cell::sync::Lazy;
 
+use super::provider::Usage;
+
 static CALLS: AtomicU64 = AtomicU64::new(0);
 static CACHE_HITS: AtomicU64 = AtomicU64::new(0);
 static PROMPT_TOKENS: AtomicU64 = AtomicU64::new(0);
 static COMPLETION_TOKENS: AtomicU64 = AtomicU64::new(0);
+static REASONING_TOKENS: AtomicU64 = AtomicU64::new(0);
+static CACHED_INPUT_TOKENS: AtomicU64 = AtomicU64::new(0);
+static CALLS_WITH_UNKNOWN_REASONING: AtomicU64 = AtomicU64::new(0);
 static NETWORK_TIME_MS: AtomicU64 = AtomicU64::new(0);
 static CALLS_WITHOUT_USAGE: AtomicU64 = AtomicU64::new(0);
 static HTTP_ATTEMPTS: AtomicU64 = AtomicU64::new(0);
@@ -34,6 +37,8 @@ pub struct CategoryUsage {
     pub cache_hits: u64,
     pub prompt_tokens: u64,
     pub completion_tokens: u64,
+    pub reasoning_tokens: u64,
+    pub cached_input_tokens: u64,
     pub network_time_ms: u64,
 }
 
@@ -57,26 +62,25 @@ pub fn model_name() -> Option<String> {
 /// Record one completed LLM call under `category` (a human-readable analysis-type label).
 /// `from_cache` calls count as logical completions but contribute no tokens or network time to the
 /// current run: their provider cost was paid in an earlier run.
-/// `tokens_reported` is false when the provider's response did not contain a recognizable usage
-/// block (the call still counts; its tokens are unknown).
-pub fn record(
-    category: &str,
-    prompt_tokens: u64,
-    completion_tokens: u64,
-    elapsed_ms: u64,
-    from_cache: bool,
-    tokens_reported: bool,
-) {
+/// A call whose `usage` reports neither input nor output tokens is counted as a call without
+/// token data; one without a reasoning count adds nothing to the reasoning total but is counted in
+/// `calls_with_unknown_reasoning`.
+pub fn record(category: &str, usage: &Usage, elapsed_ms: u64, from_cache: bool) {
     CALLS.fetch_add(1, Ordering::Relaxed);
     if from_cache {
         CACHE_HITS.fetch_add(1, Ordering::Relaxed);
     } else {
-        PROMPT_TOKENS.fetch_add(prompt_tokens, Ordering::Relaxed);
-        COMPLETION_TOKENS.fetch_add(completion_tokens, Ordering::Relaxed);
+        PROMPT_TOKENS.fetch_add(usage.input(), Ordering::Relaxed);
+        COMPLETION_TOKENS.fetch_add(usage.output(), Ordering::Relaxed);
+        REASONING_TOKENS.fetch_add(usage.reasoning_tokens.unwrap_or(0), Ordering::Relaxed);
+        CACHED_INPUT_TOKENS.fetch_add(usage.cached_input_tokens.unwrap_or(0), Ordering::Relaxed);
         NETWORK_TIME_MS.fetch_add(elapsed_ms, Ordering::Relaxed);
-    }
-    if !from_cache && !tokens_reported {
-        CALLS_WITHOUT_USAGE.fetch_add(1, Ordering::Relaxed);
+        if !usage.has_tokens() {
+            CALLS_WITHOUT_USAGE.fetch_add(1, Ordering::Relaxed);
+        }
+        if usage.reasoning_tokens.is_none() {
+            CALLS_WITH_UNKNOWN_REASONING.fetch_add(1, Ordering::Relaxed);
+        }
     }
     if let Ok(mut map) = BY_CATEGORY.lock() {
         let e = map.entry(category.to_string()).or_default();
@@ -84,8 +88,10 @@ pub fn record(
         if from_cache {
             e.cache_hits += 1;
         } else {
-            e.prompt_tokens += prompt_tokens;
-            e.completion_tokens += completion_tokens;
+            e.prompt_tokens += usage.input();
+            e.completion_tokens += usage.output();
+            e.reasoning_tokens += usage.reasoning_tokens.unwrap_or(0);
+            e.cached_input_tokens += usage.cached_input_tokens.unwrap_or(0);
             e.network_time_ms += elapsed_ms;
         }
     }
@@ -146,8 +152,11 @@ pub struct UsageSnapshot {
     pub cache_hits: u64,
     pub prompt_tokens: u64,
     pub completion_tokens: u64,
+    pub reasoning_tokens: u64,
+    pub cached_input_tokens: u64,
     pub network_time_s: f64,
     pub calls_without_usage: u64,
+    pub calls_with_unknown_reasoning: u64,
     pub http_attempts: u64,
     pub retries: u64,
 }
@@ -159,8 +168,13 @@ impl UsageSnapshot {
             cache_hits: self.cache_hits.saturating_sub(earlier.cache_hits),
             prompt_tokens: self.prompt_tokens.saturating_sub(earlier.prompt_tokens),
             completion_tokens: self.completion_tokens.saturating_sub(earlier.completion_tokens),
+            reasoning_tokens: self.reasoning_tokens.saturating_sub(earlier.reasoning_tokens),
+            cached_input_tokens: self.cached_input_tokens.saturating_sub(earlier.cached_input_tokens),
             network_time_s: (self.network_time_s - earlier.network_time_s).max(0.0),
             calls_without_usage: self.calls_without_usage.saturating_sub(earlier.calls_without_usage),
+            calls_with_unknown_reasoning: self
+                .calls_with_unknown_reasoning
+                .saturating_sub(earlier.calls_with_unknown_reasoning),
             http_attempts: self.http_attempts.saturating_sub(earlier.http_attempts),
             retries: self.retries.saturating_sub(earlier.retries),
         }
@@ -173,8 +187,11 @@ pub fn snapshot() -> UsageSnapshot {
         cache_hits: CACHE_HITS.load(Ordering::Relaxed),
         prompt_tokens: PROMPT_TOKENS.load(Ordering::Relaxed),
         completion_tokens: COMPLETION_TOKENS.load(Ordering::Relaxed),
+        reasoning_tokens: REASONING_TOKENS.load(Ordering::Relaxed),
+        cached_input_tokens: CACHED_INPUT_TOKENS.load(Ordering::Relaxed),
         network_time_s: NETWORK_TIME_MS.load(Ordering::Relaxed) as f64 / 1000.0,
         calls_without_usage: CALLS_WITHOUT_USAGE.load(Ordering::Relaxed),
+        calls_with_unknown_reasoning: CALLS_WITH_UNKNOWN_REASONING.load(Ordering::Relaxed),
         http_attempts: HTTP_ATTEMPTS.load(Ordering::Relaxed),
         retries: RETRIES.load(Ordering::Relaxed),
     }
@@ -188,8 +205,11 @@ pub fn reset() {
     CACHE_HITS.store(0, Ordering::Relaxed);
     PROMPT_TOKENS.store(0, Ordering::Relaxed);
     COMPLETION_TOKENS.store(0, Ordering::Relaxed);
+    REASONING_TOKENS.store(0, Ordering::Relaxed);
+    CACHED_INPUT_TOKENS.store(0, Ordering::Relaxed);
     NETWORK_TIME_MS.store(0, Ordering::Relaxed);
     CALLS_WITHOUT_USAGE.store(0, Ordering::Relaxed);
+    CALLS_WITH_UNKNOWN_REASONING.store(0, Ordering::Relaxed);
     HTTP_ATTEMPTS.store(0, Ordering::Relaxed);
     RETRIES.store(0, Ordering::Relaxed);
     if let Ok(mut categories) = BY_CATEGORY.lock() {
@@ -271,6 +291,7 @@ mod tests {
             prompt_tokens: 40_079,
             completion_tokens: 4_609,
             network_time_ms: 0,
+            ..Default::default()
         };
         let line = format_category_line("SEO analysis", &u);
         assert!(line.contains("SEO analysis"));
@@ -278,6 +299,67 @@ mod tests {
         assert!(line.contains("input 40.1k"));
         assert!(line.contains("output 4.6k"));
         assert!(!line.contains("from cache"));
+    }
+
+    /// Serializes the tests that record into the process-wide totals.
+    static GLOBALS: Mutex<()> = Mutex::new(());
+
+    fn usage(input: Option<u64>, output: Option<u64>, reasoning: Option<u64>, cached: Option<u64>) -> Usage {
+        Usage {
+            input_tokens: input,
+            output_tokens: output,
+            reasoning_tokens: reasoning,
+            cached_input_tokens: cached,
+        }
+    }
+
+    #[test]
+    fn record_sums_reasoning_and_cached_tokens() {
+        let _globals = GLOBALS.lock().unwrap_or_else(|e| e.into_inner());
+        let category = "test: reasoning and cached";
+        let before = snapshot();
+        record(category, &usage(Some(17), Some(37), Some(33), Some(4)), 1200, false);
+        record(category, &usage(Some(19), Some(2), None, Some(0)), 300, false);
+        record(category, &Usage::default(), 100, false);
+        // A cache hit adds no tokens: they were paid for in an earlier run.
+        record(category, &usage(Some(1000), Some(500), Some(400), Some(900)), 0, true);
+
+        let d = snapshot().delta_since(before);
+        assert_eq!((d.calls, d.cache_hits), (4, 1));
+        assert_eq!((d.prompt_tokens, d.completion_tokens), (36, 39));
+        assert_eq!((d.reasoning_tokens, d.cached_input_tokens), (33, 4));
+        assert_eq!(d.calls_without_usage, 1);
+        assert_eq!(
+            d.calls_with_unknown_reasoning, 2,
+            "the call without reasoning and the one without usage"
+        );
+
+        let (_, c) = categories()
+            .into_iter()
+            .find(|(name, _)| name == category)
+            .expect("the category");
+        assert_eq!((c.calls, c.cache_hits, c.network_time_ms), (4, 1, 1600));
+        assert_eq!((c.prompt_tokens, c.completion_tokens), (36, 39));
+        assert_eq!((c.reasoning_tokens, c.cached_input_tokens), (33, 4));
+    }
+
+    #[test]
+    fn category_line_without_reasoning_reads_as_before() {
+        let _globals = GLOBALS.lock().unwrap_or_else(|e| e.into_inner());
+        record(
+            "test: no reasoning",
+            &usage(Some(40_079), Some(4_609), None, None),
+            900,
+            false,
+        );
+        let line = breakdown_lines()
+            .into_iter()
+            .find(|line| line.contains("test: no reasoning"))
+            .expect("the category line");
+        assert_eq!(
+            line,
+            "AI tokens — test: no reasoning: 1 request(s), input 40.1k (40079) tokens, output 4.6k (4609) tokens"
+        );
     }
 
     #[test]
@@ -288,6 +370,7 @@ mod tests {
             prompt_tokens: 100,
             completion_tokens: 50,
             network_time_ms: 0,
+            ..Default::default()
         };
         let line = format_category_line("Custom check", &u);
         assert!(line.contains("2 from cache"));

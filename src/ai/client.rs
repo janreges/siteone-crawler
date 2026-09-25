@@ -53,12 +53,18 @@ impl AiCompletion {
     }
 }
 
-/// On-disk cache record (content-addressed; never contains the API key).
+/// On-disk cache record (content-addressed; never contains the API key). `prompt_tokens` and
+/// `completion_tokens` keep their original meaning and number type, 0/0 meaning "not reported",
+/// so records stay readable in both directions between builds; the newer counts are optional.
 #[derive(Serialize, Deserialize)]
 struct CachedCompletion {
     text: String,
-    prompt_tokens: u32,
-    completion_tokens: u32,
+    prompt_tokens: u64,
+    completion_tokens: u64,
+    #[serde(default)]
+    reasoning_tokens: Option<u64>,
+    #[serde(default)]
+    cached_input_tokens: Option<u64>,
     #[serde(default)]
     finish_reason: Option<String>,
 }
@@ -235,15 +241,7 @@ impl AiClient {
         // Cache key from URL + body only (no auth headers).
         let cache_key = self.cache_key(&shaped.url, &shaped.body);
         if use_cache && let Some(hit) = self.get_cached(&cache_key) {
-            let had_tokens = hit.usage.prompt_tokens > 0 || hit.usage.completion_tokens > 0;
-            super::usage::record(
-                category,
-                hit.usage.prompt_tokens as u64,
-                hit.usage.completion_tokens as u64,
-                0,
-                true,
-                had_tokens,
-            );
+            super::usage::record(category, &hit.usage, 0, true);
             return Ok(hit);
         }
 
@@ -309,22 +307,13 @@ impl AiClient {
                         ))
                     })?;
 
-                    let parsed_usage = provider::parse_usage(self.config.provider, &json);
-                    let tokens_reported = parsed_usage.is_some();
-                    let usage = parsed_usage.unwrap_or_default();
+                    let usage = provider::parse_usage(self.config.provider, &json).unwrap_or_default();
                     let finish_reason = provider::parse_finish_reason(self.config.provider, &json);
 
                     // A successful HTTP response may still be a refusal/safety response with no
                     // content. Account for any provider-reported tokens before validating content.
                     if status.is_success() {
-                        super::usage::record(
-                            category,
-                            usage.prompt_tokens as u64,
-                            usage.completion_tokens as u64,
-                            call_start.elapsed().as_millis() as u64,
-                            false,
-                            tokens_reported,
-                        );
+                        super::usage::record(category, &usage, call_start.elapsed().as_millis() as u64, false);
                     }
 
                     // Non-2xx with a parseable body, or a 200 body carrying a provider error.
@@ -397,12 +386,20 @@ impl AiClient {
         }
         let data = std::fs::read_to_string(&path).ok()?;
         let cached: CachedCompletion = serde_json::from_str(&data).ok()?;
+        let reported = cached.prompt_tokens > 0 || cached.completion_tokens > 0;
+        let usage = if reported {
+            Usage {
+                input_tokens: Some(cached.prompt_tokens),
+                output_tokens: Some(cached.completion_tokens),
+                reasoning_tokens: cached.reasoning_tokens,
+                cached_input_tokens: cached.cached_input_tokens,
+            }
+        } else {
+            Usage::default()
+        };
         Some(AiCompletion {
             text: cached.text,
-            usage: Usage {
-                prompt_tokens: cached.prompt_tokens,
-                completion_tokens: cached.completion_tokens,
-            },
+            usage,
             from_cache: true,
             finish_reason: cached.finish_reason,
         })
@@ -420,8 +417,10 @@ impl AiClient {
         }
         let cached = CachedCompletion {
             text: completion.text.clone(),
-            prompt_tokens: completion.usage.prompt_tokens,
-            completion_tokens: completion.usage.completion_tokens,
+            prompt_tokens: completion.usage.input(),
+            completion_tokens: completion.usage.output(),
+            reasoning_tokens: completion.usage.reasoning_tokens,
+            cached_input_tokens: completion.usage.cached_input_tokens,
             finish_reason: completion.finish_reason.clone(),
         };
         if let Ok(json) = serde_json::to_string(&cached) {
@@ -561,6 +560,76 @@ mod tests {
             };
             assert!(completion.was_interrupted(provider), "{provider:?} {reason}");
         }
+    }
+
+    fn client_with_cache(dir: &std::path::Path) -> AiClient {
+        AiClient::new(AiConfig {
+            provider: Provider::OpenAiCompatible,
+            endpoint: "http://127.0.0.1:9/v1".to_string(),
+            model: "m".to_string(),
+            api_key: None,
+            max_tokens: 100,
+            temperature: 0.0,
+            force_completion_tokens: false,
+            extra_body: None,
+            timeout_secs: 1,
+            cache_dir: Some(dir.display().to_string()),
+            max_reqs_per_sec: None,
+        })
+    }
+
+    #[test]
+    fn cache_keeps_reasoning_and_cached_tokens() {
+        let dir = tempfile::tempdir().expect("a temp dir");
+        let client = client_with_cache(dir.path());
+        let usage = Usage {
+            input_tokens: Some(17),
+            output_tokens: Some(37),
+            reasoning_tokens: Some(33),
+            cached_input_tokens: Some(4),
+        };
+        let completion = AiCompletion {
+            text: "OK".to_string(),
+            usage,
+            from_cache: false,
+            finish_reason: Some("stop".to_string()),
+        };
+        client.store_cached("abcdef", &completion);
+        let hit = client.get_cached("abcdef").expect("a cache hit");
+        assert_eq!(hit.usage, usage);
+        assert!(hit.from_cache);
+        assert_eq!(hit.text, "OK");
+    }
+
+    #[test]
+    fn cache_files_of_older_builds_still_load() {
+        let dir = tempfile::tempdir().expect("a temp dir");
+        let client = client_with_cache(dir.path());
+        std::fs::create_dir_all(dir.path().join("ab")).expect("the cache subdir");
+        std::fs::write(
+            dir.path().join("ab/abcdef.json"),
+            r#"{"text":"OK","prompt_tokens":17,"completion_tokens":37,"finish_reason":"stop"}"#,
+        )
+        .expect("an old cache file");
+        std::fs::write(
+            dir.path().join("ab/ab0000.json"),
+            r#"{"text":"OK","prompt_tokens":0,"completion_tokens":0}"#,
+        )
+        .expect("an old cache file without usage");
+
+        let hit = client.get_cached("abcdef").expect("an old record loads");
+        assert_eq!(
+            hit.usage,
+            Usage {
+                input_tokens: Some(17),
+                output_tokens: Some(37),
+                reasoning_tokens: None,
+                cached_input_tokens: None,
+            }
+        );
+        // Older builds stored "not reported" as 0/0.
+        let hit = client.get_cached("ab0000").expect("an old record loads");
+        assert_eq!(hit.usage, Usage::default());
     }
 
     #[test]

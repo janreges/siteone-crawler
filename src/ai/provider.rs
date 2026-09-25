@@ -352,20 +352,55 @@ fn openai_strict_schema(schema: &Value) -> Value {
     schema
 }
 
-/// Token usage extracted from a response.
-#[derive(Debug, Clone, Copy, Default)]
+/// Token usage reported by the provider for one response. Every field is None when the response
+/// did not say — "unknown" is never turned into 0.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Usage {
-    pub prompt_tokens: u32,
-    pub completion_tokens: u32,
+    /// All prompt tokens the provider processed (for Anthropic: input + cache creation + cache read).
+    pub input_tokens: Option<u64>,
+    /// Generated tokens, INCLUDING reasoning/thinking tokens.
+    pub output_tokens: Option<u64>,
+    /// The part of `output_tokens` that was reasoning/thinking, when the provider reports it.
+    pub reasoning_tokens: Option<u64>,
+    /// The part of `input_tokens` served from the provider's prompt cache.
+    pub cached_input_tokens: Option<u64>,
 }
 
 impl Usage {
-    fn from_u64(prompt: Option<u64>, completion: Option<u64>) -> Self {
-        Usage {
-            prompt_tokens: prompt.unwrap_or(0).min(u32::MAX as u64) as u32,
-            completion_tokens: completion.unwrap_or(0).min(u32::MAX as u64) as u32,
-        }
+    pub fn input(&self) -> u64 {
+        self.input_tokens.unwrap_or(0)
     }
+
+    pub fn output(&self) -> u64 {
+        self.output_tokens.unwrap_or(0)
+    }
+
+    /// True when the provider reported at least the input or the output token count.
+    pub fn has_tokens(&self) -> bool {
+        self.input_tokens.is_some() || self.output_tokens.is_some()
+    }
+}
+
+/// Largest token count accepted from a response (2^53, the largest integer a JSON number is
+/// guaranteed to carry exactly).
+const MAX_COUNT: u64 = 1 << 53;
+
+/// A token count at `key` of `v`: a JSON integer, or a finite non-negative float with no
+/// fractional part, up to 2^53. Anything else (negative, fractional, huge, string, ...) is None.
+fn count(v: &Value, key: &str) -> Option<u64> {
+    let n = v.get(key)?;
+    let count = match n.as_u64() {
+        Some(i) => i,
+        None => {
+            let f = n.as_f64()?;
+            if !f.is_finite() || f < 0.0 || f.fract() != 0.0 {
+                return None;
+            }
+            // Saturates for huge values, which the range check below then rejects.
+            f as u64
+        }
+    };
+    (count <= MAX_COUNT).then_some(count)
 }
 
 /// Extract the assistant's text content from a provider-native response.
@@ -426,61 +461,112 @@ pub fn parse_finish_reason(provider: Provider, resp: &Value) -> Option<String> {
 }
 
 /// Extract token usage from a response, trying every known runtime format in turn (regardless
-/// of the configured provider). `completion_tokens` always represents OUTPUT INCLUDING any
+/// of the configured provider). `output_tokens` always represents OUTPUT INCLUDING any
 /// reasoning/thinking tokens. Returns None when no known format is present — the caller then
 /// keeps working but simply does not count tokens for that call (never panics).
 ///
 /// Supported shapes:
-/// - OpenAI / OpenAI-compatible (vLLM, llama.cpp server, LM Studio, SGLang, MiniMax, Ollama
-///   `/v1`, Gemini OpenAI-compat): `usage.prompt_tokens` / `usage.completion_tokens`.
-/// - Anthropic: `usage.input_tokens` / `usage.output_tokens`.
+/// - OpenAI / OpenAI-compatible (vLLM, llama.cpp server, LM Studio, SGLang, MiniMax, DeepSeek,
+///   Ollama `/v1`, Gemini OpenAI-compat): `usage.prompt_tokens` / `usage.completion_tokens`,
+///   reasoning in `completion_tokens_details.reasoning_tokens`, cached input in
+///   `prompt_tokens_details.cached_tokens` (DeepSeek: `prompt_cache_hit_tokens`).
+/// - Anthropic and the OpenAI Responses API: `usage.input_tokens` / `usage.output_tokens`; the
+///   Anthropic prompt-cache parts (`cache_creation_input_tokens`, `cache_read_input_tokens`) are
+///   added to the input; reasoning in `output_tokens_details.thinking_tokens` or
+///   `…reasoning_tokens`; cached input in `cache_read_input_tokens` or
+///   `input_tokens_details.cached_tokens`.
 /// - Gemini native: `usageMetadata.promptTokenCount` + output as `totalTokenCount - prompt`
 ///   (correct on both Gemini API and Vertex), falling back to `candidatesTokenCount +
-///   thoughtsTokenCount`.
+///   thoughtsTokenCount`; reasoning = `thoughtsTokenCount`, cached = `cachedContentTokenCount`.
 /// - Ollama native (`/api/chat`, `/api/generate`): `prompt_eval_count` / `eval_count`.
 /// - llama.cpp native (`/completion`): `tokens_evaluated` / `tokens_predicted`.
+///
+/// A reasoning count larger than the output count is inconsistent and reported as unknown.
 pub fn parse_usage(_provider: Provider, resp: &Value) -> Option<Usage> {
-    let u64f = |v: &Value, k: &str| v.get(k).and_then(|n| n.as_u64());
+    let usage = parse_usage_shape(resp)?;
+    if !usage.has_tokens() {
+        return None;
+    }
+    let reasoning_fits = match (usage.reasoning_tokens, usage.output_tokens) {
+        (Some(reasoning), Some(output)) => reasoning <= output,
+        _ => true,
+    };
+    Some(Usage {
+        reasoning_tokens: usage.reasoning_tokens.filter(|_| reasoning_fits),
+        ..usage
+    })
+}
+
+fn parse_usage_shape(resp: &Value) -> Option<Usage> {
+    let nested = |v: &Value, object: &str, key: &str| v.get(object).and_then(|o| count(o, key));
 
     if let Some(u) = resp.get("usage") {
         // OpenAI-compatible.
-        let (p, c) = (u64f(u, "prompt_tokens"), u64f(u, "completion_tokens"));
+        let (p, c) = (count(u, "prompt_tokens"), count(u, "completion_tokens"));
         if p.is_some() || c.is_some() {
-            return Some(Usage::from_u64(p, c));
+            return Some(Usage {
+                input_tokens: p,
+                output_tokens: c,
+                reasoning_tokens: nested(u, "completion_tokens_details", "reasoning_tokens"),
+                cached_input_tokens: nested(u, "prompt_tokens_details", "cached_tokens")
+                    .or_else(|| count(u, "prompt_cache_hit_tokens")),
+            });
         }
-        // Anthropic.
-        let (i, o) = (u64f(u, "input_tokens"), u64f(u, "output_tokens"));
+        // Anthropic, OpenAI Responses.
+        let (i, o) = (count(u, "input_tokens"), count(u, "output_tokens"));
         if i.is_some() || o.is_some() {
-            return Some(Usage::from_u64(i, o));
+            let cache_read = count(u, "cache_read_input_tokens");
+            let input = i.map(|i| i + count(u, "cache_creation_input_tokens").unwrap_or(0) + cache_read.unwrap_or(0));
+            return Some(Usage {
+                input_tokens: input,
+                output_tokens: o,
+                reasoning_tokens: nested(u, "output_tokens_details", "thinking_tokens")
+                    .or_else(|| nested(u, "output_tokens_details", "reasoning_tokens")),
+                cached_input_tokens: cache_read.or_else(|| nested(u, "input_tokens_details", "cached_tokens")),
+            });
         }
     }
 
     // Gemini native.
     if let Some(m) = resp.get("usageMetadata") {
-        let prompt = u64f(m, "promptTokenCount");
-        let total = u64f(m, "totalTokenCount");
-        let cand = u64f(m, "candidatesTokenCount");
-        let thoughts = u64f(m, "thoughtsTokenCount");
+        let prompt = count(m, "promptTokenCount");
+        let total = count(m, "totalTokenCount");
+        let cand = count(m, "candidatesTokenCount");
+        let thoughts = count(m, "thoughtsTokenCount");
         if prompt.is_some() || cand.is_some() || total.is_some() {
-            let p = prompt.unwrap_or(0);
-            let out = match total {
-                Some(t) if t >= p => t - p, // captures candidates + thoughts on both API and Vertex
-                _ => cand.unwrap_or(0) + thoughts.unwrap_or(0),
+            let output = match (total, prompt) {
+                // Captures candidates + thoughts on both API and Vertex.
+                (Some(t), Some(p)) if t >= p => Some(t - p),
+                _ if cand.is_some() || thoughts.is_some() => Some(cand.unwrap_or(0) + thoughts.unwrap_or(0)),
+                _ => None,
             };
-            return Some(Usage::from_u64(Some(p), Some(out)));
+            return Some(Usage {
+                input_tokens: prompt,
+                output_tokens: output,
+                reasoning_tokens: thoughts,
+                cached_input_tokens: count(m, "cachedContentTokenCount"),
+            });
         }
     }
 
     // Ollama native.
-    let (pe, ec) = (u64f(resp, "prompt_eval_count"), u64f(resp, "eval_count"));
+    let (pe, ec) = (count(resp, "prompt_eval_count"), count(resp, "eval_count"));
     if pe.is_some() || ec.is_some() {
-        return Some(Usage::from_u64(pe, ec));
+        return Some(Usage {
+            input_tokens: pe,
+            output_tokens: ec,
+            ..Usage::default()
+        });
     }
 
     // llama.cpp native /completion.
-    let (te, tp) = (u64f(resp, "tokens_evaluated"), u64f(resp, "tokens_predicted"));
+    let (te, tp) = (count(resp, "tokens_evaluated"), count(resp, "tokens_predicted"));
     if te.is_some() || tp.is_some() {
-        return Some(Usage::from_u64(te, tp));
+        return Some(Usage {
+            input_tokens: te,
+            output_tokens: tp,
+            ..Usage::default()
+        });
     }
 
     None
@@ -755,8 +841,7 @@ mod tests {
             Some("hi there")
         );
         let u = parse_usage(Provider::OpenAiCompatible, &resp).unwrap();
-        assert_eq!(u.prompt_tokens, 10);
-        assert_eq!(u.completion_tokens, 3);
+        assert_eq!(u, usage(Some(10), Some(3), None, None));
     }
 
     #[test]
@@ -792,8 +877,7 @@ mod tests {
     fn parse_usage_anthropic() {
         let resp = json!({"usage": {"input_tokens": 100, "output_tokens": 40}});
         let u = parse_usage(Provider::Anthropic, &resp).unwrap();
-        assert_eq!(u.prompt_tokens, 100);
-        assert_eq!(u.completion_tokens, 40);
+        assert_eq!(u, usage(Some(100), Some(40), None, None));
     }
 
     #[test]
@@ -801,30 +885,188 @@ mod tests {
         // Gemini: output incl reasoning = total - prompt (works for both API and Vertex).
         let resp = json!({"usageMetadata": {"promptTokenCount": 50, "candidatesTokenCount": 30, "thoughtsTokenCount": 20, "totalTokenCount": 100}});
         let u = parse_usage(Provider::Gemini, &resp).unwrap();
-        assert_eq!(u.prompt_tokens, 50);
-        assert_eq!(u.completion_tokens, 50); // 100 - 50 = candidates + thoughts
+        // 100 - 50 = candidates + thoughts
+        assert_eq!(u, usage(Some(50), Some(50), Some(20), None));
     }
 
     #[test]
     fn parse_usage_ollama_native() {
         let resp = json!({"prompt_eval_count": 26, "eval_count": 259, "done": true});
         let u = parse_usage(Provider::OpenAiCompatible, &resp).unwrap();
-        assert_eq!(u.prompt_tokens, 26);
-        assert_eq!(u.completion_tokens, 259);
+        assert_eq!(u, usage(Some(26), Some(259), None, None));
     }
 
     #[test]
     fn parse_usage_llamacpp_native() {
         let resp = json!({"tokens_evaluated": 6, "tokens_predicted": 17});
         let u = parse_usage(Provider::OpenAiCompatible, &resp).unwrap();
-        assert_eq!(u.prompt_tokens, 6);
-        assert_eq!(u.completion_tokens, 17);
+        assert_eq!(u, usage(Some(6), Some(17), None, None));
     }
 
     #[test]
     fn parse_usage_none_when_unknown() {
-        let resp = json!({"something_else": 1, "choices": []});
-        assert!(parse_usage(Provider::OpenAiCompatible, &resp).is_none());
+        for resp in [
+            json!({"something_else": 1, "choices": []}),
+            json!({"usage": {}}),
+            json!({"usage": {"total_tokens": 5}}),
+            json!({"usage": null}),
+            json!({"usage": "12"}),
+            json!({"usageMetadata": {}}),
+            json!({"usageMetadata": {"totalTokenCount": 29}}),
+            json!({"usage": {"prompt_tokens": "12", "completion_tokens": -1}}),
+            json!([1, 2]),
+            json!("text"),
+            json!(null),
+        ] {
+            assert_eq!(parse_usage(Provider::OpenAiCompatible, &resp), None, "{resp}");
+        }
+    }
+
+    fn usage(input: Option<u64>, output: Option<u64>, reasoning: Option<u64>, cached: Option<u64>) -> Usage {
+        Usage {
+            input_tokens: input,
+            output_tokens: output,
+            reasoning_tokens: reasoning,
+            cached_input_tokens: cached,
+        }
+    }
+
+    /// A captured real response from `tests/fixtures/ai-responses/`.
+    fn fixture(name: &str) -> Value {
+        let text = match name {
+            "vllm-qwen-think" => include_str!("../../tests/fixtures/ai-responses/vllm-qwen-think.json"),
+            "vllm-qwen-nothink" => include_str!("../../tests/fixtures/ai-responses/vllm-qwen-nothink.json"),
+            "vllm-deepseek" => include_str!("../../tests/fixtures/ai-responses/vllm-deepseek.json"),
+            "openai" => include_str!("../../tests/fixtures/ai-responses/openai.json"),
+            "anthropic" => include_str!("../../tests/fixtures/ai-responses/anthropic.json"),
+            "gemini" => include_str!("../../tests/fixtures/ai-responses/gemini.json"),
+            "minimax" => include_str!("../../tests/fixtures/ai-responses/minimax.json"),
+            "deepseek" => include_str!("../../tests/fixtures/ai-responses/deepseek.json"),
+            other => panic!("no fixture {other}"),
+        };
+        serde_json::from_str(text).expect("the fixture is JSON")
+    }
+
+    #[test]
+    fn usage_of_every_captured_runtime() {
+        // Numbers read from the fixture files. Anthropic input = input 43 + cache creation 0 +
+        // cache read 0; Gemini output = totalTokenCount 29 - promptTokenCount 8 = 21 and it reports
+        // no cachedContentTokenCount; MiniMax reports no reasoning count; DeepSeek's cached count
+        // comes from prompt_tokens_details (0), not prompt_cache_hit_tokens.
+        let cases = [
+            ("vllm-qwen-think", usage(Some(17), Some(37), Some(33), Some(0))),
+            ("vllm-qwen-nothink", usage(Some(19), Some(2), Some(0), Some(0))),
+            ("vllm-deepseek", usage(Some(17), Some(37), Some(33), Some(0))),
+            ("openai", usage(Some(13), Some(10), Some(0), Some(0))),
+            ("anthropic", usage(Some(43), Some(39), Some(32), Some(0))),
+            ("gemini", usage(Some(8), Some(21), Some(20), None)),
+            ("minimax", usage(Some(183), Some(30), None, Some(128))),
+            ("deepseek", usage(Some(37), Some(19), Some(17), Some(0))),
+        ];
+        // The shape decides, not the configured provider.
+        for provider in [
+            Provider::OpenAi,
+            Provider::OpenAiCompatible,
+            Provider::Anthropic,
+            Provider::Gemini,
+        ] {
+            for (name, expected) in cases {
+                assert_eq!(
+                    parse_usage(provider, &fixture(name)),
+                    Some(expected),
+                    "{name} as {provider:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn usage_counts_accept_only_whole_non_negative_numbers() {
+        let input = |count: Value| {
+            parse_usage(
+                Provider::OpenAiCompatible,
+                &json!({"usage": {"prompt_tokens": count, "completion_tokens": 5}}),
+            )
+            .expect("completion_tokens alone is a known shape")
+            .input_tokens
+        };
+        assert_eq!(input(json!(12)), Some(12));
+        assert_eq!(input(json!(12.0)), Some(12));
+        assert_eq!(input(json!(0)), Some(0));
+        assert_eq!(input(json!(9_007_199_254_740_992u64)), Some(9_007_199_254_740_992));
+        for bad in [
+            json!(12.5),
+            json!(-1),
+            json!(-0.5),
+            json!("12"),
+            json!(1e300),
+            json!(9_007_199_254_740_993u64),
+            json!(u64::MAX),
+            json!(null),
+            json!(true),
+            json!([12]),
+            json!({"n": 12}),
+        ] {
+            assert_eq!(input(bad.clone()), None, "{bad}");
+        }
+    }
+
+    #[test]
+    fn reasoning_larger_than_output_is_unknown() {
+        let with_reasoning = |reasoning: u64| {
+            parse_usage(
+                Provider::OpenAiCompatible,
+                &json!({"usage": {"prompt_tokens": 10, "completion_tokens": 5,
+                    "completion_tokens_details": {"reasoning_tokens": reasoning}}}),
+            )
+        };
+        assert_eq!(with_reasoning(6), Some(usage(Some(10), Some(5), None, None)));
+        assert_eq!(with_reasoning(5), Some(usage(Some(10), Some(5), Some(5), None)));
+    }
+
+    #[test]
+    fn anthropic_input_includes_prompt_cache_tokens() {
+        let resp = json!({"usage": {"input_tokens": 10, "cache_creation_input_tokens": 5,
+            "cache_read_input_tokens": 7, "output_tokens": 3}});
+        assert_eq!(
+            parse_usage(Provider::Anthropic, &resp),
+            Some(usage(Some(22), Some(3), None, Some(7)))
+        );
+        // Cache parts alone do not make an input count up.
+        let resp = json!({"usage": {"cache_read_input_tokens": 7, "output_tokens": 3}});
+        assert_eq!(
+            parse_usage(Provider::Anthropic, &resp),
+            Some(usage(None, Some(3), None, Some(7)))
+        );
+    }
+
+    #[test]
+    fn openai_responses_usage_shape() {
+        let resp = json!({"usage": {"input_tokens": 20, "input_tokens_details": {"cached_tokens": 4},
+            "output_tokens": 9, "output_tokens_details": {"reasoning_tokens": 6}}});
+        assert_eq!(
+            parse_usage(Provider::OpenAi, &resp),
+            Some(usage(Some(20), Some(9), Some(6), Some(4)))
+        );
+    }
+
+    #[test]
+    fn deepseek_cache_hit_tokens_when_no_prompt_details() {
+        let resp = json!({"usage": {"prompt_tokens": 37, "completion_tokens": 19, "prompt_cache_hit_tokens": 30}});
+        assert_eq!(
+            parse_usage(Provider::OpenAiCompatible, &resp),
+            Some(usage(Some(37), Some(19), None, Some(30)))
+        );
+    }
+
+    #[test]
+    fn gemini_output_from_parts_when_total_is_inconsistent() {
+        let resp = json!({"usageMetadata": {"promptTokenCount": 50, "totalTokenCount": 40,
+            "candidatesTokenCount": 7, "thoughtsTokenCount": 3, "cachedContentTokenCount": 12}});
+        assert_eq!(
+            parse_usage(Provider::Gemini, &resp),
+            Some(usage(Some(50), Some(10), Some(3), Some(12)))
+        );
     }
 
     #[test]

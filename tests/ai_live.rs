@@ -49,7 +49,8 @@ async fn minimax_m3_json_roundtrip() {
     eprintln!("=== MiniMax-M3 RAW ===\n{}\n=== END ===", completion.text);
     eprintln!(
         "usage: prompt={} completion={}",
-        completion.usage.prompt_tokens, completion.usage.completion_tokens
+        completion.usage.input(),
+        completion.usage.output()
     );
     let norm = normalize_json_response(&completion.text);
     eprintln!("=== normalized ===\n{}", norm);

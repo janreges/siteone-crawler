@@ -863,8 +863,8 @@ async fn run_seo_action(
             let outcome = match client.complete_parsed(&req, CAT_SEO, seo::parse).await {
                 Ok((result, completion)) => SeoOutcome::Ok(Box::new(SeoOk {
                     result,
-                    prompt_tokens: completion.usage.prompt_tokens,
-                    completion_tokens: completion.usage.completion_tokens,
+                    prompt_tokens: completion.usage.input(),
+                    completion_tokens: completion.usage.output(),
                     from_cache: completion.from_cache,
                 })),
                 Err(e) => SeoOutcome::CallError(e.to_string()),
@@ -900,8 +900,8 @@ async fn run_seo_action(
                 } = *ok;
                 ok_count += 1;
                 overall_sum += result.scores.overall as i64;
-                prompt_tokens_total += prompt_tokens as u64;
-                completion_tokens_total += completion_tokens as u64;
+                prompt_tokens_total += prompt_tokens;
+                completion_tokens_total += completion_tokens;
                 if from_cache {
                     cache_hits += 1;
                 }
@@ -987,8 +987,8 @@ async fn run_seo_action(
 
 struct SeoOk {
     result: seo::SeoResult,
-    prompt_tokens: u32,
-    completion_tokens: u32,
+    prompt_tokens: u64,
+    completion_tokens: u64,
     from_cache: bool,
 }
 
