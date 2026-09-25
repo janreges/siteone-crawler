@@ -19,4 +19,5 @@ pub mod runner;
 pub mod secret;
 pub mod selection;
 pub mod summary;
+pub mod telemetry;
 pub mod usage;

@@ -40,6 +40,10 @@ pub struct CategoryUsage {
     pub reasoning_tokens: u64,
     pub cached_input_tokens: u64,
     pub network_time_ms: u64,
+    /// Output tokens of the requests whose generation time is known (see `record_generation`).
+    pub timed_output_tokens: u64,
+    /// Send-to-body time of those requests, without rate-limit waits and retry backoff.
+    pub generation_ms: u64,
 }
 
 /// Remember the model name (called once per client; the first non-empty value sticks).
@@ -97,6 +101,16 @@ pub fn record(category: &str, usage: &Usage, elapsed_ms: u64, from_cache: bool) 
     }
 }
 
+/// Record the output tokens and the send-to-body time of one successful request, for the average
+/// generation speed of its category.
+pub fn record_generation(category: &str, output_tokens: u64, duration_ms: u64) {
+    if let Ok(mut map) = BY_CATEGORY.lock() {
+        let e = map.entry(category.to_string()).or_default();
+        e.timed_output_tokens += output_tokens;
+        e.generation_ms += duration_ms;
+    }
+}
+
 pub fn record_http_attempt(is_retry: bool) {
     HTTP_ATTEMPTS.fetch_add(1, Ordering::Relaxed);
     if is_retry {
@@ -136,13 +150,28 @@ fn format_category_line(name: &str, u: &CategoryUsage) -> String {
     } else {
         String::new()
     };
+    let reasoning = if u.reasoning_tokens > 0 {
+        format!(", reasoning {} tokens", format_count(u.reasoning_tokens))
+    } else {
+        String::new()
+    };
+    let speed = if u.generation_ms > 0 {
+        format!(
+            ", avg {} tok/s",
+            (u.timed_output_tokens as f64 * 1000.0 / u.generation_ms as f64).round() as u64
+        )
+    } else {
+        String::new()
+    };
     format!(
-        "AI tokens — {}: {} request(s){}, input {} tokens, output {} tokens",
+        "AI tokens — {}: {} request(s){}, input {} tokens, output {} tokens{}{}",
         name,
         u.calls,
         cache,
         format_count(u.prompt_tokens),
         format_count(u.completion_tokens),
+        reasoning,
+        speed,
     )
 }
 
@@ -359,6 +388,25 @@ mod tests {
         assert_eq!(
             line,
             "AI tokens — test: no reasoning: 1 request(s), input 40.1k (40079) tokens, output 4.6k (4609) tokens"
+        );
+    }
+
+    #[test]
+    fn category_line_with_reasoning_and_speed() {
+        let _globals = GLOBALS.lock().unwrap_or_else(|e| e.into_inner());
+        let category = "test: reasoning and speed";
+        record(category, &usage(Some(17), Some(37), Some(33), None), 1500, false);
+        record(category, &usage(Some(19), Some(2), None, None), 900, false);
+        // Generation throughput counts only the timed attempts: 39 tokens in 1.3 s = 30 tok/s.
+        record_generation(category, 37, 1000);
+        record_generation(category, 2, 300);
+        let line = breakdown_lines()
+            .into_iter()
+            .find(|line| line.contains(category))
+            .expect("the category line");
+        assert_eq!(
+            line,
+            "AI tokens — test: reasoning and speed: 2 request(s), input 36 tokens, output 39 tokens, reasoning 33 tokens, avg 30 tok/s"
         );
     }
 

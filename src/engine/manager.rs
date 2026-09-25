@@ -273,6 +273,8 @@ impl Manager {
 
         // Optional AI phase (post-crawl, before analyzers/exporters). Fail-soft.
         // One `ai` event phase brackets every AI pipeline below, so a host sees the whole wait.
+        // The per-request lines are progress output (this also covers the later summary action).
+        crate::ai::telemetry::set_console_enabled(!options.hide_progress_bar);
         let runs_ai = !options.ai_actions.is_empty() || options.ai_elaborate || options.ai_profile;
         if options.ai_enabled && runs_ai {
             crate::events::phase("ai", crate::events::PhaseState::Started);

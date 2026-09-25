@@ -3648,3 +3648,165 @@ fn mock_llm_delays_its_answer() {
     assert!(response.ends_with("{}"), "{response}");
     assert!(started.elapsed() >= std::time::Duration::from_millis(300));
 }
+
+// ---------------------------------------------------------------------------
+// Per-request AI telemetry on stderr (offline, against `MockLlm`)
+// ---------------------------------------------------------------------------
+
+/// The captured vLLM Qwen response (thinking on: 17 in, 37 out, 33 of them reasoning) with its
+/// answer replaced by a valid SEO result, so the SEO action succeeds on the first request.
+fn qwen_seo_answer() -> String {
+    let mut response: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/ai-responses/vllm-qwen-think.json")).expect("JSON");
+    response["choices"][0]["message"]["content"] = serde_json::json!(r#"{"scores":{"overall":80}}"#);
+    response.to_string()
+}
+
+fn chat_response(status: u16, body: String) -> MockResponse {
+    MockResponse {
+        path_prefix: "/v1/chat/completions",
+        status,
+        body,
+        // Long enough for a measurable duration, and so a tok/s value.
+        delay_ms: 100,
+    }
+}
+
+/// A local one-page site to run the AI actions on.
+fn one_page_site(tmp: &TempDir) -> LocalServer {
+    let site = tmp.path.join("site");
+    write_site(&site, 0);
+    LocalServer::start(&site)
+}
+
+/// Crawls `server` with the SEO action against `mock`; returns stderr.
+fn crawl_with_ai_seo(server: &LocalServer, mock: &MockLlm, extra: &[&str]) -> String {
+    let mut args = vec![
+        "--config-file=/dev/null".to_string(),
+        format!("--url={}", server.url()),
+        LOCAL_ANALYZERS.to_string(),
+        "--http-cache-dir=".to_string(),
+        "--no-color".to_string(),
+        "--ai-provider=openai-compatible".to_string(),
+        format!("--ai-endpoint={}", mock.url()),
+        "--ai-model=m".to_string(),
+        "--ai-actions=seo".to_string(),
+        "--ai-max-pages=1".to_string(),
+    ];
+    args.extend(extra.iter().map(|arg| arg.to_string()));
+    if !extra.iter().any(|arg| arg.starts_with("--ai-cache-dir=")) {
+        args.push("--ai-cache-dir=".to_string());
+    }
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    let output = run_crawler(&args);
+    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+    assert_eq!(output.status.code(), Some(0), "stderr: {stderr}");
+    stderr
+}
+
+fn assert_line(stderr: &str, pattern: &str) {
+    let re = regex::Regex::new(&format!("(?m)^{pattern}$")).expect("a valid pattern");
+    assert!(re.is_match(stderr), "no line matching {pattern:?} in stderr:\n{stderr}");
+}
+
+#[test]
+fn ai_request_is_reported_with_tokens_reasoning_time_and_speed() {
+    let tmp = TempDir::new("ai-telemetry-ok");
+    let mock = MockLlm::start(vec![chat_response(200, qwen_seo_answer())]);
+    let stderr = crawl_with_ai_seo(&one_page_site(&tmp), &mock, &[]);
+    assert_line(
+        &stderr,
+        r"  AI ✓ #1 SEO analysis · 17 in · 37 out \(33 reasoning\) · \d+\.\d s · \d+ tok/s",
+    );
+    assert_eq!(mock.request_bodies().len(), 1);
+}
+
+#[test]
+fn ai_request_with_uncounted_reasoning_says_so() {
+    let tmp = TempDir::new("ai-telemetry-minimax");
+    // MiniMax reasons inline in <think> and reports no reasoning count (183 in, 30 out).
+    let mut response: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/ai-responses/minimax.json")).expect("JSON");
+    response["choices"][0]["message"]["content"] =
+        serde_json::json!("<think>The user wants an SEO review.</think>\n\n{\"scores\":{\"overall\":80}}");
+    let mock = MockLlm::start(vec![chat_response(200, response.to_string())]);
+    let stderr = crawl_with_ai_seo(&one_page_site(&tmp), &mock, &[]);
+    assert_line(
+        &stderr,
+        r"  AI ✓ #1 SEO analysis · 183 in · 30 out \(reasoning n/a\) · \d+\.\d s · \d+ tok/s",
+    );
+}
+
+#[test]
+fn ai_request_without_usage_is_still_reported() {
+    let tmp = TempDir::new("ai-telemetry-no-usage");
+    let body = serde_json::json!({"id": "x", "choices": [{"message": {"content": r#"{"scores":{"overall":80}}"#}}]});
+    let mock = MockLlm::start(vec![chat_response(200, body.to_string())]);
+    let stderr = crawl_with_ai_seo(&one_page_site(&tmp), &mock, &[]);
+    assert_line(&stderr, r"  AI ✓ #1 SEO analysis · tokens not reported · \d+\.\d s");
+}
+
+#[test]
+fn ai_request_retry_and_success_are_both_reported() {
+    let tmp = TempDir::new("ai-telemetry-retry");
+    let mock = MockLlm::start(vec![
+        chat_response(429, r#"{"error":{"message":"slow down"}}"#.to_string()),
+        chat_response(200, qwen_seo_answer()),
+    ]);
+    // Two seconds between sends: the retry waits for the 1 s backoff and then for its rate slot.
+    let stderr = crawl_with_ai_seo(&one_page_site(&tmp), &mock, &["--ai-max-reqs-per-sec=0.5"]);
+    assert_line(
+        &stderr,
+        r"  AI ↻ #1 SEO analysis · HTTP 429 · \d+\.\d s · retrying \(attempt 2/3\)",
+    );
+    // The mock answers in 0.1 s; neither the backoff nor the rate-limit wait is part of that time.
+    assert_line(
+        &stderr,
+        r"  AI ✓ #2 SEO analysis · 17 in · 37 out \(33 reasoning\) · 0\.\d s · \d+ tok/s",
+    );
+    assert!(stderr.find("AI ↻ #1") < stderr.find("AI ✓ #2"), "in arrival order");
+}
+
+#[test]
+fn ai_provider_error_is_reported() {
+    let tmp = TempDir::new("ai-telemetry-error");
+    let mock = MockLlm::start(vec![chat_response(
+        404,
+        include_str!("fixtures/ai-responses/error-vllm-unknown-model.json").to_string(),
+    )]);
+    let stderr = crawl_with_ai_seo(&one_page_site(&tmp), &mock, &[]);
+    assert_line(
+        &stderr,
+        r"  AI ✗ #1 SEO analysis · AI provider error: The model `no-such-model` does not exist\. · \d+\.\d s",
+    );
+}
+
+#[test]
+fn ai_cache_hit_is_reported() {
+    let tmp = TempDir::new("ai-telemetry-cache");
+    let cache = tmp.path.join("ai-cache");
+    let cache_arg = format!("--ai-cache-dir={}", cache.display());
+    let mock = MockLlm::start(vec![chat_response(200, qwen_seo_answer())]);
+    // The same site (and so the same prompt) twice.
+    let server = one_page_site(&tmp);
+    crawl_with_ai_seo(&server, &mock, &[&cache_arg]);
+    let stderr = crawl_with_ai_seo(&server, &mock, &[&cache_arg]);
+    assert_line(
+        &stderr,
+        r"  AI ⇢ #1 SEO analysis · cache hit · 17 in · 37 out \(33 reasoning\)",
+    );
+    assert_eq!(
+        mock.request_bodies().len(),
+        1,
+        "the second run is served from the cache"
+    );
+}
+
+#[test]
+fn ai_request_lines_are_hidden_with_hide_progress_bar() {
+    let tmp = TempDir::new("ai-telemetry-hidden");
+    let mock = MockLlm::start(vec![chat_response(200, qwen_seo_answer())]);
+    let stderr = crawl_with_ai_seo(&one_page_site(&tmp), &mock, &["--hide-progress-bar"]);
+    assert_eq!(mock.request_bodies().len(), 1, "the request is made");
+    assert!(!stderr.contains("AI ✓"), "stderr: {stderr}");
+}

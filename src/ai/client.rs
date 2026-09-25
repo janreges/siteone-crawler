@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 
 use super::config::AiConfig;
 use super::provider::{self, ChatRequest, Provider, Usage};
+use super::telemetry::{self, RequestOutcome, RequestRecord};
 use crate::error::{CrawlerError, CrawlerResult};
 
 const MAX_ATTEMPTS: u32 = 3;
@@ -240,8 +241,16 @@ impl AiClient {
 
         // Cache key from URL + body only (no auth headers).
         let cache_key = self.cache_key(&shaped.url, &shaped.body);
+        // One telemetry record per cache hit and per HTTP attempt.
+        let base = self.base_record(category);
         if use_cache && let Some(hit) = self.get_cached(&cache_key) {
             super::usage::record(category, &hit.usage, 0, true);
+            telemetry::report(RequestRecord {
+                outcome: RequestOutcome::CacheHit,
+                usage: hit.usage.has_tokens().then_some(hit.usage),
+                finish_reason: hit.finish_reason.clone(),
+                ..base
+            });
             return Ok(hit);
         }
 
@@ -259,10 +268,27 @@ impl AiClient {
         let body_string = serde_json::to_string(&shaped.body)
             .map_err(|e| CrawlerError::Other(format!("AI request serialization error: {}", e)))?;
         let mut last_err = String::from("unknown error");
+        // Reports a failed attempt and returns the error for the caller.
+        let fail = |record: RequestRecord, message: String| {
+            let message = self.redact(&message);
+            telemetry::report(RequestRecord {
+                outcome: RequestOutcome::Error,
+                error: Some(message.clone()),
+                ..record
+            });
+            CrawlerError::Other(message)
+        };
 
         for attempt in 0..MAX_ATTEMPTS {
             self.wait_for_rate_slot().await;
             super::usage::record_http_attempt(retry_context || attempt > 0);
+            let will_retry = attempt + 1 < MAX_ATTEMPTS;
+            // The attempt's duration excludes the rate-limit wait above and the backoff below.
+            let sent_at = Instant::now();
+            let record = RequestRecord {
+                attempt: attempt + 1,
+                ..base.clone()
+            };
             let resp = self
                 .client
                 .post(&shaped.url)
@@ -281,34 +307,67 @@ impl AiClient {
                         .and_then(|v| v.to_str().ok())
                         .and_then(|s| s.trim().parse::<u64>().ok());
                     let code = status.as_u16();
+                    let record = RequestRecord {
+                        http_status: Some(code),
+                        duration_ms: Some(elapsed_ms(sent_at)),
+                        ..record
+                    };
 
                     if code == 429 || (500..=599).contains(&code) {
                         last_err = format!("HTTP {}", code);
-                        if attempt + 1 < MAX_ATTEMPTS {
+                        if will_retry {
+                            telemetry::report(RequestRecord {
+                                outcome: RequestOutcome::Retry,
+                                error: Some(last_err.clone()),
+                                ..record
+                            });
                             self.backoff(attempt, retry_after).await;
                             continue;
                         }
-                        return Err(CrawlerError::Other(format!(
-                            "AI request failed after retries: {}",
-                            last_err
-                        )));
+                        return Err(fail(record, format!("AI request failed after retries: {}", last_err)));
                     }
 
-                    let body_text = r
-                        .text()
-                        .await
-                        .map_err(|e| CrawlerError::Other(format!("AI response read error: {}", e)))?;
+                    let body_text = match r.text().await {
+                        Ok(text) => text,
+                        Err(e) => {
+                            let record = RequestRecord {
+                                duration_ms: Some(elapsed_ms(sent_at)),
+                                ..record
+                            };
+                            return Err(fail(
+                                record,
+                                format!("AI response read error: {}", transport_error_text(e)),
+                            ));
+                        }
+                    };
+                    let record = RequestRecord {
+                        duration_ms: Some(elapsed_ms(sent_at)),
+                        ..record
+                    };
 
-                    let json: serde_json::Value = serde_json::from_str(&body_text).map_err(|e| {
-                        CrawlerError::Other(format!(
-                            "AI response is not valid JSON: {} (body starts: {})",
-                            e,
-                            snippet(&body_text)
-                        ))
-                    })?;
+                    let json: serde_json::Value = match serde_json::from_str(&body_text) {
+                        Ok(json) => json,
+                        Err(e) => {
+                            return Err(fail(
+                                record,
+                                format!(
+                                    "AI response is not valid JSON: {} (body starts: {})",
+                                    e,
+                                    snippet(&body_text)
+                                ),
+                            ));
+                        }
+                    };
 
-                    let usage = provider::parse_usage(self.config.provider, &json).unwrap_or_default();
+                    let parsed_usage = provider::parse_usage(self.config.provider, &json);
+                    let usage = parsed_usage.unwrap_or_default();
                     let finish_reason = provider::parse_finish_reason(self.config.provider, &json);
+                    let record = RequestRecord {
+                        usage: parsed_usage,
+                        reasoning_chars: provider::parse_reasoning(self.config.provider, &json),
+                        finish_reason: finish_reason.clone(),
+                        ..record
+                    };
 
                     // A successful HTTP response may still be a refusal/safety response with no
                     // content. Account for any provider-reported tokens before validating content.
@@ -318,18 +377,16 @@ impl AiClient {
 
                     // Non-2xx with a parseable body, or a 200 body carrying a provider error.
                     if let Some(msg) = provider::extract_error(self.config.provider, &json) {
-                        return Err(CrawlerError::Other(format!("AI provider error: {}", msg)));
+                        return Err(fail(record, format!("AI provider error: {}", msg)));
                     }
                     if !status.is_success() {
-                        return Err(CrawlerError::Other(format!(
-                            "AI HTTP {}: {}",
-                            code,
-                            snippet(&body_text)
-                        )));
+                        return Err(fail(record, format!("AI HTTP {}: {}", code, snippet(&body_text))));
                     }
 
-                    let text = provider::parse_content(self.config.provider, &json)
-                        .ok_or_else(|| CrawlerError::Other(no_content_message(self.config.provider, &json)))?;
+                    let Some(text) = provider::parse_content(self.config.provider, &json) else {
+                        return Err(fail(record, no_content_message(self.config.provider, &json)));
+                    };
+                    telemetry::report(record);
 
                     let completion = AiCompletion {
                         text,
@@ -346,16 +403,62 @@ impl AiClient {
                     // server-side, so retrying could double-charge. Only retry when we know
                     // the request never reached/processed (connect/build errors).
                     let retriable = e.is_connect() || e.is_request();
-                    if retriable && attempt + 1 < MAX_ATTEMPTS {
+                    let record = RequestRecord {
+                        duration_ms: Some(elapsed_ms(sent_at)),
+                        ..record
+                    };
+                    let error = self.redact(&transport_error_text(e));
+                    if retriable && will_retry {
+                        telemetry::report(RequestRecord {
+                            outcome: RequestOutcome::Retry,
+                            error: Some(error),
+                            ..record
+                        });
                         self.backoff(attempt, None).await;
                         continue;
                     }
+                    telemetry::report(RequestRecord {
+                        outcome: RequestOutcome::Error,
+                        error: Some(format!("AI request error: {}", error)),
+                        ..record
+                    });
                     return Err(CrawlerError::Other(format!("AI request error: {}", last_err)));
                 }
             }
         }
 
         Err(CrawlerError::Other(format!("AI request failed: {}", last_err)))
+    }
+
+    /// `text` with the configured API key masked, should a provider or proxy echo it.
+    fn redact(&self, text: &str) -> String {
+        match self.config.api_key.as_deref() {
+            Some(key) if !key.is_empty() => text.replace(key, "[redacted]"),
+            _ => text.to_string(),
+        }
+    }
+
+    /// The telemetry record of a request made now, carrying the subject of the enclosing
+    /// `telemetry::scope`.
+    fn base_record(&self, category: &str) -> RequestRecord {
+        let subject = telemetry::current_subject().unwrap_or_default();
+        RequestRecord {
+            seq: 0,
+            task: subject.task.as_deref().map(telemetry::task_ref),
+            category: category.to_string(),
+            subject: subject.subject,
+            provider: self.config.provider.as_str(),
+            model: self.config.model.clone(),
+            attempt: 1,
+            max_attempts: MAX_ATTEMPTS,
+            outcome: RequestOutcome::Ok,
+            http_status: None,
+            error: None,
+            usage: None,
+            reasoning_chars: None,
+            duration_ms: None,
+            finish_reason: None,
+        }
     }
 
     async fn backoff(&self, attempt: u32, retry_after: Option<u64>) {
@@ -507,6 +610,23 @@ fn is_structured_output_unsupported(message: &str) -> bool {
     mentions_schema && rejects_capability
 }
 
+fn elapsed_ms(since: Instant) -> u64 {
+    since.elapsed().as_millis() as u64
+}
+
+/// A transport error with its causes but without its URL, which may carry credentials.
+fn transport_error_text(e: reqwest::Error) -> String {
+    let e = e.without_url();
+    let mut text = e.to_string();
+    let mut source = std::error::Error::source(&e);
+    while let Some(cause) = source {
+        text.push_str(": ");
+        text.push_str(&cause.to_string());
+        source = cause.source();
+    }
+    text
+}
+
 /// The error text for a response without content, quoting the model's refusal when it gave one.
 fn no_content_message(provider: Provider, json: &serde_json::Value) -> String {
     match provider::parse_refusal(provider, json) {
@@ -638,6 +758,52 @@ mod tests {
         // Older builds stored "not reported" as 0/0.
         let hit = client.get_cached("ab0000").expect("an old record loads");
         assert_eq!(hit.usage, Usage::default());
+    }
+
+    #[tokio::test]
+    async fn requests_carry_the_subject_of_their_scope() {
+        let dir = tempfile::tempdir().expect("a temp dir");
+        let client = client_with_cache(dir.path());
+        let subject = telemetry::Subject {
+            task: Some("seo".to_string()),
+            subject: Some("/about".to_string()),
+        };
+        let record = telemetry::scope(subject, async { client.base_record("SEO analysis") }).await;
+        assert_eq!(record.task.map(|task| task.key).as_deref(), Some("seo"));
+        assert_eq!(record.subject.as_deref(), Some("/about"));
+        assert_eq!(record.category, "SEO analysis");
+        assert_eq!((record.provider, record.model.as_str()), ("openai-compatible", "m"));
+        assert_eq!((record.attempt, record.max_attempts), (1, MAX_ATTEMPTS));
+
+        let outside = client.base_record("SEO analysis");
+        assert!(outside.task.is_none() && outside.subject.is_none());
+    }
+
+    #[tokio::test]
+    async fn transport_errors_are_reported_without_their_url() {
+        let port = std::net::TcpListener::bind("127.0.0.1:0")
+            .and_then(|listener| listener.local_addr())
+            .expect("a free port")
+            .port();
+        let error = reqwest::Client::new()
+            .post(format!("http://user:secret-xyz@127.0.0.1:{port}/v1/chat/completions"))
+            .send()
+            .await
+            .expect_err("nothing listens there");
+        let text = transport_error_text(error);
+        assert!(!text.contains("secret-xyz") && !text.contains("127.0.0.1"), "{text}");
+        assert!(text.starts_with("error sending request: "), "the causes follow: {text}");
+    }
+
+    #[test]
+    fn errors_never_echo_the_api_key() {
+        let dir = tempfile::tempdir().expect("a temp dir");
+        let mut client = client_with_cache(dir.path());
+        client.config.api_key = Some("secret-xyz".to_string());
+        assert_eq!(
+            client.redact("AI provider error: invalid key secret-xyz"),
+            "AI provider error: invalid key [redacted]"
+        );
     }
 
     #[test]
