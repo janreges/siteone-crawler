@@ -585,8 +585,9 @@ pub fn decode_body(raw: &[u8], content_encoding: &str) -> std::io::Result<Vec<u8
 }
 
 /// [`decode_body`] that gives up with `ErrorKind::TimedOut` once `deadline` passes, so decompressing
-/// a response cannot outlive the request timeout. Every coding must reach the end of its stream: a
-/// truncated `deflate` body is an error, not a shorter page.
+/// a response cannot outlive the request timeout: decoders get the body and give their output in
+/// pieces of at most `DECODE_CHUNK` bytes, with the deadline checked around each piece. Every coding
+/// must reach the end of its stream: a truncated `deflate` body is an error, not a shorter page.
 pub fn decode_body_until(raw: &[u8], content_encoding: &str, deadline: Option<Instant>) -> std::io::Result<Vec<u8>> {
     let codings: Vec<String> = content_encoding
         .split(',')
@@ -603,8 +604,14 @@ pub fn decode_body_until(raw: &[u8], content_encoding: &str, deadline: Option<In
     let mut body = raw.to_vec();
     for coding in codings.iter().rev() {
         body = match coding.as_str() {
-            "br" => read_until(brotli::Decompressor::new(&body[..], 4096), deadline)?,
-            "gzip" | "x-gzip" => read_until(flate2::read::MultiGzDecoder::new(&body[..]), deadline)?,
+            "br" => read_until(
+                brotli::Decompressor::new(DeadlineReader::new(&body, deadline), 4096),
+                deadline,
+            )?,
+            "gzip" | "x-gzip" => read_until(
+                flate2::read::MultiGzDecoder::new(DeadlineReader::new(&body, deadline)),
+                deadline,
+            )?,
             // `deflate` is zlib-wrapped by the spec, but some servers send a raw deflate stream.
             _ => match inflate_until(&body, true, deadline) {
                 Err(error) if error.kind() != std::io::ErrorKind::TimedOut => inflate_until(&body, false, deadline)?,
@@ -614,6 +621,9 @@ pub fn decode_body_until(raw: &[u8], content_encoding: &str, deadline: Option<In
     }
     Ok(body)
 }
+
+/// Largest piece of a body a decoder takes in, or gives out, between two deadline checks.
+const DECODE_CHUNK: usize = 64 * 1024;
 
 fn check_deadline(deadline: Option<Instant>) -> std::io::Result<()> {
     if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
@@ -625,14 +635,39 @@ fn check_deadline(deadline: Option<Instant>) -> std::io::Result<()> {
     Ok(())
 }
 
-/// Read a decoder to its end in chunks, checking `deadline` between them.
+/// A compressed body handed to a decoder `DECODE_CHUNK` bytes at a time, failing once `deadline` has
+/// passed: a decoder can take in much input without giving out anything (e.g. a run of empty gzip
+/// members), so checking the deadline between its output chunks alone would not stop it.
+struct DeadlineReader<'a> {
+    input: &'a [u8],
+    deadline: Option<Instant>,
+}
+
+impl<'a> DeadlineReader<'a> {
+    fn new(input: &'a [u8], deadline: Option<Instant>) -> Self {
+        Self { input, deadline }
+    }
+}
+
+impl std::io::Read for DeadlineReader<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        check_deadline(self.deadline)?;
+        let len = buf.len().min(DECODE_CHUNK).min(self.input.len());
+        buf[..len].copy_from_slice(&self.input[..len]);
+        self.input = &self.input[len..];
+        Ok(len)
+    }
+}
+
+/// Read a decoder to its end in chunks, checking `deadline` between them and at the end.
 fn read_until(mut reader: impl std::io::Read, deadline: Option<Instant>) -> std::io::Result<Vec<u8>> {
     let mut decoded = Vec::new();
-    let mut chunk = vec![0u8; 64 * 1024];
+    let mut chunk = vec![0u8; DECODE_CHUNK];
     loop {
         check_deadline(deadline)?;
         let read = reader.read(&mut chunk)?;
         if read == 0 {
+            check_deadline(deadline)?;
             return Ok(decoded);
         }
         decoded.extend_from_slice(&chunk[..read]);
@@ -641,25 +676,27 @@ fn read_until(mut reader: impl std::io::Read, deadline: Option<Instant>) -> std:
 
 /// Inflate a zlib-wrapped (`zlib_header`) or raw deflate stream up to its end marker. flate2's
 /// readers report a stream that stops early as a normal end of input, so this drives the inflater
-/// directly and treats input that runs out before the end marker as an error.
+/// directly, a `DECODE_CHUNK` of input and of output at a time, and treats input that runs out
+/// before the end marker as an error.
 fn inflate_until(input: &[u8], zlib_header: bool, deadline: Option<Instant>) -> std::io::Result<Vec<u8>> {
     let mut inflater = flate2::Decompress::new(zlib_header);
-    let mut decoded: Vec<u8> = Vec::with_capacity(input.len().saturating_mul(4).max(1024));
+    let mut decoded = Vec::new();
+    let mut chunk = vec![0u8; DECODE_CHUNK];
     loop {
         check_deadline(deadline)?;
-        if decoded.len() == decoded.capacity() {
-            decoded.reserve(decoded.capacity().max(64 * 1024));
-        }
         let consumed = inflater.total_in() as usize;
-        let produced = decoded.len();
+        let produced = inflater.total_out();
+        let piece = &input[consumed..input.len().min(consumed + DECODE_CHUNK)];
         let status = inflater
-            .decompress_vec(&input[consumed..], &mut decoded, flate2::FlushDecompress::None)
+            .decompress(piece, &mut chunk, flate2::FlushDecompress::None)
             .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
+        let output = (inflater.total_out() - produced) as usize;
+        decoded.extend_from_slice(&chunk[..output]);
         if matches!(status, flate2::Status::StreamEnd) {
+            check_deadline(deadline)?;
             return Ok(decoded);
         }
-        let progressed = inflater.total_in() as usize != consumed || decoded.len() != produced;
-        if !progressed && decoded.len() < decoded.capacity() {
+        if inflater.total_in() as usize == consumed && output == 0 {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::UnexpectedEof,
                 "the deflate stream ends before its end marker",
@@ -827,6 +864,28 @@ mod tests {
         }
         let future = Some(Instant::now() + std::time::Duration::from_secs(60));
         assert_eq!(decode_body_until(&gzip_compress(PAGE), "gzip", future).unwrap(), PAGE);
+    }
+
+    #[test]
+    fn decoding_that_produces_no_output_still_stops_at_the_deadline() {
+        // Empty gzip members or empty deflate blocks keep a decoder busy without producing output,
+        // so bounding the output alone never reaches a deadline check.
+        let gzip_members = gzip_compress(b"").repeat(200_000);
+        // Empty stored blocks and an empty final block in a zlib wrapper (Adler-32 of nothing = 1).
+        let mut zlib = vec![0x78, 0x01];
+        for _ in 0..1_000_000 {
+            zlib.extend_from_slice(&[0x00, 0x00, 0x00, 0xff, 0xff]);
+        }
+        zlib.extend_from_slice(&[0x01, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00, 0x01]);
+        for (body, coding) in [(&gzip_members, "gzip"), (&zlib, "deflate")] {
+            // Valid bodies that decode to nothing when there is time...
+            let start = Instant::now();
+            assert_eq!(decode_body(body, coding).unwrap(), b"", "{coding}");
+            // ...and stop when the deadline passes a quarter of the way through.
+            let deadline = Some(Instant::now() + start.elapsed() / 4);
+            let error = decode_body_until(body, coding, deadline).unwrap_err();
+            assert_eq!(error.kind(), std::io::ErrorKind::TimedOut, "{coding}");
+        }
     }
 
     #[test]
