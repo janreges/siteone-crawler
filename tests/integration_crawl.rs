@@ -1507,6 +1507,40 @@ fn json_progress_names_failed_urls_on_stderr() {
     assert_eq!(json["results"].as_array().map(Vec::len), Some(3));
 }
 
+/// #104: under GitHub Actions the CI gate's `::error` annotations go to stderr in JSON mode, so stdout
+/// stays one parseable JSON document (the runner reads workflow commands from both streams).
+#[test]
+fn github_annotations_keep_json_stdout_parseable() {
+    let html = |body: &str| format!("<html><head><title>T</title></head><body>{body}</body></html>");
+    let server = RecordingServer::start(vec![Route {
+        path: "/",
+        headers: vec![("Content-Type", "text/html; charset=utf-8".to_string())],
+        body: html("<p>One page</p>").into_bytes(),
+    }]);
+
+    let output = std::process::Command::new(common::binary_path())
+        .args([
+            "--config-file=/dev/null",
+            &format!("--url={}", server.url()),
+            "--ci",
+            "--ci-min-pages=100",
+            "--output=json",
+            LOCAL_ANALYZERS,
+            "--http-cache-dir=",
+            "--output-html-report=",
+            "--output-json-file=",
+            "--output-text-file=",
+        ])
+        .env("GITHUB_ACTIONS", "true")
+        .output()
+        .expect("Failed to execute crawler binary");
+    assert_eq!(output.status.code(), Some(10), "the gate fails on --ci-min-pages");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.lines().any(|line| line.starts_with("::error")), "{stderr}");
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).expect("stdout is one JSON document");
+    assert!(json["results"].is_array());
+}
+
 /// #104: `--hide-progress-bar` also hides the `--progress-interval` lines in JSON mode.
 #[test]
 fn hide_progress_bar_suppresses_progress_lines_in_json_mode() {

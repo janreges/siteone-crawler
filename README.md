@@ -832,7 +832,7 @@ Convert a local HTML file to clean Markdown without crawling. Uses the same conv
 | `--ci-fail-on-code=<code>` | Fail the build if a finding code (`aplCode`, e.g. `seo-noindex-sitewide`) is present. Can be specified multiple times. |
 | `--ci-ignore-code=<code>` | Ignore a finding code (`aplCode`, e.g. `pages-without-lang`) when counting criticals/warnings; also suppresses `--ci-fail-on-code`. Can be specified multiple times. |
 | `--ci-junit-file=<file>` | Write the CI gate result as a JUnit XML report (renders natively in GitLab/Jenkins/GitHub test reporters). |
-| `--ci-github-annotations` | Print GitHub Actions `::error` annotations for failed checks. Auto-enabled when `GITHUB_ACTIONS=true`. |
+| `--ci-github-annotations` | Print GitHub Actions `::error` annotations for failed checks (to stderr with `--output=json`). Auto-enabled when `GITHUB_ACTIONS=true`. |
 
 **Default behavior with `--ci` alone:** overall score >= 5.0, each category score >= 5.0 (Performance, SEO, Security, Best Practices) and Accessibility >= 3.0, 404 errors <= 0, 5xx errors <= 0, critical findings <= 0, HTML pages >= 10, assets >= 10. File outputs (HTML, JSON, TXT reports) are not generated. To save reports in CI mode, specify the desired output explicitly, e.g. `--ci --output-html-report=report.html`. Instead of one row per URL, the console prints at most one progress line every 10 seconds plus the rows of failed URLs (4xx/5xx, connection errors, timeouts); use `--progress-interval=0` to get every row.
 

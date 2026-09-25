@@ -450,8 +450,15 @@ impl Manager {
                 }
                 let in_github_actions = std::env::var("GITHUB_ACTIONS").map(|v| v == "true").unwrap_or(false);
                 if self.options.ci_github_annotations || in_github_actions {
+                    // With --output=json stdout is one JSON document, so the annotations go to stderr
+                    // (the Actions runner reads workflow commands from both streams)
+                    let json_output = self.options.output_type == OutputType::Json;
                     for line in ci_gate::github_annotations(&ci_result) {
-                        println!("{}", line);
+                        if json_output {
+                            eprintln!("{}", line);
+                        } else {
+                            println!("{}", line);
+                        }
                     }
                 }
             }
