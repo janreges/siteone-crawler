@@ -384,6 +384,7 @@ impl Fetcher for BrowserRenderer {
         _accept: &str,
         _accept_encoding: &str,
         _origin: Option<&str>,
+        _use_http_auth_if_configured: bool,
     ) -> bool {
         // The browser always fetches rendered documents live (it does not use the HTTP cache),
         // so never let the crawl loop skip the inter-request rate-limit delay on a "cache hit".

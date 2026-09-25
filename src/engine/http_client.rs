@@ -141,7 +141,13 @@ impl HttpClient {
             accept_encoding.to_string(),
             origin.unwrap_or("").to_string(),
         ];
-        let cache_key = self.get_cache_key(host, port, &args_for_cache, extension.as_deref());
+        let cache_key = self.get_cache_key(
+            host,
+            port,
+            &args_for_cache,
+            extension.as_deref(),
+            use_http_auth_if_configured,
+        );
 
         // Check cache first (skip URLs with spaces as they are likely problematic)
         if !url.contains(' ')
@@ -407,6 +413,7 @@ impl HttpClient {
         accept: &str,
         accept_encoding: &str,
         origin: Option<&str>,
+        use_http_auth_if_configured: bool,
     ) -> bool {
         if self.cache_dir.is_none() || url.contains(' ') {
             return false;
@@ -429,7 +436,13 @@ impl HttpClient {
             accept_encoding.to_string(),
             origin.unwrap_or("").to_string(),
         ];
-        let cache_key = self.get_cache_key(host, port, &args_for_cache, extension.as_deref());
+        let cache_key = self.get_cache_key(
+            host,
+            port,
+            &args_for_cache,
+            extension.as_deref(),
+            use_http_auth_if_configured,
+        );
         match self.get_cache_file_path(&cache_key) {
             Some(file) => Path::new(&file).is_file(),
             None => false,
@@ -443,19 +456,27 @@ impl HttpClient {
         Some(format!("{}/{}{}", cache_dir, cache_key, ext))
     }
 
-    /// Generate a cache key from request parameters. Configured credentials (`--http-auth`,
-    /// `--header`) are part of the key, so authenticated and anonymous responses never share an
-    /// entry; without credentials the key is the same as in earlier versions.
-    fn get_cache_key(&self, host: &str, port: u16, args: &[String], extension: Option<&str>) -> String {
+    /// Generate a cache key from request parameters. Credentials (`--http-auth`, `--header`) are part
+    /// of the key when the request actually carries them (`with_credentials`, the scope decision), so
+    /// authenticated and anonymous responses never share an entry; a request without credentials
+    /// has the same key as in earlier versions.
+    fn get_cache_key(
+        &self,
+        host: &str,
+        port: u16,
+        args: &[String],
+        extension: Option<&str>,
+        with_credentials: bool,
+    ) -> String {
         let mut hasher = Md5::new();
         for arg in args {
             hasher.update(arg.as_bytes());
         }
-        if let Some(auth) = &self.http_auth {
+        if let Some(auth) = self.http_auth.as_ref().filter(|_| with_credentials) {
             hasher.update(b"\0http-auth:");
             hasher.update(auth.as_bytes());
         }
-        for (name, value) in &self.custom_headers {
+        for (name, value) in self.custom_headers.iter().filter(|_| with_credentials) {
             hasher.update(b"\0header:");
             hasher.update(name.as_str().as_bytes());
             hasher.update(b":");
@@ -514,6 +535,7 @@ impl Fetcher for HttpClient {
         accept: &str,
         accept_encoding: &str,
         origin: Option<&str>,
+        use_http_auth_if_configured: bool,
     ) -> bool {
         // Explicit path to the inherent method (the trait method shares its name).
         HttpClient::is_url_cached(
@@ -527,6 +549,7 @@ impl Fetcher for HttpClient {
             accept,
             accept_encoding,
             origin,
+            use_http_auth_if_configured,
         )
     }
 }
@@ -701,7 +724,7 @@ mod tests {
             "https".to_string(),
             "/page".to_string(),
         ];
-        let key = client.get_cache_key("example.com", 443, &args, Some("html"));
+        let key = client.get_cache_key("example.com", 443, &args, Some("html"), false);
         assert!(key.starts_with("example.com-443/"));
         assert!(key.ends_with(".html"));
     }
@@ -1037,11 +1060,94 @@ mod tests {
         );
     }
 
+    /// Answers `connections` requests with a body that says whether the request carried a cookie.
+    fn serve_cookie_aware(connections: usize) -> u16 {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            for _ in 0..connections {
+                let Ok((mut stream, _)) = listener.accept() else { return };
+                let mut head = Vec::new();
+                let mut buf = [0u8; 1024];
+                while !head.windows(4).any(|window| window == b"\r\n\r\n") {
+                    match std::io::Read::read(&mut stream, &mut buf) {
+                        Ok(0) | Err(_) => break,
+                        Ok(n) => head.extend_from_slice(&buf[..n]),
+                    }
+                }
+                let with_cookie = String::from_utf8_lossy(&head)
+                    .to_ascii_lowercase()
+                    .contains("\r\ncookie:");
+                let body: &[u8] = if with_cookie { b"PRIVATE" } else { b"ANONYMOUS" };
+                std::io::Write::write_all(&mut stream, &raw_response("Content-Type: text/plain\r\n", body)).ok();
+            }
+        });
+        port
+    }
+
+    /// The same URL requested outside and inside the credential scope must not share a cache
+    /// entry: the key follows what was actually sent, not what is configured.
+    #[tokio::test]
+    async fn cache_entries_follow_whether_credentials_were_sent() {
+        let cache = tempfile::tempdir().unwrap();
+        let port = serve_cookie_aware(2);
+        let client = HttpClient::new(
+            None,
+            None,
+            Some(cache.path().to_string_lossy().into_owned()),
+            false,
+            None,
+            false,
+        )
+        .with_custom_headers(&["Cookie: session=1".to_string()]);
+        let fetch = |with_credentials: bool| {
+            client.request(
+                "127.0.0.1",
+                port,
+                "http",
+                "/secret.txt",
+                "GET",
+                5,
+                "test-agent",
+                "*/*",
+                "identity",
+                None,
+                with_credentials,
+                None,
+            )
+        };
+
+        assert_eq!(fetch(false).await.unwrap().body.as_deref(), Some(&b"ANONYMOUS"[..]));
+        let authenticated = fetch(true).await.unwrap();
+        assert!(
+            !authenticated.is_loaded_from_cache(),
+            "a request with credentials must not reuse the anonymous entry"
+        );
+        assert_eq!(authenticated.body.as_deref(), Some(&b"PRIVATE"[..]));
+        // Both are cached now, each under its own key.
+        assert_eq!(fetch(false).await.unwrap().body.as_deref(), Some(&b"ANONYMOUS"[..]));
+        assert_eq!(fetch(true).await.unwrap().body.as_deref(), Some(&b"PRIVATE"[..]));
+        for with_credentials in [false, true] {
+            assert!(client.is_url_cached(
+                "127.0.0.1",
+                port,
+                "http",
+                "/secret.txt",
+                "GET",
+                "test-agent",
+                "*/*",
+                "identity",
+                None,
+                with_credentials,
+            ));
+        }
+    }
+
     #[test]
     fn credentials_are_part_of_the_cache_key() {
         let cache = || Some("/tmp/cache".to_string());
         let args = vec!["example.com".to_string(), "/page".to_string()];
-        let key = |client: &HttpClient| client.get_cache_key("example.com", 443, &args, Some("html"));
+        let key = |client: &HttpClient| client.get_cache_key("example.com", 443, &args, Some("html"), true);
 
         let anonymous = HttpClient::new(None, None, cache(), false, None, false);
         let cookie_a = HttpClient::new(None, None, cache(), false, None, false)
@@ -1058,6 +1164,11 @@ mod tests {
             key(&HttpClient::new(None, None, cache(), false, None, false)
                 .with_custom_headers(&["Cookie: session=a".to_string()])),
             "the same credentials give the same key"
+        );
+        assert_eq!(
+            cookie_a.get_cache_key("example.com", 443, &args, Some("html"), false),
+            key(&anonymous),
+            "a request that does not carry the credentials shares the anonymous entry"
         );
 
         // Without credentials the key is unchanged, so existing caches stay valid.

@@ -570,6 +570,7 @@ impl Crawler {
                     accept_header,
                     &options.accept_encoding,
                     origin_for_request,
+                    use_http_auth,
                 ) {
                     let sleep_duration = {
                         let now = Self::current_timestamp();

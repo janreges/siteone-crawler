@@ -75,7 +75,9 @@ pub trait Fetcher: Send + Sync {
 
     /// Whether a response for these request parameters already exists in the HTTP cache.
     /// Used by rate limiting to skip the inter-request delay for cache hits. A browser
-    /// renderer delegates this to its inner `HttpClient`.
+    /// renderer delegates this to its inner `HttpClient`. `use_http_auth_if_configured` must be
+    /// the same scope decision as for `fetch`, because credentials that are sent are part of the
+    /// cache key.
     #[allow(clippy::too_many_arguments)]
     fn is_url_cached(
         &self,
@@ -88,6 +90,7 @@ pub trait Fetcher: Send + Sync {
         accept: &str,
         accept_encoding: &str,
         origin: Option<&str>,
+        use_http_auth_if_configured: bool,
     ) -> bool;
 
     /// Optional clean-shutdown hook (e.g. browser teardown). Default is a no-op.
