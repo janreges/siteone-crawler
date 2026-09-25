@@ -4,6 +4,7 @@
 // How far each AI task (a per-page action, a report, an elaborate or profile stage) has got, one
 // unit of work (page, area, section, chapter, call) at a time. Failed units count as done too, so a
 // task that runs to its end reaches `done == total`; one that ends early is finished below it.
+// Every change is an `aiProgress` event.
 
 use std::collections::BTreeMap;
 use std::future::Future;
@@ -24,15 +25,14 @@ static TASKS: Mutex<BTreeMap<String, TaskState>> = Mutex::new(BTreeMap::new());
 /// Start `task` (again) with `total` units; `label` is its human-readable name.
 pub fn start(task: &str, label: &str, total: u64) {
     if let Ok(mut tasks) = TASKS.lock() {
-        tasks.insert(
-            task.to_string(),
-            TaskState {
-                label: label.to_string(),
-                done: 0,
-                total,
-                finished: false,
-            },
-        );
+        let state = TaskState {
+            label: label.to_string(),
+            done: 0,
+            total,
+            finished: false,
+        };
+        emit(task, &state, "started");
+        tasks.insert(task.to_string(), state);
     }
 }
 
@@ -41,8 +41,10 @@ pub fn advance(task: &str) {
     if let Ok(mut tasks) = TASKS.lock()
         && let Some(state) = tasks.get_mut(task)
         && !state.finished
+        && state.done < state.total
     {
-        state.done = (state.done + 1).min(state.total);
+        state.done += 1;
+        emit(task, state, "progress");
     }
 }
 
@@ -50,8 +52,23 @@ pub fn advance(task: &str) {
 pub fn finish(task: &str) {
     if let Ok(mut tasks) = TASKS.lock()
         && let Some(state) = tasks.get_mut(task)
+        && !state.finished
     {
         state.finished = true;
+        emit(task, state, "finished");
+    }
+}
+
+/// The `aiProgress` event of a change; emitted under the lock, so the events keep its order.
+fn emit(task: &str, state: &TaskState, change: &'static str) {
+    if crate::events::is_enabled() {
+        crate::events::emit(crate::events::Event::AiProgress {
+            task: task.to_string(),
+            label: state.label.clone(),
+            done: state.done,
+            total: state.total,
+            state: change,
+        });
     }
 }
 

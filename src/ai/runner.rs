@@ -38,6 +38,10 @@ const CAT_CUSTOM: &str = "Custom check";
 const CAT_LLMS: &str = "llms.txt summaries";
 const CAT_EXTRACT: &str = "AI report (extract)";
 
+// Labels of the `issue` events (kind `ai`) of AI steps that failed without failing the run.
+const AI_PHASE_SKIPPED: &str = "AI phase skipped";
+const LLMS_EXPORT_FAILED: &str = "llms.txt export failed";
+
 // Progress task keys of the per-page actions (see `progress`).
 const TASK_SEO: &str = "seo";
 const TASK_TYPOS: &str = "typos";
@@ -194,17 +198,19 @@ pub async fn run_ai(options: &CoreOptions, status: &Arc<Mutex<Status>>, output: 
     }
 
     if pages.is_empty() && context_failures.is_empty() {
+        let msg = "AI enabled but no pages matched the selection criteria.";
+        crate::events::emit_ai_issue(AI_PHASE_SKIPPED, msg);
         if let Ok(st) = status.lock() {
-            st.add_notice_to_summary("ai-no-pages", "AI enabled but no pages matched the selection criteria.");
+            st.add_notice_to_summary("ai-no-pages", msg);
         }
         return;
     }
     if pages.is_empty() && !options.ai_actions.iter().any(|action| action == "extract") {
+        let msg =
+            "AI actions were skipped because none of the selected pages had retained content for prompt construction.";
+        crate::events::emit_ai_issue(AI_PHASE_SKIPPED, msg);
         if let Ok(st) = status.lock() {
-            st.add_warning_to_summary(
-                "ai-no-page-content",
-                "AI actions were skipped because none of the selected pages had retained content for prompt construction.",
-            );
+            st.add_warning_to_summary("ai-no-page-content", msg);
         }
         return;
     }
@@ -224,8 +230,10 @@ pub async fn run_ai(options: &CoreOptions, status: &Arc<Mutex<Status>>, output: 
             Ok(k) => k,
             Err(e) => {
                 eprintln!("{}", utils::get_color_text(&format!("ERROR: {}", e), "red", true));
+                let msg = format!("AI phase skipped: {}", e);
+                crate::events::emit_ai_issue(AI_PHASE_SKIPPED, &msg);
                 if let Ok(st) = status.lock() {
-                    st.add_critical_to_summary("ai-key-error", &format!("AI phase skipped: {}", e));
+                    st.add_critical_to_summary("ai-key-error", &msg);
                 }
                 return;
             }
@@ -239,8 +247,10 @@ pub async fn run_ai(options: &CoreOptions, status: &Arc<Mutex<Status>>, output: 
             provider.default_key_env()
         );
         eprintln!("{}", utils::get_color_text(&format!("ERROR: {}", msg), "red", true));
+        let msg = format!("AI phase skipped: {}", msg);
+        crate::events::emit_ai_issue(AI_PHASE_SKIPPED, &msg);
         if let Ok(st) = status.lock() {
-            st.add_critical_to_summary("ai-key-missing", &format!("AI phase skipped: {}", msg));
+            st.add_critical_to_summary("ai-key-missing", &msg);
         }
         return;
     }
@@ -802,8 +812,10 @@ const EXTRACT_MAX_ATTEMPTS: u32 = 3;
 
 fn report_extract_error(status: &Arc<Mutex<Status>>, msg: &str) {
     eprintln!("{}", utils::get_color_text(&format!("ERROR: {}", msg), "red", true));
+    let msg = format!("AI report skipped: {}", msg);
+    crate::events::emit_ai_issue("AI report skipped", &msg);
     if let Ok(st) = status.lock() {
-        st.add_critical_to_summary("ai-report-error", &format!("AI report skipped: {}", msg));
+        st.add_critical_to_summary("ai-report-error", &msg);
     }
 }
 
@@ -1211,8 +1223,10 @@ async fn run_llms_action(
 
     let out_dir = llms_output_dir(options);
     if std::fs::create_dir_all(&out_dir).is_err() {
+        let msg = format!("Could not create output dir '{}'", out_dir);
+        crate::events::emit_ai_issue(LLMS_EXPORT_FAILED, &msg);
         if let Ok(st) = status.lock() {
-            st.add_warning_to_summary("ai-llms-error", &format!("Could not create output dir '{}'", out_dir));
+            st.add_warning_to_summary("ai-llms-error", &msg);
         }
         return;
     }
@@ -1223,7 +1237,7 @@ async fn run_llms_action(
     if actions.iter().any(|a| a == "llms-txt") {
         let entries: Vec<llms_txt::LlmsEntry> = collected.iter().map(|(_, ctx, s)| make_entry(ctx, s)).collect();
         let content = llms_txt::build_llms_txt(&site_name, &site_summary, &entries);
-        write_and_report(&format!("{}.llms.txt", base), &content, status, "llms.txt");
+        write_and_report(&format!("{}.llms.txt", base), &content, status, "llms", "llms.txt");
     }
     if actions.iter().any(|a| a == "llms-full") {
         let full: Vec<(llms_txt::LlmsEntry, String)> = collected
@@ -1231,7 +1245,13 @@ async fn run_llms_action(
             .map(|(_, ctx, s)| (make_entry(ctx, s), ctx.content_markdown.clone()))
             .collect();
         let content = llms_txt::build_llms_full(&site_name, &site_summary, &full);
-        write_and_report(&format!("{}.llms-full.txt", base), &content, status, "llms-full.txt");
+        write_and_report(
+            &format!("{}.llms-full.txt", base),
+            &content,
+            status,
+            "llms-full",
+            "llms-full.txt",
+        );
     }
 
     eprintln!(
@@ -1401,9 +1421,11 @@ fn sanitize_domain(host: &str) -> String {
     if s.is_empty() { "site".to_string() } else { s }
 }
 
-fn write_and_report(path: &str, content: &str, status: &Arc<Mutex<Status>>, label: &str) {
+/// Write one llms file and report it (`kind` is its artifact kind in the event stream).
+fn write_and_report(path: &str, content: &str, status: &Arc<Mutex<Status>>, kind: &'static str, label: &'static str) {
     match std::fs::write(path, content) {
         Ok(_) => {
+            crate::events::emit_ai_artifact(kind, label, std::path::Path::new(path));
             let abs = crate::utils::get_absolute_path(path);
             eprintln!(
                 "{}",
@@ -1418,8 +1440,10 @@ fn write_and_report(path: &str, content: &str, status: &Arc<Mutex<Status>>, labe
                 "{}",
                 utils::get_color_text(&format!("AI: failed to write {}: {}", label, e), "red", false)
             );
+            let msg = format!("Failed to write {}: {}", label, e);
+            crate::events::emit_ai_issue(LLMS_EXPORT_FAILED, &msg);
             if let Ok(st) = status.lock() {
-                st.add_warning_to_summary("ai-llms-error", &format!("Failed to write {}: {}", label, e));
+                st.add_warning_to_summary("ai-llms-error", &msg);
             }
         }
     }
@@ -1601,8 +1625,10 @@ async fn run_custom_action(
         Ok(p) => p,
         Err(e) => {
             eprintln!("{}", utils::get_color_text(&format!("ERROR: {}", e), "red", true));
+            let msg = format!("AI custom action skipped: {}", e);
+            crate::events::emit_ai_issue("AI custom check skipped", &msg);
             if let Ok(st) = status.lock() {
-                st.add_critical_to_summary("ai-custom-error", &format!("AI custom action skipped: {}", e));
+                st.add_critical_to_summary("ai-custom-error", &msg);
             }
             return;
         }

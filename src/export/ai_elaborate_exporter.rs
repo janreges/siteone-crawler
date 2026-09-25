@@ -118,6 +118,10 @@ impl Exporter for AiElaborateExporter {
                 e
             ))
         })?;
+        // Announced once all three exist: a failed set is rolled back, so none of them remains.
+        crate::events::emit_ai_artifact("ai-elaborate-md", "Brand profile (Markdown)", &self.md_path);
+        crate::events::emit_ai_artifact("ai-elaborate-json", "Brand profile (JSON)", &self.json_path);
+        crate::events::emit_ai_artifact("ai-elaborate-html", "Brand profile (HTML)", &self.html_path);
 
         eprintln!(
             "{}",

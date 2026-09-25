@@ -117,6 +117,10 @@ impl Exporter for AiProfileExporter {
                 e
             ))
         })?;
+        // Announced once all three exist: a failed set is rolled back, so none of them remains.
+        crate::events::emit_ai_artifact("ai-profile-md", "AI profile (Markdown)", &self.md_path);
+        crate::events::emit_ai_artifact("ai-profile-json", "AI profile (JSON)", &self.json_path);
+        crate::events::emit_ai_artifact("ai-profile-html", "AI profile (HTML)", &self.html_path);
 
         eprintln!(
             "{}",

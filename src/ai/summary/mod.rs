@@ -31,6 +31,8 @@ const CAT_SUMMARY_AREAS: &str = "Executive summary (area evals)";
 const CAT_SUMMARY_SYNTHESIS: &str = "Executive summary (synthesis)";
 /// Progress task: one unit per area evaluation plus the synthesis.
 const TASK: &str = "summary";
+/// Label of the `issue` event (kind `ai`) when no summary is produced.
+const SUMMARY_FAILED: &str = "AI executive summary failed";
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AreaFinding {
@@ -117,10 +119,9 @@ pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, _output: &A
     let config = match build_config(options) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!(
-                "{}",
-                utils::get_color_text(&format!("AI summary skipped: {}", e), "red", true)
-            );
+            let msg = format!("AI summary skipped: {}", e);
+            eprintln!("{}", utils::get_color_text(&msg, "red", true));
+            crate::events::emit_ai_issue(SUMMARY_FAILED, &msg);
             return;
         }
     };
@@ -192,10 +193,9 @@ pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, _output: &A
     }
 
     if assessments.is_empty() {
-        eprintln!(
-            "{}",
-            utils::get_color_text("AI summary: no area assessments produced; skipping.", "yellow", true)
-        );
+        let msg = "AI summary: no area assessments produced; skipping.";
+        eprintln!("{}", utils::get_color_text(msg, "yellow", true));
+        crate::events::emit_ai_issue(SUMMARY_FAILED, msg);
         progress::finish(TASK);
         return;
     }
@@ -267,18 +267,16 @@ pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, _output: &A
         Ok(c) => match serde_json::from_str::<ReportSummary>(&normalize_json_response(&c.text)) {
             Ok(r) => r,
             Err(e) => {
-                eprintln!(
-                    "{}",
-                    utils::get_color_text(&format!("AI summary: synthesis JSON invalid: {}", e), "yellow", true)
-                );
+                let msg = format!("AI summary: synthesis JSON invalid: {}", e);
+                eprintln!("{}", utils::get_color_text(&msg, "yellow", true));
+                crate::events::emit_ai_issue(SUMMARY_FAILED, &msg);
                 return;
             }
         },
         Err(e) => {
-            eprintln!(
-                "{}",
-                utils::get_color_text(&format!("AI summary: synthesis call failed: {}", e), "yellow", true)
-            );
+            let msg = format!("AI summary: synthesis call failed: {}", e);
+            eprintln!("{}", utils::get_color_text(&msg, "yellow", true));
+            crate::events::emit_ai_issue(SUMMARY_FAILED, &msg);
             return;
         }
     };

@@ -52,6 +52,8 @@ const TASK_SELECT: &str = "elaborate:select";
 const TASK_EXTRACT: &str = "elaborate:extract";
 const TASK_SYNTH: &str = "elaborate:synthesize";
 const SYNTH_LABEL: &str = "Elaborate: synthesis";
+/// Label of the `issue` event (kind `ai`) when no document is produced.
+const ELABORATE_FAILED: &str = "Brand elaborate failed";
 const TASK_CORRECT: &str = "elaborate:correct";
 const EXTRACT_ATTEMPTS: u32 = 3;
 const SELECT_ATTEMPTS: u32 = 2;
@@ -106,8 +108,10 @@ pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, output: &Ar
     };
 
     if candidate_set.candidates.is_empty() {
+        let msg = "AI elaborate: no eligible pages were crawled.";
+        crate::events::emit_ai_issue(ELABORATE_FAILED, msg);
         if let Ok(st) = status.lock() {
-            st.add_notice_to_summary("ai-elaborate", "AI elaborate: no eligible pages were crawled.");
+            st.add_notice_to_summary("ai-elaborate", msg);
         }
         return;
     }
@@ -759,6 +763,7 @@ fn path_hint(url: &str) -> String {
 
 fn report_error(status: &Arc<Mutex<Status>>, msg: &str) {
     eprintln!("{}", utils::get_color_text(&format!("ERROR: {}", msg), "red", true));
+    crate::events::emit_ai_issue(ELABORATE_FAILED, msg);
     if let Ok(st) = status.lock() {
         st.add_critical_to_summary("ai-elaborate-error", msg);
     }

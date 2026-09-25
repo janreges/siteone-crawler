@@ -2766,7 +2766,7 @@ pub fn get_options() -> Options {
             ),
             CrawlerOption::new(
                 "--events-file", None, "eventsFile", OptionType::File, false,
-                "Write a machine-readable NDJSON account of the run to this file (one JSON object per line: crawled URLs, phases, artifacts, issues, result). Intended for GUIs and CI tooling that would otherwise have to parse the human-readable output.",
+                "Write a machine-readable NDJSON account of the run to this file (one JSON object per line: crawled URLs, phases, AI requests and progress, artifacts, issues, result; see docs/EVENTS.md). Intended for GUIs and CI tooling that would otherwise have to parse the human-readable output.",
                 None, true, false, None,
             ),
             CrawlerOption::new(

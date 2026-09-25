@@ -2,12 +2,13 @@
 // (c) Jan Reges <jan.reges@siteone.cz>
 //
 // One record per LLM HTTP attempt and per cache hit, reported as the response arrives: a compact
-// line on stderr (unless hidden) plus the throughput totals. Everything here is fire-and-forget —
-// a failure to print never affects the AI result.
+// line on stderr (unless hidden), an `aiRequest` event plus the throughput totals. Everything here
+// is fire-and-forget — a failure to print or to write an event never affects the AI result.
 
 use std::future::Future;
 use std::io::Write;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Mutex, PoisonError};
 
 use super::provider::Usage;
 use crate::utils::get_color_text;
@@ -99,6 +100,42 @@ impl RequestRecord {
             usage.input_tokens?.saturating_add(usage.output_tokens?),
             self.duration_ms?,
         )
+    }
+
+    /// The `aiRequest` event of this record.
+    pub fn event(&self) -> crate::events::Event {
+        let usage = self.usage.unwrap_or_default();
+        let progress = self.task.as_ref().and_then(|task| task.progress);
+        crate::events::Event::AiRequest(Box::new(crate::events::AiRequest {
+            seq: self.seq,
+            task: self.task.as_ref().map(|task| task.key.clone()),
+            label: self.task.as_ref().map(|task| task.label.clone()),
+            done: progress.map(|(done, _)| done),
+            total: progress.map(|(_, total)| total),
+            category: self.category.clone(),
+            subject: self.subject.clone(),
+            provider: self.provider,
+            model: self.model.clone(),
+            attempt: self.attempt,
+            max_attempts: self.max_attempts,
+            outcome: match self.outcome {
+                RequestOutcome::Ok => "ok",
+                RequestOutcome::Retry => "retry",
+                RequestOutcome::Error => "error",
+                RequestOutcome::CacheHit => "cacheHit",
+            },
+            status: self.http_status,
+            error: self.error.clone(),
+            input_tokens: usage.input_tokens,
+            output_tokens: usage.output_tokens,
+            reasoning_tokens: usage.reasoning_tokens,
+            cached_input_tokens: usage.cached_input_tokens,
+            reasoning_chars: self.reasoning_chars,
+            ms: self.duration_ms,
+            output_tokens_per_second: self.output_tokens_per_second(),
+            total_tokens_per_second: self.total_tokens_per_second(),
+            finish_reason: self.finish_reason.clone(),
+        }))
     }
 
     /// The uncoloured console line of this record.
@@ -201,16 +238,18 @@ fn thousands(n: u64) -> String {
 
 static NEXT_SEQ: AtomicU64 = AtomicU64::new(1);
 static CONSOLE_ENABLED: AtomicBool = AtomicBool::new(true);
+/// Held while a record is numbered, printed and emitted, so both outputs follow the numbering.
+static REPORTING: Mutex<()> = Mutex::new(());
 
 /// Show or hide the per-request console lines (hidden with `--hide-progress-bar`).
 pub fn set_console_enabled(enabled: bool) {
     CONSOLE_ENABLED.store(enabled, Ordering::Relaxed);
 }
 
-/// Report one request: assign its sequence number, print its line and add it to the totals.
-pub fn report(mut record: RequestRecord) {
-    record.seq = NEXT_SEQ.fetch_add(1, Ordering::Relaxed);
-    record.error = record.error.as_deref().map(error_text);
+/// Report one request: number it, print its line, emit its event and add it to the totals.
+pub fn report(record: RequestRecord) {
+    let _in_order = REPORTING.lock().unwrap_or_else(PoisonError::into_inner);
+    let record = stamp(record);
     if record.outcome == RequestOutcome::Ok
         && let (Some(output), Some(duration_ms)) = (record.usage.and_then(|u| u.output_tokens), record.duration_ms)
         && duration_ms > 0
@@ -232,6 +271,18 @@ pub fn report(mut record: RequestRecord) {
             get_color_text(&details, "gray", false)
         );
     }
+    if crate::events::is_enabled() {
+        crate::events::emit(record.event());
+    }
+}
+
+/// `record` as reported: numbered in arrival order, its error cut to size, and its task (known
+/// since the request was sent) with the progress it has now.
+fn stamp(mut record: RequestRecord) -> RequestRecord {
+    record.seq = NEXT_SEQ.fetch_add(1, Ordering::Relaxed);
+    record.error = record.error.as_deref().map(error_text);
+    record.task = record.task.map(|task| task_ref(&task.key));
+    record
 }
 
 const MAX_ERROR_CHARS: usize = 200;
@@ -538,6 +589,77 @@ mod tests {
             },
             "a task never started is named by its key"
         );
+    }
+
+    #[test]
+    fn the_event_of_a_request_carries_every_known_field() {
+        let r = RequestRecord {
+            usage: Some(Usage {
+                input_tokens: Some(3412),
+                output_tokens: Some(812),
+                reasoning_tokens: Some(540),
+                cached_input_tokens: Some(0),
+            }),
+            reasoning_chars: Some(1480),
+            ..record(RequestOutcome::Ok)
+        };
+        assert_eq!(
+            serde_json::to_value(r.event()).expect("JSON"),
+            serde_json::json!({
+                "type": "aiRequest", "seq": 12, "task": "seo", "label": "SEO", "done": 11, "total": 40,
+                "category": "SEO analysis", "subject": "/blog/post", "provider": "openai-compatible",
+                "model": "m", "attempt": 1, "maxAttempts": 3, "outcome": "ok", "status": 200,
+                "inputTokens": 3412, "outputTokens": 812, "reasoningTokens": 540, "cachedInputTokens": 0,
+                "reasoningChars": 1480, "ms": 6800, "outputTokensPerSecond": 119.4,
+                "totalTokensPerSecond": 621.2, "finishReason": "stop"
+            })
+        );
+    }
+
+    #[test]
+    fn the_event_of_a_failed_attempt_has_no_token_fields() {
+        let r = RequestRecord {
+            task: None,
+            subject: None,
+            outcome: RequestOutcome::Retry,
+            http_status: Some(429),
+            error: Some("HTTP 429".to_string()),
+            duration_ms: Some(400),
+            finish_reason: None,
+            ..record(RequestOutcome::Retry)
+        };
+        assert_eq!(
+            serde_json::to_value(r.event()).expect("JSON"),
+            serde_json::json!({
+                "type": "aiRequest", "seq": 12, "category": "SEO analysis", "provider": "openai-compatible",
+                "model": "m", "attempt": 1, "maxAttempts": 3, "outcome": "retry", "status": 429,
+                "error": "HTTP 429", "ms": 400
+            })
+        );
+        let outcome = |outcome| {
+            serde_json::to_value(RequestRecord { outcome, ..r.clone() }.event()).expect("JSON")["outcome"].clone()
+        };
+        assert_eq!(outcome(RequestOutcome::Error), "error");
+        assert_eq!(outcome(RequestOutcome::CacheHit), "cacheHit");
+    }
+
+    #[test]
+    fn a_request_is_stamped_with_its_task_as_it_is_when_reported() {
+        super::super::progress::start("test:stamp", "Stamp", 3);
+        // The request started before any unit of its task was done …
+        let r = RequestRecord {
+            task: Some(task_ref("test:stamp")),
+            error: Some("x".repeat(300)),
+            ..record(RequestOutcome::Ok)
+        };
+        assert_eq!(r.task.as_ref().and_then(|task| task.progress), Some((0, 3)));
+        // … and its response arrives after two other units finished.
+        super::super::progress::advance("test:stamp");
+        super::super::progress::advance("test:stamp");
+        let first = stamp(r.clone());
+        assert_eq!(first.task.and_then(|task| task.progress), Some((2, 3)));
+        assert_eq!(first.error.map(|e| e.chars().count()), Some(200));
+        assert!(stamp(r).seq > first.seq, "numbered in the order reported");
     }
 
     #[test]

@@ -736,6 +736,8 @@ paths (e.g. `../about/index.html`), so the copy also works when opened directly 
 | `--http-cache-ttl=<val>` | TTL for HTTP cache entries (e.g. `1h`, `7d`, `30m`). Use `0` for infinite. Default is `24h`. |
 | `--websocket-server=<host:port>` | Start crawler with websocket server on given host:port. |
 | `--console-width=<int>` | Enforce a fixed console width, disabling automatic detection. |
+| `--events-file=<file>` | Write a machine-readable NDJSON account of the run to this file: crawled URLs, phases, AI requests and progress, artifacts, issues and the result. For GUIs and CI tooling; see [docs/EVENTS.md](docs/EVENTS.md). |
+| `--control-stdin` | Read commands from stdin: a line `stop` (or end of input) winds the crawl down like Ctrl+C. See [docs/EVENTS.md](docs/EVENTS.md). |
 
 ### Fastest URL analyzer
 
@@ -1023,6 +1025,8 @@ Supported providers: `openai`, `anthropic`, `gemini`, and `openai-compatible` (v
 | `extract` | First-class **AI report** engine (via `--ai-report`): extracts a typed set of fields per page (preset or custom schema) into a structured JSON + a self-contained HTML report. | `<ai-report-dir>/ai-report.<preset>.<host>.<run-id>.json` + `.html` |
 
 > `llms.txt` / `llms-full.txt` are written next to `--markdown-export-dir` or `--offline-export-dir` if set, otherwise to `tmp/`.
+
+> A host following the run (a GUI, CI tooling) gets every AI request with its tokens and timing, the progress of each AI task, the AI totals and every AI output file as events of the `--events-file` stream — see [docs/EVENTS.md](docs/EVENTS.md).
 
 #### AI reports (`--ai-report`)
 

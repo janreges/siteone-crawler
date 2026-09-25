@@ -92,6 +92,90 @@ pub enum Event {
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>,
     },
+    /// One LLM HTTP attempt or AI cache hit, as its response arrives.
+    AiRequest(Box<AiRequest>),
+    /// An AI task started, finished one more unit, or ended.
+    #[serde(rename_all = "camelCase")]
+    AiProgress {
+        task: String,
+        label: String,
+        done: u64,
+        total: u64,
+        /// `started`, `progress` or `finished`.
+        state: &'static str,
+    },
+    /// The AI totals of the run, once all AI work is done.
+    #[serde(rename_all = "camelCase")]
+    AiUsage {
+        provider: String,
+        model: String,
+        calls: u64,
+        cache_hits: u64,
+        http_attempts: u64,
+        retries: u64,
+        input_tokens: u64,
+        output_tokens: u64,
+        reasoning_tokens: u64,
+        cached_input_tokens: u64,
+        calls_without_usage: u64,
+        network_ms: u64,
+    },
+}
+
+/// The fields of an `aiRequest` event (boxed: far larger than the other events).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiRequest {
+    pub seq: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub task: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    /// Units of the task done when the response arrived (this request's own unit not yet).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub done: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total: Option<u64>,
+    pub category: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subject: Option<String>,
+    pub provider: &'static str,
+    pub model: String,
+    pub attempt: u32,
+    pub max_attempts: u32,
+    /// `ok`, `retry`, `error` or `cacheHit`.
+    pub outcome: &'static str,
+    /// The HTTP status of the response.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_tokens: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_tokens: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_tokens: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cached_input_tokens: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_chars: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ms: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none", serialize_with = "one_decimal")]
+    pub output_tokens_per_second: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none", serialize_with = "one_decimal")]
+    pub total_tokens_per_second: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub finish_reason: Option<String>,
+}
+
+/// Rates are written with one decimal, e.g. `119.4`.
+fn one_decimal<S: serde::Serializer>(value: &Option<f64>, serializer: S) -> Result<S::Ok, S::Error> {
+    match value {
+        Some(value) => serializer.serialize_f64((value * 10.0).round() / 10.0),
+        None => serializer.serialize_none(),
+    }
 }
 
 /// Opens the event file. Called once, before the crawl starts.
@@ -166,7 +250,6 @@ const ARTIFACTS: &[(&str, &str, &str)] = &[
     ("sitemap-txt", "sitemap-txt", "Text sitemap"),
     ("screenshots", "screenshots", "Screenshots"),
     ("screenshots-animation", "animation", "Animation"),
-    ("ai-llms", "llms", "AI text export"),
 ];
 
 /// Summary codes for steps that failed without failing the run.
@@ -220,6 +303,35 @@ pub fn emit_issue(code: &str, text: &str) {
         label,
         detail: text.to_string(),
     });
+}
+
+/// Reports a file an AI exporter wrote. The AI exporters announce their files themselves, one
+/// event per file, because their summary lines name several files at once.
+pub fn emit_ai_artifact(kind: &'static str, label: &'static str, path: &Path) {
+    if !is_enabled() {
+        return;
+    }
+    emit(Event::Artifact {
+        kind,
+        label,
+        path: crate::utils::get_absolute_path(&path.to_string_lossy()),
+    });
+}
+
+/// Reports an AI step that failed without failing the run (kind `ai`).
+pub fn emit_ai_issue(label: &'static str, detail: &str) {
+    if !is_enabled() {
+        return;
+    }
+    emit(ai_issue(label, detail));
+}
+
+fn ai_issue(label: &'static str, detail: &str) -> Event {
+    Event::Issue {
+        kind: "ai",
+        label,
+        detail: detail.to_string(),
+    }
 }
 
 fn code_to_kind(code: &str) -> &'static str {
@@ -305,5 +417,134 @@ mod tests {
         // No init() in this test binary path; emit must not panic or block.
         assert!(!is_enabled());
         phase("crawl", PhaseState::Started);
+        emit_ai_artifact("ai-report-json", "AI report (JSON)", Path::new("/tmp/r.json"));
+        emit_ai_issue("AI phase skipped", "no API key");
+    }
+
+    fn ai_request() -> AiRequest {
+        AiRequest {
+            seq: 12,
+            task: Some("seo".to_string()),
+            label: Some("SEO".to_string()),
+            done: Some(11),
+            total: Some(40),
+            category: "SEO analysis".to_string(),
+            subject: Some("/blog/post".to_string()),
+            provider: "openai-compatible",
+            model: "qwen".to_string(),
+            attempt: 1,
+            max_attempts: 3,
+            outcome: "ok",
+            status: Some(200),
+            error: None,
+            input_tokens: Some(3412),
+            output_tokens: Some(812),
+            reasoning_tokens: Some(540),
+            cached_input_tokens: Some(0),
+            reasoning_chars: Some(1480),
+            ms: Some(6800),
+            output_tokens_per_second: Some(119.411_764),
+            total_tokens_per_second: Some(621.0),
+            finish_reason: Some("stop".to_string()),
+        }
+    }
+
+    #[test]
+    fn an_ai_request_is_one_camel_case_line_with_speeds_to_one_decimal() {
+        let json = serde_json::to_string(&Event::AiRequest(Box::new(ai_request()))).unwrap();
+        assert_eq!(
+            json,
+            concat!(
+                r#"{"type":"aiRequest","seq":12,"task":"seo","label":"SEO","done":11,"total":40,"#,
+                r#""category":"SEO analysis","subject":"/blog/post","provider":"openai-compatible","#,
+                r#""model":"qwen","attempt":1,"maxAttempts":3,"outcome":"ok","status":200,"#,
+                r#""inputTokens":3412,"outputTokens":812,"reasoningTokens":540,"cachedInputTokens":0,"#,
+                r#""reasoningChars":1480,"ms":6800,"outputTokensPerSecond":119.4,"#,
+                r#""totalTokensPerSecond":621.0,"finishReason":"stop"}"#
+            )
+        );
+    }
+
+    #[test]
+    fn an_ai_request_leaves_out_what_is_unknown() {
+        let retry = AiRequest {
+            seq: 3,
+            task: None,
+            label: None,
+            done: None,
+            total: None,
+            subject: None,
+            outcome: "retry",
+            status: Some(429),
+            error: Some("HTTP 429".to_string()),
+            input_tokens: None,
+            output_tokens: None,
+            reasoning_tokens: None,
+            cached_input_tokens: None,
+            reasoning_chars: None,
+            ms: Some(400),
+            output_tokens_per_second: None,
+            total_tokens_per_second: None,
+            finish_reason: None,
+            ..ai_request()
+        };
+        let json = serde_json::to_string(&Event::AiRequest(Box::new(retry))).unwrap();
+        assert_eq!(
+            json,
+            concat!(
+                r#"{"type":"aiRequest","seq":3,"category":"SEO analysis","provider":"openai-compatible","#,
+                r#""model":"qwen","attempt":1,"maxAttempts":3,"outcome":"retry","status":429,"#,
+                r#""error":"HTTP 429","ms":400}"#
+            )
+        );
+    }
+
+    #[test]
+    fn ai_progress_and_usage_are_camel_case() {
+        let json = serde_json::to_string(&Event::AiProgress {
+            task: "profile:chapters".to_string(),
+            label: "Profile: chapters".to_string(),
+            done: 3,
+            total: 12,
+            state: "progress",
+        })
+        .unwrap();
+        assert_eq!(
+            json,
+            r#"{"type":"aiProgress","task":"profile:chapters","label":"Profile: chapters","done":3,"total":12,"state":"progress"}"#
+        );
+
+        let json = serde_json::to_string(&Event::AiUsage {
+            provider: "openai-compatible".to_string(),
+            model: "qwen".to_string(),
+            calls: 6,
+            cache_hits: 1,
+            http_attempts: 7,
+            retries: 2,
+            input_tokens: 100,
+            output_tokens: 50,
+            reasoning_tokens: 30,
+            cached_input_tokens: 10,
+            calls_without_usage: 0,
+            network_ms: 1234,
+        })
+        .unwrap();
+        assert_eq!(
+            json,
+            concat!(
+                r#"{"type":"aiUsage","provider":"openai-compatible","model":"qwen","calls":6,"cacheHits":1,"#,
+                r#""httpAttempts":7,"retries":2,"inputTokens":100,"outputTokens":50,"reasoningTokens":30,"#,
+                r#""cachedInputTokens":10,"callsWithoutUsage":0,"networkMs":1234}"#
+            )
+        );
+    }
+
+    #[test]
+    fn ai_issues_have_their_own_kind() {
+        let json = serde_json::to_string(&ai_issue("AI phase skipped", "no API key")).unwrap();
+        assert_eq!(
+            json,
+            r#"{"type":"issue","kind":"ai","label":"AI phase skipped","detail":"no API key"}"#
+        );
     }
 }

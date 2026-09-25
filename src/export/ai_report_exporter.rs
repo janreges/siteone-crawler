@@ -101,6 +101,9 @@ impl Exporter for AiReportExporter {
                 e
             ))
         })?;
+        // Announced once both exist: a failed pair is rolled back, so neither file remains.
+        crate::events::emit_ai_artifact("ai-report-json", "AI report (JSON)", &self.json_path);
+        crate::events::emit_ai_artifact("ai-report-html", "AI report (HTML)", &self.html_path);
 
         eprintln!(
             "{}",

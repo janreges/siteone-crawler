@@ -4040,11 +4040,12 @@ fn ai_custom_and_llms_requests_carry_their_task_and_page() {
     let mock = MockLlm::start(vec![chat_response(200, qwen_seo_answer())]);
     // llms.txt is written next to the markdown export.
     let export_dir = format!("--markdown-export-dir={}", tmp.path.join("md").display());
-    let stderr = crawl_with_ai(
+    let (stderr, events) = crawl_with_ai_events(
         &one_page_site(&tmp),
         &mock,
+        &tmp,
         &[
-            "--ai-actions=custom,llms-txt",
+            "--ai-actions=custom,llms-txt,llms-full",
             "--ai-prompt=Check the page.",
             &export_dir,
         ],
@@ -4052,4 +4053,510 @@ fn ai_custom_and_llms_requests_carry_their_task_and_page() {
     assert_line(&stderr, r"  AI ✓ #\d+ Custom check 1/1 · / · 17 in · .*");
     assert_line(&stderr, r"  AI ✓ #\d+ llms\.txt 1/1 · / · 17 in · .*");
     assert_every_request_names_its_task(&stderr);
+    // Both files are announced, each with its path.
+    for (kind, name) in [("llms", ".llms.txt"), ("llms-full", ".llms-full.txt")] {
+        let artifact = events_of(&events, "artifact")
+            .into_iter()
+            .find(|a| a["kind"] == kind)
+            .unwrap_or_else(|| panic!("no {kind} artifact in {events:#?}"));
+        let path = artifact["path"].as_str().expect("a path");
+        assert!(
+            path.ends_with(name) && std::path::Path::new(path).is_file(),
+            "{artifact}"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// AI events in the NDJSON stream (`--events-file`)
+// ---------------------------------------------------------------------------
+
+/// Crawls like `crawl_with_ai`, with an event stream in `tmp`; returns stderr and the events.
+fn crawl_with_ai_events(
+    server: &LocalServer,
+    mock: &MockLlm,
+    tmp: &TempDir,
+    extra: &[&str],
+) -> (String, Vec<serde_json::Value>) {
+    let events = tmp.path.join("events.ndjson");
+    let events_arg = format!("--events-file={}", events.display());
+    let report_dir = format!("--ai-report-dir={}", tmp.path.display());
+    let mut args = extra.to_vec();
+    args.extend([events_arg.as_str(), report_dir.as_str()]);
+    let stderr = crawl_with_ai(server, mock, &args);
+    let text = std::fs::read_to_string(&events).expect("the event file exists");
+    let events = text
+        .lines()
+        .map(|line| serde_json::from_str(line).expect("one JSON object per line"))
+        .collect();
+    (stderr, events)
+}
+
+fn events_of<'a>(events: &'a [serde_json::Value], kind: &str) -> Vec<&'a serde_json::Value> {
+    events.iter().filter(|event| event["type"] == kind).collect()
+}
+
+/// The `aiProgress` events of `task`: started at 0, one `progress` per unit up to the total, then
+/// finished at the total. Returns the total.
+fn assert_progress_runs_to_the_end(events: &[serde_json::Value], task: &str) -> u64 {
+    let states: Vec<(String, u64, u64)> = events_of(events, "aiProgress")
+        .into_iter()
+        .filter(|event| event["task"] == task)
+        .map(|event| {
+            (
+                event["state"].as_str().expect("a state").to_string(),
+                event["done"].as_u64().expect("done"),
+                event["total"].as_u64().expect("total"),
+            )
+        })
+        .collect();
+    let total = states
+        .first()
+        .map(|(_, _, total)| *total)
+        .unwrap_or_else(|| panic!("no progress of {task}"));
+    let mut expected = vec![("started".to_string(), 0, total)];
+    expected.extend((1..=total).map(|done| ("progress".to_string(), done, total)));
+    expected.push(("finished".to_string(), total, total));
+    assert_eq!(states, expected, "progress of {task}");
+    total
+}
+
+/// Unknown values are left out, never written as null.
+fn assert_no_nulls(events: &[serde_json::Value]) {
+    for event in events {
+        let object = event.as_object().expect("an object");
+        assert!(object.values().all(|value| !value.is_null()), "a null in {event}");
+    }
+}
+
+/// Concurrent requests are numbered in the order they are written, on stderr and in the stream.
+fn assert_numbered_in_order(stderr: &str, events: &[serde_json::Value]) {
+    let line = regex::Regex::new(r"(?m)^  AI [✓↻✗⇢] #(\d+) ").expect("a valid pattern");
+    let printed: Vec<u64> = line
+        .captures_iter(stderr)
+        .map(|c| c[1].parse().expect("a number"))
+        .collect();
+    let emitted: Vec<u64> = events_of(events, "aiRequest")
+        .iter()
+        .map(|request| request["seq"].as_u64().expect("seq"))
+        .collect();
+    let expected: Vec<u64> = (1..=emitted.len() as u64).collect();
+    assert_eq!(emitted, expected, "events");
+    assert_eq!(printed, expected, "stderr");
+}
+
+fn sum_of(events: &[&serde_json::Value], field: &str) -> u64 {
+    events.iter().filter_map(|event| event[field].as_u64()).sum()
+}
+
+#[test]
+fn ai_events_report_requests_progress_usage_and_files() {
+    let tmp = TempDir::new("ai-events");
+    let site = tmp.path.join("site");
+    write_site(&site, 1);
+    let server = LocalServer::start(&site);
+    // The SEO action asks first (one request per page), then the `ia` report.
+    let mock = MockLlm::start(vec![
+        chat_response(200, qwen_seo_answer()),
+        chat_response(200, qwen_seo_answer()),
+        chat_response(200, qwen_ia_answer()),
+    ]);
+    let (_, events) = crawl_with_ai_events(
+        &server,
+        &mock,
+        &tmp,
+        &[
+            "--ai-actions=seo",
+            "--ai-report=ia",
+            "--ai-max-pages=2",
+            "--ai-max-concurrency=1",
+        ],
+    );
+    assert_no_nulls(&events);
+    assert_eq!(assert_progress_runs_to_the_end(&events, "seo"), 2);
+    assert_eq!(assert_progress_runs_to_the_end(&events, "report:ia"), 2);
+
+    let requests = events_of(&events, "aiRequest");
+    assert_eq!(requests.len(), 4, "{requests:#?}");
+    let seqs: Vec<u64> = requests.iter().map(|r| r["seq"].as_u64().expect("seq")).collect();
+    assert_eq!(seqs, vec![1, 2, 3, 4], "numbered in the order written");
+    for (request, (task, label, done)) in requests.iter().zip([
+        ("seo", "SEO", 0),
+        ("seo", "SEO", 1),
+        ("report:ia", "Report 'ia'", 0),
+        ("report:ia", "Report 'ia'", 1),
+    ]) {
+        assert_eq!(request["task"], task);
+        assert_eq!(request["label"], label);
+        assert_eq!(
+            (request["done"].as_u64(), request["total"].as_u64()),
+            (Some(done), Some(2))
+        );
+        assert!(
+            request["subject"].as_str().is_some_and(|s| s.starts_with('/')),
+            "{request}"
+        );
+        assert_eq!(request["provider"], "openai-compatible");
+        assert_eq!(request["model"], "m");
+        assert_eq!(
+            (request["attempt"].as_u64(), request["maxAttempts"].as_u64()),
+            (Some(1), Some(3))
+        );
+        assert_eq!(request["outcome"], "ok");
+        assert_eq!(request["status"], 200);
+        // The captured vLLM Qwen response: 17 in, 37 out of which 33 reasoning, 148 reasoning chars.
+        assert_eq!(request["inputTokens"], 17);
+        assert_eq!(request["outputTokens"], 37);
+        assert_eq!(request["reasoningTokens"], 33);
+        assert_eq!(request["cachedInputTokens"], 0);
+        assert_eq!(request["reasoningChars"], 148);
+        assert_eq!(request["finishReason"], "stop");
+        assert!(request["ms"].as_u64().is_some_and(|ms| ms >= 100), "{request}");
+        assert!(
+            request["outputTokensPerSecond"].as_f64().is_some_and(|v| v > 0.0),
+            "{request}"
+        );
+        assert!(
+            request["totalTokensPerSecond"].as_f64().is_some_and(|v| v > 0.0),
+            "{request}"
+        );
+        assert!(request.get("error").is_none(), "{request}");
+    }
+    assert_eq!(requests[0]["category"], "SEO analysis");
+    assert_eq!(requests[2]["category"], "AI report (extract)");
+
+    let usage = events_of(&events, "aiUsage");
+    assert_eq!(usage.len(), 1, "once per run");
+    let usage = usage[0];
+    assert_eq!(usage["provider"], "openai-compatible");
+    assert_eq!(usage["model"], "m");
+    assert_eq!(usage["calls"], 4);
+    assert_eq!(usage["cacheHits"], 0);
+    assert_eq!(usage["httpAttempts"], 4);
+    assert_eq!(usage["retries"], 0);
+    assert_eq!(usage["callsWithoutUsage"], 0);
+    for (total, field) in [
+        ("inputTokens", "inputTokens"),
+        ("outputTokens", "outputTokens"),
+        ("reasoningTokens", "reasoningTokens"),
+        ("cachedInputTokens", "cachedInputTokens"),
+    ] {
+        assert_eq!(usage[total].as_u64(), Some(sum_of(&requests, field)), "{total}");
+    }
+    assert!(usage["networkMs"].as_u64().is_some_and(|ms| ms >= 400), "{usage}");
+    let position = |event: &serde_json::Value| events.iter().position(|e| e == event).expect("present");
+    assert!(position(usage) > position(requests[3]), "after the last request");
+
+    let artifacts = events_of(&events, "artifact");
+    for (kind, extension) in [("ai-report-json", ".json"), ("ai-report-html", ".html")] {
+        let artifact = artifacts
+            .iter()
+            .find(|a| a["kind"] == kind)
+            .unwrap_or_else(|| panic!("no {kind} in {artifacts:#?}"));
+        let path = std::path::Path::new(artifact["path"].as_str().expect("a path"));
+        assert!(path.is_absolute() && path.is_file(), "{artifact}");
+        assert!(path.to_string_lossy().ends_with(extension), "{artifact}");
+    }
+}
+
+#[test]
+fn ai_events_report_retries_failures_and_missing_usage() {
+    let tmp = TempDir::new("ai-events-failures");
+    let site = tmp.path.join("site");
+    write_site(&site, 1);
+    let server = LocalServer::start(&site);
+    let no_usage =
+        serde_json::json!({"id": "x", "choices": [{"message": {"content": r#"{"scores":{"overall":80}}"#}}]});
+    // First page: 429, then an answer without usage. Second page: an unknown model.
+    let mock = MockLlm::start(vec![
+        chat_response(429, r#"{"error":{"message":"slow down"}}"#.to_string()),
+        chat_response(200, no_usage.to_string()),
+        chat_response(
+            404,
+            include_str!("fixtures/ai-responses/error-vllm-unknown-model.json").to_string(),
+        ),
+    ]);
+    let (_, events) = crawl_with_ai_events(
+        &server,
+        &mock,
+        &tmp,
+        &["--ai-actions=seo", "--ai-max-pages=2", "--ai-max-concurrency=1"],
+    );
+    assert_no_nulls(&events);
+    // The failed page counts too.
+    assert_eq!(assert_progress_runs_to_the_end(&events, "seo"), 2);
+
+    let requests = events_of(&events, "aiRequest");
+    let outcomes: Vec<(&str, u64, u64)> = requests
+        .iter()
+        .map(|r| {
+            (
+                r["outcome"].as_str().expect("an outcome"),
+                r["status"].as_u64().expect("a status"),
+                r["attempt"].as_u64().expect("an attempt"),
+            )
+        })
+        .collect();
+    assert_eq!(outcomes, vec![("retry", 429, 1), ("ok", 200, 2), ("error", 404, 1)]);
+    assert_eq!(requests[0]["error"], "HTTP 429");
+    for field in ["inputTokens", "outputTokens", "reasoningTokens", "cachedInputTokens"] {
+        assert!(
+            requests[1].get(field).is_none(),
+            "no usage, no {field}: {}",
+            requests[1]
+        );
+    }
+    assert!(
+        requests[2]["error"]
+            .as_str()
+            .is_some_and(|e| e.contains("The model `no-such-model` does not exist")),
+        "{}",
+        requests[2]
+    );
+
+    let usage = events_of(&events, "aiUsage")[0];
+    assert_eq!(usage["calls"], 1);
+    assert_eq!(usage["httpAttempts"], 3);
+    assert_eq!(usage["retries"], 1);
+    assert_eq!(usage["callsWithoutUsage"], 1);
+    assert_eq!(usage["inputTokens"], 0);
+}
+
+#[test]
+fn ai_events_report_a_skipped_ai_phase_as_an_issue() {
+    let tmp = TempDir::new("ai-events-no-key");
+    let events = tmp.path.join("events.ndjson");
+    let server = one_page_site(&tmp);
+    let output = run_crawler(&[
+        "--config-file=/dev/null",
+        &format!("--url={}", server.url()),
+        LOCAL_ANALYZERS,
+        "--http-cache-dir=",
+        "--ai-provider=openai",
+        "--ai-model=m",
+        "--ai-api-key-env=SITEONE_TEST_NO_SUCH_KEY",
+        "--ai-actions=seo",
+        &format!("--events-file={}", events.display()),
+    ]);
+    assert_eq!(output.status.code(), Some(0), "the AI phase is fail-soft");
+    let text = std::fs::read_to_string(&events).expect("the event file exists");
+    let issue = text
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).expect("JSON"))
+        .find(|event| event["type"] == "issue" && event["kind"] == "ai")
+        .unwrap_or_else(|| panic!("no AI issue in:\n{text}"));
+    assert_eq!(issue["label"], "AI phase skipped");
+    assert!(
+        issue["detail"].as_str().is_some_and(|d| d.contains("no API key")),
+        "{issue}"
+    );
+}
+
+#[test]
+fn ai_events_follow_the_executive_summary() {
+    let tmp = TempDir::new("ai-events-summary");
+    let mock = MockLlm::start(vec![chat_response(200, qwen_seo_answer())]);
+    let (_, events) = crawl_with_ai_events(&one_page_site(&tmp), &mock, &tmp, &["--ai-actions=summary"]);
+    assert_eq!(assert_progress_runs_to_the_end(&events, "summary"), 6);
+    let requests = events_of(&events, "aiRequest");
+    assert_eq!(requests.len(), 6);
+    assert_eq!(requests[5]["subject"], "synthesis");
+    // The summary runs after the `ai` phase; the totals still include it.
+    let usage = events_of(&events, "aiUsage");
+    assert_eq!(usage.len(), 1);
+    assert_eq!(usage[0]["calls"], 6);
+    assert_eq!(usage[0]["inputTokens"].as_u64(), Some(sum_of(&requests, "inputTokens")));
+}
+
+#[test]
+fn ai_events_follow_every_brand_elaborate_stage() {
+    let tmp = TempDir::new("ai-events-elaborate");
+    let site = tmp.path.join("site");
+    write_site(&site, 45);
+    let server = LocalServer::start(&site);
+    let mock = MockLlm::start(vec![chat_response(200, elaborate_answer())]);
+    let (_, events) = crawl_with_ai_events(
+        &server,
+        &mock,
+        &tmp,
+        &["--ai-elaborate", "--ai-max-pages=3", "--ai-elaborate-gap-fill=0"],
+    );
+    assert_no_nulls(&events);
+    // Round 2 is not needed and counts as done; the correction fails and counts as done.
+    assert_eq!(assert_progress_runs_to_the_end(&events, "elaborate:select"), 2);
+    assert_eq!(assert_progress_runs_to_the_end(&events, "elaborate:extract"), 3);
+    assert!(assert_progress_runs_to_the_end(&events, "elaborate:synthesize") >= 1);
+    assert_eq!(assert_progress_runs_to_the_end(&events, "elaborate:correct"), 1);
+    for request in events_of(&events, "aiRequest") {
+        assert!(
+            request["task"].as_str().is_some_and(|t| t.starts_with("elaborate:")) && request["subject"].is_string(),
+            "{request}"
+        );
+    }
+    for kind in ["ai-elaborate-md", "ai-elaborate-json", "ai-elaborate-html"] {
+        let artifact = events_of(&events, "artifact")
+            .into_iter()
+            .find(|a| a["kind"] == kind)
+            .unwrap_or_else(|| panic!("no {kind}"));
+        assert!(
+            std::path::Path::new(artifact["path"].as_str().expect("a path")).is_file(),
+            "{artifact}"
+        );
+    }
+}
+
+#[test]
+fn ai_events_follow_every_ai_profile_stage() {
+    let tmp = TempDir::new("ai-events-profile");
+    let site = tmp.path.join("site");
+    write_site(&site, 2);
+    let server = LocalServer::start(&site);
+    let mock = MockLlm::start(vec![chat_response(200, profile_answer())]);
+    let (stderr, events) = crawl_with_ai_events(
+        &server,
+        &mock,
+        &tmp,
+        &["--ai-profile", "--ai-max-pages=3", "--ai-report-language=cs"],
+    );
+    assert_no_nulls(&events);
+    assert_numbered_in_order(&stderr, &events);
+    for task in [
+        "profile:summary",
+        "profile:classify",
+        "profile:localize",
+        "profile:executive",
+        "profile:correct",
+    ] {
+        assert_eq!(assert_progress_runs_to_the_end(&events, task), 1, "{task}");
+    }
+    assert_eq!(assert_progress_runs_to_the_end(&events, "profile:describe"), 3);
+    assert!(assert_progress_runs_to_the_end(&events, "profile:chapters") > 1);
+    for request in events_of(&events, "aiRequest") {
+        assert!(
+            request["task"].as_str().is_some_and(|t| t.starts_with("profile:")) && request["subject"].is_string(),
+            "{request}"
+        );
+    }
+    for kind in ["ai-profile-md", "ai-profile-json", "ai-profile-html"] {
+        let artifact = events_of(&events, "artifact")
+            .into_iter()
+            .find(|a| a["kind"] == kind)
+            .unwrap_or_else(|| panic!("no {kind}"));
+        assert!(
+            std::path::Path::new(artifact["path"].as_str().expect("a path")).is_file(),
+            "{artifact}"
+        );
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn ai_events_report_failed_pipelines_as_issues() {
+    let tmp = TempDir::new("ai-events-all-fail");
+    let site = tmp.path.join("site");
+    write_site(&site, 1);
+    let server = LocalServer::start(&site);
+    // Every request fails at once (a 404 is not retried).
+    let mock = MockLlm::start(vec![chat_response(
+        404,
+        include_str!("fixtures/ai-responses/error-vllm-unknown-model.json").to_string(),
+    )]);
+    let events_path = tmp.path.join("events.ndjson");
+    // A directory nothing can be written to: the AI report export fails.
+    let read_only = tmp.path.join("read-only");
+    std::fs::create_dir(&read_only).expect("a directory");
+    std::fs::set_permissions(&read_only, std::os::unix::fs::PermissionsExt::from_mode(0o555)).expect("read-only");
+    let output = run_crawler(&[
+        "--config-file=/dev/null",
+        &format!("--url={}", server.url()),
+        LOCAL_ANALYZERS,
+        "--http-cache-dir=",
+        "--ai-provider=openai-compatible",
+        &format!("--ai-endpoint={}", mock.url()),
+        "--ai-model=m",
+        "--ai-cache-dir=",
+        "--ai-actions=summary",
+        "--ai-report=ia",
+        "--ai-elaborate",
+        "--ai-profile",
+        "--ai-max-pages=2",
+        &format!("--ai-report-dir={}", read_only.display()),
+        &format!("--events-file={}", events_path.display()),
+    ]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(0), "the AI features are fail-soft: {stderr}");
+    let text = std::fs::read_to_string(&events_path).expect("the event file exists");
+    let events: Vec<serde_json::Value> = text
+        .lines()
+        .map(|line| serde_json::from_str(line).expect("one JSON object per line"))
+        .collect();
+    assert_no_nulls(&events);
+
+    let issues: Vec<&str> = events_of(&events, "issue")
+        .into_iter()
+        .filter(|issue| issue["kind"] == "ai")
+        .map(|issue| issue["label"].as_str().expect("a label"))
+        .collect();
+    for label in [
+        "AI executive summary failed",
+        "Brand elaborate failed",
+        "AI profile failed",
+        "AI report export failed",
+    ] {
+        assert!(issues.contains(&label), "no {label:?} in {issues:?}\n{stderr}");
+    }
+    // Failed units count: every task that started ran to its end.
+    let tasks: std::collections::BTreeSet<&str> = events_of(&events, "aiProgress")
+        .into_iter()
+        .map(|event| event["task"].as_str().expect("a task"))
+        .collect();
+    for task in [
+        "report:ia",
+        "summary",
+        "elaborate:extract",
+        "profile:describe",
+        "profile:chapters",
+    ] {
+        assert!(tasks.contains(task), "no progress of {task} in {tasks:?}");
+    }
+    for task in tasks {
+        // The summary stops before its synthesis when every area failed.
+        if task != "summary" {
+            assert_progress_runs_to_the_end(&events, task);
+        }
+    }
+    for request in events_of(&events, "aiRequest") {
+        assert_eq!(request["outcome"], "error", "{request}");
+        assert_eq!(request["status"], 404, "{request}");
+    }
+}
+
+#[test]
+fn ai_events_follow_the_elaborate_gap_fill() {
+    let tmp = TempDir::new("ai-events-gap-fill");
+    let site = tmp.path.join("site");
+    std::fs::create_dir_all(&site).expect("site dir");
+    // A navigation the single-page crawl never follows; one of its pages does not exist.
+    std::fs::write(
+        site.join("index.html"),
+        r#"<html><head><title>Acme</title></head><body><nav><a href="/about.html">About</a> <a href="/missing.html">Missing</a></nav><p>Acme builds tools.</p></body></html>"#,
+    )
+    .expect("index.html");
+    std::fs::write(
+        site.join("about.html"),
+        "<html><head><title>About</title></head><body><p>Founded in 1999.</p></body></html>",
+    )
+    .expect("about.html");
+    let server = LocalServer::start(&site);
+    let mock = MockLlm::start(vec![chat_response(200, elaborate_answer())]);
+    let (_, events) = crawl_with_ai_events(
+        &server,
+        &mock,
+        &tmp,
+        &["--single-page", "--ai-elaborate", "--ai-elaborate-correct=false"],
+    );
+    // The page that could not be fetched counts as done too.
+    assert_eq!(assert_progress_runs_to_the_end(&events, "elaborate:gapfill"), 2);
+    // The fetched page joins the extraction.
+    assert_eq!(assert_progress_runs_to_the_end(&events, "elaborate:extract"), 2);
 }

@@ -249,6 +249,28 @@ pub fn reset() {
     }
 }
 
+/// Emit the `aiUsage` event with the totals of the run (the model as recorded, else `model`).
+pub fn emit_event(provider: &str, model: &str) {
+    if !crate::events::is_enabled() {
+        return;
+    }
+    let s = snapshot();
+    crate::events::emit(crate::events::Event::AiUsage {
+        provider: provider.to_string(),
+        model: model_name().unwrap_or_else(|| model.to_string()),
+        calls: s.calls,
+        cache_hits: s.cache_hits,
+        http_attempts: s.http_attempts,
+        retries: s.retries,
+        input_tokens: s.prompt_tokens,
+        output_tokens: s.completion_tokens,
+        reasoning_tokens: s.reasoning_tokens,
+        cached_input_tokens: s.cached_input_tokens,
+        calls_without_usage: s.calls_without_usage,
+        network_ms: (s.network_time_s * 1000.0).round() as u64,
+    });
+}
+
 /// Human-readable count: `1.245M (1245678)` for millions, `12.3k (12345)` for thousands,
 /// the plain number below 1000.
 pub fn format_count(n: u64) -> String {

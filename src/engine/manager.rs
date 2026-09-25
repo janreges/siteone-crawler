@@ -382,6 +382,14 @@ impl Manager {
                 st.add_info_to_summary("ai-usage-by-type", &line);
             }
         }
+        // The AI totals for a host, once the last AI request is done: the executive summary above
+        // runs after the `ai` phase.
+        let runs_ai = !self.options.ai_actions.is_empty() || self.options.ai_elaborate || self.options.ai_profile;
+        if self.options.ai_enabled && runs_ai {
+            let provider = crate::ai::provider::Provider::parse(&self.options.ai_provider)
+                .unwrap_or(crate::ai::provider::Provider::OpenAiCompatible);
+            crate::ai::usage::emit_event(provider.as_str(), self.options.ai_model.as_deref().unwrap_or_default());
+        }
 
         // Run exporters
         self.run_exporters(crawler);
@@ -563,11 +571,10 @@ impl Manager {
                     }
                 }
                 Err(error) => {
+                    let msg = format!("AI report export failed: {}", error);
+                    crate::events::emit_ai_issue("AI report export failed", &msg);
                     if let Ok(st) = status.lock() {
-                        st.add_critical_to_summary(
-                            ai_exporter.get_name(),
-                            &format!("AI report export failed: {}", error),
-                        );
+                        st.add_critical_to_summary(ai_exporter.get_name(), &msg);
                     }
                 }
                 Ok(()) => {}
@@ -594,13 +601,12 @@ impl Manager {
                     "Cannot lock crawler state for brand-elaborate export".to_string(),
                 )),
             };
-            if let Err(error) = export_result
-                && let Ok(st) = status.lock()
-            {
-                st.add_critical_to_summary(
-                    elaborate_exporter.get_name(),
-                    &format!("Brand-elaborate export failed: {}", error),
-                );
+            if let Err(error) = export_result {
+                let msg = format!("Brand-elaborate export failed: {}", error);
+                crate::events::emit_ai_issue("Brand elaborate export failed", &msg);
+                if let Ok(st) = status.lock() {
+                    st.add_critical_to_summary(elaborate_exporter.get_name(), &msg);
+                }
             }
         }
 
@@ -624,13 +630,12 @@ impl Manager {
                     "Cannot lock crawler state for AI-profile export".to_string(),
                 )),
             };
-            if let Err(error) = export_result
-                && let Ok(st) = status.lock()
-            {
-                st.add_critical_to_summary(
-                    profile_exporter.get_name(),
-                    &format!("AI-profile export failed: {}", error),
-                );
+            if let Err(error) = export_result {
+                let msg = format!("AI-profile export failed: {}", error);
+                crate::events::emit_ai_issue("AI profile export failed", &msg);
+                if let Ok(st) = status.lock() {
+                    st.add_critical_to_summary(profile_exporter.get_name(), &msg);
+                }
             }
         }
 

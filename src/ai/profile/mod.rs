@@ -61,6 +61,8 @@ const PARSE_ATTEMPTS: u32 = 2;
 // `profile:chapters`; `profile:correct` is the executive summary's correction.
 const TASK_DESCRIBE: &str = "profile:describe";
 const TASK_CHAPTERS: &str = "profile:chapters";
+/// Label of the `issue` event (kind `ai`) when no document is produced.
+const PROFILE_FAILED: &str = "AI profile failed";
 
 /// The path portion of a URL, used as a short human-readable page label.
 fn path_hint(url: &str) -> String {
@@ -120,6 +122,7 @@ fn subject_name_from(title: &str, host: &str) -> String {
 
 fn report_error(status: &Arc<Mutex<Status>>, msg: &str) {
     eprintln!("{}", utils::get_color_text(&format!("ERROR: {}", msg), "red", true));
+    crate::events::emit_ai_issue(PROFILE_FAILED, msg);
     if let Ok(st) = status.lock() {
         st.add_critical_to_summary("ai-profile-error", msg);
     }
@@ -182,8 +185,10 @@ pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, output: &Ar
     };
 
     if pages.is_empty() {
+        let msg = "AI profile: no eligible pages were crawled.";
+        crate::events::emit_ai_issue(PROFILE_FAILED, msg);
         if let Ok(st) = status.lock() {
-            st.add_notice_to_summary("ai-profile", "AI profile: no eligible pages were crawled.");
+            st.add_notice_to_summary("ai-profile", msg);
         }
         return;
     }
@@ -556,10 +561,9 @@ pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, output: &Ar
     );
     if let Ok(st) = status.lock() {
         if visible == 0 {
-            st.add_critical_to_summary(
-                "ai-profile-empty",
-                "AI profile: every chapter was empty; no document produced.",
-            );
+            let msg = "AI profile: every chapter was empty; no document produced.";
+            crate::events::emit_ai_issue(PROFILE_FAILED, msg);
+            st.add_critical_to_summary("ai-profile-empty", msg);
             return;
         }
         st.add_info_to_summary(
