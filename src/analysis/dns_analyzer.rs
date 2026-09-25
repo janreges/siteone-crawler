@@ -112,6 +112,12 @@ impl DnsAnalyzer {
         }
         None
     }
+
+    /// The host as an IP address when it is an IP literal (`127.0.0.1`, `[::1]`); DNS resolution
+    /// does not apply to such hosts.
+    fn ip_literal(host: &str) -> Option<std::net::IpAddr> {
+        host.trim_start_matches('[').trim_end_matches(']').parse().ok()
+    }
 }
 
 impl Analyzer for DnsAnalyzer {
@@ -179,6 +185,20 @@ impl Analyzer for DnsAnalyzer {
             .first()
             .and_then(|u| u.get_host())
             .unwrap_or_else(|| "unknown".to_string());
+
+        // An IP-literal host (e.g. a local test server) has no DNS records to look up; querying
+        // for them would only sit out resolver timeouts.
+        if let Some(ip) = Self::ip_literal(&domain) {
+            let text = format!("DNS resolution does not apply: the crawled host {ip} is an IP address.");
+            let mut row = HashMap::new();
+            row.insert("info".to_string(), text.clone());
+            super_table.set_data(vec![row]);
+            status.configure_super_table_url_stripping(&mut super_table);
+            output.add_super_table(&super_table);
+            status.add_super_table_at_end(super_table);
+            status.add_info_to_summary("dns", &text);
+            return;
+        }
 
         match self.get_dns_info(&domain) {
             Ok(dns_info) => {
@@ -287,5 +307,21 @@ impl Analyzer for DnsAnalyzer {
 
     fn get_exec_counts(&self) -> &HashMap<String, usize> {
         self.base.get_exec_counts()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ip_literal_hosts_are_recognized() {
+        assert_eq!(DnsAnalyzer::ip_literal("127.0.0.1"), Some("127.0.0.1".parse().unwrap()));
+        // `url::Url::host_str()` keeps the brackets of an IPv6 host.
+        assert_eq!(DnsAnalyzer::ip_literal("[::1]"), Some("::1".parse().unwrap()));
+        assert_eq!(DnsAnalyzer::ip_literal("::1"), Some("::1".parse().unwrap()));
+        assert_eq!(DnsAnalyzer::ip_literal("localhost"), None);
+        assert_eq!(DnsAnalyzer::ip_literal("crawler.siteone.io"), None);
+        assert_eq!(DnsAnalyzer::ip_literal("1.2.3"), None);
     }
 }

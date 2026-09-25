@@ -855,7 +855,7 @@ fn url_list_crawls_listed_urls() {
 // These run against the built-in server, so they need no network and no fixed delays.
 // ---------------------------------------------------------------------------
 
-/// Skips the DNS analyzer, whose lookups of an IP-literal host can sit out resolver timeouts.
+/// Runs only the Headers analyzer, so local test crawls stay fast and their output small.
 const LOCAL_ANALYZERS: &str = "--analyzer-filter-regex=/Headers/";
 
 /// Writes an index page that links to `pages` further pages.
@@ -1182,4 +1182,45 @@ fn brotli_response_keeps_content_encoding_and_passes_the_brotli_check() {
             .any(|head| head.to_ascii_lowercase().contains("accept-encoding: gzip, deflate, br")),
         "the crawler still asks for compressed responses: {requests:?}"
     );
+}
+
+/// An IP-literal host has no DNS records: the DNS analyzer says so instead of querying the
+/// resolver for "127.0.0.1" (which sat out timeouts and ended in a critical finding).
+#[test]
+fn dns_analysis_is_skipped_for_ip_literal_hosts() {
+    let tmp = TempDir::new("dns-ip-literal");
+    let site = tmp.path.join("site");
+    write_site(&site, 0);
+    let server = LocalServer::start(&site);
+
+    let output = run_built_crawler(&[
+        "--config-file=/dev/null",
+        &format!("--url={}", server.url()),
+        "--single-page",
+        "--output=json",
+        "--analyzer-filter-regex=/Dns/",
+        "--http-cache-dir=",
+        "--output-html-report=",
+        "--output-json-file=",
+        "--output-text-file=",
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).expect("JSON on stdout");
+
+    assert_eq!(
+        json["tables"]["dns"]["rows"][0]["info"],
+        "DNS resolution does not apply: the crawled host 127.0.0.1 is an IP address."
+    );
+    let dns = json["summary"]["items"]
+        .as_array()
+        .expect("summary items")
+        .iter()
+        .find(|item| item["aplCode"] == "dns")
+        .expect("a DNS summary item");
+    assert_eq!(dns["status"], "INFO", "{dns}");
 }
