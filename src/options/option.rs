@@ -425,7 +425,8 @@ impl CrawlerOption {
                     if url::Url::parse(&encoded).is_err() {
                         return Err(CrawlerError::Config(format!(
                             "Option {} ({}) must be valid URL",
-                            display_name, val
+                            display_name,
+                            crate::utils::redact_url_userinfo(val)
                         )));
                     }
                 }

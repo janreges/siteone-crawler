@@ -124,7 +124,7 @@ on stderr:
 | `maxAttempts` | int | Transport attempts allowed for one request. |
 | `outcome` | string | `ok`; `retry` (failed, retried: HTTP 429/5xx or a connection error); `error` (failed and not retried); `cacheHit` (answered from `--ai-cache-dir`, no HTTP request). |
 | `status` | int? | HTTP status of the response. Absent for cache hits and transport errors. |
-| `error` | string? | Why the attempt failed; at most 200 characters, without credentials or URLs. |
+| `error` | string? | Why the attempt failed; at most 200 characters, without credentials (a URL it quotes has no userinfo). |
 | `inputTokens` | int? | Prompt tokens the provider processed (Anthropic: incl. cache creation and cache reads). |
 | `outputTokens` | int? | Generated tokens, **including** reasoning/thinking tokens. |
 | `reasoningTokens` | int? | The part of `outputTokens` that was reasoning, when the provider reports it. |

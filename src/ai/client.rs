@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 
 use super::config::AiConfig;
 use super::provider::{self, ChatRequest, ModelInfo, Provider, Usage};
+use super::secret::Redactor;
 use super::telemetry::{self, RequestOutcome, RequestRecord};
 use crate::error::{CrawlerError, CrawlerResult};
 
@@ -76,6 +77,7 @@ pub struct AiClient {
     client: reqwest::Client,
     config: AiConfig,
     request_interval: Option<Duration>,
+    redactor: Redactor,
 }
 
 impl AiClient {
@@ -87,10 +89,12 @@ impl AiClient {
             .max_reqs_per_sec
             .filter(|rate| rate.is_finite() && *rate > 0.0)
             .map(|rate| Duration::from_secs_f64(1.0 / rate));
+        let redactor = Redactor::new(config.api_key.as_deref(), &config.endpoint);
         Self {
             client,
             config,
             request_interval,
+            redactor,
         }
     }
 
@@ -155,23 +159,23 @@ impl AiClient {
             {
                 Ok(completion) if completion.was_truncated() => {
                     self.evict_cached(&active_req, None);
-                    last_err = Some(CrawlerError::Other(format!(
+                    last_err = Some(CrawlerError::Other(self.redact(&format!(
                         "invalid response: generation stopped at token limit ({})",
                         completion.finish_reason.as_deref().unwrap_or("unknown")
-                    )));
+                    ))));
                 }
                 Ok(completion) if completion.was_interrupted(self.provider()) => {
                     self.evict_cached(&active_req, None);
-                    last_err = Some(CrawlerError::Other(format!(
+                    last_err = Some(CrawlerError::Other(self.redact(&format!(
                         "invalid response: provider stopped generation abnormally ({})",
                         completion.finish_reason.as_deref().unwrap_or("unknown")
-                    )));
+                    ))));
                 }
                 Ok(completion) => match parse(&completion.text) {
                     Ok(value) => return Ok((value, completion)),
                     Err(e) => {
                         self.evict_cached(&active_req, None);
-                        last_err = Some(CrawlerError::Other(format!("invalid response: {}", e)));
+                        last_err = Some(CrawlerError::Other(self.redact(&format!("invalid response: {}", e))));
                     }
                 },
                 Err(e)
@@ -210,10 +214,10 @@ impl AiClient {
             .await?;
         if completion.was_interrupted(self.provider()) {
             self.evict_cached(req, extra_body_override);
-            return Err(CrawlerError::Other(format!(
+            return Err(CrawlerError::Other(self.redact(&format!(
                 "AI provider stopped generation abnormally ({})",
                 completion.finish_reason.as_deref().unwrap_or("unknown")
-            )));
+            ))));
         }
         Ok(completion)
     }
@@ -250,7 +254,7 @@ impl AiClient {
             telemetry::report(RequestRecord {
                 outcome: RequestOutcome::CacheHit,
                 usage: hit.usage.has_tokens().then_some(hit.usage),
-                finish_reason: hit.finish_reason.clone(),
+                finish_reason: hit.finish_reason.as_deref().map(|reason| self.redact(reason)),
                 ..base
             });
             return Ok(hit);
@@ -348,7 +352,7 @@ impl AiClient {
                                 format!(
                                     "AI response is not valid JSON: {} (body starts: {})",
                                     e,
-                                    snippet(&body_text)
+                                    snippet(&self.redact(&body_text))
                                 ),
                             ));
                         }
@@ -360,7 +364,7 @@ impl AiClient {
                     let record = RequestRecord {
                         usage: parsed_usage,
                         reasoning_chars: provider::parse_reasoning(self.config.provider, &json),
-                        finish_reason: finish_reason.clone(),
+                        finish_reason: finish_reason.as_deref().map(|reason| self.redact(reason)),
                         ..record
                     };
 
@@ -375,11 +379,14 @@ impl AiClient {
                         return Err(fail(record, format!("AI provider error: {}", msg)));
                     }
                     if !status.is_success() {
-                        return Err(fail(record, format!("AI HTTP {}: {}", code, snippet(&body_text))));
+                        return Err(fail(
+                            record,
+                            format!("AI HTTP {}: {}", code, snippet(&self.redact(&body_text))),
+                        ));
                     }
 
                     let Some(text) = provider::parse_content(self.config.provider, &json) else {
-                        return Err(fail(record, no_content_message(self.config.provider, &json)));
+                        return Err(fail(record, self.no_content_message(&json)));
                     };
                     let duration_ms = record.duration_ms;
                     telemetry::report(record);
@@ -395,7 +402,6 @@ impl AiClient {
                     return Ok(completion);
                 }
                 Err(e) => {
-                    last_err = self.redact(&public_error_text(&e));
                     // Do NOT retry on timeout: a paid completion may have been processed
                     // server-side, so retrying could double-charge. Only retry when we know
                     // the request never reached/processed (connect/build errors). reqwest reports
@@ -406,6 +412,7 @@ impl AiClient {
                         ..record
                     };
                     let error = self.redact(&transport_error_text(e));
+                    last_err = error.clone();
                     if retriable && will_retry {
                         telemetry::report(RequestRecord {
                             outcome: RequestOutcome::Retry,
@@ -454,7 +461,7 @@ impl AiClient {
             let detail = json
                 .as_ref()
                 .and_then(|json| provider::extract_error(self.config.provider, json))
-                .unwrap_or_else(|| snippet(&body));
+                .unwrap_or_else(|| snippet(&self.redact(&body)));
             return Err(self.redact(&match detail.is_empty() {
                 true => format!("HTTP {}", status.as_u16()),
                 false => format!("HTTP {}: {}", status.as_u16(), detail),
@@ -463,7 +470,7 @@ impl AiClient {
         let Some(json) = json else {
             return Err(self.redact(&format!(
                 "The endpoint's answer is not JSON (body starts: {})",
-                snippet(&body)
+                snippet(&self.redact(&body))
             )));
         };
         if let Some(message) = provider::extract_error(self.config.provider, &json) {
@@ -472,17 +479,27 @@ impl AiClient {
         provider::parse_model_list(&json).ok_or_else(|| {
             self.redact(&format!(
                 "The endpoint's answer is not a model list (body starts: {})",
-                snippet(&body)
+                snippet(&self.redact(&body))
             ))
         })
     }
 
-    /// `text` with the configured API key masked, should a provider or proxy echo it.
-    fn redact(&self, text: &str) -> String {
-        match self.config.api_key.as_deref() {
-            Some(key) if !key.is_empty() => text.replace(key, "[redacted]"),
-            _ => text.to_string(),
+    /// The error text for a response without content, quoting the model's refusal when it gave one.
+    fn no_content_message(&self, json: &serde_json::Value) -> String {
+        match provider::parse_refusal(self.config.provider, json) {
+            // Redacted before it is cut: a cut through a credential would leave a part of it.
+            Some(refusal) => format!(
+                "AI response had no content (refusal: {})",
+                snippet(&self.redact(&refusal))
+            ),
+            None => "AI response had no content".to_string(),
         }
+    }
+
+    /// `text` without the credentials of the connection, should a provider or proxy echo them
+    /// (see `Redactor`). Applied to whatever the client reports; a body is redacted before it is cut.
+    pub fn redact(&self, text: &str) -> String {
+        self.redactor.redact(text)
     }
 
     /// The telemetry record of a request made now, carrying the subject of the enclosing
@@ -673,16 +690,6 @@ fn elapsed_ms(since: Instant) -> u64 {
     since.elapsed().as_millis() as u64
 }
 
-/// A transport error as reqwest words it, with the credentials of the URL it quotes removed:
-/// reqwest moves `user:pass@` into a header, but keeps userinfo it cannot decode in the URL.
-fn public_error_text(e: &reqwest::Error) -> String {
-    let text = e.to_string();
-    match e.url() {
-        Some(url) => text.replace(url.as_str(), &crate::utils::redact_url_userinfo(url.as_str())),
-        None => text,
-    }
-}
-
 /// A transport error with its causes but without its URL, which may carry credentials.
 fn transport_error_text(e: reqwest::Error) -> String {
     let e = e.without_url();
@@ -694,14 +701,6 @@ fn transport_error_text(e: reqwest::Error) -> String {
         source = cause.source();
     }
     text
-}
-
-/// The error text for a response without content, quoting the model's refusal when it gave one.
-fn no_content_message(provider: Provider, json: &serde_json::Value) -> String {
-    match provider::parse_refusal(provider, json) {
-        Some(refusal) => format!("AI response had no content (refusal: {})", snippet(&refusal)),
-        None => "AI response had no content".to_string(),
-    }
 }
 
 fn snippet(s: &str) -> String {
@@ -870,28 +869,91 @@ mod tests {
 
     #[test]
     fn errors_never_echo_the_api_key() {
-        let dir = tempfile::tempdir().expect("a temp dir");
-        let mut client = client_with_cache(dir.path());
-        client.config.api_key = Some("secret-xyz".to_string());
+        let client = client_with_connection("http://127.0.0.1:9/v1", "secret-xyz");
         assert_eq!(
             client.redact("AI provider error: invalid key secret-xyz"),
             "AI provider error: invalid key [redacted]"
         );
     }
 
+    fn client_with_connection(endpoint: &str, api_key: &str) -> AiClient {
+        AiClient::new(AiConfig {
+            endpoint: endpoint.to_string(),
+            api_key: Some(api_key.to_string()),
+            ..client_with_cache(std::path::Path::new("/nonexistent")).config
+        })
+    }
+
+    #[test]
+    fn errors_never_echo_the_credentials_of_the_endpoint() {
+        let client = client_with_connection(
+            "http://review:PW_SENTINEL_0002@proxy.test:8000/v1?token=QUERY_SENTINEL_0003",
+            "sk-SENTINEL-key-0001",
+        );
+        // A proxy that quotes the endpoint it rejected, and the key and token on their own.
+        let echo = "Proxy rejected http://review:PW_SENTINEL_0002@proxy.test:8000/v1?token=QUERY_SENTINEL_0003 \
+                    (key sk-SENTINEL-key-0001, token QUERY_SENTINEL_0003, password PW_SENTINEL_0002)";
+        let redacted = client.redact(echo);
+        for secret in [
+            "PW_SENTINEL_0002",
+            "QUERY_SENTINEL_0003",
+            "sk-SENTINEL-key-0001",
+            "review:",
+        ] {
+            assert!(!redacted.contains(secret), "{secret} in {redacted}");
+        }
+        assert!(
+            redacted.starts_with("Proxy rejected http://proxy.test:8000/v1"),
+            "{redacted}"
+        );
+
+        // Userinfo as written in the endpoint (percent-encoded) and as a server decodes it.
+        let client = client_with_connection("http://user:P%40ss_SENTINEL_0004@proxy.test/v1", "sk-SENTINEL-key-0001");
+        for echo in ["bad password P%40ss_SENTINEL_0004", "bad password P@ss_SENTINEL_0004"] {
+            let redacted = client.redact(echo);
+            assert!(!redacted.contains("ss_SENTINEL_0004"), "{redacted}");
+        }
+        // Userinfo that does not decode, in any URL the message quotes.
+        let redacted = client.redact("at http://%FFuser:PW_SENTINEL_0005@other.test/v1: refused");
+        assert_eq!(redacted, "at http://other.test/v1: refused");
+    }
+
+    #[test]
+    fn a_short_key_withholds_the_message_rather_than_spelling_itself_out() {
+        // Blanking `a` out of "invalid API key" leaves "inv[redacted]lid": the blanks spell the key.
+        let client = client_with_connection("http://127.0.0.1:9/v1", "a");
+        let redacted = client.redact("invalid API key");
+        assert!(!redacted.contains("inv"), "{redacted}");
+        assert!(redacted.contains("withheld"), "{redacted}");
+        assert_eq!(
+            client.redact("HTTP 500"),
+            "HTTP 500",
+            "a message without it is left alone"
+        );
+    }
+
+    #[test]
+    fn a_refusal_is_redacted_before_it_is_cut() {
+        let key = "sk-SENTINEL-key-0001-abcdefghijklmnopqrstuvwxyz";
+        let client = client_with_connection("http://127.0.0.1:9/v1", key);
+        // The key straddles the 200-character cut: cutting first would leave its prefix.
+        let refusal = format!("{}{}", "x".repeat(180), key);
+        let refused = serde_json::json!({"choices": [{"message": {"content": null, "refusal": refusal}}]});
+        let message = client.no_content_message(&refused);
+        assert!(!message.contains(&key[..12]), "{message}");
+    }
+
     #[test]
     fn missing_content_error_quotes_the_refusal() {
+        let client = client_with_cache(std::path::Path::new("/nonexistent"));
         let refused =
             serde_json::json!({"choices": [{"message": {"content": null, "refusal": "I can't help with that."}}]});
         assert_eq!(
-            no_content_message(Provider::OpenAi, &refused),
+            client.no_content_message(&refused),
             "AI response had no content (refusal: I can't help with that.)"
         );
         let empty = serde_json::json!({"choices": [{"message": {}}]});
-        assert_eq!(
-            no_content_message(Provider::OpenAi, &empty),
-            "AI response had no content"
-        );
+        assert_eq!(client.no_content_message(&empty), "AI response had no content");
     }
 
     #[test]

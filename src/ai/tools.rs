@@ -125,10 +125,20 @@ pub async fn run(options: &CoreOptions) -> i32 {
 /// Lists the models of the configured endpoint.
 pub async fn list_models(config: AiConfig) -> Result<ModelList, String> {
     let client = AiClient::new(config);
-    let models = client.list_models().await?;
+    // The endpoint writes the names, so they may repeat a credential like any other answer.
+    let models = client
+        .list_models()
+        .await?
+        .into_iter()
+        .map(|model| ModelInfo {
+            id: client.redact(&model.id),
+            display_name: model.display_name.map(|name| client.redact(&name)),
+            ..model
+        })
+        .collect();
     Ok(ModelList {
         provider: client.provider().as_str(),
-        endpoint: utils::redact_url_userinfo(&client.config().endpoint),
+        endpoint: client.redact(&client.config().endpoint),
         models,
     })
 }
@@ -162,8 +172,9 @@ pub async fn check(mut config: AiConfig) -> Result<CheckResult, String> {
             .output_tokens
             .zip(completion.duration_ms)
             .and_then(|(output, ms)| super::telemetry::per_second(output, ms)),
-        finish_reason: completion.finish_reason,
-        reply: reply_text(&completion.text),
+        finish_reason: completion.finish_reason.map(|reason| client.redact(&reason)),
+        // Redacted before it is cut: a cut through a credential would leave a part of it.
+        reply: reply_text(&client.redact(&completion.text)),
     })
 }
 
