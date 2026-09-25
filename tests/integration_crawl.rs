@@ -2532,7 +2532,8 @@ fn dangling_references(export: &Path) -> Vec<String> {
     .unwrap();
     let meta_refresh_reference = regex::Regex::new(r#"(?i)<meta[^>]*\burl=([^"'>\s]+)"#).unwrap();
     let css_reference = regex::Regex::new(r#"url\(['"]?([^'")]+)['"]?\)"#).unwrap();
-    let markdown_reference = regex::Regex::new(r"\]\(([^)\s]+)\)").unwrap();
+    // `](destination)` or `](destination "title")`
+    let markdown_reference = regex::Regex::new(r#"\]\(([^)\s]+)(?:\s+"(?:[^"\\]|\\.)*")?\)"#).unwrap();
     let mut dangling = Vec::new();
     for file in exported_files(export) {
         let patterns = match file.extension().and_then(|ext| ext.to_str()) {
@@ -3388,7 +3389,7 @@ fn preserve_url_structure_keeps_extensionless_images_intact() {
         Route {
             path: "/icons/",
             headers: vec![("Content-Type", "text/html; charset=utf-8".to_string())],
-            body: br#"<html><head><title>Icons</title></head><body><h1>Icons</h1><img src="/logo" alt="Logo"></body></html>"#
+            body: br#"<html><head><title>Icons</title></head><body><h1>Icons</h1><img src="/logo" alt="Logo" title="Our logo"></body></html>"#
                 .to_vec(),
         },
         Route {
@@ -3432,7 +3433,7 @@ fn preserve_url_structure_keeps_extensionless_images_intact() {
         ("icons/index.md", "Logo", "../logo/index.svg", SVG_LOGO),
     ] {
         let page_md = std::fs::read_to_string(markdown.join(page)).expect("the markdown page");
-        let image = regex::Regex::new(&format!(r"!\[{alt}\]\(([^)]+)\)"))
+        let image = regex::Regex::new(&format!(r"!\[{alt}\]\(([^)\s]+)"))
             .unwrap()
             .captures(&page_md)
             .unwrap_or_else(|| panic!("an image in {page}: {page_md}"))[1]

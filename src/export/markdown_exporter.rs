@@ -330,7 +330,9 @@ impl MarkdownExporter {
     /// References of the page stored as `page_path` to an extension-less image lead to the file it is
     /// stored in, named with the extension of its content type (see `image_extensions`).
     fn lead_references_to_image_files(&self, content: &str, page_path: &str) -> String {
-        static RE_REFERENCE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\]\(([^)\s]+)\)").unwrap());
+        // `](destination)` or `](destination "title")`, as the HTML converter writes them
+        static RE_REFERENCE: Lazy<Regex> =
+            Lazy::new(|| Regex::new(r#"\]\(([^)\s]+)(\s+"(?:[^"\\]|\\.)*")?\)"#).unwrap());
         if self.image_extensions.is_empty() {
             return content.to_string();
         }
@@ -350,8 +352,9 @@ impl MarkdownExporter {
                         segment => segments.push(segment),
                     }
                 }
+                let title = caps.get(2).map_or("", |m| m.as_str());
                 match self.image_extensions.get(&segments.join("/")) {
-                    Some(extension) => format!("]({}{}{})", &path[..path.len() - 4], extension, rest),
+                    Some(extension) => format!("]({}{}{}{})", &path[..path.len() - 4], extension, rest, title),
                     None => caps[0].to_string(),
                 }
             })
@@ -1370,6 +1373,14 @@ mod tests {
         assert_eq!(
             exporter.lead_references_to_image_files("[Logo](logo/index.html)", "blog/index.html"),
             "[Logo](logo/index.html)"
+        );
+        // An image or link with a title (the HTML converter emits `"title"` after the destination)
+        assert_eq!(
+            exporter.lead_references_to_image_files(
+                r#"![Logo](../logo/index.html "Our \"logo\"") [Logo file](../logo/index.html#top "Logo file")"#,
+                "icons/index.html"
+            ),
+            r#"![Logo](../logo/index.svg "Our \"logo\"") [Logo file](../logo/index.svg#top "Logo file")"#
         );
     }
 
