@@ -42,6 +42,7 @@
     *   [5.25. `analysis-stats` (Analysis stats)](#525-analysis-stats-analysis-stats)
     *   [5.26. `content-processors-stats` (Content processor stats)](#526-content-processors-stats-content-processor-stats)
     *   [5.27. `external-urls` (External URLs)](#527-external-urls-external-urls)
+    *   [5.28. `technologies` (Technologies)](#528-technologies-technologies)
 *   [6. Note on Text Output](#6-note-on-text-output)
 
 
@@ -744,6 +745,18 @@ Lists external URLs discovered during the crawl along with where they were found
 | `url` | The external URL that was discovered. |
 | `count` | The number of times this external URL was found across all crawled pages. |
 | `foundOn` | The URL of the page where this external URL was found (typically the first occurrence). |
+
+### 5.28. `technologies` (Technologies)
+
+Technologies recognized passively from response headers, cookie names, `<meta>` tags, `<script src>` URLs and HTML markers of the crawled HTML pages (no extra requests). A technology missing from the table may still be in use.
+
+| Column | Description |
+|--------|-------------|
+| `category` | One of `Server`, `CDN`, `WAF / Security`, `Hosting / PaaS`, `CMS`, `E-commerce`, `Backend framework`, `Frontend framework`, `JS library`, `Analytics / Tag manager`, `Fonts / UI`. |
+| `technology` | Technology name (e.g. `"Cloudflare"`, `"WordPress"`, `"jQuery"`). |
+| `version` | Versions seen, comma-separated in ascending order; empty when the site does not reveal one. |
+| `evidence` | The first signal that matched, e.g. `"server: nginx/1.25.3"`, `"cookie __cf_bm"`, `"meta generator: WordPress 6.5.2"`, `"script https://code.jquery.com/jquery-3.7.1.min.js"`. Cookie values are never shown. |
+| `pages` | Number of crawled HTML pages (redirects not counted) on which the technology was recognized. |
 
 ## 6. Note on Text Output
 

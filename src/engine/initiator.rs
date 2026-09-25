@@ -30,6 +30,7 @@ use crate::analysis::best_practice_analyzer::BestPracticeAnalyzer;
 use crate::analysis::security_analyzer::SecurityAnalyzer;
 use crate::analysis::seo_opengraph_analyzer::SeoAndOpenGraphAnalyzer;
 use crate::analysis::ssl_tls::SslTlsAnalyzer;
+use crate::analysis::technologies_analyzer::TechnologiesAnalyzer;
 
 pub struct Initiator {
     options: core_options::CoreOptions,
@@ -143,6 +144,9 @@ impl Initiator {
         let mut ssl_tls = SslTlsAnalyzer::new();
         ssl_tls.set_config(options.accept_invalid_certs);
         analysis_manager.register_analyzer(Box::new(ssl_tls));
+
+        // TechnologiesAnalyzer: passive tech-stack / CDN / WAF detection
+        analysis_manager.register_analyzer(Box::new(TechnologiesAnalyzer::new()));
     }
 
     /// Print help text.

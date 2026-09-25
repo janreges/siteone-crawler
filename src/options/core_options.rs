@@ -2795,7 +2795,7 @@ pub fn get_options() -> Options {
             },
             CrawlerOption::new(
                 "--html-report-options", None, "htmlReportOptions", OptionType::String, false,
-                "Comma-separated list of sections to include in HTML report. Available sections: summary, seo-opengraph, image-gallery, video-gallery, visited-urls, dns-ssl, crawler-stats, crawler-info, headers, content-types, skipped-urls, caching, best-practices, accessibility, security, redirects, 404-pages, slowest-urls, fastest-urls, source-domains. Default: all sections.",
+                "Comma-separated list of sections to include in HTML report. Available sections: summary, seo-opengraph, image-gallery, video-gallery, visited-urls, dns-ssl, crawler-stats, crawler-info, headers, content-types, skipped-urls, caching, best-practices, accessibility, security, redirects, 404-pages, slowest-urls, fastest-urls, source-domains, technologies. Default: all sections.",
                 None, true, false, None,
             ),
             {

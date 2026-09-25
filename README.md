@@ -135,6 +135,12 @@ The following features are summarized in greater detail:
 
 - will **find the weak points** or **strange behavior** of your website
 - built-in analyzers cover SEO, security headers, accessibility, best practices, performance, SSL/TLS, caching, and more
+- **technology detection** — the **Technologies** table lists the stack a site reveals: web server, CDN, WAF / bot
+  protection, hosting platform, CMS, e-commerce platform, backend and frontend frameworks, JS libraries (with versions
+  where visible), analytics / tag managers and fonts / UI kits. Detection is passive — response headers, cookie names,
+  `<meta name="generator">`, script URLs and a few HTML markers of the crawled pages, no extra requests — so a
+  technology missing from the table may still be in use. Available in text, JSON (`tables.technologies`) and the HTML
+  report.
 
 ### 📧 Reporter
 
@@ -591,7 +597,7 @@ For a clearer list, I recommend going to the documentation: 🌐 https://crawler
 | Parameter | Description |
 |-----------|-------------|
 | `--output-html-report=<file>` | Save HTML report into that file. Set to empty `''` to disable HTML report.<br>By default saved into `tmp/%domain%.report.%datetime%.html`. |
-| `--html-report-options=<sections>` | Comma-separated list of sections to include in HTML report.<br>Available sections: `summary`, `seo-opengraph`, `image-gallery`, `video-gallery`, `visited-urls`, `dns-ssl`, `crawler-stats`, `crawler-info`, `headers`, `content-types`, `skipped-urls`, `external-links`, `caching`, `best-practices`, `accessibility`, `security`, `redirects`, `404-pages`, `slowest-urls`, `fastest-urls`, `source-domains`.<br>Default: all sections. |
+| `--html-report-options=<sections>` | Comma-separated list of sections to include in HTML report.<br>Available sections: `summary`, `seo-opengraph`, `image-gallery`, `video-gallery`, `visited-urls`, `dns-ssl`, `crawler-stats`, `crawler-info`, `headers`, `content-types`, `skipped-urls`, `external-links`, `caching`, `best-practices`, `accessibility`, `security`, `redirects`, `404-pages`, `slowest-urls`, `fastest-urls`, `source-domains`, `technologies`.<br>Default: all sections. |
 | `--output-json-file=<file>` | File path for JSON output. Set to empty `''` to disable JSON file.<br>By default saved into `tmp/%domain%.output.%datetime%.json`.<br>See [JSON Output Documentation](docs/JSON-OUTPUT.md) for format details. |
 | `--output-text-file=<file>` | File path for TXT output. Set to empty `''` to disable TXT file.<br>By default saved into `tmp/%domain%.output.%datetime%.txt`.<br>See [Text Output Documentation](docs/TEXT-OUTPUT.md) for format details. |
 | `--add-timestamp-to-output-file` | Append timestamp to output filenames (HTML report, JSON, TXT) except sitemaps. |

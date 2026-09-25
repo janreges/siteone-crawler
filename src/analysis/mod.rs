@@ -23,3 +23,4 @@ pub mod best_practice_analyzer;
 pub mod security_analyzer;
 pub mod seo_opengraph_analyzer;
 pub mod ssl_tls;
+pub mod technologies_analyzer;

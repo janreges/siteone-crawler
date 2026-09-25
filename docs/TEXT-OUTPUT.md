@@ -23,11 +23,12 @@
     *   [3.16. Content Types](#316-content-types)
     *   [3.17. DNS Info](#317-dns-info)
     *   [3.18. Security](#318-security)
-    *   [3.19. Analysis Stats](#319-analysis-stats)
-    *   [3.20. Content Processor Stats](#320-content-processor-stats)
-    *   [3.21. Execution Summary](#321-execution-summary)
-    *   [3.22. Website Quality Score](#322-website-quality-score)
-    *   [3.23. Summary](#323-summary)
+    *   [3.19. Technologies](#319-technologies)
+    *   [3.20. Analysis Stats](#320-analysis-stats)
+    *   [3.21. Content Processor Stats](#321-content-processor-stats)
+    *   [3.22. Execution Summary](#322-execution-summary)
+    *   [3.23. Website Quality Score](#323-website-quality-score)
+    *   [3.24. Summary](#324-summary)
 *   [4. Information Obtainable from Text Output](#4-information-obtainable-from-text-output)
 *   [5. Use Cases for Text Output](#5-use-cases-for-text-output)
 *   [6. Note on JSON Output](#6-note-on-json-output)
@@ -504,7 +505,26 @@ Reports on the presence and configuration of important security-related HTTP hea
 *   **OK / Notice / Warning / Critical:** Counts based on the header's presence and configuration. Note that X-XSS-Protection produces a "Notice" (deprecated) rather than a "Critical" when it is set, because the header itself is deprecated in favor of Content-Security-Policy.
 *   **Recommendation:** Suggestion for improvement if issues are found. Empty when no action is needed.
 
-### 3.19. Analysis Stats
+### 3.19. Technologies
+
+Lists the technologies the crawled HTML pages reveal: web server, CDN, WAF / bot protection, hosting platform, CMS, e-commerce platform, backend and frontend frameworks, JS libraries, analytics / tag managers and fonts / UI kits. Detection is passive — response headers, cookie names, `<meta>` tags, `<script src>` URLs and a few HTML markers, no extra requests — so a technology not listed may still be in use; the table never claims that a site has no CDN or WAF.
+
+**Technologies**
+
+| Category                | Technology         | Version | Evidence                                    | Pages |
+| :---------------------- | :----------------- | :------ | :------------------------------------------ | :---- |
+| Server                  | Nginx              | 1.25.3  | server: nginx/1.25.3                        | 54    |
+| CDN                     | Cloudflare         |         | cf-ray: 8c1d2e3f4a5b6c7d-PRG                | 54    |
+| CMS                     | WordPress          | 6.5.2   | meta generator: WordPress 6.5.2             | 54    |
+| JS library              | jQuery             | 3.7.1   | script /wp-includes/js/jquery/jquery.min.js | 54    |
+| Analytics / Tag manager | Google Tag Manager |         | html googletagmanager.com/gtm.js?id=        | 54    |
+
+*   **Category / Technology:** What was recognized.
+*   **Version:** Versions seen, in ascending order; empty when the site does not reveal one.
+*   **Evidence:** The first signal that matched — a response header, a cookie name, a meta tag, a script URL (without its query string) or an HTML marker. Cookie values are never shown.
+*   **Pages:** Number of crawled HTML pages (redirects not counted) on which the technology was recognized.
+
+### 3.20. Analysis Stats
 
 Provides performance metrics for the crawler's internal analysis modules. Useful for debugging the crawler itself. The method names follow Rust naming conventions (e.g., `BestPracticeAnalyzer::checkHeadingStructure`, `AccessibilityAnalyzer::checkMissingAriaLabels`).
 
@@ -538,7 +558,7 @@ Provides performance metrics for the crawler's internal analysis modules. Useful
 *   **Exec time:** Total execution time for all invocations of this method.
 *   **Exec count:** Number of times the method was invoked (typically once per analyzed URL or once for aggregate checks).
 
-### 3.20. Content Processor Stats
+### 3.21. Content Processor Stats
 
 Provides performance metrics for content processors that run during the crawl. These processors handle URL extraction and content transformation for different resource types.
 
@@ -563,7 +583,7 @@ Provides performance metrics for content processors that run during the crawl. T
 *   **Exec time:** Total execution time for all invocations.
 *   **Exec count:** Number of times the method was invoked.
 
-### 3.21. Execution Summary
+### 3.22. Execution Summary
 
 A bordered summary block showing overall crawl statistics, printed between `===` separator lines.
 
@@ -579,7 +599,7 @@ Response times: AVG 21 ms MIN 3 ms MAX 345 ms TOTAL 1.5 s
 *   **Total of N visited URLs:** Count of all successfully visited URLs, total downloaded size, request throughput, and download speed.
 *   **Response times:** Average, minimum, maximum, and total response times across all URLs.
 
-### 3.22. Website Quality Score
+### 3.23. Website Quality Score
 
 A visual box-drawing quality score display that rates the website across five weighted categories on a 0-10 scale. Each category shows a progress bar, numeric score, and a label (Excellent, Good, Fair, Poor, etc.).
 
@@ -606,7 +626,7 @@ The five categories and their weights are:
 *   **Accessibility** (20%): Based on lang attributes, alt text, ARIA labels, roles.
 *   **Best Practices** (15%): Based on inline SVGs, heading structure, DOM depth, compression support.
 
-### 3.23. Summary
+### 3.24. Summary
 
 A categorized list of findings using severity-level prefixes. Each finding is on its own line with an emoji indicator:
 

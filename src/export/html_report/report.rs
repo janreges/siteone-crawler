@@ -54,6 +54,7 @@ const ST_ACCESSIBILITY: &str = "accessibility";
 const ST_EXTERNAL_URLS: &str = "external-urls";
 const ST_SECURITY: &str = "security";
 const ST_SOURCE_DOMAINS: &str = "source-domains";
+const ST_TECHNOLOGIES: &str = "technologies";
 
 /// Analysis names for Best Practices
 const BEST_PRACTICE_ANALYSIS_NAMES: &[&str] = &[
@@ -144,6 +145,7 @@ fn get_super_table_order(apl_code: &str) -> i32 {
         ST_HEADERS,
         ST_CACHING_PER_CONTENT_TYPE,
         ST_DNS,
+        ST_TECHNOLOGIES,
     ];
 
     ORDERS
@@ -168,6 +170,7 @@ fn get_section_name_by_apl_code(apl_code: &str) -> Option<&'static str> {
         "external-urls" => Some("external-urls"),
         "redirects" => Some("redirects"),
         "security" => Some("security"),
+        "technologies" => Some("technologies"),
         "content-types" | "content-types-raw" => Some("content-types"),
         "dns" | "certificate-info" => Some("dns-ssl"),
         "seo" | "open-graph" | "seo-headings" | "non-unique-titles" | "non-unique-descriptions" => {
@@ -1794,6 +1797,13 @@ fn get_super_table_badges_by_apl_code(info: &SuperTableInfo, all_infos: &[SuperT
                 ));
             }
         }
+        "technologies" => {
+            badges.push(Badge::with_title(
+                info.total_rows.to_string(),
+                BadgeColor::Neutral,
+                "Detected technologies",
+            ));
+        }
         "ai-content-issues" => {
             // Count AI-detected content issues by severity for the tab badges.
             let count = |sev: &str| {
@@ -2518,5 +2528,36 @@ mod accessibility_detail_tests {
                 "'{stale}' is not a check any more"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod technologies_tab_tests {
+    use super::*;
+
+    #[test]
+    fn technologies_tab_comes_after_existing_tabs_and_can_be_filtered() {
+        assert_eq!(
+            get_super_table_order(ST_TECHNOLOGIES),
+            get_super_table_order(ST_DNS) + 1
+        );
+        assert_eq!(get_super_table_order(ST_SEO), 4, "existing tab order is unchanged");
+        assert_eq!(get_section_name_by_apl_code(ST_TECHNOLOGIES), Some("technologies"));
+    }
+
+    #[test]
+    fn technologies_tab_badge_counts_detected_technologies() {
+        let info = SuperTableInfo {
+            apl_code: ST_TECHNOLOGIES.to_string(),
+            title: "Technologies".to_string(),
+            forced_tab_label: None,
+            html_output: String::new(),
+            total_rows: 7,
+            data: Vec::new(),
+        };
+        let badges = get_super_table_badges_by_apl_code(&info, &[]);
+        assert_eq!(badges.len(), 1);
+        assert_eq!(badges[0].value, "7");
+        assert_eq!(badges[0].color, BadgeColor::Neutral);
     }
 }
