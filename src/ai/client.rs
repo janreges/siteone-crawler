@@ -398,7 +398,7 @@ impl AiClient {
                     return Ok(completion);
                 }
                 Err(e) => {
-                    last_err = e.to_string();
+                    last_err = self.redact(&public_error_text(&e));
                     // Do NOT retry on timeout: a paid completion may have been processed
                     // server-side, so retrying could double-charge. Only retry when we know
                     // the request never reached/processed (connect/build errors). reqwest reports
@@ -613,6 +613,16 @@ fn is_structured_output_unsupported(message: &str) -> bool {
 
 fn elapsed_ms(since: Instant) -> u64 {
     since.elapsed().as_millis() as u64
+}
+
+/// A transport error as reqwest words it, with the credentials of the URL it quotes removed:
+/// reqwest moves `user:pass@` into a header, but keeps userinfo it cannot decode in the URL.
+fn public_error_text(e: &reqwest::Error) -> String {
+    let text = e.to_string();
+    match e.url() {
+        Some(url) => text.replace(url.as_str(), &crate::utils::redact_url_userinfo(url.as_str())),
+        None => text,
+    }
 }
 
 /// A transport error with its causes but without its URL, which may carry credentials.

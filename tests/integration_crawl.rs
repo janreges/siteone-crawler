@@ -3804,6 +3804,65 @@ fn ai_request_that_timed_out_is_not_retried() {
 }
 
 #[test]
+fn ai_errors_never_carry_endpoint_credentials() {
+    let tmp = TempDir::new("ai-endpoint-credentials");
+    let server = one_page_site(&tmp);
+    // Slower than the 1 s timeout: the requests fail with a transport error, which quotes its URL.
+    let mock = MockLlm::start(vec![MockResponse {
+        delay_ms: 2500,
+        ..chat_response(200, qwen_seo_answer())
+    }]);
+    // reqwest moves `user:pass@` into an Authorization header, but userinfo it cannot decode (a
+    // non-UTF-8 escape) stays in the URL of the request and so of its errors.
+    for (name, userinfo) in [("plain", "user:PW_SENTINEL"), ("undecodable", "%FFuser:PW_SENTINEL")] {
+        let out = tmp.path.join(name);
+        std::fs::create_dir_all(&out).expect("an output dir");
+        let events = out.join("events.ndjson");
+        let args = [
+            "--config-file=/dev/null".to_string(),
+            format!("--url={}", server.url()),
+            LOCAL_ANALYZERS.to_string(),
+            "--http-cache-dir=".to_string(),
+            "--no-color".to_string(),
+            "--ai-provider=openai-compatible".to_string(),
+            format!("--ai-endpoint=http://{userinfo}@127.0.0.1:{}/v1", mock.port()),
+            "--ai-model=m".to_string(),
+            "--ai-actions=seo".to_string(),
+            "--ai-report=ia".to_string(),
+            "--ai-max-pages=1".to_string(),
+            "--ai-timeout=1".to_string(),
+            "--ai-cache-dir=".to_string(),
+            format!("--events-file={}", events.display()),
+            format!("--ai-report-dir={}", out.display()),
+        ];
+        let args: Vec<&str> = args.iter().map(String::as_str).collect();
+        let output = run_crawler(&args);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("AI SEO failed"),
+            "the requests failed ({name}): {stderr}"
+        );
+        let mut texts = vec![
+            (
+                "stdout".to_string(),
+                String::from_utf8_lossy(&output.stdout).into_owned(),
+            ),
+            ("stderr".to_string(), stderr.into_owned()),
+        ];
+        for entry in std::fs::read_dir(&out).expect("the output dir") {
+            let path = entry.expect("an entry").path();
+            let text = String::from_utf8_lossy(&std::fs::read(&path).expect("a file")).into_owned();
+            texts.push((path.display().to_string(), text));
+        }
+        assert!(texts.len() > 3, "events and report files were written ({name})");
+        for (source, text) in texts {
+            let leak = text.lines().find(|line| line.contains("PW_SENTINEL"));
+            assert!(leak.is_none(), "{name}: the password in {source}: {leak:?}");
+        }
+    }
+}
+
+#[test]
 fn ai_cache_hit_is_reported() {
     let tmp = TempDir::new("ai-telemetry-cache");
     let cache = tmp.path.join("ai-cache");
