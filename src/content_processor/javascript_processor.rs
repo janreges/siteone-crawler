@@ -77,9 +77,11 @@ enum JsContext {
 }
 
 /// For each of the ascending byte `offsets` in `js`: is it in code, not in a comment, a string, the text
-/// of a template or a regular expression? None when the scan does not end in code, i.e. it lost track
-/// of the source. A `/` starts a regular expression where a value may start (after an operator, an
-/// opening bracket or a keyword such as `return`), otherwise it divides.
+/// of a template or a regular expression? None when the scan loses track of the source: it ends
+/// outside code, or a string or regular expression runs into a line break. A `/` starts a regular
+/// expression where a value may start (after an operator, an opening bracket, the condition of `if`,
+/// `while`, `for` or `with`, or a keyword such as `return`), otherwise it divides (after a value, a
+/// closing bracket, `++`/`--` or a property named like a keyword, e.g. `o.in`).
 fn in_js_code(js: &str, offsets: &[usize]) -> Option<Vec<bool>> {
     const REGEX_KEYWORDS: &[&str] = &[
         "return",
@@ -104,10 +106,16 @@ fn in_js_code(js: &str, offsets: &[usize]) -> Option<Vec<bool>> {
     let mut templates: Vec<usize> = Vec::new();
     let mut braces = 0usize;
     // The last token in code: a punctuator, a value (`"` for a string, template or regular expression,
-    // `a` for a word) and the word itself
+    // `a` for a word) and the word itself; the token before it; whether the word is a property (after
+    // `.`); for each open `(`, whether it holds the condition of a statement
     let mut last: Option<u8> = None;
+    let mut before_last: Option<u8> = None;
     let mut word = String::new();
+    let mut word_is_property = false;
     let mut in_word = false;
+    let mut parens: Vec<bool> = Vec::new();
+    // A string or regular expression ran into a line break: the scan misread the source somewhere
+    let mut lost_track = false;
     let mut i = 0;
     while i < bytes.len() {
         while in_code.len() < offsets.len() && offsets[in_code.len()] <= i {
@@ -122,6 +130,8 @@ fn in_js_code(js: &str, offsets: &[usize]) -> Option<Vec<bool>> {
                 if is_word {
                     if !in_word {
                         word.clear();
+                        word_is_property = last == Some(b'.');
+                        before_last = last;
                     }
                     word.push(c as char);
                     last = Some(b'a');
@@ -136,13 +146,16 @@ fn in_js_code(js: &str, offsets: &[usize]) -> Option<Vec<bool>> {
                         b'/' => {
                             let starts_value = match last {
                                 None => true,
-                                Some(b'a') => REGEX_KEYWORDS.contains(&word.as_str()),
+                                Some(b'a') => !word_is_property && REGEX_KEYWORDS.contains(&word.as_str()),
                                 Some(b'"') | Some(b')') | Some(b']') => false,
+                                // `i++ / 2`, `i-- / 2`
+                                Some(sign @ (b'+' | b'-')) => before_last != Some(sign),
                                 Some(_) => true,
                             };
                             if starts_value {
                                 context = JsContext::Regex { in_class: false };
                             } else {
+                                before_last = last;
                                 last = Some(b'/');
                             }
                         }
@@ -150,7 +163,21 @@ fn in_js_code(js: &str, offsets: &[usize]) -> Option<Vec<bool>> {
                         b'`' => context = JsContext::Template,
                         b'{' => {
                             braces += 1;
+                            before_last = last;
                             last = Some(c);
+                        }
+                        b'(' => {
+                            let condition = last == Some(b'a')
+                                && !word_is_property
+                                && matches!(word.as_str(), "if" | "while" | "for" | "with");
+                            parens.push(condition);
+                            before_last = last;
+                            last = Some(c);
+                        }
+                        // After the condition of a statement, a statement starts: `if (x) /re/.test(y)`
+                        b')' => {
+                            before_last = last;
+                            last = Some(if parens.pop().unwrap_or(false) { b';' } else { c });
                         }
                         b'}' if templates.last() == Some(&braces) => {
                             templates.pop();
@@ -158,9 +185,13 @@ fn in_js_code(js: &str, offsets: &[usize]) -> Option<Vec<bool>> {
                         }
                         b'}' => {
                             braces = braces.saturating_sub(1);
+                            before_last = last;
                             last = Some(c);
                         }
-                        _ => last = Some(c),
+                        _ => {
+                            before_last = last;
+                            last = Some(c);
+                        }
                     }
                 }
                 in_word = is_word;
@@ -178,10 +209,11 @@ fn in_js_code(js: &str, offsets: &[usize]) -> Option<Vec<bool>> {
             }
             JsContext::Quoted(quote) => match c {
                 b'\\' => step = 2,
-                // An unescaped line break ends a broken string too, so the scan recovers
+                // No string holds a raw line break: the scan misread the source
                 b'\n' => {
                     context = JsContext::Code;
                     last = Some(b'"');
+                    lost_track = true;
                 }
                 _ if c == quote => {
                     context = JsContext::Code;
@@ -214,6 +246,7 @@ fn in_js_code(js: &str, offsets: &[usize]) -> Option<Vec<bool>> {
                 b'\n' => {
                     context = JsContext::Code;
                     last = Some(b'"');
+                    lost_track = true;
                 }
                 _ => {}
             },
@@ -226,7 +259,7 @@ fn in_js_code(js: &str, offsets: &[usize]) -> Option<Vec<bool>> {
     while in_code.len() < offsets.len() {
         in_code.push(context == JsContext::Code);
     }
-    (context == JsContext::Code && templates.is_empty()).then_some(in_code)
+    (!lost_track && context == JsContext::Code && templates.is_empty()).then_some(in_code)
 }
 
 /// Does code that continues after `before` start a statement (or an expression within one)? That is
@@ -564,9 +597,15 @@ mod tests {
             "import x from 'y'\n\n",
             // strings, templates and regular expressions before it are skipped whole
             r#"var s="a;b",r=/["'`]/g,t=`x${"}"}y`,d=4/2/1;"#,
+            // a regular expression after the condition of `if`, a division after `++` or after a
+            // property named like a keyword
+            r#"var t="Guide";if(t)/["']/.test(t);"#,
+            r#"var i=0;i++/2;"#,
+            r#"var o={in:4};o.in/2;"#,
         ] {
+            // A script ends with a line break
             let mut js = format!(
-                r#"{prefix}window.__VUEPRESS__ = {{version:"1.9.9",hash:"de4f7cf8"}};const Es=[{{name:"v-1",path:"/guide/"}}];"#
+                "{prefix}window.__VUEPRESS__ = {{version:\"1.9.9\",hash:\"de4f7cf8\"}};const Es=[{{name:\"v-1\",path:\"/guide/\"}}];\n"
             );
             processor.apply_content_changes_for_offline_version(&mut js, ContentTypeId::Script, &url, false);
             assert!(js.contains(r#"{name:"v-1",href:"#), "{prefix}: {js}");
