@@ -409,12 +409,12 @@ fn score_accessibility(summary: &Summary) -> CategoryScore {
         &mut per_url_total,
     );
 
-    // Missing ARIA labels
+    // Links/buttons without an accessible name (icon-only without aria-label)
     per_url_deduct(
         summary,
         "pages-without-aria-labels",
         0.3,
-        "page(s) without aria labels",
+        "page(s) with unnamed links/buttons",
         "Give icon-only links/buttons an accessible name via aria-label or visually-hidden text.",
         &mut deductions,
         &mut per_url_total,
@@ -886,6 +886,23 @@ mod tests {
             (seo.score - 7.0).abs() < 0.001,
             "expected 10 - 3 = 7, got {}",
             seo.score
+        );
+    }
+
+    #[test]
+    fn unnamed_links_deduction_says_what_it_measures() {
+        let mut summary = Summary::new();
+        summary.add_item(Item::new(
+            "pages-without-aria-labels".to_string(),
+            "3 page(s) with unnamed links/buttons (icon-only without aria-label)".to_string(),
+            ItemStatus::Warning,
+        ));
+        let scores = calculate_scores(&summary, &make_basic_stats());
+        let accessibility = scores.categories.iter().find(|c| c.code == "accessibility").unwrap();
+        let reasons: Vec<&str> = accessibility.deductions.iter().map(|d| d.reason.as_str()).collect();
+        assert!(
+            reasons.contains(&"3 page(s) with unnamed links/buttons"),
+            "got {reasons:?}"
         );
     }
 }

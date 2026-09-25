@@ -748,8 +748,8 @@ Summary
 ⚠️ 50 page(s) do not support Brotli compression.
 ⚠️ 49 page(s) with skipped heading levels.
 ⚠️ 1 page(s) without image alt attributes.
-⚠️ 50 page(s) without aria labels.
-⚠️ 50 page(s) without role attributes.
+⚠️ 50 page(s) with unnamed links/buttons (icon-only without aria-label).
+⚠️ 50 page(s) without a main landmark.
 ⏩ Loaded robots.txt for domain 'crawler.siteone.io': status code 200, size 152 B and took 24 ms.
 ⏩ External URLs - 89 external URL(s) found.
 ⏩ 404 NOTICE - 1 non-existent page(s) found.

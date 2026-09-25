@@ -208,7 +208,7 @@
           },
           {
             "points": 2.0,
-            "reason": "51 page(s) without aria labels"
+            "reason": "51 page(s) with unnamed links/buttons"
           }
         ],
         "label": "Fair",
@@ -1021,7 +1021,7 @@
       {
         "aplCode": "pages-without-aria-labels",
         "status": "WARNING",
-        "text": "51 page(s) without aria labels"
+        "text": "51 page(s) with unnamed links/buttons (icon-only without aria-label)"
       },
       {
         "aplCode": "pages-without-main-landmark",

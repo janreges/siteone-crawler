@@ -627,7 +627,7 @@ Summarizes the results of accessibility checks.
 
 | Column | Description |
 |--------|-------------|
-| `analysisName` | The name of the specific accessibility check (e.g., `"Missing image alt attributes"`, `"Missing html lang attribute"`, `"ARIA roles and landmarks"`). |
+| `analysisName` | The name of the specific accessibility check: `"HTML structural issues"`, `"Missing image alt attributes"`, `"Missing form labels"`, `"Unnamed links/buttons"`, `"Missing main landmark"` or `"Missing html lang attribute"`. |
 | `ok` | Count of elements/pages passing this check. |
 | `notice` | Count of notice-level findings. |
 | `warning` | Count of warning-level findings. |

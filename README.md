@@ -1179,7 +1179,7 @@ The crawler automatically calculates a quality score (0.0-10.0) across 5 weighte
 | **Performance** | 20% | Response times, slow URLs |
 | **SEO** | 20% | Missing H1, title uniqueness, meta descriptions, 404s, redirects |
 | **Security** | 25% | SSL/TLS certificates, security headers, unsafe protocols |
-| **Accessibility** | 20% | Lang attribute, image alt text, form labels, ARIA, heading levels |
+| **Accessibility** | 20% | Lang attribute, image alt text, form labels, unnamed links/buttons, main landmark, HTML structure (duplicate ids, broken ARIA references), heading levels |
 | **Best Practices** | 15% | Duplicate/large SVGs, deep DOM, Brotli/WebP support |
 
 The overall score is a weighted average of all categories. Scores are displayed in a colored box in the console output and included in JSON and HTML report outputs.

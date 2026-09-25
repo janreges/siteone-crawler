@@ -26,6 +26,16 @@ const ANALYSIS_MAIN_LANDMARK: &str = "Missing main landmark";
 const ANALYSIS_MISSING_LANG_ATTRIBUTE: &str = "Missing html lang attribute";
 const ANALYSIS_HTML_STRUCTURE: &str = "HTML structural issues";
 
+/// Every check this analyzer reports, in the order the HTML report lists their detail tables.
+pub(crate) const ANALYSIS_NAMES: [&str; 6] = [
+    ANALYSIS_HTML_STRUCTURE,
+    ANALYSIS_MISSING_IMAGE_ALT_ATTRIBUTES,
+    ANALYSIS_MISSING_FORM_LABELS,
+    ANALYSIS_UNNAMED_INTERACTIVE,
+    ANALYSIS_MAIN_LANDMARK,
+    ANALYSIS_MISSING_LANG_ATTRIBUTE,
+];
+
 const SUPER_TABLE_ACCESSIBILITY: &str = "accessibility";
 
 pub struct AccessibilityAnalyzer {
@@ -106,7 +116,8 @@ impl AccessibilityAnalyzer {
 
     fn check_missing_labels(&mut self, document: &Html, result: &mut UrlAnalysisResult) {
         // Controls that need a programmatic label. Buttons/submit/reset/image derive their name
-        // from value=/alt=, so they are excluded here.
+        // from value=/alt=, so they are excluded here, and so are controls hidden from assistive
+        // technology (axe's `label` rule skips them too).
         let input_selector = match Selector::parse(
             "input:not([type='hidden']):not([type='submit']):not([type='button']):not([type='reset']):not([type='image']), select, textarea",
         ) {
@@ -114,14 +125,16 @@ impl AccessibilityAnalyzer {
             Err(_) => return,
         };
 
-        let inputs: Vec<_> = document.select(&input_selector).collect();
+        let inputs: Vec<_> = document
+            .select(&input_selector)
+            .filter(|input| !is_hidden_from_assistive_tech(input))
+            .collect();
         let mut inputs_without_labels: Vec<String> = Vec::new();
 
         for input in &inputs {
             let dedup_key = normalize_tag_for_dedup(input);
-            // A control is considered labeled by ANY of: <label for=id>, a wrapping <label>,
-            // aria-label, aria-labelledby, or title. The old check only looked at label[for],
-            // producing false positives for the very common wrapping-label pattern.
+            // A control is labeled by ANY of: a <label for=id> or wrapping <label> with text,
+            // aria-label, aria-labelledby, title, or (input/textarea) a non-empty placeholder.
             if input_is_labeled(input, document) {
                 self.stats.add_ok(ANALYSIS_MISSING_FORM_LABELS, Some(&dedup_key));
             } else {
@@ -697,8 +710,9 @@ fn element_has_accessible_name(element: &scraper::ElementRef) -> bool {
     false
 }
 
-/// Is a form control labeled by any accepted mechanism: aria-label/-labelledby/title on the
-/// control, an explicit <label for=id>, or a wrapping <label>…<input>…</label>?
+/// Is a form control labeled by a mechanism axe's `label` rule accepts: aria-label/-labelledby/title
+/// on the control, an explicit <label for=id> or a wrapping <label> with text of its own, or a
+/// non-empty placeholder on <input>/<textarea> (not on <select>)?
 fn input_is_labeled(input: &scraper::ElementRef, document: &Html) -> bool {
     let v = input.value();
     if attr_non_empty(v.attr("aria-label"))
@@ -707,26 +721,67 @@ fn input_is_labeled(input: &scraper::ElementRef, document: &Html) -> bool {
     {
         return true;
     }
+    if v.name() != "select" && attr_non_empty(v.attr("placeholder")) {
+        return true;
+    }
     if let Some(id) = v.attr("id") {
         let id = id.trim();
         // Match label[for] by string comparison rather than building a selector from the (untrusted)
         // id, which would fail for ids containing quotes or selector metacharacters.
         if !id.is_empty()
             && let Ok(sel) = Selector::parse("label[for]")
-            && document.select(&sel).any(|l| l.value().attr("for") == Some(id))
+            && document
+                .select(&sel)
+                .any(|l| l.value().attr("for") == Some(id) && label_has_text(&l))
         {
             return true;
         }
     }
     // Implicit wrapping <label>
-    for ancestor in input.ancestors() {
-        if let Some(el) = scraper::ElementRef::wrap(ancestor)
-            && el.value().name() == "label"
-        {
-            return true;
-        }
+    input
+        .ancestors()
+        .filter_map(scraper::ElementRef::wrap)
+        .any(|el| el.value().name() == "label" && label_has_text(&el))
+}
+
+/// Does a <label> have text of its own? Text inside nested form controls (the options of a wrapped
+/// <select>, a <textarea> value) and scripts does not count; the alt text of a nested image does.
+fn label_has_text(label: &scraper::ElementRef) -> bool {
+    fn has_text(node: ego_tree::NodeRef<scraper::Node>) -> bool {
+        node.children().any(|child| match child.value() {
+            scraper::Node::Text(text) => !text.trim().is_empty(),
+            scraper::Node::Element(el) => match el.name() {
+                "select" | "textarea" | "script" | "style" => false,
+                "img" => attr_non_empty(el.attr("alt")),
+                _ => has_text(child),
+            },
+            _ => false,
+        })
     }
-    false
+    attr_non_empty(label.value().attr("aria-label")) || has_text(**label)
+}
+
+/// Is the control hidden from assistive technology: a `hidden` attribute, aria-hidden="true" or an
+/// inline display:none / visibility:hidden on the control or on an ancestor? Nobody can reach such
+/// a control, so it needs no label.
+fn is_hidden_from_assistive_tech(element: &scraper::ElementRef) -> bool {
+    std::iter::once(*element)
+        .chain(element.ancestors().filter_map(scraper::ElementRef::wrap))
+        .any(|el| {
+            let v = el.value();
+            let inline_hidden = v.attr("style").is_some_and(|style| {
+                let style = style
+                    .chars()
+                    .filter(|c| !c.is_whitespace())
+                    .collect::<String>()
+                    .to_ascii_lowercase();
+                style.contains("display:none") || style.contains("visibility:hidden")
+            });
+            v.attr("hidden").is_some()
+                || v.attr("aria-hidden")
+                    .is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+                || inline_hidden
+        })
 }
 
 #[cfg(test)]
@@ -900,5 +955,98 @@ mod tests {
         );
         assert_eq!(analyzer2.pages_without_main_landmark, 0, "page with <main> is OK");
         assert!(result2.get_warning().is_empty());
+    }
+
+    fn form_label_warnings(html: &str) -> Vec<String> {
+        let mut analyzer = AccessibilityAnalyzer::new();
+        let mut result = UrlAnalysisResult::new();
+        analyzer.check_missing_labels(&Html::parse_document(html), &mut result);
+        result.get_warning().to_vec()
+    }
+
+    #[test]
+    fn issue_112_search_form_has_no_label_findings() {
+        // The exact markup from #112: label[for] + placeholder, a submit and a hidden input.
+        let html = r#"<html><body><div class="woocommerce">
+            <form id="searchform" action="https://www.plastic2go.com.au" method="get">
+                <label class="screen-reader-text" for="woocommerce-product-search-field-0">Find products</label>
+                <input id="woocommerce-product-search-field-0" name="s" type="text" value="" placeholder="Find products">
+                <input id="searchsubmit" class="button" type="submit" value="Find Now">
+                <input name="post_type" type="hidden" value="product">
+            </form>
+        </div></body></html>"#;
+        assert!(
+            form_label_warnings(html).is_empty(),
+            "got: {:?}",
+            form_label_warnings(html)
+        );
+    }
+
+    #[test]
+    fn empty_labels_do_not_label_a_control() {
+        for html in [
+            r#"<html><body><label for="q"></label><input id="q" type="text"></body></html>"#,
+            r#"<html><body><label for="q">   </label><input id="q" type="text"></body></html>"#,
+            r#"<html><body><label><input type="text"></label></body></html>"#,
+            r#"<html><body><label><select><option>Prague</option></select></label></body></html>"#,
+        ] {
+            assert_eq!(form_label_warnings(html).len(), 1, "expected a finding for {html}");
+        }
+    }
+
+    #[test]
+    fn label_text_in_nested_elements_or_image_alt_counts() {
+        for html in [
+            r#"<html><body><label><span>Name</span> <input type="text"></label></body></html>"#,
+            r#"<html><body><label for="q"><img src="search.svg" alt="Search"></label><input id="q" type="search"></body></html>"#,
+        ] {
+            assert!(form_label_warnings(html).is_empty(), "expected no finding for {html}");
+        }
+    }
+
+    #[test]
+    fn placeholder_labels_inputs_and_textareas_but_not_selects() {
+        assert!(
+            form_label_warnings(r#"<html><body><input type="text" placeholder="Search"></body></html>"#).is_empty()
+        );
+        assert!(
+            form_label_warnings(r#"<html><body><textarea placeholder="Your message"></textarea></body></html>"#)
+                .is_empty()
+        );
+        assert_eq!(
+            form_label_warnings(r#"<html><body><input type="text" placeholder="  "></body></html>"#).len(),
+            1
+        );
+        assert_eq!(
+            form_label_warnings(
+                r#"<html><body><select placeholder="Pick one"><option>A</option></select></body></html>"#
+            )
+            .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn controls_hidden_from_assistive_technology_are_skipped() {
+        for html in [
+            r#"<html><body><input type="text" aria-hidden="true"></body></html>"#,
+            r#"<html><body><input type="text" hidden></body></html>"#,
+            r#"<html><body><input type="text" style="visibility: hidden"></body></html>"#,
+            r#"<html><body><div style="display: none;"><input type="text"></div></body></html>"#,
+            r#"<html><body><div aria-hidden="true"><form><select><option>A</option></select></form></div></body></html>"#,
+        ] {
+            let mut analyzer = AccessibilityAnalyzer::new();
+            let mut result = UrlAnalysisResult::new();
+            analyzer.check_missing_labels(&Html::parse_document(html), &mut result);
+            assert!(
+                result.get_warning().is_empty(),
+                "hidden control must be skipped: {html}"
+            );
+            assert!(
+                result.get_ok().is_empty(),
+                "only hidden controls: nothing to report: {html}"
+            );
+            assert_eq!(analyzer.pages_without_form_labels, 0);
+        }
     }
 }

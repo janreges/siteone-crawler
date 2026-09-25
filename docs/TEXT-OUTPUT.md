@@ -409,13 +409,16 @@ Summarizes results from accessibility checks.
 
 | Analysis name                | OK  | Notice | Warning | Critical |
 | :--------------------------- | :-- | :----- | :------ | :------- |
+| HTML structural issues       | 1   | 0      | 0       | 0        |
+| Missing form labels          | 3   | 0      | 1       | 0        |
 | Missing html lang attribute  | 1   | 0      | 0       | 0        |
-| Missing aria labels          | 2   | 0      | 119     | 0        |
-| Missing roles                | 0   | 0      | 35      | 0        |
 | Missing image alt attributes | 6   | 0      | 1       | 0        |
+| Missing main landmark        | 0   | 0      | 1       | 0        |
+| Unnamed links/buttons        | 42  | 0      | 2       | 0        |
 
 *   **Analysis name:** The specific accessibility check.
 *   **OK / Notice / Warning / Critical:** Counts for each severity level.
+*   **Missing form labels:** a control counts as labelled by a `<label for>` or wrapping `<label>` with text, `aria-label`, `aria-labelledby`, `title` or (for `<input>`/`<textarea>`) a non-empty `placeholder`, like axe's `label` rule. Controls hidden from assistive technology (`hidden`, `aria-hidden="true"`, inline `display:none`/`visibility:hidden` on the control or an ancestor) are skipped.
 
 ### 3.15. Source Domains
 
@@ -623,8 +626,8 @@ Summary
 [WARNING] 50 page(s) do not support Brotli compression.
 [WARNING] 49 page(s) with skipped heading levels.
 [WARNING] 1 page(s) without image alt attributes.
-[WARNING] 50 page(s) without aria labels.
-[WARNING] 50 page(s) without role attributes.
+[WARNING] 50 page(s) with unnamed links/buttons (icon-only without aria-label).
+[WARNING] 50 page(s) without a main landmark.
 [INFO] Loaded robots.txt for domain 'crawler.siteone.io': status code 200, size 152 B and took 24 ms.
 [INFO] External URLs - 89 external URL(s) found.
 [INFO] 404 NOTICE - 1 non-existent page(s) found.

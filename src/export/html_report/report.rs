@@ -5,6 +5,7 @@ use std::collections::HashMap;
 
 use regex::Regex;
 
+use crate::analysis::accessibility_analyzer;
 use crate::components::summary::item_status::ItemStatus;
 use crate::components::super_table::SuperTable;
 use crate::components::super_table_column::SuperTableColumn;
@@ -67,15 +68,8 @@ const BEST_PRACTICE_ANALYSIS_NAMES: &[&str] = &[
     "Description uniqueness",
 ];
 
-/// Analysis names for Accessibility
-const ACCESSIBILITY_ANALYSIS_NAMES: &[&str] = &[
-    "Valid HTML",
-    "Missing image alt attributes",
-    "Missing form labels",
-    "Missing aria labels",
-    "Missing roles",
-    "Missing html lang attribute",
-];
+/// Analysis names for Accessibility — the analyzer's own list, so the report cannot drift from it
+const ACCESSIBILITY_ANALYSIS_NAMES: &[&str] = &accessibility_analyzer::ANALYSIS_NAMES;
 
 /// Analysis names for Security
 const SECURITY_ANALYSIS_NAMES: &[&str] = &["Security headers"];
@@ -2474,3 +2468,55 @@ const VIDEO_GALLERY_SCRIPT: &str = r#"<script> function playVideos() {
         });
 
         </script>"#;
+
+#[cfg(test)]
+mod accessibility_detail_tests {
+    use super::*;
+    use crate::analysis::accessibility_analyzer::AccessibilityAnalyzer;
+    use crate::analysis::analyzer::Analyzer;
+    use crate::types::ContentTypeId;
+
+    #[test]
+    fn accessibility_tab_has_a_detail_table_for_every_check_the_analyzer_reports() {
+        // A page that fails all six accessibility checks.
+        let html = r#"<html><body><img src="a.png"><input type="text"><a href="/x"><svg></svg></a><div id="d"></div><div id="d"></div></body></html>"#;
+        let page = visited_url::VisitedUrl::new(
+            "u1".to_string(),
+            String::new(),
+            visited_url::SOURCE_INIT_URL,
+            "https://example.com/".to_string(),
+            200,
+            0.1,
+            Some(html.len() as i64),
+            ContentTypeId::Html,
+            Some("text/html".to_string()),
+            None,
+            None,
+            false,
+            true,
+            0,
+            None,
+        );
+        let result = AccessibilityAnalyzer::new()
+            .analyze_visited_url(&page, Some(html), None)
+            .expect("an HTML page is analyzed");
+        let reported: Vec<&String> = result
+            .get_warning_details()
+            .keys()
+            .chain(result.get_critical_details().keys())
+            .collect();
+        assert_eq!(reported.len(), 6, "every check fails on this page: {reported:?}");
+        for name in reported {
+            assert!(
+                ACCESSIBILITY_ANALYSIS_NAMES.contains(&name.as_str()),
+                "the HTML report has no detail table for '{name}'"
+            );
+        }
+        for stale in ["Valid HTML", "Missing aria labels", "Missing roles"] {
+            assert!(
+                !ACCESSIBILITY_ANALYSIS_NAMES.contains(&stale),
+                "'{stale}' is not a check any more"
+            );
+        }
+    }
+}
