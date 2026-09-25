@@ -447,13 +447,9 @@ impl HtmlProcessor {
     fn set_js_variable_with_url_depth(&self, html: &str, url: &ParsedUrl) -> String {
         let base_path = if url.path.is_empty() { "/" } else { url.path.as_str() };
 
+        // /docs/ is stored as docs/index.html, so every '/' after the leading one is a directory level
         let trimmed = base_path.trim_start_matches('/');
         let mut depth = trimmed.matches('/').count();
-
-        let needs_index_html = base_path != "/" && base_path.ends_with('/');
-        if needs_index_html {
-            depth += 1;
-        }
 
         // --offline-export-preserve-url-structure stores /docs/guide as docs/guide/index.html (#55)
         if self.config.offline_export_preserve_url_structure && OfflineUrlConverter::is_stored_as_directory_index(url) {
@@ -1574,6 +1570,28 @@ mod tests {
             let mut html = format!("<html><head>{meta}</head><body></body></html>");
             processor.apply_content_changes_for_offline_version(&mut html, content_type, &page, false);
             assert!(html.contains("url=../about/index.html"), "{meta} -> {html}");
+        }
+    }
+
+    #[test]
+    fn trailing_slash_page_url_depth_is_its_storage_depth() {
+        // /docs/ is stored as docs/index.html, one level below the export root (also with
+        // --offline-export-preserve-url-structure, which stores it at the same place)
+        let page = ParsedUrl::parse("https://example.com/docs/", None);
+        for preserve in [false, true] {
+            let mut config = make_config();
+            config.offline_export_preserve_url_structure = preserve;
+            let mut html = "<html><head></head><body></body></html>".to_string();
+            HtmlProcessor::new(config).apply_content_changes_for_offline_version(
+                &mut html,
+                ContentTypeId::Html,
+                &page,
+                false,
+            );
+            assert!(
+                html.contains("var _SiteOneUrlDepth = 1;"),
+                "preserve={preserve}: {html}"
+            );
         }
     }
 }

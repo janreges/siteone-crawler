@@ -134,13 +134,10 @@ impl ContentProcessor for NextJsProcessor {
         *content = RE_DISABLE_PREFETCH.replace_all(content, "$1 return; if").to_string();
 
         // Calculate depth for relative prefix
+        // /docs/ is stored as docs/index.html, so every '/' after the leading one is a directory level
         let base_path = &url.path;
         let trimmed = base_path.trim_start_matches('/');
         let mut depth = trimmed.matches('/').count();
-        let needs_index = base_path != "/" && !base_path.is_empty() && base_path.ends_with('/');
-        if needs_index {
-            depth += 1;
-        }
         // --offline-export-preserve-url-structure stores /docs/guide as docs/guide/index.html (#55)
         if self.config.offline_export_preserve_url_structure && OfflineUrlConverter::is_stored_as_directory_index(url) {
             depth += 1;
@@ -277,5 +274,16 @@ mod tests {
             r#"<script>self.__next_f.push([1,"{\"src\":\"/_next/static/media/logo.png\"}"])</script>"#.to_string();
         processor.apply_content_changes_for_offline_version(&mut content, ContentTypeId::Html, &page, false);
         assert!(content.contains(r#"\"../../_next/static/media/logo.png"#), "{content}");
+    }
+
+    #[test]
+    fn trailing_slash_page_next_assets_are_relative_to_its_storage_directory() {
+        // /docs/ is stored as docs/index.html, one level below the export root
+        let processor = NextJsProcessor::new(make_config());
+        let page = ParsedUrl::parse("https://example.com/docs/", None);
+        let mut content =
+            r#"<script>self.__next_f.push([1,"{\"src\":\"/_next/static/media/logo.png\"}"])</script>"#.to_string();
+        processor.apply_content_changes_for_offline_version(&mut content, ContentTypeId::Html, &page, false);
+        assert!(content.contains(r#"\"../_next/static/media/logo.png"#), "{content}");
     }
 }
