@@ -821,10 +821,11 @@ fn visibility_hidden(el: &scraper::node::Element) -> Option<bool> {
 }
 
 /// The lower-cased value an inline `style` attribute gives `property` (`display` or `visibility`), read
-/// as a browser reads it: comments are ignored and quoted strings or ()/[]/{} blocks never end a
-/// declaration, the property name must match exactly (so `--x-display` is not `display`), escapes
-/// are decoded (`\62 lock` is `block`), a declaration whose value the property does not accept is
-/// dropped, and a later declaration wins unless an earlier one is `!important`.
+/// as a browser reads it: comments are ignored and quoted strings, ()/[]/{} blocks or escaped
+/// characters never end a declaration, the property name must match exactly (so `--x-display` is not
+/// `display`), escapes are decoded within their keyword (`\62 lock` is `block`), a declaration whose
+/// value the property does not accept is dropped, and a later declaration wins unless an earlier one
+/// is `!important`.
 fn inline_style_value(style: &str, property: &str) -> Option<String> {
     let mut effective: Option<(String, bool)> = None;
     for declaration in css_declarations(style) {
@@ -834,18 +835,12 @@ fn inline_style_value(style: &str, property: &str) -> Option<String> {
         if !name.trim().eq_ignore_ascii_case(property) {
             continue;
         }
-        let mut value = decode_css_escapes(value.trim()).to_ascii_lowercase();
-        let important = match value.rfind('!') {
-            Some(bang) if value[bang + 1..].trim() == "important" => {
-                value.truncate(bang);
-                true
-            }
-            _ => false,
-        };
-        let value = value.trim_end().to_string();
-        if !is_valid_css_value(property, &value) {
+        let (value, important) = split_important(value.trim());
+        let keywords = css_keywords(value);
+        if !is_valid_css_value(property, &keywords) {
             continue;
         }
+        let value = keywords.join(" ");
         if effective
             .as_ref()
             .is_none_or(|(_, was_important)| important || !was_important)
@@ -857,7 +852,7 @@ fn inline_style_value(style: &str, property: &str) -> Option<String> {
 }
 
 /// The declarations of an inline style without comments: split at every `;` that is outside a
-/// quoted string and outside ()/[]/{} blocks.
+/// quoted string and outside ()/[]/{} blocks and not escaped.
 fn css_declarations(style: &str) -> Vec<String> {
     let mut declarations = Vec::new();
     let mut current = String::new();
@@ -877,6 +872,11 @@ fn css_declarations(style: &str) -> Vec<String> {
             continue;
         }
         match c {
+            // An escaped character is never a delimiter
+            '\\' => {
+                current.push(c);
+                current.extend(chars.next());
+            }
             '/' if chars.peek() == Some(&'*') => {
                 chars.next();
                 let mut previous = ' ';
@@ -908,40 +908,73 @@ fn css_declarations(style: &str) -> Vec<String> {
     declarations
 }
 
-/// `value` with its CSS escapes decoded: `\` and 1–6 hex digits (and one optional white space after
-/// them) is that code point, `\` and any other character is that character.
-fn decode_css_escapes(value: &str) -> String {
-    if !value.contains('\\') {
-        return value.to_string();
-    }
-    let mut decoded = String::with_capacity(value.len());
-    let mut chars = value.chars().peekable();
-    while let Some(c) = chars.next() {
-        if c != '\\' {
-            decoded.push(c);
-            continue;
-        }
-        let mut hex = String::new();
-        while hex.len() < 6
-            && let Some(digit) = chars.peek().filter(|digit| digit.is_ascii_hexdigit())
-        {
-            hex.push(*digit);
-            chars.next();
-        }
-        if hex.is_empty() {
-            decoded.extend(chars.next());
-        } else {
-            let code = u32::from_str_radix(&hex, 16).unwrap_or(0);
-            decoded.push(char::from_u32(code).filter(|c| *c != '\0').unwrap_or('\u{fffd}'));
-            chars.next_if(|c| c.is_whitespace());
+/// A declaration value without its `!important` flag, and whether it had one. An escaped `!` is part
+/// of the value.
+fn split_important(value: &str) -> (&str, bool) {
+    let mut bang = None;
+    let mut chars = value.char_indices();
+    while let Some((index, c)) = chars.next() {
+        match c {
+            '\\' => {
+                chars.next();
+            }
+            '!' => bang = Some(index),
+            _ => {}
         }
     }
-    decoded
+    match bang {
+        Some(index) if value[index + 1..].trim().eq_ignore_ascii_case("important") => (value[..index].trim_end(), true),
+        _ => (value, false),
+    }
 }
 
-/// Does `property` (`display` or `visibility`) accept `value`? Values with `var()` are accepted, as a
-/// browser accepts them before it knows what they resolve to.
-fn is_valid_css_value(property: &str, value: &str) -> bool {
+/// The lower-cased keywords of a declaration value: split at white space that is not escaped, each
+/// with its escapes decoded (`\62 lock` is `block`, `block\ flow` is one keyword). `\` and 1–6 hex
+/// digits (and one optional white space after them) is that code point, `\` and any other character
+/// is that character, and a `\` at the end or before a line break is no escape (U+FFFD).
+fn css_keywords(value: &str) -> Vec<String> {
+    let mut keywords = Vec::new();
+    let mut current = String::new();
+    let mut chars = value.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            let mut hex = String::new();
+            while hex.len() < 6
+                && let Some(digit) = chars.peek().filter(|digit| digit.is_ascii_hexdigit())
+            {
+                hex.push(*digit);
+                chars.next();
+            }
+            if hex.is_empty() {
+                match chars.next() {
+                    None | Some('\n' | '\r' | '\x0c') => current.push('\u{fffd}'),
+                    Some(escaped) => current.push(escaped),
+                }
+            } else {
+                let code = u32::from_str_radix(&hex, 16).unwrap_or(0);
+                current.push(char::from_u32(code).filter(|c| *c != '\0').unwrap_or('\u{fffd}'));
+                chars.next_if(|c| c.is_whitespace());
+            }
+        } else if c.is_whitespace() {
+            if !current.is_empty() {
+                keywords.push(std::mem::take(&mut current));
+            }
+        } else {
+            current.push(c);
+        }
+    }
+    if !current.is_empty() {
+        keywords.push(current);
+    }
+    keywords
+        .into_iter()
+        .map(|keyword| keyword.to_ascii_lowercase())
+        .collect()
+}
+
+/// Does `property` (`display` or `visibility`) accept the value made of `keywords`? Values with `var()`
+/// are accepted, as a browser accepts them before it knows what they resolve to.
+fn is_valid_css_value(property: &str, keywords: &[String]) -> bool {
     const GLOBAL: &[&str] = &["inherit", "initial", "unset", "revert", "revert-layer"];
     const DISPLAY_SINGLE: &[&str] = &[
         "none",
@@ -988,12 +1021,14 @@ fn is_valid_css_value(property: &str, value: &str) -> bool {
     // an optional outside keyword and an optional `flow`/`flow-root` (`block flow list-item`).
     const DISPLAY_OUTSIDE: &[&str] = &["block", "inline", "run-in"];
     const DISPLAY_INSIDE: &[&str] = &["flow", "flow-root", "table", "flex", "grid", "ruby", "math"];
-    if value.contains("var(") || GLOBAL.contains(&value) {
+    let keywords: Vec<&str> = keywords.iter().map(String::as_str).collect();
+    if keywords.iter().any(|keyword| keyword.contains("var("))
+        || matches!(keywords.as_slice(), [one] if GLOBAL.contains(one))
+    {
         return true;
     }
     match property {
         "display" => {
-            let keywords: Vec<&str> = value.split_whitespace().collect();
             let count = |set: &[&str]| keywords.iter().filter(|keyword| set.contains(keyword)).count();
             let (outside, inside) = (count(DISPLAY_OUTSIDE), count(DISPLAY_INSIDE));
             let (list_item, flow) = (count(&["list-item"]), count(&["flow", "flow-root"]));
@@ -1007,7 +1042,7 @@ fn is_valid_css_value(property: &str, value: &str) -> bool {
                 _ => false,
             }
         }
-        "visibility" => matches!(value, "visible" | "hidden" | "collapse"),
+        "visibility" => matches!(keywords.as_slice(), ["visible" | "hidden" | "collapse"]),
         _ => true,
     }
 }
@@ -1305,6 +1340,10 @@ mod tests {
             // valid multi-keyword values
             r#"<input id="q" style="display:none;display:inline flex">"#,
             r#"<input id="q" style="display:none;display:list-item inline flow-root">"#,
+            // an escaped `!` is part of the value, which is then invalid; so is a trailing `\`
+            r#"<input id="q" style="display:none\!important">"#,
+            r#"<input id="q" style="visibility:hidden\!important">"#,
+            r#"<input id="q" style="display:none\">"#,
         ] {
             let html = format!("<html><body>{body}</body></html>");
             assert_eq!(
@@ -1334,6 +1373,10 @@ mod tests {
             r#"<input id="q" style="display:none;display:list-item flex">"#,
             // an escaped keyword is the keyword (`\6e one` = `none`)
             r#"<input id="q" style="display:\6e one">"#,
+            // an escaped bracket does not open a block, an escaped space does not separate keywords
+            r#"<input id="q" style="--x:\[;display:none">"#,
+            r#"<input id="q" style="--x:\{;display:none">"#,
+            r#"<input id="q" style="display:none;display:block\ flow">"#,
             r#"<div style="visibility:hidden"><input id="q" style="visibility:invalid"></div>"#,
         ] {
             let html = format!("<html><body>{body}</body></html>");
