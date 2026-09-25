@@ -309,8 +309,8 @@ fn score_security(summary: &Summary) -> CategoryScore {
         }
     }
 
-    // SSL certificate validity period
-    if is_critical(summary, "ssl-certificate-valid-to") {
+    // SSL certificate validity period: expired, or expiring within 14 days
+    if is_critical(summary, "ssl-certificate-valid-to") || is_warning(summary, "ssl-certificate-expiring-soon") {
         deductions.push(
             Deduction::new("SSL certificate expired or expiring soon", 0.5)
                 .with_fix("Renew the TLS certificate before expiry; automate renewal (e.g. ACME/Let's Encrypt)."),
@@ -323,6 +323,14 @@ fn score_security(summary: &Summary) -> CategoryScore {
             Deduction::new("Insecure TLS protocol versions supported", 1.0)
                 .with_fix("Disable SSLv3/TLS 1.0/1.1 on the server; allow only TLS 1.2 and TLS 1.3."),
         );
+    }
+
+    // Insecure cipher suites (NULL/EXPORT/anonymous/RC4/DES/3DES). Missing forward secrecy is a
+    // Notice ("ssl-no-forward-secrecy") and intentionally not scored.
+    if is_critical(summary, "ssl-weak-cipher-suites") {
+        deductions.push(Deduction::new("Insecure TLS cipher suites accepted", 1.0).with_fix(
+            "Disable NULL, EXPORT, anonymous, RC4, DES and 3DES cipher suites; offer ECDHE suites with AES-GCM or ChaCha20-Poly1305.",
+        ));
     }
 
     // Security headers — graduated scale based on affected page count
@@ -886,6 +894,38 @@ mod tests {
             (seo.score - 7.0).abs() < 0.001,
             "expected 10 - 3 = 7, got {}",
             seo.score
+        );
+    }
+
+    #[test]
+    fn insecure_cipher_suites_reduce_security() {
+        let summary = make_summary_with_items(vec![("ssl-weak-cipher-suites", ItemStatus::Critical)]);
+        let scores = calculate_scores(&summary, &make_basic_stats());
+        let security = scores.categories.iter().find(|c| c.code == "security").unwrap();
+        assert!(
+            (security.score - 9.0).abs() < 0.001,
+            "expected 10 - 1 = 9, got {}",
+            security.score
+        );
+    }
+
+    #[test]
+    fn missing_forward_secrecy_is_a_notice_without_score_impact() {
+        let summary = make_summary_with_items(vec![("ssl-no-forward-secrecy", ItemStatus::Notice)]);
+        let scores = calculate_scores(&summary, &make_basic_stats());
+        let security = scores.categories.iter().find(|c| c.code == "security").unwrap();
+        assert_eq!(security.score, 10.0);
+    }
+
+    #[test]
+    fn certificate_expiring_soon_reduces_security() {
+        let summary = make_summary_with_items(vec![("ssl-certificate-expiring-soon", ItemStatus::Warning)]);
+        let scores = calculate_scores(&summary, &make_basic_stats());
+        let security = scores.categories.iter().find(|c| c.code == "security").unwrap();
+        assert!(
+            (security.score - 9.5).abs() < 0.001,
+            "expected 10 - 0.5 = 9.5, got {}",
+            security.score
         );
     }
 

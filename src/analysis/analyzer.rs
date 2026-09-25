@@ -32,6 +32,12 @@ pub trait Analyzer: Send + Sync {
         None
     }
 
+    /// Should analyze() still run when the crawl produced no working URL? Most analyzers need crawled
+    /// pages; the SSL/TLS analyzer does not, and can explain why an HTTPS site could not be crawled.
+    fn runs_without_working_urls(&self) -> bool {
+        false
+    }
+
     /// Should this analyzer be activated based on options?
     fn should_be_activated(&self) -> bool;
 

@@ -108,7 +108,7 @@ cargo clippy --no-default-features -- -D warnings  # lint the lean variant
 
 ### How Analyzers Work
 
-Each analyzer implements the `Analyzer` trait (`analysis/analyzer.rs`). Analyzers are **post-crawl only** — they don't run during crawling. The `AnalysisManager` calls each analyzer's `analyze(&Status, &mut Output)` method after all URLs have been visited. Analyzers read crawled data from `Status` (visited URLs, response headers, bodies, skipped URLs) and produce `SuperTable` instances that get added to `Output`. Analyzers also add `Item` entries to the `Summary` (OK, Warning, Critical, Info findings) which feed into scoring.
+Each analyzer implements the `Analyzer` trait (`analysis/analyzer.rs`). Analyzers are **post-crawl only** — they don't run during crawling. The `AnalysisManager` calls each analyzer's `analyze(&Status, &mut Output)` method after all URLs have been visited. Analyzers whose `runs_without_working_urls()` returns `true` (SSL/TLS) also run when no URL could be crawled at all, e.g. to explain why an HTTPS site failed. Analyzers read crawled data from `Status` (visited URLs, response headers, bodies, skipped URLs) and produce `SuperTable` instances that get added to `Output`. Analyzers also add `Item` entries to the `Summary` (OK, Warning, Critical, Info findings) which feed into scoring.
 
 ### How Content Processors Work
 

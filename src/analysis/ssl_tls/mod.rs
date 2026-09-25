@@ -15,6 +15,7 @@ use crate::result::status::Status;
 use crate::utils;
 
 mod cert_info;
+mod cipher_suites;
 mod tls_probe;
 
 use cert_info::Trust;
@@ -46,7 +47,15 @@ impl SslTlsAnalyzer {
         self.accept_invalid_certs = accept_invalid_certs;
     }
 
-    fn get_tls_certificate_info(&self, hostname: &str, port: u16, status: &Status) -> HashMap<String, String> {
+    /// `report_connect_failure` is false after a crawl without any working URL, which already reported
+    /// that the host could not be reached.
+    fn get_tls_certificate_info(
+        &self,
+        hostname: &str,
+        port: u16,
+        status: &Status,
+        report_connect_failure: bool,
+    ) -> HashMap<String, String> {
         let mut result: HashMap<String, String> = HashMap::new();
         let mut errors: Vec<String> = Vec::new();
 
@@ -64,6 +73,7 @@ impl SslTlsAnalyzer {
         //    inspect expired / self-signed / mismatched certs too.
         let captured = match cert_info::capture_cert(hostname, port) {
             Ok(c) => c,
+            Err(cert_info::CaptureError::Connect(_)) if !report_connect_failure => return result,
             Err(cert_info::CaptureError::Connect(e)) => {
                 status.add_critical_to_summary("ssl-certificate-connect", &e);
                 errors.push(e);
@@ -74,6 +84,7 @@ impl SslTlsAnalyzer {
                 let msg = "TLS handshake failed — the server may only support obsolete protocols or cipher suites (e.g. SSL 3.0, RC4, 3DES, weak Diffie-Hellman) that are no longer considered secure.";
                 status.add_critical_to_summary("ssl-tls-handshake-failed", msg);
                 errors.push(format!("{} ({})", msg, detail));
+                probe_and_report_cipher_suites(hostname, port, &[0x0303, 0x0302, 0x0301], status, &mut result);
                 result.insert("Errors".to_string(), errors.join(", "));
                 return result;
             }
@@ -154,10 +165,29 @@ impl SslTlsAnalyzer {
                 );
             } else {
                 let diff = (na_dt - now).num_seconds().unsigned_abs() as i64;
-                result.insert(
-                    "Valid to".to_string(),
-                    format!("{} (VALID still for {})", valid_to_str, utils::get_formatted_age(diff)),
-                );
+                if expires_soon(na_dt, now) {
+                    status.add_warning_to_summary(
+                        "ssl-certificate-expiring-soon",
+                        &format!(
+                            "SSL/TLS certificate expires in {} ({}). Renew it now.",
+                            utils::get_formatted_age(diff),
+                            valid_to_str
+                        ),
+                    );
+                    result.insert(
+                        "Valid to".to_string(),
+                        format!(
+                            "{} (EXPIRES SOON, valid still for {})",
+                            valid_to_str,
+                            utils::get_formatted_age(diff)
+                        ),
+                    );
+                } else {
+                    result.insert(
+                        "Valid to".to_string(),
+                        format!("{} (VALID still for {})", valid_to_str, utils::get_formatted_age(diff)),
+                    );
+                }
             }
         } else {
             result.insert("Valid to".to_string(), valid_to_str);
@@ -309,6 +339,17 @@ impl SslTlsAnalyzer {
             }
         }
 
+        // 7c) Cipher suites (#20): insecure and non-forward-secret suites per protocol up to TLS 1.2.
+        //     TLS 1.2 is always probed (a server offering only weak TLS 1.2 suites fails the rustls
+        //     detection above); older versions only when the legacy probes found them.
+        let mut probe_versions: Vec<u16> = vec![0x0303];
+        for (code, name) in [(0x0302u16, "TLSv1.1"), (0x0301, "TLSv1.0"), (0x0300, "SSLv3")] {
+            if supported_protocols.iter().any(|p| p == name) {
+                probe_versions.push(code);
+            }
+        }
+        probe_and_report_cipher_suites(hostname, port, &probe_versions, status, &mut result);
+
         // 8) Overall summary.
         if errors.is_empty() && !issuer.is_empty() {
             status.add_ok_to_summary(
@@ -338,16 +379,24 @@ impl Analyzer for SslTlsAnalyzer {
     fn analyze(&mut self, status: &Status, output: &mut dyn Output) {
         // Find the initial URL from visited URLs (the one with SOURCE_INIT_URL source_attr)
         let visited_urls = status.get_visited_urls();
-        let initial_url = visited_urls
+        let initial = visited_urls
             .iter()
             .find(|u| u.source_attr == crate::result::visited_url::SOURCE_INIT_URL)
-            .map(|u| u.url.clone())
-            .or_else(|| visited_urls.first().map(|u| u.url.clone()));
+            .or_else(|| visited_urls.first())
+            .map(|u| (u.url.clone(), u.status_code));
 
-        let initial_url = match initial_url {
-            Some(url) => url,
+        let (initial_url, initial_status_code) = match initial {
+            Some(initial) => initial,
             None => return,
         };
+
+        // Without any working URL (#20) only an HTTPS initial URL that failed to connect is examined:
+        // when the TLS handshake is what failed, the table says so and lists the insecure suites the
+        // server does accept. Other failures were already reported by the crawl.
+        let without_crawled_pages = status.get_number_of_working_visited_urls() == 0;
+        if without_crawled_pages && (!initial_url.starts_with("https://") || initial_status_code != -1) {
+            return;
+        }
 
         if !initial_url.starts_with("https://") {
             status.add_notice_to_summary("ssl-tls-analyzer", "SSL/TLS not supported, analyzer skipped.");
@@ -372,11 +421,15 @@ impl Analyzer for SslTlsAnalyzer {
         }
 
         let s = Instant::now();
-        let cert_info = self.get_tls_certificate_info(&hostname, port, status);
+        let cert_info = self.get_tls_certificate_info(&hostname, port, status, !without_crawled_pages);
+        if cert_info.is_empty() {
+            return;
+        }
         self.base
             .measure_exec_time("SslTlsAnalyzer", "getTLSandSSLCertificateInfo", s);
 
         let console_width = utils::get_console_width();
+        let value_width = (console_width as i32 - 30).max(20);
 
         let mut table_data: Vec<HashMap<String, String>> = Vec::new();
         let display_order = [
@@ -390,6 +443,8 @@ impl Analyzer for SslTlsAnalyzer {
             "Public key",
             "SHA-256 fingerprint",
             "Supported protocols",
+            "Insecure cipher suites",
+            "Without forward secrecy",
             "Trust",
             "Errors",
         ];
@@ -421,12 +476,14 @@ impl Analyzer for SslTlsAnalyzer {
             SuperTableColumn::new(
                 "value".to_string(),
                 "Text".to_string(),
-                (console_width as i32 - 30).max(20),
-                Some(Box::new(|value: &str, render_into: &str| {
+                value_width,
+                Some(Box::new(move |value: &str, render_into: &str| {
                     if render_into == "html" {
-                        value.replace(' ', "&nbsp;").replace('\n', "<br>")
+                        suite_list_for_display(value, "\n", "\n", usize::MAX)
+                            .replace(' ', "&nbsp;")
+                            .replace('\n', "<br>")
                     } else {
-                        value.to_string()
+                        suite_list_for_display(value, " ", ", ", value_width as usize)
                     }
                 })),
                 None,
@@ -458,6 +515,10 @@ impl Analyzer for SslTlsAnalyzer {
     }
 
     fn should_be_activated(&self) -> bool {
+        true
+    }
+
+    fn runs_without_working_urls(&self) -> bool {
         true
     }
 
@@ -493,4 +554,454 @@ fn asn1_time_to_datetime(time: &ASN1Time) -> Option<chrono::DateTime<chrono::Utc
     // ASN1Time has a timestamp() method that gives epoch seconds
     let epoch = time.timestamp();
     chrono::DateTime::from_timestamp(epoch, 0)
+}
+
+/// A certificate that expires in less than this many days (but has not expired yet) gets a warning.
+const EXPIRY_WARNING_DAYS: i64 = 14;
+
+/// Whether a certificate valid until `not_after` is still valid at `now` but expires within
+/// EXPIRY_WARNING_DAYS days.
+fn expires_soon(not_after: chrono::DateTime<chrono::Utc>, now: chrono::DateTime<chrono::Utc>) -> bool {
+    (0..EXPIRY_WARNING_DAYS * 86_400).contains(&(not_after - now).num_seconds())
+}
+
+/// Probe the weak cipher suites of `versions` (highest first) within the per-host budget and report them.
+fn probe_and_report_cipher_suites(
+    hostname: &str,
+    port: u16,
+    versions: &[u16],
+    status: &Status,
+    result: &mut HashMap<String, String>,
+) {
+    let mut budget =
+        tls_probe::ProbeBudget::new(tls_probe::MAX_CIPHER_PROBE_HANDSHAKES, tls_probe::MAX_CIPHER_PROBE_TIME);
+    let probe = tls_probe::probe_weak_cipher_suites(hostname, port, versions, &mut budget);
+    report_cipher_suites(&probe, status, result);
+}
+
+/// Suites shown per row in the text and HTML table; the rest is summarized as "… (+k more)". The table
+/// data (JSON) and the summary keep the full list.
+const MAX_SUITES_SHOWN: usize = 5;
+
+/// Display form of a suite-list value (an optional note line ending with ':', then one suite per
+/// line): the note, then at most MAX_SUITES_SHOWN suites that fit into `max_chars` — a suite is never
+/// cut in the middle — and "… (+k more)" for the rest. Single-line values are returned unchanged.
+fn suite_list_for_display(value: &str, note_separator: &str, separator: &str, max_chars: usize) -> String {
+    if !value.contains('\n') {
+        return value.to_string();
+    }
+    let mut suites: Vec<&str> = value.lines().collect();
+    let mut shown = String::new();
+    if suites.first().is_some_and(|line| line.ends_with(':')) {
+        shown.push_str(suites.remove(0));
+        shown.push_str(note_separator);
+    }
+    let more = |hidden: usize, first: bool| format!("{}… (+{} more)", if first { "" } else { separator }, hidden);
+    let mut count = 0;
+    for (index, suite) in suites.iter().enumerate() {
+        let separator_len = if count == 0 { 0 } else { separator.chars().count() };
+        let hidden_after = suites.len() - index - 1;
+        let reserve = if hidden_after > 0 {
+            more(hidden_after, false).chars().count()
+        } else {
+            0
+        };
+        if count == MAX_SUITES_SHOWN
+            || shown.chars().count() + separator_len + suite.chars().count() + reserve > max_chars
+        {
+            break;
+        }
+        if count > 0 {
+            shown.push_str(separator);
+        }
+        shown.push_str(suite);
+        count += 1;
+    }
+    if count < suites.len() {
+        shown.push_str(&more(suites.len() - count, count == 0));
+    }
+    shown
+}
+
+/// Put a cipher-suite probe into the SSL/TLS table and the summary (#20): insecure suites are
+/// critical; suites without forward secrecy are a notice, which does not affect the score.
+fn report_cipher_suites(probe: &tls_probe::CipherProbeResult, status: &Status, result: &mut HashMap<String, String>) {
+    // An incomplete list starts with a note, so a shortened display never hides it.
+    let (none, note) = match probe.incomplete {
+        None => ("None", None),
+        Some(tls_probe::Incomplete::LimitReached) => (
+            "None found (probe limit reached, the list may be incomplete)",
+            Some("Probe limit reached, the list may be incomplete:"),
+        ),
+        Some(tls_probe::Incomplete::Unreachable) => (
+            "None found (probe could not connect, the list may be incomplete)",
+            Some("Probe could not connect, the list may be incomplete:"),
+        ),
+    };
+    // One suite per line, so the HTML report can break the list (the text table joins the lines).
+    let table_value = |suites: &[String]| {
+        note.into_iter()
+            .map(str::to_string)
+            .chain(suites.iter().cloned())
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+
+    let insecure = cipher_suites::describe_accepted(&probe.accepted, cipher_suites::is_insecure);
+    if insecure.is_empty() {
+        result.insert("Insecure cipher suites".to_string(), none.to_string());
+        if probe.incomplete.is_none() {
+            status.add_ok_to_summary(
+                "ssl-weak-cipher-suites",
+                "No insecure cipher suites (NULL, EXPORT, anonymous, RC4, DES, 3DES) are accepted.",
+            );
+        }
+    } else {
+        let list = insecure.join(", ");
+        result.insert("Insecure cipher suites".to_string(), table_value(&insecure));
+        status.add_critical_to_summary(
+            "ssl-weak-cipher-suites",
+            &format!("Server accepts insecure cipher suites: {}.", list),
+        );
+    }
+
+    let without_forward_secrecy =
+        cipher_suites::describe_accepted(&probe.accepted, cipher_suites::lacks_forward_secrecy);
+    if without_forward_secrecy.is_empty() {
+        result.insert("Without forward secrecy".to_string(), none.to_string());
+    } else {
+        let list = without_forward_secrecy.join(", ");
+        result.insert(
+            "Without forward secrecy".to_string(),
+            table_value(&without_forward_secrecy),
+        );
+        status.add_notice_to_summary(
+            "ssl-no-forward-secrecy",
+            &format!(
+                "Server accepts cipher suites without forward secrecy (static RSA key exchange), such as {}.",
+                list
+            ),
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::components::summary::item_status::ItemStatus;
+
+    fn at(offset_seconds: i64) -> chrono::DateTime<chrono::Utc> {
+        chrono::DateTime::from_timestamp(1_790_000_000 + offset_seconds, 0).expect("valid timestamp")
+    }
+
+    fn empty_status() -> Status {
+        let info = crate::info::Info::new(
+            "SiteOne Crawler".to_string(),
+            "test".to_string(),
+            String::new(),
+            String::new(),
+            String::new(),
+            String::new(),
+            "https://example.com/".to_string(),
+        );
+        Status::new(
+            Box::new(crate::result::storage::memory_storage::MemoryStorage::new(false)),
+            false,
+            info,
+            std::time::Instant::now(),
+        )
+    }
+
+    fn summary_status(status: &Status, code: &str) -> Option<ItemStatus> {
+        status
+            .get_summary()
+            .get_items()
+            .iter()
+            .find(|item| item.apl_code == code)
+            .map(|item| item.status)
+    }
+
+    #[test]
+    fn certificate_expiring_within_14_days_is_flagged() {
+        let now = at(0);
+        let day = 86_400;
+        assert!(!expires_soon(at(31 * day + 21 * 3600), now), "31.9 days left is fine");
+        assert!(!expires_soon(at(14 * day), now), "exactly 14 days left is fine");
+        assert!(expires_soon(at(14 * day - 1), now));
+        assert!(expires_soon(at(1), now));
+        assert!(expires_soon(at(0), now), "expires this very second");
+        assert!(
+            !expires_soon(at(-1), now),
+            "already expired is reported as expired, not as expiring"
+        );
+    }
+
+    #[test]
+    fn insecure_suites_are_critical_and_static_rsa_is_a_notice() {
+        let status = empty_status();
+        let mut table = HashMap::new();
+        let probe = tls_probe::CipherProbeResult {
+            accepted: vec![(0x0303, 0x000A), (0x0301, 0x000A), (0x0303, 0x009C)],
+            incomplete: None,
+        };
+        report_cipher_suites(&probe, &status, &mut table);
+        assert_eq!(
+            table["Insecure cipher suites"],
+            "TLS_RSA_WITH_3DES_EDE_CBC_SHA (TLSv1.0, TLSv1.2)"
+        );
+        assert_eq!(
+            table["Without forward secrecy"],
+            "TLS_RSA_WITH_3DES_EDE_CBC_SHA (TLSv1.0, TLSv1.2)\nTLS_RSA_WITH_AES_128_GCM_SHA256 (TLSv1.2)",
+            "one suite per line, so the HTML report can break the list"
+        );
+        assert_eq!(
+            summary_status(&status, "ssl-weak-cipher-suites"),
+            Some(ItemStatus::Critical)
+        );
+        assert_eq!(
+            summary_status(&status, "ssl-no-forward-secrecy"),
+            Some(ItemStatus::Notice)
+        );
+        let text = status
+            .get_summary()
+            .get_items()
+            .iter()
+            .find(|item| item.apl_code == "ssl-weak-cipher-suites")
+            .map(|item| item.text.clone())
+            .unwrap();
+        assert!(
+            text.starts_with("Server accepts insecure cipher suites: TLS_RSA_WITH_3DES_EDE_CBC_SHA"),
+            "{text}"
+        );
+    }
+
+    /// Eight accepted insecure suites, each listed with TLS 1.0 and TLS 1.2.
+    fn many_insecure_suites() -> Vec<(u16, u16)> {
+        [0x000Au16, 0x0005, 0x0004, 0xC012, 0xC011, 0x0016, 0x0009, 0x0015]
+            .into_iter()
+            .flat_map(|id| [(0x0303, id), (0x0301, id)])
+            .collect()
+    }
+
+    #[test]
+    fn an_incomplete_list_starts_with_the_note_and_keeps_every_suite() {
+        let status = empty_status();
+        let mut table = HashMap::new();
+        let probe = tls_probe::CipherProbeResult {
+            accepted: many_insecure_suites(),
+            incomplete: Some(tls_probe::Incomplete::LimitReached),
+        };
+        report_cipher_suites(&probe, &status, &mut table);
+        let lines: Vec<&str> = table["Insecure cipher suites"].lines().collect();
+        assert_eq!(lines[0], "Probe limit reached, the list may be incomplete:");
+        assert_eq!(
+            lines.len(),
+            9,
+            "the table data (JSON) keeps all eight suites: {lines:?}"
+        );
+        assert_eq!(lines[1], "TLS_RSA_WITH_3DES_EDE_CBC_SHA (TLSv1.0, TLSv1.2)");
+    }
+
+    #[test]
+    fn long_suite_lists_are_shortened_between_whole_suites() {
+        let status = empty_status();
+        let mut table = HashMap::new();
+        let probe = tls_probe::CipherProbeResult {
+            accepted: many_insecure_suites(),
+            incomplete: Some(tls_probe::Incomplete::LimitReached),
+        };
+        report_cipher_suites(&probe, &status, &mut table);
+        let value = &table["Insecure cipher suites"];
+
+        // Text: the note first, then whole suites that fit the column, then how many are left out.
+        let text = suite_list_for_display(value, " ", ", ", 160);
+        assert!(text.chars().count() <= 160, "{text}");
+        assert_eq!(
+            text,
+            "Probe limit reached, the list may be incomplete: TLS_RSA_WITH_3DES_EDE_CBC_SHA (TLSv1.0, TLSv1.2), \
+             TLS_RSA_WITH_RC4_128_SHA (TLSv1.0, TLSv1.2), … (+6 more)"
+        );
+
+        // HTML: one suite per line, at most MAX_SUITES_SHOWN of them.
+        let html = suite_list_for_display(value, "\n", "\n", usize::MAX);
+        let lines: Vec<&str> = html.lines().collect();
+        assert_eq!(lines.len(), 1 + MAX_SUITES_SHOWN + 1, "{html}");
+        assert_eq!(lines[0], "Probe limit reached, the list may be incomplete:");
+        assert_eq!(lines[MAX_SUITES_SHOWN + 1], "… (+3 more)");
+
+        // Values of the other rows are left alone.
+        assert_eq!(
+            suite_list_for_display("TLSv1.2, TLSv1.3", " ", ", ", 10),
+            "TLSv1.2, TLSv1.3"
+        );
+    }
+
+    #[test]
+    fn clean_probe_is_ok_and_incomplete_probe_says_so() {
+        let status = empty_status();
+        let mut table = HashMap::new();
+        let clean = tls_probe::CipherProbeResult {
+            accepted: Vec::new(),
+            incomplete: None,
+        };
+        report_cipher_suites(&clean, &status, &mut table);
+        assert_eq!(table["Insecure cipher suites"], "None");
+        assert_eq!(table["Without forward secrecy"], "None");
+        assert_eq!(summary_status(&status, "ssl-weak-cipher-suites"), Some(ItemStatus::Ok));
+        assert_eq!(summary_status(&status, "ssl-no-forward-secrecy"), None);
+
+        let status = empty_status();
+        let mut table = HashMap::new();
+        let cut_short = tls_probe::CipherProbeResult {
+            accepted: Vec::new(),
+            incomplete: Some(tls_probe::Incomplete::LimitReached),
+        };
+        report_cipher_suites(&cut_short, &status, &mut table);
+        assert_eq!(
+            table["Insecure cipher suites"],
+            "None found (probe limit reached, the list may be incomplete)"
+        );
+        assert_eq!(
+            summary_status(&status, "ssl-weak-cipher-suites"),
+            None,
+            "no OK without a complete probe"
+        );
+    }
+
+    /// Run the SSL/TLS analyzer the way the analysis manager does after a crawl in which the initial
+    /// URL `url` failed to connect (status -1), i.e. without any working URL.
+    fn analyze_failed_crawl(url: &str) -> Status {
+        // main() installs the process-wide rustls provider; tests have to do it themselves.
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        let mut status = empty_status();
+        status.add_visited_url(
+            crate::result::visited_url::VisitedUrl::new(
+                "init".to_string(),
+                String::new(),
+                crate::result::visited_url::SOURCE_INIT_URL,
+                url.to_string(),
+                -1,
+                0.1,
+                None,
+                crate::types::ContentTypeId::Html,
+                None,
+                None,
+                None,
+                false,
+                true,
+                0,
+                None,
+            ),
+            None,
+            None,
+        );
+        let mut manager = crate::analysis::manager::AnalysisManager::new();
+        manager.register_analyzer(Box::new(SslTlsAnalyzer::new()));
+        let mut output = crate::output::json_output::JsonOutput::new(
+            crate::output::output::CrawlerInfo::default(),
+            vec![],
+            true,
+            false,
+            None,
+            0,
+        );
+        manager.run_analyzers(&status, &mut output);
+        status
+    }
+
+    /// A server whose TLS handshake fails for a modern client (it answers rustls with a
+    /// handshake_failure alert) but that accepts TLS_RSA_WITH_3DES_EDE_CBC_SHA whenever it is offered.
+    fn legacy_only_tls_server() -> u16 {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a free port");
+        let port = listener.local_addr().expect("local address").port();
+        std::thread::spawn(move || {
+            for mut stream in listener.incoming().flatten() {
+                let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(5)));
+                let mut header = [0u8; 5];
+                if stream.read_exact(&mut header).is_err() {
+                    continue;
+                }
+                let mut hello = vec![0u8; u16::from_be_bytes([header[3], header[4]]) as usize];
+                if stream.read_exact(&mut hello).is_err() || hello.len() < 39 {
+                    continue;
+                }
+                // handshake header(4) + client_version(2) + random(32), then the session id and the suites
+                let version = [hello[4], hello[5]];
+                let suites_at = 39 + hello[38] as usize;
+                let offers_3des = hello
+                    .get(suites_at + 2..)
+                    .and_then(|rest| {
+                        let len = u16::from_be_bytes([hello[suites_at], hello[suites_at + 1]]) as usize;
+                        rest.get(..len)
+                    })
+                    .is_some_and(|suites| suites.chunks(2).any(|suite| suite == [0x00, 0x0A]));
+                let answer = if offers_3des {
+                    let mut server_hello = vec![0x16, version[0], version[1], 0x00, 0x2a, 0x02, 0x00, 0x00, 0x26];
+                    server_hello.extend_from_slice(&version);
+                    server_hello.extend_from_slice(&[0u8; 32]);
+                    server_hello.extend_from_slice(&[0x00, 0x00, 0x0A, 0x00]);
+                    server_hello
+                } else {
+                    vec![0x15, 0x03, 0x03, 0x00, 0x02, 0x02, 0x28]
+                };
+                let _ = stream.write_all(&answer);
+            }
+        });
+        port
+    }
+
+    #[test]
+    fn a_legacy_only_https_server_is_analyzed_although_no_url_could_be_crawled() {
+        let port = legacy_only_tls_server();
+        let status = analyze_failed_crawl(&format!("https://127.0.0.1:{}/", port));
+        assert_eq!(
+            summary_status(&status, "ssl-tls-handshake-failed"),
+            Some(ItemStatus::Critical)
+        );
+        assert_eq!(
+            summary_status(&status, "ssl-weak-cipher-suites"),
+            Some(ItemStatus::Critical),
+            "the insecure suites the server accepts are listed"
+        );
+    }
+
+    #[test]
+    fn an_unreachable_host_without_crawled_pages_adds_no_ssl_findings() {
+        let closed_port = std::net::TcpListener::bind("127.0.0.1:0")
+            .and_then(|listener| listener.local_addr())
+            .expect("a free port")
+            .port();
+        for url in [
+            format!("https://127.0.0.1:{}/", closed_port),
+            "http://127.0.0.1:1/".to_string(),
+        ] {
+            let status = analyze_failed_crawl(&url);
+            let codes: Vec<String> = status
+                .get_summary()
+                .get_items()
+                .iter()
+                .map(|item| item.apl_code.clone())
+                .collect();
+            assert_eq!(codes, vec!["analysis-manager-error".to_string()], "{url}");
+        }
+    }
+
+    #[test]
+    fn an_unreachable_host_is_not_reported_as_a_probe_limit() {
+        let closed_port = std::net::TcpListener::bind("127.0.0.1:0")
+            .and_then(|listener| listener.local_addr())
+            .expect("a free port")
+            .port();
+        let mut budget =
+            tls_probe::ProbeBudget::new(tls_probe::MAX_CIPHER_PROBE_HANDSHAKES, tls_probe::MAX_CIPHER_PROBE_TIME);
+        let probe = tls_probe::probe_weak_cipher_suites("127.0.0.1", closed_port, &[0x0303], &mut budget);
+        let status = empty_status();
+        let mut table = HashMap::new();
+        report_cipher_suites(&probe, &status, &mut table);
+        assert_eq!(
+            table["Insecure cipher suites"],
+            "None found (probe could not connect, the list may be incomplete)"
+        );
+    }
 }

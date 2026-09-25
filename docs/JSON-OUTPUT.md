@@ -460,8 +460,8 @@ Provides details about the SSL/TLS certificate of the crawled domain.
 
 | Column | Description |
 |--------|-------------|
-| `info` | The name of the certificate attribute (e.g., `"Issuer"`, `"Subject"`, `"Valid from"`, `"Valid to"`, `"Supported protocols"`, `"RAW certificate output"`, `"RAW protocols output"`). |
-| `value` | The value of the corresponding certificate attribute. Always a string. For multi-line values like raw certificate or protocol output, the entire content is a single string with embedded newlines. |
+| `info` | The name of the certificate attribute: `"Issuer"`, `"Subject"`, `"Subject Alternative Names"`, `"Valid from"`, `"Valid to"`, `"Serial number"`, `"Signature algorithm"`, `"Public key"`, `"SHA-256 fingerprint"`, `"Supported protocols"`, `"Insecure cipher suites"`, `"Without forward secrecy"`, `"Trust"`, `"Errors"`. |
+| `value` | The value of the corresponding certificate attribute. Always a string. For multi-line values like raw certificate or protocol output, the entire content is a single string with embedded newlines. `"Insecure cipher suites"` and `"Without forward secrecy"` list one suite per line (e.g. `"TLS_RSA_WITH_3DES_EDE_CBC_SHA (TLSv1.0, TLSv1.2)"`), preceded by a note line ending with `:` when the probe was cut short, or hold `"None"` / `"None found (…)"`. |
 
 ### 5.6. `fastest-urls` (TOP fastest URLs)
 
