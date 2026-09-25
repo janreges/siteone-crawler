@@ -3367,7 +3367,9 @@ const PNG_1X1: [u8; 68] = [
 
 /// #55: with --offline-export-preserve-url-structure an image on an extension-less URL (/photo) is
 /// stored in the page layout (photo/index.html), so the original-URL copy serves it at /photo. The
-/// markdown export must keep its bytes there instead of converting it to an empty photo/index.md.
+/// markdown export keeps its bytes instead of converting it to an empty photo/index.md, in a file with
+/// the extension of its content type (photo/index.png, logo/index.svg), so a Markdown viewer shows it:
+/// an SVG image is not shown from a file named .html.
 #[test]
 fn preserve_url_structure_keeps_extensionless_images_intact() {
     let tmp = TempDir::new("preserve-extensionless-image");
@@ -3375,13 +3377,24 @@ fn preserve_url_structure_keeps_extensionless_images_intact() {
         Route {
             path: "/",
             headers: vec![("Content-Type", "text/html; charset=utf-8".to_string())],
-            body: br#"<html><head><title>Home</title></head><body><h1>Home</h1><img src="/photo" alt="Photo"></body></html>"#
+            body: br#"<html><head><title>Home</title></head><body><h1>Home</h1><img src="/photo" alt="Photo"><a href="/icons/">Icons</a></body></html>"#
                 .to_vec(),
         },
         Route {
             path: "/photo",
             headers: vec![("Content-Type", "image/png".to_string())],
             body: PNG_1X1.to_vec(),
+        },
+        Route {
+            path: "/icons/",
+            headers: vec![("Content-Type", "text/html; charset=utf-8".to_string())],
+            body: br#"<html><head><title>Icons</title></head><body><h1>Icons</h1><img src="/logo" alt="Logo"></body></html>"#
+                .to_vec(),
+        },
+        Route {
+            path: "/logo",
+            headers: vec![("Content-Type", "image/svg+xml".to_string())],
+            body: SVG_LOGO.to_vec(),
         },
     ]);
     let export = tmp.path.join("offline");
@@ -3414,17 +3427,27 @@ fn preserve_url_structure_keeps_extensionless_images_intact() {
         PNG_1X1,
         "offline {src}"
     );
-    let index_md = std::fs::read_to_string(markdown.join("index.md")).expect("index.md");
-    let image = regex::Regex::new(r"!\[Photo\]\(([^)]+)\)")
-        .unwrap()
-        .captures(&index_md)
-        .expect("an image in index.md")[1]
-        .to_string();
-    assert_eq!(
-        std::fs::read(markdown.join(&image)).expect("the markdown image"),
-        PNG_1X1,
-        "markdown {image}"
-    );
+    for (page, alt, file, bytes) in [
+        ("index.md", "Photo", "photo/index.png", &PNG_1X1[..]),
+        ("icons/index.md", "Logo", "../logo/index.svg", SVG_LOGO),
+    ] {
+        let page_md = std::fs::read_to_string(markdown.join(page)).expect("the markdown page");
+        let image = regex::Regex::new(&format!(r"!\[{alt}\]\(([^)]+)\)"))
+            .unwrap()
+            .captures(&page_md)
+            .unwrap_or_else(|| panic!("an image in {page}: {page_md}"))[1]
+            .to_string();
+        assert_eq!(image, file, "{page}");
+        let stored = markdown.join(page).parent().expect("page directory").join(&image);
+        assert_eq!(
+            std::fs::read(&stored).expect("the markdown image"),
+            bytes,
+            "markdown {image}"
+        );
+    }
     assert_eq!(dangling_references(&export), Vec::<String>::new(), "offline export");
     assert_eq!(dangling_references(&markdown), Vec::<String>::new(), "markdown export");
 }
+
+const SVG_LOGO: &[u8] =
+    br#"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="red"/></svg>"#;

@@ -3029,7 +3029,7 @@ pub fn get_options() -> Options {
             ),
             CrawlerOption::new(
                 "--offline-export-preserve-url-structure", None, "offlineExportPreserveUrlStructure", OptionType::Bool, false,
-                "Preserve the original URL path structure. E.g. /about is stored as about/index.html instead of about.html and links point to that file. Useful for web server deployment. The markdown export uses the same layout (about/index.md).",
+                "Preserve the original URL path structure. E.g. /about is stored as about/index.html instead of about.html and links point to that file. Useful for web server deployment. The markdown export uses the same layout (about/index.md; an extension-less image gets the extension of its content type, e.g. logo/index.svg).",
                 Some("false"), false, false, None,
             ),
             CrawlerOption::new(

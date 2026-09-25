@@ -9,6 +9,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
+use once_cell::sync::Lazy;
 use regex::Regex;
 
 use crate::content_processor::manager::ContentProcessorManager;
@@ -51,6 +52,10 @@ pub struct MarkdownExporter {
     content_processor_manager: Option<Arc<Mutex<ContentProcessorManager>>>,
     /// Maps URL -> relative file path for successfully exported files
     exported_file_paths: HashMap<String, String>,
+    /// With `preserve_url_structure`: the extension of the content type of each extension-less image,
+    /// by the page-layout file path it would get (photo/index.html → png). Such an image is stored,
+    /// and referenced, as photo/index.png: a Markdown viewer does not show an SVG named .html (#55)
+    image_extensions: HashMap<String, String>,
 }
 
 impl Default for MarkdownExporter {
@@ -79,6 +84,7 @@ impl MarkdownExporter {
             initial_url: String::new(),
             content_processor_manager: None,
             exported_file_paths: HashMap::new(),
+            image_extensions: HashMap::new(),
         }
     }
 
@@ -205,10 +211,11 @@ impl MarkdownExporter {
             };
 
         // Build store file path
-        let relative_path = self.get_relative_file_path_for_file_by_url(visited_url, status);
-        let sanitized_path = OfflineUrlConverter::sanitize_file_path(&relative_path, false);
-        // Path traversal protection: strip "../" sequences from sanitized path
-        let sanitized_path = sanitized_path.replace("../", "").replace("..\\", "");
+        let sanitized_path = self.get_store_file_path(visited_url, status);
+        let sanitized_path = match self.image_extensions.get(&sanitized_path) {
+            Some(extension) => format!("{}{}", &sanitized_path[..sanitized_path.len() - 4], extension),
+            None => sanitized_path,
+        };
         let store_file_path = format!("{}/{}", export_dir, sanitized_path);
 
         // Create directory structure
@@ -293,7 +300,7 @@ impl MarkdownExporter {
             }
 
             // Normalize the markdown file
-            self.normalize_markdown_file(&md_file_path);
+            self.normalize_markdown_file(&md_file_path, &sanitized_path);
         }
 
         // Record the mapping — for HTML files, use the .md path
@@ -308,15 +315,47 @@ impl MarkdownExporter {
         Ok(())
     }
 
-    /// Normalize a markdown file after conversion from HTML.
-    fn normalize_markdown_file(&self, md_file_path: &str) {
+    /// Normalize a markdown file after conversion from HTML (stored as `page_path`).
+    fn normalize_markdown_file(&self, md_file_path: &str, page_path: &str) {
         let md_content = match fs::read_to_string(md_file_path) {
             Ok(content) => content,
             Err(_) => return,
         };
 
+        let md_content = self.lead_references_to_image_files(&md_content, page_path);
         let normalized = self.normalize_markdown_content(&md_content, self.markdown_export_directory.is_some());
         let _ = fs::write(md_file_path, &normalized);
+    }
+
+    /// References of the page stored as `page_path` to an extension-less image lead to the file it is
+    /// stored in, named with the extension of its content type (see `image_extensions`).
+    fn lead_references_to_image_files(&self, content: &str, page_path: &str) -> String {
+        static RE_REFERENCE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\]\(([^)\s]+)\)").unwrap());
+        if self.image_extensions.is_empty() {
+            return content.to_string();
+        }
+        let page_directory = page_path.rfind('/').map_or("", |i| &page_path[..=i]);
+        RE_REFERENCE
+            .replace_all(content, |caps: &regex::Captures| {
+                let reference = &caps[1];
+                let (path, rest) = reference.split_at(reference.find(['#', '?']).unwrap_or(reference.len()));
+                let joined = format!("{}{}", page_directory, path);
+                let mut segments: Vec<&str> = Vec::new();
+                for segment in joined.split('/') {
+                    match segment {
+                        ".." => {
+                            segments.pop();
+                        }
+                        "." | "" => {}
+                        segment => segments.push(segment),
+                    }
+                }
+                match self.image_extensions.get(&segments.join("/")) {
+                    Some(extension) => format!("]({}{}{})", &path[..path.len() - 4], extension, rest),
+                    None => caps[0].to_string(),
+                }
+            })
+            .into_owned()
     }
 
     /// Normalize markdown content after conversion from HTML.
@@ -920,6 +959,15 @@ impl MarkdownExporter {
         result
     }
 
+    /// Relative path the visited URL is stored as: sanitized, with "../" sequences stripped (path
+    /// traversal protection).
+    fn get_store_file_path(&self, visited_url: &VisitedUrl, status: &Status) -> String {
+        let relative_path = self.get_relative_file_path_for_file_by_url(visited_url, status);
+        OfflineUrlConverter::sanitize_file_path(&relative_path, false)
+            .replace("../", "")
+            .replace("..\\", "")
+    }
+
     /// Get relative file path for storing a visited URL.
     fn get_relative_file_path_for_file_by_url(&self, visited_url: &VisitedUrl, status: &Status) -> String {
         let initial_url = self
@@ -1029,6 +1077,20 @@ impl Exporter for MarkdownExporter {
             })
             .collect();
 
+        // With --offline-export-preserve-url-structure an extension-less image would be stored in the
+        // page layout (photo/index.html): it gets the extension of its content type (#55)
+        if self.preserve_url_structure {
+            self.image_extensions = exported_urls
+                .iter()
+                .filter(|u| OfflineUrlConverter::is_stored_as_directory_index(&ParsedUrl::parse(&u.url, None)))
+                .filter_map(|u| {
+                    let extension = image_extension(u.content_type_header.as_deref()?)?;
+                    let path = self.get_store_file_path(u, status);
+                    path.ends_with(".html").then_some((path, extension))
+                })
+                .collect();
+        }
+
         // Store all allowed URLs
         for exported_url in &exported_urls {
             if Self::is_valid_url(&exported_url.url) && self.should_be_url_stored(exported_url) {
@@ -1101,6 +1163,19 @@ impl Exporter for MarkdownExporter {
 
         Ok(())
     }
+}
+
+/// File extension of an image by its Content-Type (`image/svg+xml` → `svg`); None for other types.
+fn image_extension(content_type: &str) -> Option<String> {
+    let subtype = content_type.split(';').next()?.trim().to_ascii_lowercase();
+    let extension = match subtype.strip_prefix("image/")? {
+        "svg+xml" => "svg",
+        "jpeg" | "pjpeg" => "jpg",
+        "x-icon" | "vnd.microsoft.icon" => "ico",
+        other if !other.is_empty() && other.chars().all(|c| c.is_ascii_alphanumeric()) => other,
+        _ => return None,
+    };
+    Some(extension.to_string())
 }
 
 /// Extract regex pattern from a delimited string.
@@ -1251,8 +1326,9 @@ mod tests {
 
     #[test]
     fn image_sources_keep_their_html_file_name() {
-        // #55: with --offline-export-preserve-url-structure an extension-less image is stored as
-        // photo/index.html; it is not converted, so its reference must not become photo/index.md
+        // #55: with --offline-export-preserve-url-structure an extension-less image without an image
+        // content type is stored as photo/index.html; it is not converted, so its reference must not
+        // become photo/index.md
         let exporter = MarkdownExporter::new();
         let result = normalize(
             &exporter,
@@ -1261,6 +1337,40 @@ mod tests {
         assert!(result.contains("![Photo](photo/index.html)"), "{result:?}");
         assert!(result.contains("![Logo](logo/index.html)"), "{result:?}");
         assert!(result.contains("[About](about/index.md#team)"), "{result:?}");
+    }
+
+    #[test]
+    fn extensionless_images_are_named_by_their_content_type() {
+        assert_eq!(image_extension("image/svg+xml").as_deref(), Some("svg"));
+        assert_eq!(image_extension("image/PNG; charset=binary").as_deref(), Some("png"));
+        assert_eq!(image_extension("image/jpeg").as_deref(), Some("jpg"));
+        assert_eq!(image_extension("text/html; charset=utf-8"), None);
+    }
+
+    #[test]
+    fn references_to_extensionless_images_lead_to_their_image_files() {
+        // #55: with --offline-export-preserve-url-structure /logo (image/svg+xml) is stored as
+        // logo/index.svg instead of logo/index.html
+        let mut exporter = MarkdownExporter::new();
+        exporter
+            .image_extensions
+            .insert("logo/index.html".to_string(), "svg".to_string());
+        let page = "![Logo](../logo/index.html) [Logo file](../logo/index.html#top) \
+[![Logo](../logo/index.html)](../about/index.html) [Home](../index.html)";
+        assert_eq!(
+            exporter.lead_references_to_image_files(page, "icons/index.html"),
+            "![Logo](../logo/index.svg) [Logo file](../logo/index.svg#top) \
+[![Logo](../logo/index.svg)](../about/index.html) [Home](../index.html)"
+        );
+        assert_eq!(
+            exporter.lead_references_to_image_files("![Logo](logo/index.html)", "index.html"),
+            "![Logo](logo/index.svg)"
+        );
+        // blog/logo/index.html is another file
+        assert_eq!(
+            exporter.lead_references_to_image_files("[Logo](logo/index.html)", "blog/index.html"),
+            "[Logo](logo/index.html)"
+        );
     }
 
     // --- Tests for d2f9e51: preserve heading markers when trimming ---
