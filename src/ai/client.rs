@@ -329,7 +329,7 @@ impl AiClient {
                     }
 
                     let text = provider::parse_content(self.config.provider, &json)
-                        .ok_or_else(|| CrawlerError::Other("AI response had no content".to_string()))?;
+                        .ok_or_else(|| CrawlerError::Other(no_content_message(self.config.provider, &json)))?;
 
                     let completion = AiCompletion {
                         text,
@@ -507,6 +507,14 @@ fn is_structured_output_unsupported(message: &str) -> bool {
     mentions_schema && rejects_capability
 }
 
+/// The error text for a response without content, quoting the model's refusal when it gave one.
+fn no_content_message(provider: Provider, json: &serde_json::Value) -> String {
+    match provider::parse_refusal(provider, json) {
+        Some(refusal) => format!("AI response had no content (refusal: {})", snippet(&refusal)),
+        None => "AI response had no content".to_string(),
+    }
+}
+
 fn snippet(s: &str) -> String {
     let t = s.trim();
     // Truncate by characters, not bytes, so a multibyte char (e.g. non-ASCII error
@@ -630,6 +638,21 @@ mod tests {
         // Older builds stored "not reported" as 0/0.
         let hit = client.get_cached("ab0000").expect("an old record loads");
         assert_eq!(hit.usage, Usage::default());
+    }
+
+    #[test]
+    fn missing_content_error_quotes_the_refusal() {
+        let refused =
+            serde_json::json!({"choices": [{"message": {"content": null, "refusal": "I can't help with that."}}]});
+        assert_eq!(
+            no_content_message(Provider::OpenAi, &refused),
+            "AI response had no content (refusal: I can't help with that.)"
+        );
+        let empty = serde_json::json!({"choices": [{"message": {}}]});
+        assert_eq!(
+            no_content_message(Provider::OpenAi, &empty),
+            "AI response had no content"
+        );
     }
 
     #[test]

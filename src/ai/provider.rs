@@ -403,16 +403,25 @@ fn count(v: &Value, key: &str) -> Option<u64> {
     (count <= MAX_COUNT).then_some(count)
 }
 
-/// Extract the assistant's text content from a provider-native response.
+/// Extract the assistant's text content from a provider-native response. OpenAI-compatible
+/// content may be a string or an array of parts (the text parts are joined); Gemini thought parts
+/// are reasoning, not content.
 pub fn parse_content(provider: Provider, resp: &Value) -> Option<String> {
     match provider {
-        Provider::OpenAi | Provider::OpenAiCompatible => resp
-            .get("choices")?
-            .get(0)?
-            .get("message")?
-            .get("content")?
-            .as_str()
-            .map(|s| s.to_string()),
+        Provider::OpenAi | Provider::OpenAiCompatible => {
+            match resp.get("choices")?.get(0)?.get("message")?.get("content")? {
+                Value::String(text) => Some(text.clone()),
+                Value::Array(parts) => {
+                    let texts: Vec<&str> = parts
+                        .iter()
+                        .filter(|p| matches!(p.get("type").and_then(Value::as_str), None | Some("text")))
+                        .filter_map(|p| p.get("text").and_then(Value::as_str))
+                        .collect();
+                    (!texts.is_empty()).then(|| texts.concat())
+                }
+                _ => None,
+            }
+        }
         Provider::Anthropic => {
             let blocks = resp.get("content")?.as_array()?;
             let text: String = blocks
@@ -424,20 +433,102 @@ pub fn parse_content(provider: Provider, resp: &Value) -> Option<String> {
             Some(text)
         }
         Provider::Gemini => {
-            let parts = resp
-                .get("candidates")?
-                .get(0)?
-                .get("content")?
-                .get("parts")?
-                .as_array()?;
-            let text: String = parts
+            let text: String = gemini_parts(resp)?
                 .iter()
+                .filter(|p| !is_gemini_thought(p))
                 .filter_map(|p| p.get("text").and_then(|t| t.as_str()))
                 .collect::<Vec<_>>()
                 .join("");
             Some(text)
         }
     }
+}
+
+fn gemini_parts(resp: &Value) -> Option<&Vec<Value>> {
+    resp.get("candidates")?.get(0)?.get("content")?.get("parts")?.as_array()
+}
+
+fn is_gemini_thought(part: &Value) -> bool {
+    part.get("thought").and_then(Value::as_bool) == Some(true)
+}
+
+/// The refusal an OpenAI(-compatible) model returned instead of content, if any.
+pub fn parse_refusal(provider: Provider, resp: &Value) -> Option<String> {
+    match provider {
+        Provider::OpenAi | Provider::OpenAiCompatible => resp
+            .get("choices")?
+            .get(0)?
+            .get("message")?
+            .get("refusal")?
+            .as_str()
+            .map(str::trim)
+            .filter(|refusal| !refusal.is_empty())
+            .map(str::to_string),
+        Provider::Anthropic | Provider::Gemini => None,
+    }
+}
+
+/// Character count of the reasoning/thinking text a response carries, None when it has none:
+/// `message.reasoning` (vLLM >= 0.10), `message.reasoning_content` (DeepSeek, older vLLM, SGLang)
+/// or inline `<think>...</think>` in the content (MiniMax, Qwen without a reasoning parser);
+/// Anthropic `thinking` blocks; Gemini thought parts. Only the count is used (the telemetry shows
+/// that reasoning happened even when the provider does not count its tokens); the text is never
+/// kept.
+pub fn parse_reasoning(provider: Provider, resp: &Value) -> Option<u64> {
+    let chars = match provider {
+        Provider::OpenAi | Provider::OpenAiCompatible => {
+            let message = resp.get("choices")?.get(0)?.get("message")?;
+            ["reasoning", "reasoning_content"]
+                .iter()
+                .filter_map(|key| message.get(key).and_then(Value::as_str))
+                .map(text_chars)
+                .find(|&chars| chars > 0)
+                .or_else(|| parse_content(provider, resp).map(|content| inline_think_chars(&content)))
+                .unwrap_or(0)
+        }
+        Provider::Anthropic => resp
+            .get("content")?
+            .as_array()?
+            .iter()
+            .filter(|b| b.get("type").and_then(Value::as_str) == Some("thinking"))
+            .filter_map(|b| b.get("thinking").and_then(Value::as_str))
+            .map(text_chars)
+            .sum(),
+        Provider::Gemini => gemini_parts(resp)?
+            .iter()
+            .filter(|p| is_gemini_thought(p))
+            .filter_map(|p| p.get("text").and_then(Value::as_str))
+            .map(text_chars)
+            .sum(),
+    };
+    (chars > 0).then_some(chars)
+}
+
+fn text_chars(text: &str) -> u64 {
+    text.trim().chars().count() as u64
+}
+
+/// Characters inside `<think>...</think>` blocks, including an unterminated trailing `<think>`
+/// (the same blocks `normalize::strip_think` removes).
+fn inline_think_chars(content: &str) -> u64 {
+    const OPEN: &str = "<think>";
+    const CLOSE: &str = "</think>";
+    let mut chars = 0;
+    let mut rest = content;
+    while let Some(start) = rest.find(OPEN) {
+        let inner = &rest[start + OPEN.len()..];
+        match inner.find(CLOSE) {
+            Some(end) => {
+                chars += text_chars(&inner[..end]);
+                rest = &inner[end + CLOSE.len()..];
+            }
+            None => {
+                chars += text_chars(inner);
+                break;
+            }
+        }
+    }
+    chars
 }
 
 /// Extract why generation stopped. Callers use length/token-limit reasons as a hard parse failure:
@@ -1079,6 +1170,279 @@ mod tests {
     fn parse_gemini_content() {
         let resp = json!({"candidates":[{"content":{"parts":[{"text":"x"},{"text":"y"}]}}]});
         assert_eq!(parse_content(Provider::Gemini, &resp).as_deref(), Some("xy"));
+    }
+
+    #[test]
+    fn openai_content_parts_are_joined() {
+        let resp = json!({"choices": [{"message": {"content": [
+            {"type": "text", "text": "{\"a\":"},
+            {"type": "image_url", "image_url": {"url": "http://x"}},
+            {"type": "text", "text": "1}"}
+        ]}}]});
+        assert_eq!(
+            parse_content(Provider::OpenAiCompatible, &resp).as_deref(),
+            Some("{\"a\":1}")
+        );
+        let no_text = json!({"choices": [{"message": {"content": [{"type": "image_url"}]}}]});
+        assert_eq!(parse_content(Provider::OpenAi, &no_text), None);
+    }
+
+    #[test]
+    fn refusal_without_content() {
+        let resp = json!({"choices": [{"message": {"content": null, "refusal": "I can't help with that."}}]});
+        assert_eq!(parse_content(Provider::OpenAi, &resp), None);
+        assert_eq!(
+            parse_refusal(Provider::OpenAi, &resp).as_deref(),
+            Some("I can't help with that.")
+        );
+        assert_eq!(
+            parse_refusal(Provider::OpenAi, &fixture("openai")),
+            None,
+            "refusal: null"
+        );
+    }
+
+    #[test]
+    fn reasoning_text_of_every_captured_runtime() {
+        // Character counts of the trimmed reasoning text in the fixture files.
+        let cases = [
+            ("vllm-qwen-think", Provider::OpenAiCompatible, Some(148)), // message.reasoning
+            ("vllm-qwen-nothink", Provider::OpenAiCompatible, None),    // reasoning: null
+            ("vllm-deepseek", Provider::OpenAiCompatible, Some(148)),
+            ("deepseek", Provider::OpenAiCompatible, Some(77)), // message.reasoning_content
+            ("anthropic", Provider::Anthropic, Some(123)),      // "thinking" block
+            ("minimax", Provider::OpenAiCompatible, Some(108)), // inline <think> in the content
+            ("openai", Provider::OpenAi, None),
+            ("gemini", Provider::Gemini, None),
+        ];
+        for (name, provider, expected) in cases {
+            assert_eq!(parse_reasoning(provider, &fixture(name)), expected, "{name}");
+        }
+    }
+
+    #[test]
+    fn inline_think_blocks_count_their_inner_text() {
+        let content = |text: &str| json!({"choices": [{"message": {"content": text}}]});
+        let reasoning = |text: &str| parse_reasoning(Provider::OpenAiCompatible, &content(text));
+        assert_eq!(reasoning("<think>ab</think>X<think>čd</think>Y"), Some(4));
+        assert_eq!(reasoning("<think>cut off mid-thou"), Some(16), "unterminated");
+        assert_eq!(reasoning("<think> \n </think>{}"), None, "blank");
+        assert_eq!(reasoning("{\"ok\":true}"), None);
+    }
+
+    #[test]
+    fn gemini_thought_parts_are_reasoning_not_content() {
+        let resp = json!({"candidates": [{"content": {"parts": [
+            {"text": "Let me think.", "thought": true},
+            {"text": "OK"}
+        ]}}]});
+        assert_eq!(parse_content(Provider::Gemini, &resp).as_deref(), Some("OK"));
+        assert_eq!(parse_reasoning(Provider::Gemini, &resp), Some(13));
+    }
+
+    /// xorshift64: a deterministic pseudo-random sequence without a new dependency.
+    struct Rng(u64);
+
+    impl Rng {
+        fn next(&mut self) -> u64 {
+            self.0 ^= self.0 << 13;
+            self.0 ^= self.0 >> 7;
+            self.0 ^= self.0 << 17;
+            self.0
+        }
+
+        fn pick<'a, T>(&mut self, items: &'a [T]) -> &'a T {
+            &items[(self.next() % items.len() as u64) as usize]
+        }
+    }
+
+    /// Keys of every response shape we parse, so random values often hit the parsed paths.
+    const KEYS: &[&str] = &[
+        "usage",
+        "choices",
+        "message",
+        "content",
+        "reasoning",
+        "reasoning_content",
+        "refusal",
+        "text",
+        "type",
+        "thinking",
+        "thought",
+        "parts",
+        "candidates",
+        "usageMetadata",
+        "prompt_tokens",
+        "completion_tokens",
+        "prompt_tokens_details",
+        "completion_tokens_details",
+        "reasoning_tokens",
+        "cached_tokens",
+        "prompt_cache_hit_tokens",
+        "input_tokens",
+        "output_tokens",
+        "cache_creation_input_tokens",
+        "cache_read_input_tokens",
+        "output_tokens_details",
+        "input_tokens_details",
+        "thinking_tokens",
+        "promptTokenCount",
+        "candidatesTokenCount",
+        "totalTokenCount",
+        "thoughtsTokenCount",
+        "cachedContentTokenCount",
+        "prompt_eval_count",
+        "eval_count",
+        "tokens_evaluated",
+        "tokens_predicted",
+        "finish_reason",
+        "stop_reason",
+        "finishReason",
+        "error",
+        "base_resp",
+        "status_code",
+        "status_msg",
+        "x",
+    ];
+
+    fn random_json(rng: &mut Rng, depth: u32) -> Value {
+        let kind = if depth >= 5 { rng.next() % 4 } else { rng.next() % 6 };
+        match kind {
+            0 => rng
+                .pick(&[
+                    json!(null),
+                    json!(true),
+                    json!(0),
+                    json!(-1),
+                    json!(12.5),
+                    json!(-0.0),
+                    json!(1e300),
+                    json!(u64::MAX),
+                    json!(i64::MIN),
+                    json!(9_007_199_254_740_993u64),
+                ])
+                .clone(),
+            1 => json!(rng.next() >> (rng.next() % 64)),
+            2 | 3 => json!(*rng.pick(&[
+                "",
+                "text",
+                "<think>",
+                "</think>",
+                "<think>ž</think>{}",
+                "<think>unterminated ž",
+                "stop",
+                "length",
+                "thinking",
+                "12",
+                "\u{1F600}",
+            ])),
+            4 => Value::Array((0..rng.next() % 4).map(|_| random_json(rng, depth + 1)).collect()),
+            _ => Value::Object(
+                (0..rng.next() % 5)
+                    .map(|_| (rng.pick(KEYS).to_string(), random_json(rng, depth + 1)))
+                    .collect(),
+            ),
+        }
+    }
+
+    fn parse_everything(resp: &Value) {
+        for provider in [
+            Provider::OpenAi,
+            Provider::OpenAiCompatible,
+            Provider::Anthropic,
+            Provider::Gemini,
+        ] {
+            let _ = parse_usage(provider, resp);
+            let _ = parse_content(provider, resp);
+            let _ = parse_reasoning(provider, resp);
+            let _ = parse_refusal(provider, resp);
+            let _ = parse_finish_reason(provider, resp);
+            let _ = extract_error(provider, resp);
+        }
+    }
+
+    /// Nothing in response parsing may panic, whatever a provider sends.
+    #[test]
+    fn response_parsing_never_panics() {
+        let mut rng = Rng(0x9E37_79B9_7F4A_7C15);
+        for _ in 0..20_000 {
+            parse_everything(&random_json(&mut rng, 0));
+        }
+
+        let fixtures = [
+            fixture("vllm-qwen-think"),
+            fixture("vllm-qwen-nothink"),
+            fixture("vllm-deepseek"),
+            fixture("openai"),
+            fixture("anthropic"),
+            fixture("gemini"),
+            fixture("minimax"),
+            fixture("deepseek"),
+            serde_json::from_str(include_str!(
+                "../../tests/fixtures/ai-responses/error-anthropic-unknown-model.json"
+            ))
+            .expect("JSON"),
+            serde_json::from_str(include_str!(
+                "../../tests/fixtures/ai-responses/error-openai-unknown-model.json"
+            ))
+            .expect("JSON"),
+            serde_json::from_str(include_str!(
+                "../../tests/fixtures/ai-responses/error-vllm-unknown-model.json"
+            ))
+            .expect("JSON"),
+        ];
+        for resp in fixtures {
+            parse_everything(&resp);
+            // The fixture with one key removed in turn: top level, `usage`, `usageMetadata`,
+            // `choices[0]`, `choices[0].message` and `candidates[0]`.
+            let paths: [&[&str]; 6] = [
+                &[],
+                &["usage"],
+                &["usageMetadata"],
+                &["choices", "0"],
+                &["choices", "0", "message"],
+                &["candidates", "0"],
+            ];
+            for path in paths {
+                let pointer: String = path.iter().map(|segment| format!("/{segment}")).collect();
+                let keys: Vec<String> = match resp.pointer(&pointer).and_then(Value::as_object) {
+                    Some(object) => object.keys().cloned().collect(),
+                    None => continue,
+                };
+                for key in keys {
+                    let mut pruned = resp.clone();
+                    if let Some(object) = pruned.pointer_mut(&pointer).and_then(Value::as_object_mut) {
+                        object.remove(&key);
+                    }
+                    parse_everything(&pruned);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn error_bodies_of_captured_runtimes() {
+        let cases = [
+            (
+                include_str!("../../tests/fixtures/ai-responses/error-anthropic-unknown-model.json"),
+                Provider::Anthropic,
+                "model: no-such-model-xyz",
+            ),
+            (
+                include_str!("../../tests/fixtures/ai-responses/error-openai-unknown-model.json"),
+                Provider::OpenAi,
+                "The model `no-such-model-xyz` does not exist or you do not have access to it.",
+            ),
+            (
+                include_str!("../../tests/fixtures/ai-responses/error-vllm-unknown-model.json"),
+                Provider::OpenAiCompatible,
+                "The model `no-such-model` does not exist.",
+            ),
+        ];
+        for (body, provider, message) in cases {
+            let resp: Value = serde_json::from_str(body).expect("JSON");
+            assert_eq!(extract_error(provider, &resp).as_deref(), Some(message));
+        }
     }
 
     #[test]
