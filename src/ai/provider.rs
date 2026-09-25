@@ -387,8 +387,8 @@ fn openai_strict_schema(schema: &Value) -> Value {
 }
 
 /// Token usage reported by the provider for one response. Every field is None when the response
-/// did not say — "unknown" is never turned into 0.
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
+/// did not say — "unknown" is never turned into 0 (also not in the AI cache, which stores it as is).
+#[derive(Debug, Clone, Copy, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Usage {
     /// All prompt tokens the provider processed (for Anthropic: input + cache creation + cache read).
     pub input_tokens: Option<u64>,

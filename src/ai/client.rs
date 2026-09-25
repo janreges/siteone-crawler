@@ -57,18 +57,17 @@ impl AiCompletion {
     }
 }
 
-/// On-disk cache record (content-addressed; never contains the API key). `prompt_tokens` and
-/// `completion_tokens` keep their original meaning and number type, 0/0 meaning "not reported",
-/// so records stay readable in both directions between builds; the newer counts are optional.
+/// On-disk cache record (content-addressed; never contains the API key). `usage` is the usage as
+/// reported, an unknown count as null. `prompt_tokens` and `completion_tokens` keep their original
+/// meaning for older builds, 0/0 meaning "not reported"; a record without `usage`, written by an
+/// older build, is read that way.
 #[derive(Serialize, Deserialize)]
 struct CachedCompletion {
     text: String,
     prompt_tokens: u64,
     completion_tokens: u64,
     #[serde(default)]
-    reasoning_tokens: Option<u64>,
-    #[serde(default)]
-    cached_input_tokens: Option<u64>,
+    usage: Option<Usage>,
     #[serde(default)]
     finish_reason: Option<String>,
 }
@@ -553,16 +552,14 @@ impl AiClient {
         }
         let data = std::fs::read_to_string(&path).ok()?;
         let cached: CachedCompletion = serde_json::from_str(&data).ok()?;
-        let reported = cached.prompt_tokens > 0 || cached.completion_tokens > 0;
-        let usage = if reported {
-            Usage {
+        let usage = match cached.usage {
+            Some(usage) => usage,
+            None if cached.prompt_tokens > 0 || cached.completion_tokens > 0 => Usage {
                 input_tokens: Some(cached.prompt_tokens),
                 output_tokens: Some(cached.completion_tokens),
-                reasoning_tokens: cached.reasoning_tokens,
-                cached_input_tokens: cached.cached_input_tokens,
-            }
-        } else {
-            Usage::default()
+                ..Usage::default()
+            },
+            None => Usage::default(),
         };
         Some(AiCompletion {
             text: cached.text,
@@ -587,8 +584,7 @@ impl AiClient {
             text: completion.text.clone(),
             prompt_tokens: completion.usage.input(),
             completion_tokens: completion.usage.output(),
-            reasoning_tokens: completion.usage.reasoning_tokens,
-            cached_input_tokens: completion.usage.cached_input_tokens,
+            usage: Some(completion.usage),
             finish_reason: completion.finish_reason.clone(),
         };
         if let Ok(json) = serde_json::to_string(&cached) {
@@ -799,6 +795,38 @@ mod tests {
         assert_eq!(hit.usage, usage);
         assert!(hit.from_cache);
         assert_eq!(hit.text, "OK");
+    }
+
+    #[test]
+    fn cache_keeps_unknown_and_reported_zero_counts_apart() {
+        let dir = tempfile::tempdir().expect("a temp dir");
+        let client = client_with_cache(dir.path());
+        for usage in [
+            usage(Some(42), None, None, None),
+            usage(None, Some(19), Some(0), None),
+            usage(Some(0), Some(0), None, Some(0)),
+            Usage::default(),
+        ] {
+            let completion = AiCompletion {
+                text: "OK".to_string(),
+                usage,
+                from_cache: false,
+                finish_reason: None,
+                duration_ms: Some(80),
+            };
+            client.store_cached("abcdef", &completion);
+            let hit = client.get_cached("abcdef").expect("a cache hit");
+            assert_eq!(hit.usage, usage);
+        }
+    }
+
+    fn usage(input: Option<u64>, output: Option<u64>, reasoning: Option<u64>, cached: Option<u64>) -> Usage {
+        Usage {
+            input_tokens: input,
+            output_tokens: output,
+            reasoning_tokens: reasoning,
+            cached_input_tokens: cached,
+        }
     }
 
     #[test]
