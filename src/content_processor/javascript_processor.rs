@@ -45,9 +45,28 @@ static RE_VUEPRESS_BOOTSTRAP: Lazy<Regex> = Lazy::new(|| Regex::new(r"__VUEPRESS
 
 /// A VuePress 1.x or 0.x client bundle, whose `path:"/…"` keys are page and sidebar links (#62). Only a
 /// script that sets the marker counts: VuePress sets it in its client bundle, never in a page, so an HTML
-/// page or a bundle that merely mentions or reads the marker is not one.
+/// page or a bundle that merely mentions or reads the marker is not one, and neither is one that shows
+/// the bootstrap in a string or a comment (the bootstrap must start a statement).
 fn is_vuepress_bundle(content: &str, content_type: ContentTypeId) -> bool {
-    content_type == ContentTypeId::Script && RE_VUEPRESS_BOOTSTRAP.is_match(content)
+    content_type == ContentTypeId::Script
+        && RE_VUEPRESS_BOOTSTRAP
+            .find_iter(content)
+            .any(|bootstrap| starts_statement(&content[..bootstrap.start()]))
+}
+
+/// Does code that continues after `before` start a statement (or an expression within one)? That is
+/// after an optional `window.`, at the start of the script, on a new line, after a comment, or after
+/// a punctuator such as `;`, `,`, `{`, `(` or `=`. Text in a string or a comment follows other text.
+fn starts_statement(before: &str) -> bool {
+    let before = before.strip_suffix("window.").unwrap_or(before);
+    let trimmed = before.trim_end_matches([' ', '\t']);
+    if trimmed.ends_with("*/") {
+        return true;
+    }
+    match trimmed.chars().last() {
+        None | Some('\n' | '\r') => true,
+        Some(c) => ";,{}()=&|?!".contains(c),
+    }
 }
 
 pub struct JavaScriptProcessor {
@@ -330,5 +349,44 @@ mod tests {
         let mut js = original.to_string();
         processor.apply_content_changes_for_offline_version(&mut js, ContentTypeId::Script, &url, false);
         assert_eq!(js, original);
+    }
+
+    #[test]
+    fn bundle_quoting_the_vuepress_bootstrap_keeps_its_route_paths() {
+        // #62: a bundle that shows the bootstrap in a string or a comment (e.g. a docs page compiled
+        // into JS) does not run it, so it is not a VuePress client bundle.
+        let processor = JavaScriptProcessor::new(make_config());
+        let url = ParsedUrl::parse("https://example.com/js/docs.js", None);
+        for example in [
+            r#"const example='window.__VUEPRESS__={version:"1.9.9"}';"#,
+            r#"const example="__VUEPRESS_VERSION__ = {version:'0.14.11'}";"#,
+            r#"/* Example: window.__VUEPRESS__={version:"1.9.9"} */"#,
+            "// window.__VUEPRESS__={version:\"1.9.9\"}\n",
+        ] {
+            let original = format!(r#"{example}const routes=[{{path:"/marker-text/",name:"Working route"}}];"#);
+            let mut js = original.clone();
+            processor.apply_content_changes_for_offline_version(&mut js, ContentTypeId::Script, &url, false);
+            assert_eq!(js, original);
+        }
+    }
+
+    #[test]
+    fn vuepress_bootstrap_after_a_statement_boundary_is_recognized() {
+        // The bootstrap as bundlers emit it: after `;`, `,`, `{`, a comment or a line break.
+        let processor = JavaScriptProcessor::new(make_config());
+        let url = ParsedUrl::parse("https://example.com/assets/js/app.f00cc16f.js", None);
+        for prefix in [
+            "var a=1;",
+            "function(e,t,n){",
+            "n.r(t),",
+            "/* harmony import */ ",
+            "import x from 'y'\n\n",
+        ] {
+            let mut js = format!(
+                r#"{prefix}window.__VUEPRESS__ = {{version:"1.9.9",hash:"de4f7cf8"}};const Es=[{{name:"v-1",path:"/guide/"}}];"#
+            );
+            processor.apply_content_changes_for_offline_version(&mut js, ContentTypeId::Script, &url, false);
+            assert!(js.contains(r#"{name:"v-1",href:"#), "{prefix}: {js}");
+        }
     }
 }
