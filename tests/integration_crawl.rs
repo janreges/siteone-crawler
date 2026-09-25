@@ -1460,6 +1460,53 @@ fn progress_interval_keeps_rows_of_failed_urls_on_stdout() {
     );
 }
 
+/// #104: in JSON mode (`--ci --output=json`) failed URLs are named on stderr as they finish, while
+/// successful ones are not and stdout stays one parseable JSON document.
+#[test]
+fn json_progress_names_failed_urls_on_stderr() {
+    let html = |body: &str| format!("<html><head><title>T</title></head><body>{body}</body></html>");
+    let server = RecordingServer::start(vec![
+        Route {
+            path: "/",
+            headers: vec![("Content-Type", "text/html; charset=utf-8".to_string())],
+            body: html(r#"<a href="/ok.html">OK</a> <a href="/boom">Boom</a>"#).into_bytes(),
+        },
+        Route {
+            path: "/ok.html",
+            headers: vec![("Content-Type", "text/html; charset=utf-8".to_string())],
+            body: html("<p>OK</p>").into_bytes(),
+        },
+        Route {
+            path: "/boom",
+            headers: vec![
+                ("Status", "500 Internal Server Error".to_string()),
+                ("Content-Type", "text/html; charset=utf-8".to_string()),
+            ],
+            body: html("<p>Boom</p>").into_bytes(),
+        },
+    ]);
+
+    let output = run_crawler(&[
+        "--config-file=/dev/null",
+        &format!("--url={}", server.url()),
+        "--ci",
+        "--output=json",
+        LOCAL_ANALYZERS,
+        "--http-cache-dir=",
+        "--output-html-report=",
+        "--output-json-file=",
+        "--output-text-file=",
+    ]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let failed: Vec<&str> = stderr.lines().filter(|line| line.starts_with("Failed: ")).collect();
+    assert_eq!(failed.len(), 1, "{stderr}");
+    assert!(failed[0].contains("500") && failed[0].contains("/boom"), "{stderr}");
+    assert!(!stderr.contains("/ok.html"), "successful URLs are not listed: {stderr}");
+    assert!(!stderr.contains('\r'), "{stderr}");
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).expect("stdout is one JSON document");
+    assert_eq!(json["results"].as_array().map(Vec::len), Some(3));
+}
+
 /// #104: `--hide-progress-bar` also hides the `--progress-interval` lines in JSON mode.
 #[test]
 fn hide_progress_bar_suppresses_progress_lines_in_json_mode() {

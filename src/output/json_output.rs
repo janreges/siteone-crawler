@@ -151,14 +151,17 @@ impl Output for JsonOutput {
             results.push(row);
         }
 
-        // `--progress-interval`: one plain stderr line per interval instead of a `\r` redraw per URL.
+        // `--progress-interval`: one plain stderr line per interval instead of a `\r` redraw per URL;
+        // failed URLs are still named as they finish, so a CI log shows what broke.
         if let Some(progress) = self.progress.as_mut() {
             let line = progress.record(status, elapsed_time, progress_status, Instant::now());
-            if let Some(line) = line
-                && !self.hide_progress_bar
-                && self.print_to_output
-            {
-                eprintln!("{line}");
+            if !self.hide_progress_bar && self.print_to_output {
+                if !(0..400).contains(&status) {
+                    eprintln!("Failed: {status_str} {url}");
+                }
+                if let Some(line) = line {
+                    eprintln!("{line}");
+                }
             }
             return;
         }
