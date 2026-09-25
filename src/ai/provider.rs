@@ -416,7 +416,7 @@ impl Usage {
 }
 
 /// Largest token count accepted from a response (2^53, the largest integer a JSON number is
-/// guaranteed to carry exactly).
+/// guaranteed to carry exactly), also for a count summed from several fields.
 const MAX_COUNT: u64 = 1 << 53;
 
 /// A token count at `key` of `v`: a JSON integer, or a finite non-negative float with no
@@ -641,7 +641,9 @@ fn parse_usage_shape(resp: &Value) -> Option<Usage> {
         let (i, o) = (count(u, "input_tokens"), count(u, "output_tokens"));
         if i.is_some() || o.is_some() {
             let cache_read = count(u, "cache_read_input_tokens");
-            let input = i.map(|i| i + count(u, "cache_creation_input_tokens").unwrap_or(0) + cache_read.unwrap_or(0));
+            let input = i
+                .map(|i| i + count(u, "cache_creation_input_tokens").unwrap_or(0) + cache_read.unwrap_or(0))
+                .filter(|&sum| sum <= MAX_COUNT);
             return Some(Usage {
                 input_tokens: input,
                 output_tokens: o,
@@ -662,7 +664,9 @@ fn parse_usage_shape(resp: &Value) -> Option<Usage> {
             let output = match (total, prompt) {
                 // Captures candidates + thoughts on both API and Vertex.
                 (Some(t), Some(p)) if t >= p => Some(t - p),
-                _ if cand.is_some() || thoughts.is_some() => Some(cand.unwrap_or(0) + thoughts.unwrap_or(0)),
+                _ if cand.is_some() || thoughts.is_some() => {
+                    Some(cand.unwrap_or(0) + thoughts.unwrap_or(0)).filter(|&sum| sum <= MAX_COUNT)
+                }
                 _ => None,
             };
             return Some(Usage {
@@ -1064,6 +1068,22 @@ mod tests {
         let resp = json!({"usage": {"input_tokens": 100, "output_tokens": 40}});
         let u = parse_usage(Provider::Anthropic, &resp).unwrap();
         assert_eq!(u, usage(Some(100), Some(40), None, None));
+    }
+
+    #[test]
+    fn a_summed_count_past_the_largest_accepted_one_is_unknown() {
+        let max = 1u64 << 53;
+        let resp = json!({"usage": {"input_tokens": max, "cache_creation_input_tokens": max,
+            "cache_read_input_tokens": 1, "output_tokens": 40}});
+        let u = parse_usage(Provider::Anthropic, &resp).unwrap();
+        assert_eq!(u, usage(None, Some(40), None, Some(1)));
+        let resp = json!({"usageMetadata": {"promptTokenCount": 5, "candidatesTokenCount": max,
+            "thoughtsTokenCount": 1}});
+        let u = parse_usage(Provider::Gemini, &resp).unwrap();
+        assert_eq!(u, usage(Some(5), None, Some(1), None));
+        // At the limit it is still a count.
+        let resp = json!({"usage": {"input_tokens": max - 1, "cache_read_input_tokens": 1, "output_tokens": 40}});
+        assert_eq!(parse_usage(Provider::Anthropic, &resp).unwrap().input_tokens, Some(max));
     }
 
     #[test]

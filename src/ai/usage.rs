@@ -63,22 +63,27 @@ pub fn model_name() -> Option<String> {
     MODEL.lock().ok().and_then(|m| m.clone())
 }
 
-/// Record one completed LLM call under `category` (a human-readable analysis-type label).
-/// `from_cache` calls count as logical completions but contribute no tokens or network time to the
-/// current run: their provider cost was paid in an earlier run.
+/// Adds `n` to `total`, stopping at `u64::MAX`: absurd reported counts must not wrap a total
+/// around or panic.
+fn add(total: &AtomicU64, n: u64) {
+    let _ = total.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |sum| Some(sum.saturating_add(n)));
+}
+
+/// Record one completed LLM call under `category` (a human-readable analysis-type label): a 2xx
+/// response, or a cache hit. `from_cache` calls count as logical completions but contribute no
+/// tokens to the current run: their provider cost was paid in an earlier run.
 /// A call whose `usage` reports neither input nor output tokens is counted as a call without
 /// token data; one without a reasoning count adds nothing to the reasoning total but is counted in
-/// `calls_with_unknown_reasoning`.
-pub fn record(category: &str, usage: &Usage, elapsed_ms: u64, from_cache: bool) {
+/// `calls_with_unknown_reasoning`. The call's time is added by `record_call_time`.
+pub fn record(category: &str, usage: &Usage, from_cache: bool) {
     CALLS.fetch_add(1, Ordering::Relaxed);
     if from_cache {
         CACHE_HITS.fetch_add(1, Ordering::Relaxed);
     } else {
-        PROMPT_TOKENS.fetch_add(usage.input(), Ordering::Relaxed);
-        COMPLETION_TOKENS.fetch_add(usage.output(), Ordering::Relaxed);
-        REASONING_TOKENS.fetch_add(usage.reasoning_tokens.unwrap_or(0), Ordering::Relaxed);
-        CACHED_INPUT_TOKENS.fetch_add(usage.cached_input_tokens.unwrap_or(0), Ordering::Relaxed);
-        NETWORK_TIME_MS.fetch_add(elapsed_ms, Ordering::Relaxed);
+        add(&PROMPT_TOKENS, usage.input());
+        add(&COMPLETION_TOKENS, usage.output());
+        add(&REASONING_TOKENS, usage.reasoning_tokens.unwrap_or(0));
+        add(&CACHED_INPUT_TOKENS, usage.cached_input_tokens.unwrap_or(0));
         if !usage.has_tokens() {
             CALLS_WITHOUT_USAGE.fetch_add(1, Ordering::Relaxed);
         }
@@ -92,12 +97,23 @@ pub fn record(category: &str, usage: &Usage, elapsed_ms: u64, from_cache: bool) 
         if from_cache {
             e.cache_hits += 1;
         } else {
-            e.prompt_tokens += usage.input();
-            e.completion_tokens += usage.output();
-            e.reasoning_tokens += usage.reasoning_tokens.unwrap_or(0);
-            e.cached_input_tokens += usage.cached_input_tokens.unwrap_or(0);
-            e.network_time_ms += elapsed_ms;
+            e.prompt_tokens = e.prompt_tokens.saturating_add(usage.input());
+            e.completion_tokens = e.completion_tokens.saturating_add(usage.output());
+            e.reasoning_tokens = e.reasoning_tokens.saturating_add(usage.reasoning_tokens.unwrap_or(0));
+            e.cached_input_tokens = e
+                .cached_input_tokens
+                .saturating_add(usage.cached_input_tokens.unwrap_or(0));
         }
+    }
+}
+
+/// Record the time of one LLM call that went to the network, however it ended (answer, HTTP error,
+/// timeout, unusable body): from before its first rate-limit wait to its end, retries included.
+pub fn record_call_time(category: &str, elapsed_ms: u64) {
+    add(&NETWORK_TIME_MS, elapsed_ms);
+    if let Ok(mut map) = BY_CATEGORY.lock() {
+        let e = map.entry(category.to_string()).or_default();
+        e.network_time_ms = e.network_time_ms.saturating_add(elapsed_ms);
     }
 }
 
@@ -106,8 +122,8 @@ pub fn record(category: &str, usage: &Usage, elapsed_ms: u64, from_cache: bool) 
 pub fn record_generation(category: &str, output_tokens: u64, duration_ms: u64) {
     if let Ok(mut map) = BY_CATEGORY.lock() {
         let e = map.entry(category.to_string()).or_default();
-        e.timed_output_tokens += output_tokens;
-        e.generation_ms += duration_ms;
+        e.timed_output_tokens = e.timed_output_tokens.saturating_add(output_tokens);
+        e.generation_ms = e.generation_ms.saturating_add(duration_ms);
     }
 }
 
@@ -126,8 +142,8 @@ pub fn categories() -> Vec<(String, CategoryUsage)> {
         .unwrap_or_default();
     v.sort_by(|a, b| {
         let (ta, tb) = (
-            a.1.prompt_tokens + a.1.completion_tokens,
-            b.1.prompt_tokens + b.1.completion_tokens,
+            a.1.prompt_tokens.saturating_add(a.1.completion_tokens),
+            b.1.prompt_tokens.saturating_add(b.1.completion_tokens),
         );
         tb.cmp(&ta).then_with(|| a.0.cmp(&b.0))
     });
@@ -369,11 +385,14 @@ mod tests {
         let _globals = GLOBALS.lock().unwrap_or_else(|e| e.into_inner());
         let category = "test: reasoning and cached";
         let before = snapshot();
-        record(category, &usage(Some(17), Some(37), Some(33), Some(4)), 1200, false);
-        record(category, &usage(Some(19), Some(2), None, Some(0)), 300, false);
-        record(category, &Usage::default(), 100, false);
+        record(category, &usage(Some(17), Some(37), Some(33), Some(4)), false);
+        record_call_time(category, 1200);
+        record(category, &usage(Some(19), Some(2), None, Some(0)), false);
+        record_call_time(category, 300);
+        record(category, &Usage::default(), false);
+        record_call_time(category, 100);
         // A cache hit adds no tokens: they were paid for in an earlier run.
-        record(category, &usage(Some(1000), Some(500), Some(400), Some(900)), 0, true);
+        record(category, &usage(Some(1000), Some(500), Some(400), Some(900)), true);
 
         let d = snapshot().delta_since(before);
         assert_eq!((d.calls, d.cache_hits), (4, 1));
@@ -400,7 +419,6 @@ mod tests {
         record(
             "test: no reasoning",
             &usage(Some(40_079), Some(4_609), None, None),
-            900,
             false,
         );
         let line = breakdown_lines()
@@ -417,8 +435,8 @@ mod tests {
     fn category_line_with_reasoning_and_speed() {
         let _globals = GLOBALS.lock().unwrap_or_else(|e| e.into_inner());
         let category = "test: reasoning and speed";
-        record(category, &usage(Some(17), Some(37), Some(33), None), 1500, false);
-        record(category, &usage(Some(19), Some(2), None, None), 900, false);
+        record(category, &usage(Some(17), Some(37), Some(33), None), false);
+        record(category, &usage(Some(19), Some(2), None, None), false);
         // Generation throughput counts only the timed attempts: 39 tokens in 1.3 s = 30 tok/s.
         record_generation(category, 37, 1000);
         record_generation(category, 2, 300);
@@ -430,6 +448,51 @@ mod tests {
             line,
             "AI tokens — test: reasoning and speed: 2 request(s), input 36 tokens, output 39 tokens, reasoning 33 tokens, avg 30 tok/s"
         );
+    }
+
+    #[test]
+    fn totals_stop_at_the_largest_count_instead_of_overflowing() {
+        let _globals = GLOBALS.lock().unwrap_or_else(|e| e.into_inner());
+        // Every count at the largest value a response may report (2^53): 2^11 such responses
+        // reach 2^64 in each total.
+        let huge = usage(Some(1 << 53), Some(1 << 53), Some(1 << 53), Some(1 << 53));
+        for _ in 0..(1 << 11) + 1 {
+            record("test: huge", &huge, false);
+            record_call_time("test: huge", 1 << 53);
+            record_generation("test: huge", 1 << 53, 1 << 53);
+        }
+        record("test: small", &usage(Some(1), None, None, None), false);
+
+        let s = snapshot();
+        let totals = (
+            s.prompt_tokens,
+            s.completion_tokens,
+            s.reasoning_tokens,
+            s.cached_input_tokens,
+        );
+        assert_eq!(totals, (u64::MAX, u64::MAX, u64::MAX, u64::MAX));
+        let categories = categories();
+        let (_, huge) = categories
+            .iter()
+            .find(|(name, _)| name == "test: huge")
+            .expect("the category");
+        let times = (huge.network_time_ms, huge.timed_output_tokens, huge.generation_ms);
+        assert_eq!(times, (u64::MAX, u64::MAX, u64::MAX));
+        let names: Vec<&String> = categories.iter().map(|(name, _)| name).collect();
+        let (huge_at, small_at) = (
+            names.iter().position(|name| *name == "test: huge"),
+            names.iter().position(|name| *name == "test: small"),
+        );
+        assert!(
+            matches!((huge_at, small_at), (Some(huge), Some(small)) if huge < small),
+            "the biggest first: {names:?}"
+        );
+        let line = breakdown_lines()
+            .into_iter()
+            .find(|line| line.contains("test: huge"))
+            .expect("the category line");
+        assert!(line.contains(&format!("input {}", format_count(u64::MAX))), "{line}");
+        reset();
     }
 
     #[test]

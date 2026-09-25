@@ -205,13 +205,13 @@ in the `analysis` phase. Emitted whenever the run uses AI, also when no request 
 | Field | Type | Meaning |
 |---|---|---|
 | `provider`, `model` | string | As configured. |
-| `calls` | int | Responses with a success (2xx) status, plus cache hits. |
+| `calls` | int | Responses with a success (2xx) status, also an unusable one, plus cache hits. |
 | `cacheHits` | int | Of them answered from the AI cache. Cache hits add no tokens: they were paid for in an earlier run. |
 | `httpAttempts` | int | HTTP attempts, successful or not (the `aiRequest` events that are not cache hits). |
 | `retries` | int | Attempts that repeated an earlier one: transport retries and re-asks after an unusable answer. |
 | `inputTokens`, `outputTokens`, `reasoningTokens`, `cachedInputTokens` | int | Sums over the 2xx responses (the same fields of their `aiRequest` events). |
 | `callsWithoutUsage` | int | 2xx responses that reported no token usage. |
-| `networkMs` | int | Time spent on AI calls, including rate-limit waits and retry backoff. |
+| `networkMs` | int | Time spent on AI calls that went to the network, successful or not (timeouts, HTTP errors), including rate-limit waits and retry backoff. |
 
 ```json
 {"type":"aiUsage","provider":"openai-compatible","model":"qwen3.8","calls":4,"cacheHits":0,"httpAttempts":5,"retries":1,"inputTokens":68,"outputTokens":148,"reasoningTokens":132,"cachedInputTokens":0,"callsWithoutUsage":0,"networkMs":3011}

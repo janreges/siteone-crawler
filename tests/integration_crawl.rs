@@ -3788,6 +3788,75 @@ fn ai_provider_error_is_reported() {
     );
 }
 
+/// The `aiUsage` event of a crawl of a site with `pages` + 1 pages, one AI request at a time.
+fn ai_usage_of(name: &str, pages: usize, responses: Vec<MockResponse>, extra: &[&str]) -> serde_json::Value {
+    let tmp = TempDir::new(&format!("ai-usage-{name}"));
+    let site = tmp.path.join("site");
+    write_site(&site, pages);
+    let server = LocalServer::start(&site);
+    let mock = MockLlm::start(responses);
+    let events = tmp.path.join("events.ndjson");
+    let events_arg = format!("--events-file={}", events.display());
+    let mut args = vec![
+        "--ai-actions=seo",
+        "--ai-max-pages=5",
+        "--ai-max-concurrency=1",
+        &events_arg,
+    ];
+    args.extend(extra);
+    crawl_with_ai(&server, &mock, &args);
+    let text = std::fs::read_to_string(&events).expect("the events file");
+    text.lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).expect("a JSON event"))
+        .find(|event| event["type"] == "aiUsage")
+        .unwrap_or_else(|| panic!("{name}: no aiUsage event in {text}"))
+}
+
+#[test]
+fn ai_usage_counts_the_time_and_answers_of_failed_calls() {
+    let count = |usage: &serde_json::Value, field: &str| usage[field].as_u64().unwrap_or_default();
+    let mut wrong = Vec::new();
+
+    // A timeout: no answer, but a second spent waiting for it.
+    let slow = MockResponse {
+        delay_ms: 2500,
+        ..chat_response(200, qwen_seo_answer())
+    };
+    let usage = ai_usage_of("timeout", 0, vec![slow], &["--ai-timeout=1"]);
+    if (count(&usage, "calls"), count(&usage, "httpAttempts")) != (0, 1) || count(&usage, "networkMs") < 1000 {
+        wrong.push(format!("timeout: {usage}"));
+    }
+
+    // A 2xx answer that is not JSON: a completed call without token usage.
+    let malformed = MockResponse {
+        delay_ms: 200,
+        ..chat_response(200, "<html>upstream response</html>".to_string())
+    };
+    let usage = ai_usage_of("malformed", 0, vec![malformed], &[]);
+    if (count(&usage, "calls"), count(&usage, "callsWithoutUsage")) != (1, 1) || count(&usage, "networkMs") < 200 {
+        wrong.push(format!("malformed: {usage}"));
+    }
+
+    // A success, then an HTTP error: one call with its tokens, and the time of both.
+    let answers = vec![
+        chat_response(200, qwen_seo_answer()),
+        chat_response(
+            404,
+            include_str!("fixtures/ai-responses/error-vllm-unknown-model.json").to_string(),
+        ),
+    ];
+    let usage = ai_usage_of("mixed", 1, answers, &[]);
+    let counts = (
+        count(&usage, "calls"),
+        count(&usage, "httpAttempts"),
+        count(&usage, "inputTokens"),
+    );
+    if counts != (1, 2, 17) || count(&usage, "networkMs") < 200 {
+        wrong.push(format!("mixed: {usage}"));
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
 #[test]
 fn ai_request_that_timed_out_is_not_retried() {
     let tmp = TempDir::new("ai-telemetry-timeout");

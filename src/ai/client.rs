@@ -249,7 +249,7 @@ impl AiClient {
         // One telemetry record per cache hit and per HTTP attempt.
         let base = self.base_record(category);
         if use_cache && let Some(hit) = self.get_cached(&cache_key) {
-            super::usage::record(category, &hit.usage, 0, true);
+            super::usage::record(category, &hit.usage, true);
             telemetry::report(RequestRecord {
                 outcome: RequestOutcome::CacheHit,
                 usage: hit.usage.has_tokens().then_some(hit.usage),
@@ -259,7 +259,6 @@ impl AiClient {
             return Ok(hit);
         }
 
-        let call_start = std::time::Instant::now();
         let headers = header_map(&shaped.headers);
 
         let timeout = Duration::from_secs(self.config.timeout_secs.max(1));
@@ -277,6 +276,10 @@ impl AiClient {
             CrawlerError::Other(message)
         };
 
+        let _call_time = CallTime {
+            category,
+            started: Instant::now(),
+        };
         for attempt in 0..MAX_ATTEMPTS {
             self.wait_for_rate_slot().await;
             super::usage::record_http_attempt(retry_context || attempt > 0);
@@ -346,6 +349,10 @@ impl AiClient {
                     let json: serde_json::Value = match serde_json::from_str(&body_text) {
                         Ok(json) => json,
                         Err(e) => {
+                            // A 2xx answer all the same: a completed call without token usage.
+                            if status.is_success() {
+                                super::usage::record(category, &Usage::default(), false);
+                            }
                             return Err(fail(
                                 record,
                                 format!(
@@ -370,7 +377,7 @@ impl AiClient {
                     // A successful HTTP response may still be a refusal/safety response with no
                     // content. Account for any provider-reported tokens before validating content.
                     if status.is_success() {
-                        super::usage::record(category, &usage, call_start.elapsed().as_millis() as u64, false);
+                        super::usage::record(category, &usage, false);
                     }
 
                     // Non-2xx with a parseable body, or a 200 body carrying a provider error.
@@ -684,6 +691,18 @@ fn header_map(headers: &[(String, String)]) -> HeaderMap {
 
 fn elapsed_ms(since: Instant) -> u64 {
     since.elapsed().as_millis() as u64
+}
+
+/// Adds the time of one AI call to the usage totals when dropped, i.e. however the call ends.
+struct CallTime<'a> {
+    category: &'a str,
+    started: Instant,
+}
+
+impl Drop for CallTime<'_> {
+    fn drop(&mut self) {
+        super::usage::record_call_time(self.category, elapsed_ms(self.started));
+    }
 }
 
 /// A transport error with its causes but without its URL, which may carry credentials.
