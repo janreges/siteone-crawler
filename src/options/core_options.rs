@@ -770,6 +770,17 @@ impl CoreOptions {
                     "--ai-provider=openai-compatible requires --ai-endpoint=URL.".to_string(),
                 ));
             }
+            // The API path is appended to the endpoint as text, so a query or fragment would swallow
+            // it; the value is not quoted, as its query may carry a key.
+            if core
+                .ai_endpoint
+                .as_deref()
+                .is_some_and(|endpoint| endpoint.contains(['?', '#']))
+            {
+                return Err(CrawlerError::Config(
+                    "Option --ai-endpoint must not contain a query string or fragment (the API path is appended to it); pass the API key with --ai-api-key.".to_string(),
+                ));
+            }
             // Listing the models is how a model is chosen, so it needs none.
             if !core.ai_list_models && core.ai_model.as_deref().map(|s| s.trim().is_empty()).unwrap_or(true) {
                 return Err(CrawlerError::Config(
@@ -3630,7 +3641,7 @@ pub fn get_options() -> Options {
             ),
             CrawlerOption::new(
                 "--ai-endpoint", None, "aiEndpoint", OptionType::Url, false,
-                "Base API endpoint URL. Required for `openai-compatible`; optional override for the other providers.",
+                "Base API endpoint URL, without a query string or fragment (the API path is appended to it). Required for `openai-compatible`; optional override for the other providers.",
                 None, true, false, None,
             ),
             CrawlerOption::new(
@@ -4878,6 +4889,32 @@ mod tests {
             "--ai-profile-template=nonsense".to_string(),
         ];
         assert!(parse_argv(&argv).is_err());
+    }
+
+    #[test]
+    fn ai_endpoint_with_a_query_or_fragment_is_rejected_without_quoting_it() {
+        for endpoint in [
+            "http://localhost:8000/v1?api_key=SECRET_SUFFIX",
+            "http://localhost:8000/v1?",
+            "http://localhost:8000/v1#SECRET_SUFFIX",
+        ] {
+            for mode in ["--url=https://example.com", "--ai-check", "--ai-list-models"] {
+                let argv = vec![
+                    "bin".to_string(),
+                    mode.to_string(),
+                    "--ai-provider=openai-compatible".to_string(),
+                    format!("--ai-endpoint={endpoint}"),
+                    "--ai-model=test-model".to_string(),
+                ];
+                let error = parse_argv(&argv).err().map(|e| e.to_string()).unwrap_or_default();
+                assert!(
+                    error.contains("Option --ai-endpoint must not contain a query string or fragment"),
+                    "{endpoint} {mode}: {error:?}"
+                );
+                assert!(error.contains("--ai-api-key"), "{error}");
+                assert!(!error.contains("SECRET_SUFFIX"), "{error}");
+            }
+        }
     }
 
     #[test]

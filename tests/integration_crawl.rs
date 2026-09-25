@@ -4054,10 +4054,9 @@ fn ai_errors_never_carry_endpoint_credentials() {
     }
 }
 
-/// Synthetic credentials: a key long enough to be blanked, an endpoint password and a query token.
+/// Synthetic credentials: a key long enough to be blanked and an endpoint password.
 const KEY_SENTINEL: &str = "sk-KEY_SENTINEL-0001-abcdefghijklmnopqrstuvwxyz";
 const PW_SENTINEL: &str = "PW_SENTINEL_0002";
-const QUERY_SENTINEL: &str = "QUERY_SENTINEL_0003";
 
 /// Every file below `dir`, in subdirectories too.
 fn files_under(dir: &Path) -> Vec<std::path::PathBuf> {
@@ -4077,7 +4076,7 @@ fn files_under(dir: &Path) -> Vec<std::path::PathBuf> {
 fn credential_leaks(case: &str, texts: &[(String, String)]) -> Vec<String> {
     let mut leaks = Vec::new();
     for (source, text) in texts {
-        for secret in [&KEY_SENTINEL[..12], PW_SENTINEL, QUERY_SENTINEL] {
+        for secret in [&KEY_SENTINEL[..12], PW_SENTINEL] {
             if let Some(line) = text.lines().find(|line| line.contains(secret)) {
                 leaks.push(format!("{case}: {secret} in {source}: {line}"));
             }
@@ -4091,7 +4090,7 @@ fn ai_diagnostics_never_carry_credentials() {
     let tmp = TempDir::new("ai-diagnostic-credentials");
     let server = one_page_site(&tmp);
     let echo = format!(
-        r#"{{"error":{{"message":"Proxy rejected http://review:{PW_SENTINEL}@proxy.test/v1?token={QUERY_SENTINEL} for key {KEY_SENTINEL}"}}}}"#
+        r#"{{"error":{{"message":"Proxy rejected http://review:{PW_SENTINEL}@proxy.test/v1 for key {KEY_SENTINEL}"}}}}"#
     );
     let refusal = serde_json::json!({
         "choices": [{"message": {"content": null, "refusal": format!("{}{KEY_SENTINEL}", "x".repeat(180))},
@@ -4107,7 +4106,7 @@ fn ai_diagnostics_never_carry_credentials() {
             401,
             echo.clone(),
             100,
-            format!("http://review:{PW_SENTINEL}@127.0.0.1:{{port}}/v1?token={QUERY_SENTINEL}"),
+            format!("http://review:{PW_SENTINEL}@127.0.0.1:{{port}}/v1"),
             report,
         ),
         (
@@ -4115,7 +4114,7 @@ fn ai_diagnostics_never_carry_credentials() {
             401,
             echo.replace("http://review:", "http://%FFreview:"),
             100,
-            format!("http://%FFreview:{PW_SENTINEL}@127.0.0.1:{{port}}/v1?token={QUERY_SENTINEL}"),
+            format!("http://%FFreview:{PW_SENTINEL}@127.0.0.1:{{port}}/v1"),
             report,
         ),
         // An answer: its events and the AI cache file written for it.
@@ -4124,16 +4123,16 @@ fn ai_diagnostics_never_carry_credentials() {
             200,
             qwen_seo_answer(),
             100,
-            format!("http://review:{PW_SENTINEL}@127.0.0.1:{{port}}/v1?token={QUERY_SENTINEL}"),
+            format!("http://review:{PW_SENTINEL}@127.0.0.1:{{port}}/v1"),
             &[],
         ),
-        // A timeout: the transport error names the request URL, query token included.
+        // A timeout: the transport error names the request URL.
         (
-            "query-timeout",
+            "timeout",
             200,
             qwen_seo_answer(),
             2500,
-            format!("http://127.0.0.1:{{port}}/v1?token={QUERY_SENTINEL}"),
+            format!("http://review:{PW_SENTINEL}@127.0.0.1:{{port}}/v1"),
             report,
         ),
         // A long refusal or non-JSON body quoting the key where the 200-character cut falls.
@@ -5299,7 +5298,7 @@ fn ai_check_failures_are_one_json_object_without_the_key() {
 fn ai_utility_modes_never_print_credentials() {
     // Everything the provider controls repeats the credentials: model ids, names, the reply, the
     // finish reason and the error message.
-    let echoed = format!("{KEY_SENTINEL} {PW_SENTINEL} {QUERY_SENTINEL}");
+    let echoed = format!("{KEY_SENTINEL} {PW_SENTINEL}");
     let models = serde_json::json!({"data": [{"id": format!("model-{echoed}"), "display_name": echoed}]});
     let reply = serde_json::json!({
         "choices": [{"message": {"content": format!("OK {echoed}")}, "finish_reason": "stop"}],
@@ -5309,7 +5308,7 @@ fn ai_utility_modes_never_print_credentials() {
         "choices": [{"message": {"content": "OK"}, "finish_reason": KEY_SENTINEL}],
     });
     let rejected = serde_json::json!({"error": {"message": format!(
-        "Proxy rejected http://review:{PW_SENTINEL}@proxy.test/v1?token={QUERY_SENTINEL} for {KEY_SENTINEL}"
+        "Proxy rejected http://review:{PW_SENTINEL}@proxy.test/v1 for {KEY_SENTINEL}"
     )}});
     let cases = [
         ("list", "--ai-list-models", 200, models.to_string(), 0),
@@ -5329,10 +5328,7 @@ fn ai_utility_modes_never_print_credentials() {
                 body: body.clone(),
                 delay_ms: 0,
             }]);
-            let endpoint = format!(
-                "--ai-endpoint=http://{user}:{PW_SENTINEL}@127.0.0.1:{}/v1?token={QUERY_SENTINEL}",
-                mock.port()
-            );
+            let endpoint = format!("--ai-endpoint=http://{user}:{PW_SENTINEL}@127.0.0.1:{}/v1", mock.port());
             let output = run_crawler(&[
                 "--config-file=/dev/null",
                 "--no-color",
@@ -5436,6 +5432,42 @@ fn ai_utility_modes_never_quote_the_query_of_an_invalid_endpoint() {
         }
     }
     assert!(leaks.is_empty(), "{}", leaks.join("\n"));
+}
+
+#[test]
+fn ai_endpoint_with_a_query_or_fragment_is_a_configuration_error() {
+    const MESSAGE: &str = "Option --ai-endpoint must not contain a query string or fragment";
+    let tmp = TempDir::new("ai-endpoint-query");
+    let server = one_page_site(&tmp);
+    let mock = MockLlm::start(vec![chat_response(200, qwen_seo_answer())]);
+    let mut wrong = Vec::new();
+    for suffix in [format!("?api_key={KEY_SENTINEL}"), format!("#{KEY_SENTINEL}")] {
+        let endpoint = format!("--ai-endpoint={}{suffix}", mock.url());
+        let connection = ["--ai-provider=openai-compatible", &endpoint, "--ai-model=m"];
+        // A crawl: the error, then the help, on stderr.
+        let url = format!("--url={}", server.url());
+        let output = run_crawler(
+            &[
+                &["--config-file=/dev/null", "--no-color", &url, "--ai-actions=seo"],
+                &connection[..],
+            ]
+            .concat(),
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+        if output.status.code() != Some(101) || !stderr.contains(MESSAGE) || stderr.contains(KEY_SENTINEL) {
+            wrong.push(format!("crawl ({suffix}): {:?}\n{stderr}", output.status.code()));
+        }
+        // The utility modes: one JSON answer.
+        for mode in ["--ai-check", "--ai-list-models"] {
+            let (code, answer, stderr) = run_ai_tool(&[&connection[..], &[mode]].concat());
+            let error = answer["error"].as_str().unwrap_or_default();
+            if code != Some(101) || !error.contains(MESSAGE) || (answer.to_string() + &stderr).contains(KEY_SENTINEL) {
+                wrong.push(format!("{mode} ({suffix}): {code:?} {answer}\n{stderr}"));
+            }
+        }
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+    assert!(mock.request_heads().is_empty(), "no AI request is made");
 }
 
 #[test]

@@ -996,7 +996,7 @@ Supported providers: `openai`, `anthropic`, `gemini`, and `openai-compatible` (v
 | Parameter | Description |
 |-----------|-------------|
 | `--ai-provider=<val>` | `openai`, `anthropic`, `gemini`, or `openai-compatible`. Enables the AI features. Default is `openai-compatible`. |
-| `--ai-endpoint=<url>` | Base API endpoint URL. **Required** for `openai-compatible`; optional override for the others. |
+| `--ai-endpoint=<url>` | Base API endpoint URL, without a query string or fragment (the API path is appended to it; pass the key with the `--ai-api-key*` options). **Required** for `openai-compatible`; optional override for the others. |
 | `--ai-model=<val>` | Model name, e.g. `MiniMax-M3`, `gpt-5-mini`, `claude-sonnet-4-6`, `gemini-2.5-pro`. Required when AI is enabled. |
 | `--ai-max-tokens=<int>` | Max output tokens per request. Default `32000`. Auto-mapped to `max_completion_tokens` for OpenAI reasoning models. Raise it further if you enable thinking/reasoning (which consumes output tokens). |
 | `--ai-use-max-completion-tokens` | Force `max_completion_tokens` instead of `max_tokens` (otherwise auto-detected). |
@@ -1004,7 +1004,7 @@ Supported providers: `openai`, `anthropic`, `gemini`, and `openai-compatible` (v
 | `--ai-extra-body=<json>` | JSON object deep-merged into the request body, overriding native fields. See [Thinking / reasoning](#thinking--reasoning) below. |
 | `--ai-synthesis-extra-body=<json>` | Like `--ai-extra-body` but applied ONLY to the final `summary` synthesis call — e.g. to enable thinking/reasoning just for the synthesis. See the `summary` action below. |
 
-**API key (security):** the key is resolved with the following precedence (first match wins). Prefer environment variables so the key never appears in process arguments, shell history, or logs — the crawler redacts `--ai-api-key=...` in the saved command and never serializes the key into JSON output or the response cache. What the crawler prints or writes about AI requests (request lines, errors, events, reports, the `--ai-list-models`/`--ai-check` answers) shows the key and the endpoint's credentials (URL userinfo, query values) as `[redacted]`; a text that repeats a credential shorter than 8 characters is withheld as a whole, since blanking a short credential out of words would spell it back out.
+**API key (security):** the key is resolved with the following precedence (first match wins). Prefer environment variables so the key never appears in process arguments, shell history, or logs — the crawler redacts `--ai-api-key=...` in the saved command and never serializes the key into JSON output or the response cache. What the crawler prints or writes about AI requests (request lines, errors, events, reports, the `--ai-list-models`/`--ai-check` answers) shows the key and the endpoint's credentials (URL userinfo) as `[redacted]`; a text that repeats a credential shorter than 8 characters is withheld as a whole, since blanking a short credential out of words would spell it back out.
 
 1. `--ai-api-key-file=<file>` — read the first line of a file (safest for CI; `chmod 600`).
 2. `--ai-api-key=env:VARNAME` — read the named environment variable (indirection).
