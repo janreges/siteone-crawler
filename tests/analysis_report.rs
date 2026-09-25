@@ -4,7 +4,7 @@
 #[allow(dead_code)]
 mod common;
 
-use common::{LocalServer, TempDir, run_built_crawler};
+use common::{LocalServer, TempDir, run_crawler};
 
 #[test]
 fn technologies_table_reaches_text_json_and_html_outputs() {
@@ -26,7 +26,7 @@ fn technologies_table_reaches_text_json_and_html_outputs() {
     let text_file = tmp.path.join("report.txt");
     let html_file = tmp.path.join("report.html");
 
-    let output = run_built_crawler(&[
+    let output = run_crawler(&[
         "--config-file=/dev/null",
         &format!("--url={}", server.url()),
         "--analyzer-filter-regex=/Technologies/",

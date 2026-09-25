@@ -9,35 +9,15 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-/// Get path to the compiled binary.
-/// Tries release first, falls back to debug.
+/// Path to the binary Cargo built for this test run — never a leftover `target/release` build,
+/// which would make the tests check whatever version happens to be lying there.
 pub fn binary_path() -> PathBuf {
-    let release = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("target")
-        .join("release")
-        .join("siteone-crawler");
-    if release.exists() {
-        return release;
-    }
-    // Fall back to debug build
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("target")
-        .join("debug")
-        .join("siteone-crawler")
+    PathBuf::from(env!("CARGO_BIN_EXE_siteone-crawler"))
 }
 
 /// Run the crawler with given arguments and return Output.
 pub fn run_crawler(args: &[&str]) -> Output {
     Command::new(binary_path())
-        .args(args)
-        .output()
-        .expect("Failed to execute crawler binary")
-}
-
-/// Run the binary Cargo built for this test run. Unlike `run_crawler`, it never picks up a
-/// stale `target/release` build, so it suits tests of behaviour that changed recently.
-pub fn run_built_crawler(args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_siteone-crawler"))
         .args(args)
         .output()
         .expect("Failed to execute crawler binary")
