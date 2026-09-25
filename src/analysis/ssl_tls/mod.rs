@@ -889,6 +889,12 @@ mod tests {
     /// Run the SSL/TLS analyzer the way the analysis manager does after a crawl in which the initial
     /// URL `url` failed to connect (status -1), i.e. without any working URL.
     fn analyze_failed_crawl(url: &str) -> Status {
+        analyze_crawl(url, -1)
+    }
+
+    /// Run the SSL/TLS analyzer the way the analysis manager does after a crawl of the initial URL `url`
+    /// that ended with `status_code`.
+    fn analyze_crawl(url: &str, status_code: i32) -> Status {
         // main() installs the process-wide rustls provider; tests have to do it themselves.
         let _ = rustls::crypto::ring::default_provider().install_default();
         let mut status = empty_status();
@@ -898,7 +904,7 @@ mod tests {
                 String::new(),
                 crate::result::visited_url::SOURCE_INIT_URL,
                 url.to_string(),
-                -1,
+                status_code,
                 0.1,
                 None,
                 crate::types::ContentTypeId::Html,
@@ -1002,6 +1008,136 @@ mod tests {
                 ItemStatus::Critical,
                 "Server accepts insecure cipher suites: TLS_RSA_WITH_3DES_EDE_CBC_SHA (SSLv3).".to_string()
             ))
+        );
+    }
+
+    /// Self-signed test-only certificate (P-256, CN = localhost, valid until 2126) and its key.
+    const TEST_CERT_PEM: &str = "-----BEGIN CERTIFICATE-----
+MIIBmzCCAUGgAwIBAgIUTft+ssdqdRYH9ldqffEtWq1z+pYwCgYIKoZIzj0EAwIw
+FDESMBAGA1UEAwwJbG9jYWxob3N0MCAXDTI2MDkyNTExMDEyNloYDzIxMjYwOTAx
+MTEwMTI2WjAUMRIwEAYDVQQDDAlsb2NhbGhvc3QwWTATBgcqhkjOPQIBBggqhkjO
+PQMBBwNCAARbdUibKu4SHrJVsLioOg3SZc7HFXQzsxIYHSEdrmBFnwHK5IFG5jLN
+GFiGV0V69JkCk1lpG7HotS6CVm+QugK+o28wbTAdBgNVHQ4EFgQU8zQENxxt1xVX
+90xFA6KlxsxVbM0wHwYDVR0jBBgwFoAU8zQENxxt1xVX90xFA6KlxsxVbM0wDwYD
+VR0TAQH/BAUwAwEB/zAaBgNVHREEEzARgglsb2NhbGhvc3SHBH8AAAEwCgYIKoZI
+zj0EAwIDSAAwRQIgEW3JIwa39KbuPdmEHftOjP3jjIeeRWmZVT7oZito/FQCIQDJ
+Srz417j1dit9xQIXJ8+gyakb+X74qJpXlm3MvG9cBQ==
+-----END CERTIFICATE-----
+";
+    const TEST_KEY_PEM: &str = "-----BEGIN PRIVATE KEY-----
+MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgjP12ELaMFqFcab8j
+B98kHp/xr/KIXtd0B26/4Rso+jahRANCAARbdUibKu4SHrJVsLioOg3SZc7HFXQz
+sxIYHSEdrmBFnwHK5IFG5jLNGFiGV0V69JkCk1lpG7HotS6CVm+QugK+
+-----END PRIVATE KEY-----
+";
+
+    /// A server that speaks TLS 1.2/1.3 with secure suites only (rustls) and TLS 1.0 as well, where it
+    /// accepts TLS_ECDHE_RSA_WITH_NULL_SHA (and TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA) and splits its
+    /// ServerHello into two records inside the handshake header. It refuses SSLv3 and TLS 1.1.
+    fn modern_server_with_fragmented_weak_tls10() -> u16 {
+        use rustls::pki_types::pem::PemObject;
+        use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+        use std::io::{Read, Write};
+        let config = std::sync::Arc::new(
+            rustls::ServerConfig::builder_with_provider(std::sync::Arc::new(rustls::crypto::ring::default_provider()))
+                .with_safe_default_protocol_versions()
+                .expect("TLS 1.2 and 1.3")
+                .with_no_client_auth()
+                .with_single_cert(
+                    vec![CertificateDer::from_pem_slice(TEST_CERT_PEM.as_bytes()).expect("certificate")],
+                    PrivateKeyDer::from_pem_slice(TEST_KEY_PEM.as_bytes()).expect("key"),
+                )
+                .expect("server config"),
+        );
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a free port");
+        let port = listener.local_addr().expect("local address").port();
+        std::thread::spawn(move || {
+            for mut stream in listener.incoming().flatten() {
+                let config = config.clone();
+                std::thread::spawn(move || {
+                    let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(5)));
+                    let mut header = [0u8; 5];
+                    if stream.read_exact(&mut header).is_err() {
+                        return;
+                    }
+                    let mut record = header.to_vec();
+                    record.resize(5 + u16::from_be_bytes([header[3], header[4]]) as usize, 0);
+                    if stream.read_exact(&mut record[5..]).is_err() || record.len() < 44 {
+                        return;
+                    }
+                    if record[9..11] == [0x03, 0x03] {
+                        // TLS 1.2 and 1.3 (a TLS 1.3 ClientHello also carries client_version 1.2).
+                        let mut conn = rustls::ServerConnection::new(config).expect("server connection");
+                        let _ = conn.read_tls(&mut record.as_slice());
+                        let processed = conn.process_new_packets();
+                        let _ = conn.write_tls(&mut stream);
+                        if processed.is_ok() {
+                            while conn.is_handshaking() && conn.complete_io(&mut stream).is_ok() {}
+                        }
+                        return;
+                    }
+                    // record(5) + handshake header(4) + client_version(2) + random(32), then the session id
+                    let suites_at = 44 + record[43] as usize;
+                    let suites: Vec<[u8; 2]> = record
+                        .get(suites_at + 2..)
+                        .and_then(|rest| {
+                            rest.get(..u16::from_be_bytes([record[suites_at], record[suites_at + 1]]) as usize)
+                        })
+                        .map(|list| list.chunks_exact(2).map(|pair| [pair[0], pair[1]]).collect())
+                        .unwrap_or_default();
+                    let picked = [[0xC0, 0x10], [0xC0, 0x13]]
+                        .into_iter()
+                        .find(|suite| suites.contains(suite));
+                    let answer = match picked {
+                        Some(suite) if record[9..11] == [0x03, 0x01] => {
+                            // ServerHello: handshake header(4) + version, random, empty session id, suite,
+                            // compression; the first record carries only the first two handshake bytes.
+                            let mut body = vec![0x03, 0x01];
+                            body.extend_from_slice(&[0u8; 32]);
+                            body.push(0);
+                            body.extend_from_slice(&suite);
+                            body.push(0);
+                            let mut answer = vec![0x16, 0x03, 0x01, 0x00, 0x02, 0x02, 0x00];
+                            answer.extend_from_slice(&[0x16, 0x03, 0x01, 0x00, body.len() as u8 + 2]);
+                            answer.extend_from_slice(&[0x00, body.len() as u8]);
+                            answer.extend_from_slice(&body);
+                            answer
+                        }
+                        _ => vec![0x15, 0x03, 0x01, 0x00, 0x02, 0x02, 0x28],
+                    };
+                    let _ = stream.write_all(&answer);
+                });
+            }
+        });
+        port
+    }
+
+    #[test]
+    fn weak_legacy_suites_are_found_when_the_legacy_server_hello_is_split_across_records() {
+        let port = modern_server_with_fragmented_weak_tls10();
+        let status = analyze_crawl(&format!("https://127.0.0.1:{}/", port), 200);
+        let finding = |code: &str| {
+            status
+                .get_summary()
+                .get_items()
+                .iter()
+                .find(|item| item.apl_code == code)
+                .map(|item| (item.status, item.text.clone()))
+        };
+        assert_eq!(
+            finding("ssl-protocol-unsafe"),
+            Some((ItemStatus::Critical, "SSL/TLS protocol TLSv1.0 is unsafe.".to_string()))
+        );
+        assert_eq!(
+            finding("ssl-weak-cipher-suites"),
+            Some((
+                ItemStatus::Critical,
+                "Server accepts insecure cipher suites: TLS_ECDHE_RSA_WITH_NULL_SHA (TLSv1.0).".to_string()
+            ))
+        );
+        assert_eq!(
+            finding("ssl-protocol-tls13").map(|(status, _)| status),
+            Some(ItemStatus::Ok)
         );
     }
 

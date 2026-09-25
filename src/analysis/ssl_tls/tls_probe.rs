@@ -34,12 +34,6 @@ const VERSION_PROBE_SUITES: [u16; 10] = [
     0x0005, // RSA RC4-128-SHA
 ];
 
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) enum ProbeOutcome {
-    Supported,
-    NotSupported,
-}
-
 /// Build a minimal TLS ClientHello record probing exactly `version`
 /// (0x0300 SSLv3, 0x0301 TLS1.0, 0x0302 TLS1.1) with the version-probe suites.
 pub(crate) fn build_client_hello(version: u16, hostname: &str) -> Vec<u8> {
@@ -161,38 +155,17 @@ pub(crate) fn build_client_hello_with_suites(version: u16, hostname: &str, suite
     rec
 }
 
-/// Interpret the first bytes of the server's response. A probe counts as
-/// Supported only when the server replies with a ServerHello echoing exactly
-/// the requested version; an Alert / non-handshake / mismatch / truncation is
-/// NotSupported.
-pub(crate) fn parse_probe_response(buf: &[u8], requested: u16) -> ProbeOutcome {
-    // Need: 5-byte record header + 4-byte handshake header + 2-byte version.
-    if buf.len() < 11 {
-        return ProbeOutcome::NotSupported;
-    }
-    if buf[0] != 0x16 {
-        return ProbeOutcome::NotSupported; // 0x15 alert or anything else
-    }
-    if buf[5] != 0x02 {
-        return ProbeOutcome::NotSupported; // not a ServerHello
-    }
-    let server_version = u16::from_be_bytes([buf[9], buf[10]]);
-    if server_version == requested {
-        ProbeOutcome::Supported
-    } else {
-        ProbeOutcome::NotSupported
-    }
-}
-
 /// Probe a legacy version over a raw TCP socket.
 /// Returns None on a TCP connection failure (host unreachable), otherwise
-/// Some(true/false) for supported/not-supported.
+/// Some(true/false) for supported/not-supported. The version is supported only
+/// when the server answers within PROBE_TIMEOUT with a complete ServerHello
+/// (read like the cipher probes read it, so it may span several records)
+/// echoing exactly `version`.
 pub(crate) fn probe_legacy_version(hostname: &str, port: u16, version: u16) -> Option<bool> {
     let mut sock = match TcpStream::connect(format!("{}:{}", hostname, port)) {
         Ok(s) => s,
         Err(_) => return None,
     };
-    let _ = sock.set_read_timeout(Some(PROBE_TIMEOUT));
     let _ = sock.set_write_timeout(Some(PROBE_TIMEOUT));
 
     let hello = build_client_hello(version, hostname);
@@ -200,26 +173,8 @@ pub(crate) fn probe_legacy_version(hostname: &str, port: u16, version: u16) -> O
         return Some(false);
     }
 
-    // Accumulate at least 11 bytes (enough for record + ServerHello version).
-    let mut buf: Vec<u8> = Vec::with_capacity(64);
-    let mut tmp = [0u8; 512];
-    loop {
-        match sock.read(&mut tmp) {
-            Ok(0) => break,
-            Ok(n) => {
-                buf.extend_from_slice(&tmp[..n]);
-                if buf.len() >= 11 {
-                    break;
-                }
-            }
-            Err(_) => break,
-        }
-    }
-
-    if buf.is_empty() {
-        return Some(false);
-    }
-    Some(parse_probe_response(&buf, version) == ProbeOutcome::Supported)
+    let reply = read_server_hello(&mut sock, Instant::now() + PROBE_TIMEOUT);
+    Some(matches!(reply, Ok(ServerHelloReply::Hello { version: negotiated, .. }) if negotiated == version))
 }
 
 /// Detect a modern version (TLS 1.2 / 1.3) by attempting a version-pinned
@@ -276,14 +231,14 @@ pub(crate) enum ServerHelloReply {
     Hello { version: u16, cipher_suite: u16 },
     /// Not enough bytes yet.
     Incomplete,
-    /// An alert: the offer was refused.
+    /// A fatal alert or close_notify: the offer was refused.
     Refused,
-    /// Neither an alert nor a well-formed ServerHello.
+    /// Neither a valid alert nor a well-formed ServerHello.
     Malformed,
 }
 
 /// Parse the start of a server's answer: an alert, or a ServerHello, which may span several handshake
-/// records (RFC 5246 §6.2.1).
+/// records (RFC 5246 §6.2.1) and may follow warning alerts.
 pub(crate) fn parse_server_hello(buf: &[u8]) -> ServerHelloReply {
     // The handshake bytes of the records read so far; the last record may still be incomplete.
     let mut handshake: Vec<u8> = Vec::new();
@@ -301,12 +256,23 @@ pub(crate) fn parse_server_hello(buf: &[u8]) -> ServerHelloReply {
         if buf.len() < record_at + 5 {
             return ServerHelloReply::Incomplete;
         }
+        let record_len = u16::from_be_bytes([buf[record_at + 3], buf[record_at + 4]]) as usize;
         match buf[record_at] {
             0x16 => {}
-            0x15 if record_at == 0 => return ServerHelloReply::Refused,
+            // An alert before the ServerHello, once it is complete: a fatal one or close_notify refuses the
+            // offer; a warning (e.g. unrecognized_name, which some servers send first) is skipped.
+            0x15 if handshake.is_empty() && record_len == 2 => match buf.get(record_at + 5..record_at + 7) {
+                None => return ServerHelloReply::Incomplete,
+                Some([2, _] | [1, 0]) => return ServerHelloReply::Refused,
+                Some([1, _]) => {
+                    record_at += 7;
+                    continue;
+                }
+                Some(_) => return ServerHelloReply::Malformed,
+            },
             _ => return ServerHelloReply::Malformed,
         }
-        let record_end = record_at + 5 + u16::from_be_bytes([buf[record_at + 3], buf[record_at + 4]]) as usize;
+        let record_end = record_at + 5 + record_len;
         handshake.extend_from_slice(&buf[record_at + 5..record_end.min(buf.len())]);
         record_at = record_end;
     }
@@ -327,12 +293,12 @@ fn parse_server_hello_body(body: &[u8]) -> ServerHelloReply {
     }
 }
 
-/// Read until the answer to a probing ClientHello is decided (the legacy version probe stops after
-/// 11 bytes, which is too early to see the cipher suite). Every read waits at most PROBE_TIMEOUT and
+/// Read until the answer to a probing ClientHello is decided. Every read waits at most PROBE_TIMEOUT and
 /// never past `deadline`, so a server that trickles its answer cannot stretch the per-host budget.
-/// A ServerHello or an alert decides the offer, and so does a connection closed before any answer
-/// (servers without a shared suite often just close it). Silence, a cut-off or a malformed answer
-/// leave it undecided: Err says why.
+/// A ServerHello or a complete fatal alert decides the offer, and so does a connection closed or reset
+/// before any answer: like sslyze and testssl.sh we count it as a refusal, because Windows SChannel
+/// (IIS) and some load balancers reset the connection when no suite is shared. Silence, a cut-off (also
+/// of an alert) or a malformed answer leave it undecided: Err says why.
 fn read_server_hello(sock: &mut TcpStream, deadline: Instant) -> Result<ServerHelloReply, Incomplete> {
     let mut buf: Vec<u8> = Vec::with_capacity(1024);
     let mut chunk = [0u8; 4096];
@@ -567,35 +533,6 @@ mod tests {
         assert!(v3.len() < v10.len(), "sslv3 hello should be shorter (no extensions)");
     }
 
-    #[test]
-    fn parse_supported_when_serverhello_echoes_version() {
-        // record: handshake(0x16) ver 0x0301 len 0x0004 | ServerHello(0x02) len.. server_version 0x0301
-        let resp = [
-            0x16, 0x03, 0x01, 0x00, 0x04, // record header (len value irrelevant to parser)
-            0x02, 0x00, 0x00, 0x00, 0x03, 0x01, // handshake: type, 3-byte len, server_version
-        ];
-        assert_eq!(parse_probe_response(&resp, 0x0301), ProbeOutcome::Supported);
-    }
-
-    #[test]
-    fn parse_not_supported_on_alert() {
-        // Alert record (0x15) => protocol not supported.
-        let resp = [0x15, 0x03, 0x03, 0x00, 0x02, 0x02, 0x46];
-        assert_eq!(parse_probe_response(&resp, 0x0301), ProbeOutcome::NotSupported);
-    }
-
-    #[test]
-    fn parse_not_supported_on_version_mismatch() {
-        // ServerHello echoing a different version than requested.
-        let resp = [0x16, 0x03, 0x03, 0x00, 0x04, 0x02, 0x00, 0x00, 0x00, 0x03, 0x03];
-        assert_eq!(parse_probe_response(&resp, 0x0301), ProbeOutcome::NotSupported);
-    }
-
-    #[test]
-    fn parse_not_supported_on_truncated() {
-        assert_eq!(parse_probe_response(&[0x16, 0x03], 0x0301), ProbeOutcome::NotSupported);
-    }
-
     /// ServerHello captured from 3des.badssl.com: TLS 1.2, TLS_RSA_WITH_3DES_EDE_CBC_SHA, 32-byte
     /// session id, one empty extension.
     const BADSSL_3DES_SERVER_HELLO: [u8; 85] = [
@@ -642,16 +579,21 @@ mod tests {
         }
     }
 
-    /// The captured ServerHello re-framed as two handshake records, split after `at` handshake bytes.
-    fn fragmented_server_hello(at: usize) -> Vec<u8> {
-        let handshake = &BADSSL_3DES_SERVER_HELLO[5..];
+    /// A handshake record re-framed as two records, split after `at` handshake bytes.
+    fn split_record(whole: &[u8], at: usize) -> Vec<u8> {
+        let handshake = &whole[5..];
         let record = |part: &[u8]| {
-            let mut record = vec![0x16, 0x03, 0x03];
+            let mut record = whole[..3].to_vec();
             record.extend_from_slice(&(part.len() as u16).to_be_bytes());
             record.extend_from_slice(part);
             record
         };
         [record(&handshake[..at]), record(&handshake[at..])].concat()
+    }
+
+    /// The captured ServerHello re-framed as two handshake records, split after `at` handshake bytes.
+    fn fragmented_server_hello(at: usize) -> Vec<u8> {
+        split_record(&BADSSL_3DES_SERVER_HELLO, at)
     }
 
     #[test]
@@ -678,9 +620,44 @@ mod tests {
     }
 
     #[test]
-    fn an_alert_is_a_refusal() {
+    fn a_fatal_alert_or_close_notify_is_a_refusal() {
+        // fatal handshake_failure, fatal protocol_version, warning close_notify
+        for alert in [[0x02, 0x28], [0x02, 0x46], [0x01, 0x00]] {
+            let record = [&[0x15, 0x03, 0x03, 0x00, 0x02][..], &alert].concat();
+            assert_eq!(parse_server_hello(&record), ServerHelloReply::Refused, "{alert:?}");
+        }
+    }
+
+    #[test]
+    fn an_alert_cut_off_decides_nothing() {
+        // The alert header alone and the header with the alert level only.
+        for cut in [5, 6] {
+            assert_eq!(
+                parse_server_hello(&HANDSHAKE_FAILURE[..cut]),
+                ServerHelloReply::Incomplete,
+                "cut at {cut}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_warning_alert_before_the_server_hello_is_skipped() {
+        // Some servers (e.g. Apache without a matching virtual host) send a warning unrecognized_name
+        // first; the ServerHello that follows decides the offer.
+        const UNRECOGNIZED_NAME: [u8; 7] = [0x15, 0x03, 0x03, 0x00, 0x02, 0x01, 0x70];
+        let expected = ServerHelloReply::Hello {
+            version: 0x0303,
+            cipher_suite: 0x000A,
+        };
         assert_eq!(
-            parse_server_hello(&[0x15, 0x03, 0x03, 0x00, 0x02, 0x02, 0x28]),
+            parse_server_hello(&[&UNRECOGNIZED_NAME[..], &BADSSL_3DES_SERVER_HELLO].concat()),
+            expected
+        );
+        let fragmented = [&UNRECOGNIZED_NAME[..], &fragmented_server_hello(2)].concat();
+        assert_eq!(parse_server_hello(&fragmented), expected);
+        assert_eq!(parse_server_hello(&UNRECOGNIZED_NAME), ServerHelloReply::Incomplete);
+        assert_eq!(
+            parse_server_hello(&[&UNRECOGNIZED_NAME[..], &HANDSHAKE_FAILURE].concat()),
             ServerHelloReply::Refused
         );
     }
@@ -1026,6 +1003,82 @@ mod tests {
             result,
             CipherProbeResult {
                 accepted: Vec::new(),
+                incomplete: None
+            }
+        );
+    }
+
+    #[test]
+    fn a_connection_reset_without_an_answer_is_a_refusal() {
+        // Windows SChannel (IIS) resets the connection when it shares no suite with the client. Closing a
+        // socket whose received data was not read makes the kernel send a reset.
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a free port");
+        let port = listener.local_addr().expect("local address").port();
+        std::thread::spawn(move || {
+            for stream in listener.incoming().flatten() {
+                let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
+                let _ = stream.peek(&mut [0u8; 1]);
+                std::thread::sleep(Duration::from_millis(50));
+            }
+        });
+        let result = probe_local(port);
+        assert_eq!(
+            result,
+            CipherProbeResult {
+                accepted: Vec::new(),
+                incomplete: None
+            }
+        );
+    }
+
+    #[test]
+    fn a_legacy_version_is_found_when_its_server_hello_is_split_across_records() {
+        // TLS 1.0: a ServerHello split inside its handshake header; TLS 1.1: a TLS 1.2 ServerHello;
+        // SSLv3: a handshake_failure alert.
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a free port");
+        let port = listener.local_addr().expect("local address").port();
+        std::thread::spawn(move || {
+            for mut stream in listener.incoming().flatten() {
+                let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
+                let Some(hello) = read_record(&mut stream) else {
+                    continue;
+                };
+                let suite = SeenClientHello::parse(&hello).map_or(0, |seen| seen.suites[0]);
+                let answer = match [hello[9], hello[10]] {
+                    [0x03, 0x01] => split_record(&server_hello(0x0301, suite), 2),
+                    [0x03, 0x02] => server_hello(0x0303, suite),
+                    _ => HANDSHAKE_FAILURE.to_vec(),
+                };
+                let _ = stream.write_all(&answer);
+            }
+        });
+        assert_eq!(probe_legacy_version("127.0.0.1", port, 0x0301), Some(true), "TLS 1.0");
+        assert_eq!(probe_legacy_version("127.0.0.1", port, 0x0302), Some(false), "TLS 1.1");
+        assert_eq!(probe_legacy_version("127.0.0.1", port, 0x0300), Some(false), "SSLv3");
+    }
+
+    #[test]
+    fn a_cut_off_alert_leaves_the_probe_incomplete() {
+        // The header of a two-byte alert, then the connection closes.
+        let port = server_answering_first(HANDSHAKE_FAILURE[..5].to_vec(), Duration::ZERO);
+        let result = probe_local(port);
+        assert!(result.accepted.is_empty(), "{result:?}");
+        assert_eq!(result.incomplete, Some(Incomplete::Unanswered), "{result:?}");
+    }
+
+    #[test]
+    fn a_suite_picked_after_a_warning_alert_is_found() {
+        let warning_then_hello = [
+            &[0x15, 0x03, 0x03, 0x00, 0x02, 0x01, 0x70][..],
+            &server_hello(0x0303, 0xC010),
+        ]
+        .concat();
+        let port = server_answering_first(warning_then_hello, Duration::ZERO);
+        let result = probe_local(port);
+        assert_eq!(
+            result,
+            CipherProbeResult {
+                accepted: vec![(0x0303, 0xC010)],
                 incomplete: None
             }
         );
