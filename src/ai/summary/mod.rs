@@ -172,7 +172,10 @@ pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, _output: &A
             let res = match client.complete(&req, CAT_SUMMARY_AREAS).await {
                 Ok(c) => serde_json::from_str::<AreaAssessment>(&normalize_json_response(&c.text)).ok(),
                 Err(e) => {
-                    eprintln!("  AI summary: area '{}' failed: {}", area, e);
+                    eprintln!(
+                        "  {}",
+                        utils::get_color_text(&format!("AI summary: area '{}' failed: {}", area, e), "yellow", false)
+                    );
                     None
                 }
             };

@@ -142,14 +142,21 @@ pub async fn run_ai(options: &CoreOptions, status: &Arc<Mutex<Status>>, output: 
         ..selection_summary
     };
     eprintln!(
-        "  ({} HTML pages crawled, {} eligible, {} excluded by masks, {} candidate(s), capped to --ai-max-pages={}) → {} initial LLM call(s), up to {} with retries",
-        selection_summary.total_html,
-        selection_summary.eligible,
-        selection_summary.excluded,
-        selection_summary.candidates,
-        options.ai_max_pages,
-        total_calls,
-        worst_case_calls
+        "  {}",
+        utils::get_color_text(
+            &format!(
+                "({} HTML pages crawled, {} eligible, {} excluded by masks, {} candidate(s), capped to --ai-max-pages={}) → {} initial LLM call(s), up to {} with retries",
+                selection_summary.total_html,
+                selection_summary.eligible,
+                selection_summary.excluded,
+                selection_summary.candidates,
+                options.ai_max_pages,
+                total_calls,
+                worst_case_calls
+            ),
+            "gray",
+            false
+        )
     );
 
     // Rough input-token estimate for the preview (across all selected actions).
@@ -177,12 +184,26 @@ pub async fn run_ai(options: &CoreOptions, status: &Arc<Mutex<Status>>, output: 
         );
         if let Some(input_rate) = options.ai_input_cost_per_million {
             eprintln!(
-                "  Estimated input-only cost floor: ${:.6} USD at the supplied input-token rate (output and retries excluded).",
-                est_input_tokens as f64 * input_rate / 1_000_000.0
+                "  {}",
+                utils::get_color_text(
+                    &format!(
+                        "Estimated input-only cost floor: ${:.6} USD at the supplied input-token rate (output and retries excluded).",
+                        est_input_tokens as f64 * input_rate / 1_000_000.0
+                    ),
+                    "gray",
+                    false
+                )
             );
         }
         for (i, (rp, ctx)) in pages.iter().take(20).enumerate() {
-            eprintln!("  {:>3}. score {:>5.1}  {}", i + 1, rp.score, ctx.url);
+            eprintln!(
+                "  {}",
+                utils::get_color_text(
+                    &format!("{:>3}. score {:>5.1}  {}", i + 1, rp.score, ctx.url),
+                    "gray",
+                    false
+                )
+            );
         }
         if let Ok(st) = status.lock() {
             st.add_info_to_summary(

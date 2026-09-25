@@ -237,7 +237,10 @@ pub async fn run(options: &CoreOptions, status: &Arc<Mutex<Status>>, output: &Ar
             )
         );
         for (i, c) in plan.selected.iter().take(30).enumerate() {
-            eprintln!("  {:>3}. {}", i + 1, c.url);
+            eprintln!(
+                "  {}",
+                utils::get_color_text(&format!("{:>3}. {}", i + 1, c.url), "gray", false)
+            );
         }
         if let Ok(st) = status.lock() {
             st.add_info_to_summary(

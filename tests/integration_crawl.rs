@@ -3823,6 +3823,77 @@ fn ai_provider_error_is_reported() {
     );
 }
 
+/// Crawls `server` against `mock` with colours forced on, as a GUI runs the crawler; returns
+/// stderr.
+fn crawl_with_ai_in_colour(server: &LocalServer, mock: &MockLlm, extra: &[&str]) -> String {
+    let url = format!("--url={}", server.url());
+    let endpoint = format!("--ai-endpoint={}", mock.url());
+    let mut args = vec![
+        "--config-file=/dev/null",
+        url.as_str(),
+        LOCAL_ANALYZERS,
+        "--http-cache-dir=",
+        "--force-color",
+        "--ai-provider=openai-compatible",
+        endpoint.as_str(),
+        "--ai-model=m",
+        "--ai-cache-dir=",
+    ];
+    args.extend(extra);
+    let output = run_crawler(&args);
+    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+    assert_eq!(output.status.code(), Some(0), "stderr: {stderr}");
+    stderr
+}
+
+/// A GUI paints stderr text without a colour of its own as an error. The AI phase writes to
+/// stderr, so every line of it needs a colour.
+#[test]
+fn every_line_of_the_ai_phase_has_a_colour() {
+    let tmp = TempDir::new("ai-colours");
+    let site = tmp.path.join("site");
+    write_site(&site, 1);
+    let server = LocalServer::start(&site);
+    let mock = MockLlm::start(vec![chat_response(
+        404,
+        include_str!("fixtures/ai-responses/error-vllm-unknown-model.json").to_string(),
+    )]);
+    let cases: [(&[&str], &[&str]); 4] = [
+        (
+            &["--ai-actions=seo,summary"],
+            &["HTML pages crawled", "AI summary: area 'seo' failed"],
+        ),
+        (
+            &[
+                "--ai-actions=seo",
+                "--ai-dry-run",
+                "--ai-input-cost-per-million=1",
+                "--ai-output-cost-per-million=2",
+            ],
+            &["Estimated input-only cost floor", "1. score"],
+        ),
+        (&["--ai-elaborate", "--ai-dry-run"], &["1. http"]),
+        (&["--ai-profile", "--ai-dry-run"], &["1. http"]),
+    ];
+    for (args, expected) in cases {
+        let stderr = crawl_with_ai_in_colour(&server, &mock, args);
+        for text in expected {
+            assert!(stderr.contains(text), "{args:?}: no {text:?} in stderr:\n{stderr}");
+        }
+        let lines: Vec<&str> = stderr
+            .lines()
+            .skip_while(|line| !line.contains("AI "))
+            .filter(|line| !line.trim().is_empty())
+            .collect();
+        for line in lines {
+            assert!(
+                line.trim_start().starts_with('\x1b'),
+                "{args:?}: a line without a colour: {line:?}\nstderr:\n{stderr}"
+            );
+        }
+    }
+}
+
 /// The `aiUsage` event of a crawl of a site with `pages` + 1 pages, one AI request at a time.
 fn ai_usage_of(name: &str, pages: usize, responses: Vec<MockResponse>, extra: &[&str]) -> serde_json::Value {
     let tmp = TempDir::new(&format!("ai-usage-{name}"));
