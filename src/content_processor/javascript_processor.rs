@@ -39,6 +39,12 @@ static RE_PATH_UPPER_SLASH: Lazy<Regex> = Lazy::new(|| Regex::new(r#"Path:"/"#).
 
 static RE_CROSSORIGIN: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)crossorigin").unwrap());
 
+/// A VuePress 1.x (`window.__VUEPRESS__`) or 0.x (`window.__VUEPRESS_VERSION__`) client bundle, whose
+/// `path:"/…"` keys are page and sidebar links (#62).
+fn is_vuepress_bundle(content: &str) -> bool {
+    content.contains("__VUEPRESS__") || content.contains("__VUEPRESS_VERSION__")
+}
+
 pub struct JavaScriptProcessor {
     #[allow(dead_code)]
     config: ProcessorConfig,
@@ -186,15 +192,19 @@ impl ContentProcessor for JavaScriptProcessor {
                 .replace_all(content, &format!("href:{}+\"", webpack_path_prefix))
                 .to_string();
         }
-        if content.to_lowercase().contains("path:\"/") {
-            *content = RE_PATH_SLASH
-                .replace_all(content, &format!("href:{}+\"", webpack_path_prefix))
-                .to_string();
-        }
-        if content.contains("Path:\"/") {
-            *content = RE_PATH_UPPER_SLASH
-                .replace_all(content, &format!("href:{}+\"", webpack_path_prefix))
-                .to_string();
+        // path/Path keys become href only in VuePress bundles, where they are sidebar links (PHP
+        // commit 9bea99b); elsewhere they are route definitions, e.g. React Router's (#62)
+        if is_vuepress_bundle(content) {
+            if content.to_lowercase().contains("path:\"/") {
+                *content = RE_PATH_SLASH
+                    .replace_all(content, &format!("href:{}+\"", webpack_path_prefix))
+                    .to_string();
+            }
+            if content.contains("Path:\"/") {
+                *content = RE_PATH_UPPER_SLASH
+                    .replace_all(content, &format!("href:{}+\"", webpack_path_prefix))
+                    .to_string();
+            }
         }
     }
 
@@ -245,5 +255,44 @@ mod tests {
         let source = ParsedUrl::parse("https://example.com/bundle.js", None);
         let result = processor.find_urls(js, &source);
         assert!(result.is_some());
+    }
+
+    #[test]
+    fn vuepress_bundle_path_keys_point_to_offline_files() {
+        // VuePress 1.x (window.__VUEPRESS__) and 0.x (window.__VUEPRESS_VERSION__) bundles keep the
+        // rewrite of their page/sidebar `path` and `regularPath` keys (PHP commit 9bea99b).
+        let processor = JavaScriptProcessor::new(make_config());
+        let url = ParsedUrl::parse("https://example.com/assets/js/app.f00cc16f.js", None);
+        for marker in [
+            r#"window.__VUEPRESS__={version:"1.9.9",hash:"de4f7cf8"};"#,
+            r#"window.__VUEPRESS_VERSION__={version:"0.14.11",hash:"de4f7cf8"};"#,
+        ] {
+            let mut js = format!(
+                r#"{marker}const Es=[{{name:"v-27315abc",path:"/guide/",component:x}}];var s={{pages:[{{title:"Guide",regularPath:"/guide/"}}]}};"#
+            );
+            processor.apply_content_changes_for_offline_version(&mut js, ContentTypeId::Script, &url, false);
+            assert!(
+                js.contains(
+                    r#"{name:"v-27315abc",href:(_SiteOneUrlDepth > 0 ? "../".repeat(_SiteOneUrlDepth) : "./")+"guide/""#
+                ),
+                "{js}"
+            );
+            assert!(
+                js.contains(r#"regularhref:(_SiteOneUrlDepth > 0 ? "../".repeat(_SiteOneUrlDepth) : "./")+"guide/""#),
+                "{js}"
+            );
+        }
+    }
+
+    #[test]
+    fn spa_route_table_path_keys_are_kept() {
+        // #62: outside VuePress, `path:"/…"` keys are route definitions (here React Router's, from a
+        // Lovable-built SPA); renaming them to `href` breaks the offline copy.
+        let processor = JavaScriptProcessor::new(make_config());
+        let url = ParsedUrl::parse("https://example.com/assets/index-B0occCfy.js", None);
+        let original = r#"l.jsx(kW,{children:l.jsxs(wW,{children:[l.jsx(vc,{path:"/",element:l.jsx(TSe,{})}),l.jsx(vc,{path:"/auth",element:l.jsx(dje,{})}),l.jsx(vc,{path:"*",element:l.jsx(lje,{})})]})})"#;
+        let mut js = original.to_string();
+        processor.apply_content_changes_for_offline_version(&mut js, ContentTypeId::Script, &url, false);
+        assert_eq!(js, original);
     }
 }
