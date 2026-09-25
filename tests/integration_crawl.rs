@@ -201,10 +201,11 @@ fn crawl_siteone_offline_export() {
 
     // Check relative links in index.html
     let index_html = std::fs::read_to_string(offline_dir.join("index.html")).expect("Failed to read index.html");
-    // Should contain relative link to introduction/overview
+    // Should contain relative link to getting-started/quick-start-guide (the homepage no longer
+    // links to introduction/overview)
     assert!(
-        index_html.contains("introduction/overview/index.html"),
-        "index.html should contain relative link to introduction/overview/index.html"
+        index_html.contains("getting-started/quick-start-guide/index.html"),
+        "index.html should contain relative link to getting-started/quick-start-guide/index.html"
     );
     // Should contain relative CSS reference
     assert!(
