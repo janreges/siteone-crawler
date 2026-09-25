@@ -1704,6 +1704,80 @@ fn sitemap_changefreq_rejects_unknown_values() {
     );
 }
 
+/// `<lastmod>` reads `Last-Modified` and `Date` in each HTTP date format (IMF-fixdate, RFC 850,
+/// asctime), with the response headers kept in memory or in file storage (#108).
+#[test]
+fn sitemap_lastmod_reads_every_http_date_format() {
+    let page = |path: &'static str, last_modified: &str, date: &str| Route {
+        path,
+        headers: vec![
+            ("Content-Type", "text/html".to_string()),
+            ("Last-Modified", last_modified.to_string()),
+            ("Date", date.to_string()),
+        ],
+        body: b"<html><body>page</body></html>".to_vec(),
+    };
+    let server = RecordingServer::start(vec![
+        Route {
+            path: "/",
+            headers: vec![("Content-Type", "text/html".to_string())],
+            body: br#"<html><body><a href="/rfc850">1</a><a href="/asctime">2</a><a href="/now-rfc850">3</a><a href="/now-asctime">4</a></body></html>"#.to_vec(),
+        },
+        page("/rfc850", "Friday, 17-Jul-26 17:29:24 GMT", "Mon, 20 Jul 2026 12:00:00 GMT"),
+        page("/asctime", "Fri Jul 17 17:29:24 2026", "Mon, 20 Jul 2026 12:00:00 GMT"),
+        // Dynamic pages stamping the response time, with `Date` in an obsolete format.
+        page("/now-rfc850", "Mon, 20 Jul 2026 12:00:00 GMT", "Monday, 20-Jul-26 12:00:00 GMT"),
+        page("/now-asctime", "Mon, 20 Jul 2026 12:00:00 GMT", "Mon Jul 20 12:00:00 2026"),
+    ]);
+
+    for storage in ["memory", "file"] {
+        let tmp = TempDir::new(&format!("sitemap-lastmod-{storage}"));
+        let sitemap = tmp.path.join("sitemap.xml");
+        let output = run_crawler(&[
+            "--config-file=/dev/null",
+            &format!("--url={}", server.url()),
+            "--output=json",
+            LOCAL_ANALYZERS,
+            "--http-cache-dir=",
+            "--output-html-report=",
+            "--output-json-file=",
+            "--output-text-file=",
+            &format!("--sitemap-xml-file={}", sitemap.display()),
+            &format!("--result-storage={storage}"),
+            &format!("--result-storage-dir={}", tmp.path.join("storage").display()),
+        ]);
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "stderr: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let xml = std::fs::read_to_string(&sitemap).unwrap_or_else(|e| {
+            panic!(
+                "{storage}: no sitemap ({e}); stderr: {}",
+                String::from_utf8_lossy(&output.stderr)
+            )
+        });
+        let lastmod = |path: &str| -> Option<String> {
+            let loc = format!("<loc>{}{path}</loc>", server.url().trim_end_matches('/'));
+            let entry = xml.split("<url>").find(|entry| entry.contains(&loc))?;
+            let start = entry.find("<lastmod>")? + "<lastmod>".len();
+            Some(entry[start..entry.find("</lastmod>")?].to_string())
+        };
+        for path in ["/rfc850", "/asctime"] {
+            assert_eq!(
+                lastmod(path).as_deref(),
+                Some("2026-07-17T17:29:24+00:00"),
+                "{storage} {path}: {xml}"
+            );
+        }
+        for path in ["/now-rfc850", "/now-asctime"] {
+            assert!(xml.contains(&format!("{path}</loc>")), "{storage} {path}: {xml}");
+            assert_eq!(lastmod(path), None, "{storage} {path}: {xml}");
+        }
+    }
+}
+
 /// Crawls `url` on a local server with JSON output and returns the visited URLs.
 fn crawled_urls(url: &str) -> Vec<String> {
     let output = run_crawler(&[

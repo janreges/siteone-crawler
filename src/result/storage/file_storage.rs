@@ -42,9 +42,14 @@ impl FileStorage {
         if self.compress { "cache.gz" } else { "cache" }
     }
 
+    /// `uq_id` is a URL's id, or `<id>.headers` for its response headers (see `Status`).
     fn get_file_path(&self, uq_id: &str) -> PathBuf {
         debug_assert!(
-            uq_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'),
+            uq_id
+                .strip_suffix(".headers")
+                .unwrap_or(uq_id)
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'),
             "uq_id '{}' contains unsafe characters",
             uq_id
         );
@@ -136,5 +141,35 @@ impl std::fmt::Debug for FileStorage {
             .field("cache_dir", &self.cache_dir)
             .field("compress", &self.compress)
             .finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn response_headers_are_stored_next_to_the_body() {
+        let tmp_dir = std::env::temp_dir().join(format!("siteone-file-storage-test-{}", std::process::id()));
+        let mut storage = FileStorage::new(tmp_dir.to_str().unwrap(), false, "example.com").unwrap();
+
+        storage.save("d8400160", b"<html></html>").unwrap();
+        storage.save("d8400160.headers", br#"{"date":"now"}"#).unwrap();
+
+        assert_eq!(storage.load("d8400160").unwrap(), b"<html></html>");
+        assert_eq!(storage.load("d8400160.headers").unwrap(), br#"{"date":"now"}"#);
+        drop(storage);
+        fs::remove_dir_all(&tmp_dir).ok();
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "contains unsafe characters")]
+    fn keys_that_could_leave_the_cache_directory_are_rejected() {
+        let storage = FileStorage {
+            cache_dir: PathBuf::from("/nonexistent/siteone-crawler-cache"),
+            compress: false,
+        };
+        storage.get_file_path("../../x.headers");
     }
 }

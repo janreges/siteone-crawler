@@ -8,6 +8,8 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 
+use chrono::Datelike;
+
 use crate::error::{CrawlerError, CrawlerResult};
 use crate::export::exporter::Exporter;
 use crate::output::output::Output;
@@ -243,26 +245,39 @@ fn lastmod_from_headers(
     headers: &HashMap<String, String>,
     crawled_at: chrono::DateTime<chrono::Utc>,
 ) -> Option<String> {
-    let last_modified = chrono::DateTime::parse_from_rfc2822(headers.get("last-modified")?.trim()).ok()?;
+    let last_modified = parse_http_date(headers.get("last-modified")?, crawled_at)?;
     if last_modified.timestamp() < LASTMOD_MIN_TIMESTAMP {
         return None;
     }
-    let too_recent = match headers
-        .get("date")
-        .and_then(|date| chrono::DateTime::parse_from_rfc2822(date.trim()).ok())
-    {
+    let too_recent = match headers.get("date").and_then(|date| parse_http_date(date, crawled_at)) {
         Some(date) => (date - last_modified).num_seconds() <= LASTMOD_NOW_TOLERANCE_SECS,
-        None => (last_modified.with_timezone(&chrono::Utc) - crawled_at).num_seconds() > LASTMOD_FUTURE_TOLERANCE_SECS,
+        None => (last_modified - crawled_at).num_seconds() > LASTMOD_FUTURE_TOLERANCE_SECS,
     };
     if too_recent {
         return None;
     }
-    Some(
-        last_modified
-            .with_timezone(&chrono::Utc)
-            .format("%Y-%m-%dT%H:%M:%S+00:00")
-            .to_string(),
-    )
+    Some(last_modified.format("%Y-%m-%dT%H:%M:%S+00:00").to_string())
+}
+
+/// An HTTP date (RFC 9110 §5.6.7) in UTC: IMF-fixdate (or any RFC 2822 date, e.g. with a numeric
+/// offset), or the obsolete RFC 850 or asctime format. RFC 850's two-digit year is the latest one
+/// at most 50 years after `now`.
+fn parse_http_date(value: &str, now: chrono::DateTime<chrono::Utc>) -> Option<chrono::DateTime<chrono::Utc>> {
+    let value = value.trim();
+    if let Ok(date) = chrono::DateTime::parse_from_rfc2822(value) {
+        return Some(date.with_timezone(&chrono::Utc));
+    }
+    // asctime, e.g. "Sun Nov  6 08:49:37 1994"
+    if let Ok(date) = chrono::NaiveDateTime::parse_from_str(value, "%a %b %e %H:%M:%S %Y") {
+        return Some(date.and_utc());
+    }
+    // RFC 850, e.g. "Sunday, 06-Nov-94 08:49:37 GMT"; the weekday is checked only once the century
+    // is known, as chrono reads a two-digit year as 1969–2068.
+    let (weekday, rest) = value.split_once(", ")?;
+    let date = chrono::NaiveDateTime::parse_from_str(rest, "%d-%b-%y %H:%M:%S GMT").ok()?;
+    let earliest_year = now.year() - 49;
+    let date = date.with_year(earliest_year + (date.year() - earliest_year).rem_euclid(100))?;
+    (weekday.parse::<chrono::Weekday>().ok()? == date.weekday()).then(|| date.and_utc())
 }
 
 /// Output path of the XML sitemap and whether to gzip it: a path ending in `.xml.gz` is kept and
@@ -342,12 +357,56 @@ mod tests {
     }
 
     #[test]
+    fn lastmod_accepts_every_http_date_format() {
+        let lastmod = |value: &str| lastmod_from_headers(&headers(&[("last-modified", value)]), crawl_time());
+        for value in ["Friday, 17-Jul-26 17:29:24 GMT", "Fri Jul 17 17:29:24 2026"] {
+            assert_eq!(lastmod(value).as_deref(), Some("2026-07-17T17:29:24+00:00"), "{value}");
+        }
+        assert_eq!(
+            lastmod("Thu Jul  2 17:29:24 2026").as_deref(),
+            Some("2026-07-02T17:29:24+00:00"),
+            "asctime pads a one-digit day with a space"
+        );
+    }
+
+    #[test]
+    fn lastmod_reads_a_two_digit_year_as_at_most_50_years_after_the_crawl() {
+        let lastmod = |value: &str, crawled_at: &str| {
+            lastmod_from_headers(
+                &headers(&[("last-modified", value)]),
+                chrono::DateTime::parse_from_rfc3339(crawled_at)
+                    .unwrap()
+                    .with_timezone(&chrono::Utc),
+            )
+        };
+        assert_eq!(
+            lastmod("Sunday, 01-Jan-95 00:00:00 GMT", "2026-07-20T12:00:00Z").as_deref(),
+            Some("1995-01-01T00:00:00+00:00")
+        );
+        assert_eq!(
+            lastmod("Wednesday, 01-Jan-70 00:00:00 GMT", "2080-07-01T12:00:00Z").as_deref(),
+            Some("2070-01-01T00:00:00+00:00")
+        );
+    }
+
+    #[test]
     fn lastmod_is_omitted_without_a_usable_header() {
         assert_eq!(lastmod_from_headers(&headers(&[]), crawl_time()), None);
         assert_eq!(
             lastmod_from_headers(&headers(&[("last-modified", "yesterday")]), crawl_time()),
             None
         );
+        for wrong_weekday in [
+            "Sat, 17 Jul 2026 17:29:24 GMT",
+            "Saturday, 17-Jul-26 17:29:24 GMT",
+            "Sat Jul 17 17:29:24 2026",
+        ] {
+            assert_eq!(
+                lastmod_from_headers(&headers(&[("last-modified", wrong_weekday)]), crawl_time()),
+                None,
+                "{wrong_weekday}"
+            );
+        }
     }
 
     #[test]
@@ -370,6 +429,23 @@ mod tests {
             Some("2026-07-17T17:29:24+00:00"),
             "61 s later"
         );
+    }
+
+    #[test]
+    fn lastmod_is_omitted_when_the_page_stamps_a_date_in_any_http_date_format() {
+        let lastmod = |date: &str| {
+            lastmod_from_headers(
+                &headers(&[("last-modified", "Mon, 20 Jul 2026 12:00:00 GMT"), ("date", date)]),
+                crawl_time(),
+            )
+        };
+        for date in [
+            "Mon, 20 Jul 2026 12:00:00 GMT",
+            "Monday, 20-Jul-26 12:00:00 GMT",
+            "Mon Jul 20 12:00:00 2026",
+        ] {
+            assert_eq!(lastmod(date), None, "{date}");
+        }
     }
 
     #[test]
