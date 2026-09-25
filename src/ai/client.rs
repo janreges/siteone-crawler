@@ -24,6 +24,10 @@ const MAX_ATTEMPTS: u32 = 3;
 /// Delay before the single end-to-end retry in `complete_parsed`.
 const PARSE_RETRY_DELAY_SECS: u64 = 5;
 
+/// A configured API key shorter than this is not blanked out of an answer: placeholder keys such
+/// as `EMPTY`, `none` or `sk-no-key-required` are words an answer may say itself.
+const MIN_KEY_CHARS_BLANKED_IN_ANSWERS: usize = 20;
+
 /// One process-wide gate is intentional: usage accounting already assumes one crawl per process,
 /// and report extraction plus the later executive summary build separate `AiClient` instances.
 /// Sharing the gate keeps their actual HTTP sends under the same configured rate limit.
@@ -394,6 +398,7 @@ impl AiClient {
                     let Some(text) = provider::parse_content(self.config.provider, &json) else {
                         return Err(fail(record, self.no_content_message(&json)));
                     };
+                    let text = self.without_api_key(text);
                     let duration_ms = record.duration_ms;
                     telemetry::report(record);
 
@@ -508,6 +513,17 @@ impl AiClient {
         self.redactor.redact(text)
     }
 
+    /// A successful answer without the configured API key, should the provider or a proxy echo it:
+    /// the answer is cached, parsed and published. Only a key of 20+ characters is blanked out.
+    fn without_api_key(&self, text: String) -> String {
+        match self.config.api_key.as_deref() {
+            Some(key) if key.chars().count() >= MIN_KEY_CHARS_BLANKED_IN_ANSWERS && text.contains(key) => {
+                text.replace(key, "[redacted]")
+            }
+            _ => text,
+        }
+    }
+
     /// The telemetry record of a request made now, carrying the subject of the enclosing
     /// `telemetry::scope`.
     fn base_record(&self, category: &str) -> RequestRecord {
@@ -569,7 +585,8 @@ impl AiClient {
             None => Usage::default(),
         };
         Some(AiCompletion {
-            text: cached.text,
+            // A file an older build wrote may still hold the key.
+            text: self.without_api_key(cached.text),
             usage,
             from_cache: true,
             finish_reason: cached.finish_reason,
@@ -921,6 +938,22 @@ mod tests {
             client.redact("AI provider error: invalid key secret-xyz"),
             "AI provider error: invalid key [redacted]"
         );
+    }
+
+    #[test]
+    fn answers_lose_only_a_key_of_20_or_more_characters() {
+        let key = "sk-key-of-20-chars-x";
+        let client = client_with_connection("http://127.0.0.1:9/v1", key);
+        assert_eq!(
+            client.without_api_key(format!(r#"{{"title":"Key {key}"}}"#)),
+            r#"{"title":"Key [redacted]"}"#
+        );
+        // Placeholder keys and other short values are words an answer may say itself.
+        for key in ["EMPTY", "none", "sk-no-key-required", "2026-09-25", &key[..19]] {
+            let client = client_with_connection("http://127.0.0.1:9/v1", key);
+            let answer = format!(r#"{{"title":"{key}"}}"#);
+            assert_eq!(client.without_api_key(answer.clone()), answer);
+        }
     }
 
     fn client_with_connection(endpoint: &str, api_key: &str) -> AiClient {

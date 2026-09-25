@@ -4221,6 +4221,133 @@ fn ai_diagnostics_never_carry_credentials() {
     assert!(leaks.is_empty(), "{}", leaks.join("\n"));
 }
 
+/// Crawls the one page of `server` with `mock` answering, `key` configured and the extra `args`,
+/// writing the AI cache, the reports and the HTML report below `out`. Returns stdout, then stderr
+/// and each file below `out`, labelled.
+fn crawl_answered_by(
+    server: &LocalServer,
+    mock: &MockLlm,
+    key: &str,
+    out: &Path,
+    extra: &[&str],
+) -> Vec<(String, String)> {
+    std::fs::create_dir_all(out).expect("an output dir");
+    let mut args = vec![
+        "--config-file=/dev/null".to_string(),
+        format!("--url={}", server.url()),
+        LOCAL_ANALYZERS.to_string(),
+        "--http-cache-dir=".to_string(),
+        "--no-color".to_string(),
+        "--ai-provider=openai-compatible".to_string(),
+        format!("--ai-endpoint={}", mock.url()),
+        "--ai-model=m".to_string(),
+        format!("--ai-api-key={key}"),
+        "--ai-max-pages=1".to_string(),
+        format!("--ai-cache-dir={}", out.join("ai-cache").display()),
+        format!("--ai-report-dir={}", out.display()),
+        format!("--output-html-report={}", out.join("report.html").display()),
+    ];
+    args.extend(extra.iter().map(|arg| arg.to_string()));
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    let output = run_crawler(&args);
+    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+    assert_eq!(output.status.code(), Some(0), "{extra:?}: {stderr}");
+    assert_eq!(mock.request_bodies().len(), 1, "{extra:?}: one AI request");
+    let mut texts = vec![
+        (
+            "stdout".to_string(),
+            String::from_utf8_lossy(&output.stdout).into_owned(),
+        ),
+        ("stderr".to_string(), stderr),
+    ];
+    for path in files_under(out) {
+        let text = String::from_utf8_lossy(&std::fs::read(&path).expect("a file")).into_owned();
+        texts.push((path.display().to_string(), text));
+    }
+    texts
+}
+
+/// A chat completion whose answer is `content`.
+fn chat_answer(content: &str) -> String {
+    let mut response: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/ai-responses/vllm-qwen-think.json")).expect("JSON");
+    response["choices"][0]["message"]["content"] = serde_json::json!(content);
+    response.to_string()
+}
+
+#[test]
+fn ai_answers_never_carry_the_configured_key() {
+    // A realistic key (36 characters) that a provider or proxy echoes in a valid answer.
+    const KEY: &str = "sk-C5_SENTINEL-credential-0123456789";
+    let tmp = TempDir::new("ai-answer-key");
+    let server = one_page_site(&tmp);
+    let seo = serde_json::json!({
+        "scores": {"overall": 80},
+        "recommendations": {"title": format!("Title {KEY}")},
+        "debugCredential": KEY,
+    });
+    let extract = serde_json::json!({"summary": format!("Provider note {KEY}")});
+    // Where each answer is published: (a part of the file name, its end).
+    let cases: [(&str, String, &[&str], &[(&str, &str)]); 2] = [
+        (
+            "seo",
+            seo.to_string(),
+            &["--ai-actions=seo", "--output=json"],
+            &[("stdout", ""), ("report.html", ""), ("ai-cache", ".json")],
+        ),
+        (
+            "extract",
+            extract.to_string(),
+            &["--ai-report=extract", "--ai-extract-fields=summary:text"],
+            &[
+                ("ai-report.extract.", ".json"),
+                ("ai-report.extract.", ".html"),
+                ("ai-cache", ".json"),
+            ],
+        ),
+    ];
+    let mut wrong = Vec::new();
+    for (name, content, extra, published) in cases {
+        let mock = MockLlm::start(vec![chat_response(200, chat_answer(&content))]);
+        let texts = crawl_answered_by(&server, &mock, KEY, &tmp.path.join(name), extra);
+        for (source, text) in &texts {
+            if let Some(line) = text.lines().find(|line| line.contains(KEY)) {
+                wrong.push(format!("{name}: the key in {source}: {line}"));
+            }
+        }
+        // The answer did reach these outputs, with the key blanked out.
+        for (part, end) in published {
+            let reached = texts
+                .iter()
+                .filter(|(source, _)| source.contains(part) && source.ends_with(end))
+                .any(|(_, text)| text.contains("[redacted]"));
+            if !reached {
+                wrong.push(format!("{name}: no blanked answer in {part}…{end}"));
+            }
+        }
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+
+    // A placeholder key such as `EMPTY` is not blanked out of an answer that says it.
+    let placeholder = serde_json::json!({"scores": {"overall": 80}, "recommendations": {"title": "EMPTY"}});
+    let mock = MockLlm::start(vec![chat_response(200, chat_answer(&placeholder.to_string()))]);
+    let texts = crawl_answered_by(
+        &server,
+        &mock,
+        "EMPTY",
+        &tmp.path.join("placeholder"),
+        &["--ai-actions=seo", "--output=json"],
+    );
+    let stdout = &texts[0].1;
+    let title = regex::Regex::new(r#""recommendedTitle":\s*"EMPTY""#).expect("a valid pattern");
+    assert!(title.is_match(stdout), "{stdout}");
+    let cache = texts
+        .iter()
+        .find(|(source, _)| source.contains("ai-cache"))
+        .expect("an AI cache file");
+    assert!(cache.1.contains(r#"\"title\":\"EMPTY\""#), "{}", cache.1);
+}
+
 #[test]
 fn ai_cache_hit_is_reported() {
     let tmp = TempDir::new("ai-telemetry-cache");
