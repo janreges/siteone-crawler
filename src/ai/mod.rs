@@ -21,4 +21,5 @@ pub mod secret;
 pub mod selection;
 pub mod summary;
 pub mod telemetry;
+pub mod tools;
 pub mod usage;

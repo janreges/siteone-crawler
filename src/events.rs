@@ -171,7 +171,7 @@ pub struct AiRequest {
 }
 
 /// Rates are written with one decimal, e.g. `119.4`.
-fn one_decimal<S: serde::Serializer>(value: &Option<f64>, serializer: S) -> Result<S::Ok, S::Error> {
+pub(crate) fn one_decimal<S: serde::Serializer>(value: &Option<f64>, serializer: S) -> Result<S::Ok, S::Error> {
     match value {
         Some(value) => serializer.serialize_f64((value * 10.0).round() / 10.0),
         None => serializer.serialize_none(),

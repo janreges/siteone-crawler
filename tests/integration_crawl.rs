@@ -3633,6 +3633,8 @@ fn mock_llm_serves_its_responses_in_order_per_path() {
         vec![r#"{"n":1}"#, r#"{"n":2}"#, "", r#"{"n":3}"#, "x"],
         "every request body is recorded in arrival order"
     );
+    let heads = mock.request_heads();
+    assert!(heads[2].starts_with("POST /v1/models HTTP/1.1\r\n"), "{}", heads[2]);
 }
 
 #[test]
@@ -4618,4 +4620,377 @@ fn ai_events_follow_the_elaborate_gap_fill() {
     assert_eq!(assert_progress_runs_to_the_end(&events, "elaborate:gapfill"), 2);
     // The fetched page joins the extraction.
     assert_eq!(assert_progress_runs_to_the_end(&events, "elaborate:extract"), 2);
+}
+
+// ---------------------------------------------------------------------------
+// AI utility modes `--ai-list-models` and `--ai-check` (offline, against `MockLlm`)
+// ---------------------------------------------------------------------------
+
+/// Runs a utility mode with `args`; returns its exit code, the one JSON object it printed on
+/// stdout, and stderr.
+fn run_ai_tool(args: &[&str]) -> (Option<i32>, serde_json::Value, String) {
+    let mut all = vec!["--config-file=/dev/null", "--no-color"];
+    all.extend(args);
+    let output = run_crawler(&all);
+    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+    assert_eq!(
+        stdout.lines().count(),
+        1,
+        "one line on stdout: {stdout:?}\nstderr: {stderr}"
+    );
+    let answer: serde_json::Value =
+        serde_json::from_str(&stdout).unwrap_or_else(|e| panic!("not JSON ({e}): {stdout:?}"));
+    assert!(answer.is_object(), "{answer}");
+    (output.status.code(), answer, stderr)
+}
+
+fn models_response(path_prefix: &'static str, status: u16, body: &str) -> MockResponse {
+    MockResponse {
+        path_prefix,
+        status,
+        body: body.to_string(),
+        delay_ms: 0,
+    }
+}
+
+#[test]
+fn ai_list_models_prints_the_models_of_every_provider_shape() {
+    let cases = [
+        (
+            "openai-compatible",
+            "/v1",
+            "/v1/models",
+            "/v1/models",
+            include_str!("fixtures/ai-responses/models-vllm.json"),
+            "authorization: bearer sk-test-key",
+        ),
+        (
+            "anthropic",
+            "",
+            "/v1/models",
+            "/v1/models?limit=1000",
+            include_str!("fixtures/ai-responses/models-anthropic.json"),
+            "x-api-key: sk-test-key",
+        ),
+        (
+            "gemini",
+            "/v1beta",
+            "/v1beta/models",
+            "/v1beta/models?pageSize=1000",
+            include_str!("fixtures/ai-responses/models-gemini.json"),
+            "x-goog-api-key: sk-test-key",
+        ),
+    ];
+    for (provider, base, prefix, path, body, key_header) in cases {
+        let mock = MockLlm::start(vec![models_response(prefix, 200, body)]);
+        let endpoint = format!("http://127.0.0.1:{}{base}", mock.port());
+        let (code, answer, stderr) = run_ai_tool(&[
+            &format!("--ai-provider={provider}"),
+            &format!("--ai-endpoint={endpoint}"),
+            "--ai-api-key=sk-test-key",
+            "--ai-list-models",
+        ]);
+        assert_eq!(code, Some(0), "{provider}: {stderr}");
+        assert_eq!(answer["ok"], true, "{provider}: {answer}");
+        assert_eq!(answer["provider"], provider);
+        assert_eq!(answer["endpoint"], endpoint);
+        let heads = mock.request_heads();
+        assert_eq!(heads.len(), 1, "{provider}: one request");
+        let head = heads[0].to_ascii_lowercase();
+        assert!(
+            head.starts_with(&format!("get {} http/1.1\r\n", path.to_ascii_lowercase())),
+            "{provider}: {head}"
+        );
+        assert!(head.contains(key_header), "{provider}: {head}");
+        assert!(
+            !head.lines().next().unwrap_or_default().contains("sk-test-key"),
+            "{provider}: the key is never in the URL"
+        );
+        assert!(
+            !answer.to_string().contains("sk-test-key") && !stderr.contains("sk-test-key"),
+            "{provider}: the key is never printed"
+        );
+        let models = answer["models"].as_array().expect("a model list");
+        let ids: Vec<&str> = models.iter().filter_map(|m| m["id"].as_str()).collect();
+        match provider {
+            "openai-compatible" => {
+                assert_eq!(
+                    ids,
+                    [
+                        "deepseek-ai/DeepSeek-V4-Flash-0731",
+                        "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp",
+                        "nvidia/Qwen3.8-Flash-Next-NVFP4"
+                    ]
+                );
+                assert_eq!(
+                    models[2],
+                    serde_json::json!({"id": "nvidia/Qwen3.8-Flash-Next-NVFP4", "displayName": null,
+                        "contextWindow": 262144, "maxOutputTokens": null})
+                );
+            }
+            "anthropic" => {
+                assert_eq!(ids, ["claude-fable-5-1", "claude-opus-5", "claude-opus-5-5"]);
+                assert_eq!(
+                    models[2],
+                    serde_json::json!({"id": "claude-opus-5-5", "displayName": "Claude Opus 5.5",
+                        "contextWindow": 1000000, "maxOutputTokens": 128000})
+                );
+            }
+            _ => {
+                assert_eq!(
+                    ids,
+                    ["gemini-2.5-flash", "gemini-2.5-flash-preview-tts", "gemini-2.5-pro"]
+                );
+                assert_eq!(
+                    models[0],
+                    serde_json::json!({"id": "gemini-2.5-flash", "displayName": "Gemini 2.5 Flash",
+                        "contextWindow": 1048576, "maxOutputTokens": 65536})
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn ai_list_models_failures_are_one_json_object_without_the_key() {
+    // A provider that echoes the key it rejected.
+    let rejected = r#"{"error":{"message":"Incorrect API key provided: secret-xyz"}}"#;
+    let cases = [
+        (401, rejected, "HTTP 401: Incorrect API key provided: [redacted]"),
+        (502, "", "HTTP 502"),
+        (
+            200,
+            "<html>gateway</html>",
+            "The endpoint's answer is not JSON (body starts: <html>gateway</html>)",
+        ),
+        (
+            200,
+            r#"{"object":"list"}"#,
+            r#"The endpoint's answer is not a model list (body starts: {"object":"list"})"#,
+        ),
+        (
+            200,
+            rejected,
+            "AI provider error: Incorrect API key provided: [redacted]",
+        ),
+    ];
+    for (status, body, error) in cases {
+        let mock = MockLlm::start(vec![models_response("/v1/models", status, body)]);
+        let (code, answer, stderr) = run_ai_tool(&[
+            "--ai-provider=openai-compatible",
+            &format!("--ai-endpoint={}", mock.url()),
+            "--ai-api-key=secret-xyz",
+            "--ai-list-models",
+        ]);
+        assert_eq!(code, Some(1), "{status} {body}: {stderr}");
+        assert_eq!(answer, serde_json::json!({"ok": false, "error": error}));
+        assert!(stderr.contains(error), "the error on stderr too: {stderr}");
+        assert!(!stderr.contains("secret-xyz"), "{stderr}");
+    }
+
+    // Nothing listens there.
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .and_then(|listener| listener.local_addr())
+        .expect("a free port")
+        .port();
+    let (code, answer, _) = run_ai_tool(&[
+        "--ai-provider=openai-compatible",
+        &format!("--ai-endpoint=http://user:PW_SENTINEL@127.0.0.1:{port}/v1"),
+        "--ai-list-models",
+    ]);
+    assert_eq!(code, Some(1));
+    let error = answer["error"].as_str().expect("an error");
+    assert!(error.starts_with("AI request error: error sending request"), "{error}");
+    assert!(!answer.to_string().contains("PW_SENTINEL"), "{answer}");
+}
+
+#[test]
+fn ai_check_prints_the_statistics_of_one_request() {
+    let mock = MockLlm::start(vec![chat_response(
+        200,
+        include_str!("fixtures/ai-responses/vllm-qwen-think.json").to_string(),
+    )]);
+    let (code, answer, stderr) = run_ai_tool(&[
+        "--ai-provider=openai-compatible",
+        &format!("--ai-endpoint={}", mock.url()),
+        "--ai-model=qwen3.8",
+        "--ai-check",
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    let ms = answer["ms"].as_u64().expect("the request time");
+    assert!(ms >= 100, "the mock answers after 0.1 s: {ms}");
+    let speed = (37.0 * 1000.0 / ms as f64 * 10.0).round() / 10.0;
+    assert_eq!(
+        answer,
+        serde_json::json!({"ok": true, "provider": "openai-compatible", "model": "qwen3.8", "ms": ms,
+            "inputTokens": 17, "outputTokens": 37, "reasoningTokens": 33, "cachedInputTokens": 0,
+            "outputTokensPerSecond": speed, "finishReason": "stop", "reply": "OK"})
+    );
+    assert_line(
+        &stderr,
+        r"  AI ✓ #1 Connection check · 17 in · 37 out \(33 reasoning\) · \d+\.\d s · \d+ tok/s",
+    );
+    let bodies = mock.request_bodies();
+    assert_eq!(bodies.len(), 1, "one request");
+    let body: serde_json::Value = serde_json::from_str(&bodies[0]).expect("a JSON request");
+    assert_eq!(body["model"], "qwen3.8");
+    assert_eq!(
+        body["messages"],
+        serde_json::json!([{"role": "user", "content": "Reply with the single word OK."}])
+    );
+}
+
+#[test]
+fn ai_check_reports_what_the_provider_did_not_say_by_leaving_it_out() {
+    // MiniMax reasons inline and reports no reasoning count; this answer has no finish reason.
+    let mut response: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/ai-responses/minimax.json")).expect("JSON");
+    response["choices"][0]
+        .as_object_mut()
+        .expect("a choice")
+        .remove("finish_reason");
+    let mock = MockLlm::start(vec![chat_response(200, response.to_string())]);
+    let (code, answer, stderr) = run_ai_tool(&[
+        "--ai-provider=openai-compatible",
+        &format!("--ai-endpoint={}", mock.url()),
+        "--ai-model=MiniMax-M3",
+        "--ai-check",
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    assert_eq!(answer["inputTokens"], 183);
+    assert_eq!(answer["cachedInputTokens"], 128);
+    for field in ["reasoningTokens", "finishReason"] {
+        assert!(answer.get(field).is_none(), "no {field}: {answer}");
+    }
+    assert_eq!(answer["reply"], "OK", "the inline reasoning is not the reply");
+    assert_line(
+        &stderr,
+        r"  AI ✓ #1 Connection check · 183 in · 30 out \(reasoning n/a\) · \d+\.\d s · \d+ tok/s",
+    );
+}
+
+#[test]
+fn ai_check_never_uses_the_ai_cache() {
+    let tmp = TempDir::new("ai-check-cache");
+    let cache = tmp.path.join("ai-cache");
+    let mock = MockLlm::start(vec![chat_response(
+        200,
+        include_str!("fixtures/ai-responses/vllm-qwen-think.json").to_string(),
+    )]);
+    for _ in 0..2 {
+        let (code, answer, stderr) = run_ai_tool(&[
+            "--ai-provider=openai-compatible",
+            &format!("--ai-endpoint={}", mock.url()),
+            "--ai-model=m",
+            &format!("--ai-cache-dir={}", cache.display()),
+            "--ai-check",
+        ]);
+        assert_eq!(code, Some(0), "{stderr}");
+        assert_eq!(answer["ok"], true);
+    }
+    assert_eq!(mock.request_bodies().len(), 2, "every check asks the model");
+    // The option layer creates the directory; nothing may be written into it.
+    let entries = std::fs::read_dir(&cache).map(|dir| dir.count()).unwrap_or(0);
+    assert_eq!(entries, 0, "nothing is cached");
+}
+
+#[test]
+fn ai_check_failures_are_one_json_object_without_the_key() {
+    let mock = MockLlm::start(vec![chat_response(
+        401,
+        r#"{"error":{"message":"Incorrect API key provided: secret-xyz"}}"#.to_string(),
+    )]);
+    let (code, answer, stderr) = run_ai_tool(&[
+        "--ai-provider=openai-compatible",
+        &format!("--ai-endpoint={}", mock.url()),
+        "--ai-model=m",
+        "--ai-api-key=secret-xyz",
+        "--ai-check",
+    ]);
+    assert_eq!(code, Some(1), "{stderr}");
+    assert_eq!(
+        answer,
+        serde_json::json!({"ok": false,
+            "error": "AI provider error: Incorrect API key provided: [redacted]"})
+    );
+    assert_line(
+        &stderr,
+        r"  AI ✗ #1 Connection check · AI provider error: Incorrect API key provided: \[redacted\] · \d+\.\d s",
+    );
+    assert!(!stderr.contains("secret-xyz"), "{stderr}");
+
+    let mock = MockLlm::start(vec![chat_response(
+        404,
+        include_str!("fixtures/ai-responses/error-vllm-unknown-model.json").to_string(),
+    )]);
+    let (code, answer, _) = run_ai_tool(&[
+        "--ai-provider=openai-compatible",
+        &format!("--ai-endpoint={}", mock.url()),
+        "--ai-model=no-such-model",
+        "--ai-check",
+    ]);
+    assert_eq!(code, Some(1));
+    assert_eq!(
+        answer["error"],
+        "AI provider error: The model `no-such-model` does not exist."
+    );
+}
+
+#[test]
+fn ai_utility_modes_report_configuration_errors_as_json() {
+    let cases: [(&[&str], &str); 6] = [
+        (&["--ai-list-models"], "--ai-list-models requires --ai-provider"),
+        (&["--ai-check"], "--ai-check requires --ai-provider"),
+        (
+            &["--ai-provider=openai-compatible", "--ai-list-models"],
+            "--ai-provider=openai-compatible requires --ai-endpoint=URL.",
+        ),
+        (
+            &[
+                "--ai-provider=openai-compatible",
+                "--ai-endpoint=http://127.0.0.1:9/v1",
+                "--ai-check",
+            ],
+            "AI is enabled but --ai-model is missing.",
+        ),
+        (
+            &["--ai-provider=nope", "--ai-list-models"],
+            "Invalid --ai-provider 'nope'",
+        ),
+        (
+            &[
+                "--ai-provider=openai-compatible",
+                "--ai-endpoint=http://127.0.0.1:9/v1",
+                "--ai-model=m",
+                "--ai-list-models",
+                "--ai-check",
+            ],
+            "--ai-list-models and --ai-check cannot be combined",
+        ),
+    ];
+    for (args, message) in cases {
+        let (code, answer, stderr) = run_ai_tool(args);
+        assert_eq!(code, Some(101), "{args:?}: {stderr}");
+        assert_eq!(answer["ok"], false, "{args:?}: {answer}");
+        assert!(
+            answer["error"].as_str().is_some_and(|error| error.contains(message)),
+            "{args:?}: {answer}"
+        );
+        assert!(stderr.contains(message), "{args:?}: {stderr}");
+    }
+
+    // A key that does not resolve fails the run, like the AI phase of a crawl.
+    let (code, answer, _) = run_ai_tool(&[
+        "--ai-provider=anthropic",
+        "--ai-api-key-env=SITEONE_TEST_NO_SUCH_KEY",
+        "--ai-list-models",
+    ]);
+    assert_eq!(code, Some(1));
+    assert!(
+        answer["error"]
+            .as_str()
+            .is_some_and(|error| error.contains("no API key resolved for provider 'anthropic'")),
+        "{answer}"
+    );
 }

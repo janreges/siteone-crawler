@@ -499,6 +499,8 @@ mod tests {
             ai_cache_dir: Some("tmp/ai-cache".to_string()),
             ai_seo_affects_score: false,
             ai_dry_run: false,
+            ai_list_models: false,
+            ai_check: false,
             ai_report: None,
             ai_report_language: "en".to_string(),
             ai_report_dir: "tmp".to_string(),

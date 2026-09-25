@@ -14,7 +14,7 @@ use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use serde::{Deserialize, Serialize};
 
 use super::config::AiConfig;
-use super::provider::{self, ChatRequest, Provider, Usage};
+use super::provider::{self, ChatRequest, ModelInfo, Provider, Usage};
 use super::telemetry::{self, RequestOutcome, RequestRecord};
 use crate::error::{CrawlerError, CrawlerResult};
 
@@ -35,6 +35,8 @@ pub struct AiCompletion {
     pub usage: Usage,
     pub from_cache: bool,
     pub finish_reason: Option<String>,
+    /// The answering HTTP attempt's time from send to body read (None for a cache hit).
+    pub duration_ms: Option<u64>,
 }
 
 impl AiCompletion {
@@ -255,14 +257,7 @@ impl AiClient {
         }
 
         let call_start = std::time::Instant::now();
-
-        // Build headers.
-        let mut headers = HeaderMap::new();
-        for (k, v) in &shaped.headers {
-            if let (Ok(name), Ok(val)) = (HeaderName::from_bytes(k.as_bytes()), HeaderValue::from_str(v)) {
-                headers.insert(name, val);
-            }
-        }
+        let headers = header_map(&shaped.headers);
 
         let timeout = Duration::from_secs(self.config.timeout_secs.max(1));
         let body_string = serde_json::to_string(&shaped.body)
@@ -386,6 +381,7 @@ impl AiClient {
                     let Some(text) = provider::parse_content(self.config.provider, &json) else {
                         return Err(fail(record, no_content_message(self.config.provider, &json)));
                     };
+                    let duration_ms = record.duration_ms;
                     telemetry::report(record);
 
                     let completion = AiCompletion {
@@ -393,6 +389,7 @@ impl AiClient {
                         usage,
                         from_cache: false,
                         finish_reason,
+                        duration_ms,
                     };
                     self.store_cached(&cache_key, &completion);
                     return Ok(completion);
@@ -429,6 +426,55 @@ impl AiClient {
         }
 
         Err(CrawlerError::Other(format!("AI request failed: {}", last_err)))
+    }
+
+    /// The models the endpoint offers, sorted by id (one GET, no retries). The error is a
+    /// credential-free sentence.
+    pub async fn list_models(&self) -> Result<Vec<ModelInfo>, String> {
+        let shaped = provider::models_request(
+            self.config.provider,
+            &self.config.endpoint,
+            self.config.api_key.as_deref(),
+        );
+        let response = self
+            .client
+            .get(&shaped.url)
+            .headers(header_map(&shaped.headers))
+            .timeout(Duration::from_secs(self.config.timeout_secs.max(1)))
+            .send()
+            .await
+            .map_err(|e| self.redact(&format!("AI request error: {}", transport_error_text(e))))?;
+        let status = response.status();
+        let body = response
+            .text()
+            .await
+            .map_err(|e| self.redact(&format!("AI response read error: {}", transport_error_text(e))))?;
+        let json = serde_json::from_str::<serde_json::Value>(&body).ok();
+        if !status.is_success() {
+            let detail = json
+                .as_ref()
+                .and_then(|json| provider::extract_error(self.config.provider, json))
+                .unwrap_or_else(|| snippet(&body));
+            return Err(self.redact(&match detail.is_empty() {
+                true => format!("HTTP {}", status.as_u16()),
+                false => format!("HTTP {}: {}", status.as_u16(), detail),
+            }));
+        }
+        let Some(json) = json else {
+            return Err(self.redact(&format!(
+                "The endpoint's answer is not JSON (body starts: {})",
+                snippet(&body)
+            )));
+        };
+        if let Some(message) = provider::extract_error(self.config.provider, &json) {
+            return Err(self.redact(&format!("AI provider error: {}", message)));
+        }
+        provider::parse_model_list(&json).ok_or_else(|| {
+            self.redact(&format!(
+                "The endpoint's answer is not a model list (body starts: {})",
+                snippet(&body)
+            ))
+        })
     }
 
     /// `text` with the configured API key masked, should a provider or proxy echo it.
@@ -506,6 +552,7 @@ impl AiClient {
             usage,
             from_cache: true,
             finish_reason: cached.finish_reason,
+            duration_ms: None,
         })
     }
 
@@ -611,6 +658,17 @@ fn is_structured_output_unsupported(message: &str) -> bool {
     mentions_schema && rejects_capability
 }
 
+/// The shaped headers as a `HeaderMap`; a name or value HTTP cannot carry is left out.
+fn header_map(headers: &[(String, String)]) -> HeaderMap {
+    let mut map = HeaderMap::new();
+    for (k, v) in headers {
+        if let (Ok(name), Ok(val)) = (HeaderName::from_bytes(k.as_bytes()), HeaderValue::from_str(v)) {
+            map.insert(name, val);
+        }
+    }
+    map
+}
+
 fn elapsed_ms(since: Instant) -> u64 {
     since.elapsed().as_millis() as u64
 }
@@ -670,6 +728,7 @@ mod tests {
                 usage: Usage::default(),
                 from_cache: false,
                 finish_reason: Some(reason.to_string()),
+                duration_ms: None,
             };
             assert!(completion.was_truncated());
         }
@@ -678,6 +737,7 @@ mod tests {
             usage: Usage::default(),
             from_cache: false,
             finish_reason: Some("stop".to_string()),
+            duration_ms: None,
         };
         assert!(!completion.was_truncated());
         assert!(!completion.was_interrupted(Provider::OpenAi));
@@ -696,6 +756,7 @@ mod tests {
                 usage: Usage::default(),
                 from_cache: false,
                 finish_reason: Some(reason.to_string()),
+                duration_ms: None,
             };
             assert!(completion.was_interrupted(provider), "{provider:?} {reason}");
         }
@@ -732,6 +793,7 @@ mod tests {
             usage,
             from_cache: false,
             finish_reason: Some("stop".to_string()),
+            duration_ms: None,
         };
         client.store_cached("abcdef", &completion);
         let hit = client.get_cached("abcdef").expect("a cache hit");

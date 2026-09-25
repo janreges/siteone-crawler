@@ -329,6 +329,40 @@ fn shape_gemini(model: &str, endpoint: &str, api_key: Option<&str>, req: &ChatRe
     ShapedRequest { url, headers, body }
 }
 
+/// The GET request that lists the models an endpoint offers (`body` is unused). Anthropic and
+/// Gemini page their lists; one page of the most they return at once holds every model.
+pub fn models_request(provider: Provider, endpoint: &str, api_key: Option<&str>) -> ShapedRequest {
+    let endpoint = trim_endpoint(endpoint);
+    let mut headers = Vec::new();
+    let url = match provider {
+        Provider::OpenAi | Provider::OpenAiCompatible => {
+            if let Some(key) = api_key {
+                headers.push(("authorization".to_string(), format!("Bearer {}", key)));
+            }
+            format!("{}/models", endpoint)
+        }
+        Provider::Anthropic => {
+            headers.push(("anthropic-version".to_string(), "2023-06-01".to_string()));
+            if let Some(key) = api_key {
+                headers.push(("x-api-key".to_string(), key.to_string()));
+            }
+            format!("{}/v1/models?limit=1000", endpoint)
+        }
+        Provider::Gemini => {
+            // Key goes in a header, never in the URL (keeps it out of logs).
+            if let Some(key) = api_key {
+                headers.push(("x-goog-api-key".to_string(), key.to_string()));
+            }
+            format!("{}/models?pageSize=1000", endpoint)
+        }
+    };
+    ShapedRequest {
+        url,
+        headers,
+        body: Value::Null,
+    }
+}
+
 /// Hosted OpenAI strict mode supports only a subset of JSON Schema string formats. Keep the
 /// crawler's semantic URL validation, but remove the unsupported `uri` annotation before sending
 /// the schema so a valid custom URL field does not force a prompt-mode downgrade.
@@ -690,6 +724,67 @@ pub fn extract_error(provider: Provider, resp: &Value) -> Option<String> {
         }
     }
     None
+}
+
+/// One model an endpoint offers, as `--ai-list-models` prints it. A size the endpoint did not
+/// state is None, never 0.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelInfo {
+    pub id: String,
+    pub display_name: Option<String>,
+    /// Tokens the model accepts.
+    pub context_window: Option<u64>,
+    pub max_output_tokens: Option<u64>,
+}
+
+/// The models of a model-list response, sorted by id: `data[]` (OpenAI, every OpenAI-compatible
+/// runtime, Anthropic) or `models[]` (Gemini). Entries without a usable id and models that list
+/// their generation methods without `generateContent` are skipped, an odd size is left out, a
+/// repeated id keeps its first entry. None when the response holds no model list at all.
+pub fn parse_model_list(resp: &Value) -> Option<Vec<ModelInfo>> {
+    let entries = resp
+        .get("data")
+        .and_then(Value::as_array)
+        .or_else(|| resp.get("models").and_then(Value::as_array))?;
+    let mut models: Vec<ModelInfo> = entries.iter().filter_map(model_info).collect();
+    models.sort_by(|a, b| a.id.cmp(&b.id));
+    models.dedup_by(|later, earlier| later.id == earlier.id);
+    Some(models)
+}
+
+fn model_info(entry: &Value) -> Option<ModelInfo> {
+    if let Some(methods) = entry.get("supportedGenerationMethods").and_then(Value::as_array)
+        && !methods.iter().any(|method| method.as_str() == Some("generateContent"))
+    {
+        return None;
+    }
+    let text = |key: &str| {
+        entry
+            .get(key)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+    };
+    // Gemini names its models `models/<id>`.
+    let id = text("id").or_else(|| {
+        text("name")
+            .map(|name| name.strip_prefix("models/").unwrap_or(name))
+            .filter(|id| !id.is_empty())
+    })?;
+    let size = |keys: &[&str]| keys.iter().find_map(|key| count(entry, key)).filter(|&n| n > 0);
+    Some(ModelInfo {
+        id: id.to_string(),
+        display_name: text("display_name").or_else(|| text("displayName")).map(str::to_string),
+        context_window: size(&[
+            "max_model_len",
+            "context_length",
+            "context_window",
+            "max_input_tokens",
+            "inputTokenLimit",
+        ]),
+        max_output_tokens: size(&["max_tokens", "outputTokenLimit"]),
+    })
 }
 
 #[cfg(test)]
@@ -1356,6 +1451,7 @@ mod tests {
             let _ = parse_finish_reason(provider, resp);
             let _ = extract_error(provider, resp);
         }
+        let _ = parse_model_list(resp);
     }
 
     /// Nothing in response parsing may panic, whatever a provider sends.
@@ -1386,18 +1482,24 @@ mod tests {
                 "../../tests/fixtures/ai-responses/error-vllm-unknown-model.json"
             ))
             .expect("JSON"),
+            model_list("vllm"),
+            model_list("anthropic"),
+            model_list("gemini"),
+            model_list("openai"),
         ];
         for resp in fixtures {
             parse_everything(&resp);
             // The fixture with one key removed in turn: top level, `usage`, `usageMetadata`,
-            // `choices[0]`, `choices[0].message` and `candidates[0]`.
-            let paths: [&[&str]; 6] = [
+            // `choices[0]`, `choices[0].message`, `candidates[0]` and the first model entry.
+            let paths: [&[&str]; 8] = [
                 &[],
                 &["usage"],
                 &["usageMetadata"],
                 &["choices", "0"],
                 &["choices", "0", "message"],
                 &["candidates", "0"],
+                &["data", "0"],
+                &["models", "0"],
             ];
             for path in paths {
                 let pointer: String = path.iter().map(|segment| format!("/{segment}")).collect();
@@ -1414,6 +1516,180 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// A captured model list (`models-<name>.json`) from `tests/fixtures/ai-responses/`.
+    fn model_list(name: &str) -> Value {
+        let text = match name {
+            "vllm" => include_str!("../../tests/fixtures/ai-responses/models-vllm.json"),
+            "anthropic" => include_str!("../../tests/fixtures/ai-responses/models-anthropic.json"),
+            "gemini" => include_str!("../../tests/fixtures/ai-responses/models-gemini.json"),
+            "openai" => include_str!("../../tests/fixtures/ai-responses/models-openai.json"),
+            other => panic!("no model list {other}"),
+        };
+        serde_json::from_str(text).expect("the fixture is JSON")
+    }
+
+    fn model(
+        id: &str,
+        display_name: Option<&str>,
+        context_window: Option<u64>,
+        max_output_tokens: Option<u64>,
+    ) -> ModelInfo {
+        ModelInfo {
+            id: id.to_string(),
+            display_name: display_name.map(str::to_string),
+            context_window,
+            max_output_tokens,
+        }
+    }
+
+    #[test]
+    fn model_lists_of_every_captured_runtime() {
+        assert_eq!(
+            parse_model_list(&model_list("vllm")),
+            Some(vec![
+                model("deepseek-ai/DeepSeek-V4-Flash-0731", None, Some(262_144), None),
+                model("deepseek-ai/DeepSeek-V4-Flash-Vision-Exp", None, Some(262_144), None),
+                model("nvidia/Qwen3.8-Flash-Next-NVFP4", None, Some(262_144), None),
+            ])
+        );
+        assert_eq!(
+            parse_model_list(&model_list("anthropic")),
+            Some(vec![
+                model(
+                    "claude-fable-5-1",
+                    Some("Claude Fable 5.1"),
+                    Some(1_000_000),
+                    Some(128_000)
+                ),
+                model("claude-opus-5", Some("Claude Opus 5"), Some(1_000_000), Some(128_000)),
+                model(
+                    "claude-opus-5-5",
+                    Some("Claude Opus 5.5"),
+                    Some(1_000_000),
+                    Some(128_000)
+                ),
+            ])
+        );
+        assert_eq!(
+            parse_model_list(&model_list("gemini")),
+            Some(vec![
+                model(
+                    "gemini-2.5-flash",
+                    Some("Gemini 2.5 Flash"),
+                    Some(1_048_576),
+                    Some(65_536)
+                ),
+                model(
+                    "gemini-2.5-flash-preview-tts",
+                    Some("Gemini 2.5 Flash Preview TTS"),
+                    Some(8192),
+                    Some(16_384)
+                ),
+                model("gemini-2.5-pro", Some("Gemini 2.5 Pro"), Some(1_048_576), Some(65_536)),
+            ])
+        );
+        assert_eq!(
+            parse_model_list(&model_list("openai")),
+            Some(vec![
+                model("gpt-5-2025-08-07", None, None, None),
+                model("gpt-5-mini", None, None, None),
+                model("gpt-audio-2025-08-28", None, None, None),
+            ])
+        );
+    }
+
+    #[test]
+    fn odd_model_entries_are_skipped_or_lose_only_the_odd_field() {
+        let resp = json!({"data": [
+            {"id": "b", "context_length": 32768, "max_tokens": 4096.0},
+            {"id": "a", "context_window": -5, "display_name": 7},
+            {"id": "c", "max_model_len": 1.5, "max_tokens": "lots", "displayName": "  "},
+            {"id": "  d  ", "max_model_len": 0, "display_name": " Model D "},
+            {"id": "b", "max_model_len": 1},
+            {"id": "e", "max_input_tokens": 1e300},
+            {"id": ""},
+            {"id": 42},
+            {"display_name": "no id"},
+            "not an object",
+            null
+        ]});
+        assert_eq!(
+            parse_model_list(&resp),
+            Some(vec![
+                model("a", None, None, None),
+                // A duplicate id keeps its first entry.
+                model("b", None, Some(32_768), Some(4096)),
+                model("c", None, None, None),
+                model("d", Some("Model D"), None, None),
+                model("e", None, None, None),
+            ])
+        );
+    }
+
+    #[test]
+    fn models_that_cannot_generate_content_are_left_out() {
+        let resp = json!({"models": [
+            {"name": "models/text-embedding-004", "supportedGenerationMethods": ["embedContent"]},
+            {"name": "models/gemini-x", "supportedGenerationMethods": ["generateContent"], "inputTokenLimit": 100},
+            {"name": "models/no-methods-listed"}
+        ]});
+        assert_eq!(
+            parse_model_list(&resp),
+            Some(vec![
+                model("gemini-x", None, Some(100), None),
+                model("no-methods-listed", None, None, None),
+            ])
+        );
+    }
+
+    #[test]
+    fn an_answer_without_a_model_list_is_not_one() {
+        assert_eq!(parse_model_list(&json!({"object": "list", "data": []})), Some(vec![]));
+        for resp in [
+            json!(null),
+            json!([]),
+            json!("models"),
+            json!({"data": "soon"}),
+            json!({"models": {"id": "x"}}),
+            json!({"error": {"message": "invalid API key"}}),
+        ] {
+            assert_eq!(parse_model_list(&resp), None, "{resp}");
+        }
+    }
+
+    #[test]
+    fn model_list_requests_of_every_provider() {
+        let has = |r: &ShapedRequest, name: &str, value: &str| r.headers.iter().any(|(n, v)| n == name && v == value);
+        let r = models_request(Provider::OpenAiCompatible, "http://gpu:7999/v1/", Some("sk-x"));
+        assert_eq!(r.url, "http://gpu:7999/v1/models");
+        assert!(has(&r, "authorization", "Bearer sk-x"));
+        let r = models_request(Provider::OpenAiCompatible, "http://gpu:7999/v1", None);
+        assert_eq!(r.url, "http://gpu:7999/v1/models");
+        assert!(
+            r.headers.iter().all(|(name, _)| name != "authorization"),
+            "no key, no header"
+        );
+        let r = models_request(Provider::OpenAi, "https://api.openai.com/v1", Some("sk-x"));
+        assert_eq!(r.url, "https://api.openai.com/v1/models");
+        assert!(has(&r, "authorization", "Bearer sk-x"));
+        // One page of the most either API returns at once.
+        let r = models_request(Provider::Anthropic, "https://api.anthropic.com", Some("sk-ant"));
+        assert_eq!(r.url, "https://api.anthropic.com/v1/models?limit=1000");
+        assert!(has(&r, "x-api-key", "sk-ant") && has(&r, "anthropic-version", "2023-06-01"));
+        let r = models_request(
+            Provider::Gemini,
+            "https://generativelanguage.googleapis.com/v1beta",
+            Some("AIza-x"),
+        );
+        assert_eq!(
+            r.url,
+            "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000"
+        );
+        // The key goes in a header, never in the URL (which errors and logs may quote).
+        assert!(has(&r, "x-goog-api-key", "AIza-x"));
+        assert!(!r.url.contains("AIza-x"));
     }
 
     #[test]

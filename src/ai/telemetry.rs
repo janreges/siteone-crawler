@@ -215,7 +215,7 @@ impl RequestRecord {
     }
 }
 
-fn per_second(tokens: u64, duration_ms: u64) -> Option<f64> {
+pub(crate) fn per_second(tokens: u64, duration_ms: u64) -> Option<f64> {
     (duration_ms > 0).then(|| tokens as f64 * 1000.0 / duration_ms as f64)
 }
 

@@ -170,12 +170,13 @@ pub struct MockResponse {
 /// `--ai-endpoint`) that answers with canned bodies such as the captured provider responses in
 /// `tests/fixtures/ai-responses/`. The responses of one path prefix are served in order and the
 /// last one repeats once they are used up; the first prefix (in the order given) that matches a
-/// request path serves it, other paths get a 404. Every request body is recorded. Each connection
+/// request path serves it, other paths get a 404. Every request is recorded. Each connection
 /// is answered on its own thread, so concurrent AI requests are not serialized. Stopped when
 /// dropped.
 pub struct MockLlm {
     port: u16,
-    requests: Arc<Mutex<Vec<String>>>,
+    /// The head and the body of every request, in arrival order.
+    requests: Arc<Mutex<Vec<(String, String)>>>,
     stop: Arc<AtomicBool>,
     thread: Option<JoinHandle<()>>,
 }
@@ -200,7 +201,7 @@ impl MockLlm {
                 std::thread::spawn(move || {
                     let (head, body) = read_request(&mut stream);
                     let path = head.split_whitespace().nth(1).unwrap_or("/").to_string();
-                    recorded.lock().unwrap().push(body);
+                    recorded.lock().unwrap().push((head, body));
                     let answer = responses
                         .iter()
                         .find(|response| path.starts_with(response.path_prefix))
@@ -256,7 +257,22 @@ impl MockLlm {
 
     /// The body of every request received so far, in arrival order.
     pub fn request_bodies(&self) -> Vec<String> {
-        self.requests.lock().unwrap().clone()
+        self.requests
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(_, body)| body.clone())
+            .collect()
+    }
+
+    /// The head (request line and headers) of every request received so far, in arrival order.
+    pub fn request_heads(&self) -> Vec<String> {
+        self.requests
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(head, _)| head.clone())
+            .collect()
     }
 }
 

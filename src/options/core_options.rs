@@ -295,6 +295,10 @@ pub struct CoreOptions {
     pub ai_cache_dir: Option<String>,
     pub ai_seo_affects_score: bool,
     pub ai_dry_run: bool,
+    /// `--ai-list-models`: print the endpoint's models as JSON and exit (no crawl).
+    pub ai_list_models: bool,
+    /// `--ai-check`: send one test request, print its statistics as JSON and exit (no crawl).
+    pub ai_check: bool,
     // AI report engine: a preset key (e.g. `ia`, `quality`) or `extract` for a custom schema.
     pub ai_report: Option<String>,
     pub ai_report_language: String,
@@ -593,6 +597,8 @@ impl CoreOptions {
             ai_cache_dir: Some("tmp/ai-cache".to_string()),
             ai_seo_affects_score: false,
             ai_dry_run: false,
+            ai_list_models: false,
+            ai_check: false,
             ai_report: None,
             ai_report_language: "en".to_string(),
             ai_report_dir: output_prefix.clone(),
@@ -675,6 +681,8 @@ impl CoreOptions {
             "aiExtraBody",
             "aiSynthesisExtraBody",
             "aiDryRun",
+            "aiListModels",
+            "aiCheck",
             "aiSeoAffectsScore",
             "aiInclude",
             "aiExclude",
@@ -735,6 +743,21 @@ impl CoreOptions {
             core.ai_actions.clear();
         }
 
+        // The utility modes talk to the endpoint the user names; the provider has no safe default.
+        if core.ai_list_models && core.ai_check {
+            return Err(CrawlerError::Config(
+                "--ai-list-models and --ai-check cannot be combined; run them one at a time.".to_string(),
+            ));
+        }
+        for (flag, is_set) in [("--ai-list-models", core.ai_list_models), ("--ai-check", core.ai_check)] {
+            if is_set && !options.is_explicitly_set("aiProvider") {
+                return Err(CrawlerError::Config(format!(
+                    "{} requires --ai-provider (openai, anthropic, gemini, or openai-compatible with --ai-endpoint=URL).",
+                    flag
+                )));
+            }
+        }
+
         if core.ai_enabled {
             let provider = crate::ai::provider::Provider::parse(&core.ai_provider).ok_or_else(|| {
                 CrawlerError::Config(format!(
@@ -747,7 +770,8 @@ impl CoreOptions {
                     "--ai-provider=openai-compatible requires --ai-endpoint=URL.".to_string(),
                 ));
             }
-            if core.ai_model.as_deref().map(|s| s.trim().is_empty()).unwrap_or(true) {
+            // Listing the models is how a model is chosen, so it needs none.
+            if !core.ai_list_models && core.ai_model.as_deref().map(|s| s.trim().is_empty()).unwrap_or(true) {
                 return Err(CrawlerError::Config(
                     "AI is enabled but --ai-model is missing.".to_string(),
                 ));
@@ -1092,6 +1116,11 @@ impl CoreOptions {
 
         // In serve mode, skip normal crawl validation and return early
         if core.serve_markdown_dir.is_some() || core.serve_offline_dir.is_some() {
+            return Ok(core);
+        }
+
+        // The AI utility modes need no crawl, so no --url either.
+        if core.ai_list_models || core.ai_check {
             return Ok(core);
         }
 
@@ -2081,6 +2110,16 @@ impl CoreOptions {
             "aiDryRun" => {
                 if let Some(b) = value.as_bool() {
                     self.ai_dry_run = b;
+                }
+            }
+            "aiListModels" => {
+                if let Some(b) = value.as_bool() {
+                    self.ai_list_models = b;
+                }
+            }
+            "aiCheck" => {
+                if let Some(b) = value.as_bool() {
+                    self.ai_check = b;
                 }
             }
             "aiReport" => match value.as_str() {
@@ -3715,6 +3754,16 @@ pub fn get_options() -> Options {
                 Some("false"), false, false, None,
             ),
             CrawlerOption::new(
+                "--ai-list-models", None, "aiListModels", OptionType::Bool, false,
+                "Print the models the configured AI endpoint offers (with context window when known) as JSON, then exit.",
+                Some("false"), false, false, None,
+            ),
+            CrawlerOption::new(
+                "--ai-check", None, "aiCheck", OptionType::Bool, false,
+                "Send one short test request to the configured AI model, print its statistics as JSON, then exit.",
+                Some("false"), false, false, None,
+            ),
+            CrawlerOption::new(
                 "--ai-report", None, "aiReport", OptionType::String, false,
                 "Generate a first-class AI report over the crawled pages. A preset key — `ia` (information-architecture inventory), `quality` (content quality/readability), `topics` (topic & content-gap map), `compliance` (regulatory & dark-pattern audit, incl. EU CCD2 loan-advertising rules) — or `extract` for a custom typed schema. Emits a structured JSON and a self-contained HTML report.",
                 None, true, false, None,
@@ -4480,6 +4529,8 @@ mod tests {
             ai_cache_dir: Some("tmp/ai-cache".to_string()),
             ai_seo_affects_score: false,
             ai_dry_run: false,
+            ai_list_models: false,
+            ai_check: false,
             ai_report: None,
             ai_report_language: "en".to_string(),
             ai_report_dir: "tmp".to_string(),
@@ -4909,7 +4960,7 @@ mod tests {
                 .values()
                 .map(|group| group.options.len())
                 .sum::<usize>(),
-            222
+            224
         );
     }
 

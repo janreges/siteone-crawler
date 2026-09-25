@@ -56,6 +56,11 @@ async fn main() {
                 siteone_crawler::error::CrawlerError::Config(inner) => inner.clone(),
                 other => other.to_string(),
             };
+            // The AI utility modes answer in JSON on stdout, also when their options are wrong.
+            if siteone_crawler::ai::tools::requested(&argv) {
+                siteone_crawler::ai::tools::print_failure(&msg);
+                std::process::exit(101);
+            }
             eprint!("{}", utils::get_color_text(&format!("ERROR: {}", msg), "red", false));
             Initiator::print_help();
             eprintln!(
@@ -135,6 +140,15 @@ async fn main() {
                 );
                 std::process::exit(1);
             }
+        }
+        return;
+    }
+
+    // AI utility modes (model list, connection check): one JSON answer on stdout, no crawl.
+    if initiator.get_options().ai_list_models || initiator.get_options().ai_check {
+        let exit_code = siteone_crawler::ai::tools::run(initiator.get_options()).await;
+        if exit_code != 0 {
+            std::process::exit(exit_code);
         }
         return;
     }
