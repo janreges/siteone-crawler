@@ -1146,6 +1146,41 @@ Importance ranking favors the homepage, pages linked from it, shallow click-dept
 | `--ai-report-dir=<dir>` | Paired JSON/HTML AI artifact directory. Default `tmp/`; filenames always include a unique run ID. |
 | `--ai-seo-affects-score` | Let the AI SEO assessment apply a small capped deduction to the SEO quality score. **Off by default** — AI is advisory and never affects the `--ci` gate, keeping the score deterministic and reproducible. |
 
+#### Following AI requests
+
+Every LLM request is reported on stderr as its response arrives: the task and its progress, the page or stage, input and output tokens (with the reasoning part when the provider counts it), the time of the HTTP attempt and the output speed:
+
+```
+  AI ✓ #12 SEO 12/40 · /blog/post · 3,412 in · 812 out (540 reasoning) · 6.8 s · 119 tok/s
+  AI ✓ #13 Profile: chapters 3/12 · Services · 9,870 in · 1,944 out (reasoning n/a) · 21.4 s · 91 tok/s
+  AI ✓ #14 Typos 3/40 · /about · tokens not reported · 2.1 s
+  AI ↻ #15 SEO 13/40 · /blog/x · HTTP 429 · 0.4 s · retrying (attempt 2/3)
+  AI ✗ #16 SEO 13/40 · /blog/x · AI provider error: model not found · 0.2 s
+  AI ⇢ #17 SEO 14/40 · /contact · cache hit · 1,020 in · 88 out
+```
+
+`✓` answered, `↻` will be retried (HTTP 429/5xx or a connection error), `✗` failed, `⇢` answered from `--ai-cache-dir`. Output tokens include the reasoning; `(reasoning n/a)` means the response carried reasoning text without a count (e.g. MiniMax), and a response without usage still gets its line. The time covers only the HTTP attempt (send to body), never rate-limit waits or retry pauses. `--hide-progress-bar` hides the lines. The per-category token lines at the end of the run add the reasoning total and the average output speed. A host gets the same data as `aiRequest`, `aiProgress` and `aiUsage` events of the `--events-file` stream ([docs/EVENTS.md](docs/EVENTS.md)).
+
+#### Model list and connection check
+
+Two utility modes help pick and test a model (a GUI uses them for its model picker) without crawling: no `--url`, exactly one JSON object on stdout — also on failure, as `{"ok":false,"error":"…"}` with exit code `1` (`101` for a configuration error) — and never the API key. They use the connection options exactly as a crawl does (`--ai-provider`, `--ai-endpoint`, the `--ai-api-key*` options, `--ai-extra-body`, `--ai-timeout`, …).
+
+| Parameter | Description |
+|-----------|-------------|
+| `--ai-list-models` | Print the models the configured AI endpoint offers (with context window when known) as JSON, then exit. Needs no `--ai-model`. Anthropic and Gemini also report display names and output limits; OpenAI lists ids only. |
+| `--ai-check` | Send one short test request to the configured AI model, print its statistics as JSON, then exit. The AI cache is neither read nor written; the request's line (see above) goes to stderr. |
+
+```bash
+./siteone-crawler --ai-provider=openai-compatible --ai-endpoint=http://localhost:8000/v1 --ai-list-models
+{"ok":true,"provider":"openai-compatible","endpoint":"http://localhost:8000/v1","models":[{"id":"nvidia/Qwen3.8-Flash-Next-NVFP4","displayName":null,"contextWindow":262144,"maxOutputTokens":null}]}
+
+./siteone-crawler --ai-provider=openai-compatible --ai-endpoint=http://localhost:8000/v1 \
+  --ai-model=nvidia/Qwen3.8-Flash-Next-NVFP4 --ai-check
+{"ok":true,"provider":"openai-compatible","model":"nvidia/Qwen3.8-Flash-Next-NVFP4","ms":275,"inputTokens":17,"outputTokens":37,"reasoningTokens":33,"cachedInputTokens":0,"outputTokensPerSecond":134.5,"finishReason":"stop","reply":"OK"}
+```
+
+What the provider does not report (e.g. a reasoning count) is left out of the `--ai-check` answer, never written as `0`.
+
 #### Thinking / reasoning
 
 Thinking/reasoning is controlled via the universal `--ai-extra-body` JSON, which is deep-merged into the request (overriding native fields). This avoids a separate switch for every provider's differing convention:
