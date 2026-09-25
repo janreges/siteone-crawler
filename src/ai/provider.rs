@@ -1027,7 +1027,6 @@ mod tests {
         let text = match name {
             "vllm-qwen-think" => include_str!("../../tests/fixtures/ai-responses/vllm-qwen-think.json"),
             "vllm-qwen-nothink" => include_str!("../../tests/fixtures/ai-responses/vllm-qwen-nothink.json"),
-            "vllm-deepseek" => include_str!("../../tests/fixtures/ai-responses/vllm-deepseek.json"),
             "openai" => include_str!("../../tests/fixtures/ai-responses/openai.json"),
             "anthropic" => include_str!("../../tests/fixtures/ai-responses/anthropic.json"),
             "gemini" => include_str!("../../tests/fixtures/ai-responses/gemini.json"),
@@ -1047,7 +1046,6 @@ mod tests {
         let cases = [
             ("vllm-qwen-think", usage(Some(17), Some(37), Some(33), Some(0))),
             ("vllm-qwen-nothink", usage(Some(19), Some(2), Some(0), Some(0))),
-            ("vllm-deepseek", usage(Some(17), Some(37), Some(33), Some(0))),
             ("openai", usage(Some(13), Some(10), Some(0), Some(0))),
             ("anthropic", usage(Some(43), Some(39), Some(32), Some(0))),
             ("gemini", usage(Some(8), Some(21), Some(20), None)),
@@ -1208,10 +1206,9 @@ mod tests {
         let cases = [
             ("vllm-qwen-think", Provider::OpenAiCompatible, Some(148)), // message.reasoning
             ("vllm-qwen-nothink", Provider::OpenAiCompatible, None),    // reasoning: null
-            ("vllm-deepseek", Provider::OpenAiCompatible, Some(148)),
-            ("deepseek", Provider::OpenAiCompatible, Some(77)), // message.reasoning_content
-            ("anthropic", Provider::Anthropic, Some(123)),      // "thinking" block
-            ("minimax", Provider::OpenAiCompatible, Some(108)), // inline <think> in the content
+            ("deepseek", Provider::OpenAiCompatible, Some(77)),         // message.reasoning_content
+            ("anthropic", Provider::Anthropic, Some(123)),              // "thinking" block
+            ("minimax", Provider::OpenAiCompatible, Some(108)),         // inline <think> in the content
             ("openai", Provider::OpenAi, None),
             ("gemini", Provider::Gemini, None),
         ];
@@ -1372,7 +1369,6 @@ mod tests {
         let fixtures = [
             fixture("vllm-qwen-think"),
             fixture("vllm-qwen-nothink"),
-            fixture("vllm-deepseek"),
             fixture("openai"),
             fixture("anthropic"),
             fixture("gemini"),
