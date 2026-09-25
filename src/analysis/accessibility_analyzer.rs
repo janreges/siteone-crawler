@@ -746,19 +746,31 @@ fn input_is_labeled(input: &scraper::ElementRef, document: &Html) -> bool {
 
 /// Does a <label> have text of its own? Its text, the alt text of a nested image and the aria-label
 /// of the label or of an element in it (e.g. an SVG icon) count; nested form controls (the options
-/// of a wrapped <select>, a <textarea> value, their aria-label) and scripts do not.
+/// of a wrapped <select>, a <textarea> value, their aria-label), scripts and content hidden from
+/// assistive technology (see `hides_itself` and `visibility_hidden`) do not.
 /// The walk keeps its own stack: recursing once per nesting level overflows on deeply nested markup.
 fn label_has_text(label: &scraper::ElementRef) -> bool {
-    let mut pending: Vec<ego_tree::NodeRef<scraper::Node>> = vec![**label];
-    while let Some(node) = pending.pop() {
+    if attr_non_empty(label.value().attr("aria-label")) {
+        return true;
+    }
+    // Each node with whether an element above it (inside the label) made it invisible.
+    let mut pending: Vec<(ego_tree::NodeRef<scraper::Node>, bool)> =
+        label.children().map(|child| (child, false)).collect();
+    while let Some((node, invisible)) = pending.pop() {
         match node.value() {
-            scraper::Node::Text(text) if !text.trim().is_empty() => return true,
-            scraper::Node::Element(el) => match el.name() {
-                "input" | "select" | "textarea" | "script" | "style" => {}
-                _ if attr_non_empty(el.attr("aria-label")) => return true,
-                "img" if attr_non_empty(el.attr("alt")) => return true,
-                _ => pending.extend(node.children()),
-            },
+            scraper::Node::Text(text) if !invisible && !text.trim().is_empty() => return true,
+            scraper::Node::Element(el) => {
+                if matches!(el.name(), "input" | "select" | "textarea" | "script" | "style") || hides_itself(el) {
+                    continue;
+                }
+                let invisible = visibility_hidden(el).unwrap_or(invisible);
+                if !invisible
+                    && (attr_non_empty(el.attr("aria-label")) || (el.name() == "img" && attr_non_empty(el.attr("alt"))))
+                {
+                    return true;
+                }
+                pending.extend(node.children().map(|child| (child, invisible)));
+            }
             _ => {}
         }
     }
@@ -772,24 +784,11 @@ fn label_has_text(label: &scraper::ElementRef) -> bool {
 fn is_hidden_from_assistive_tech(element: &scraper::ElementRef) -> bool {
     let mut visibility_decided = false;
     for el in std::iter::once(*element).chain(element.ancestors().filter_map(scraper::ElementRef::wrap)) {
-        let v = el.value();
-        if v.attr("hidden").is_some()
-            || v.attr("aria-hidden")
-                .is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
-        {
+        if hides_itself(el.value()) {
             return true;
         }
-        let Some(style) = v.attr("style") else {
-            continue;
-        };
-        if inline_style_value(style, "display").as_deref() == Some("none") {
-            return true;
-        }
-        if !visibility_decided
-            && let Some(visibility) = inline_style_value(style, "visibility")
-            && !matches!(visibility.as_str(), "inherit" | "unset")
-        {
-            if matches!(visibility.as_str(), "hidden" | "collapse") {
+        if !visibility_decided && let Some(hidden) = visibility_hidden(el.value()) {
+            if hidden {
                 return true;
             }
             visibility_decided = true;
@@ -798,23 +797,37 @@ fn is_hidden_from_assistive_tech(element: &scraper::ElementRef) -> bool {
     false
 }
 
-/// The lower-cased value an inline `style` attribute gives `property`: comments are ignored, the
-/// property name must match exactly (so `--x-display` is not `display`), and a later declaration
-/// wins unless an earlier one is `!important`.
-fn inline_style_value(style: &str, property: &str) -> Option<String> {
-    let mut css = String::with_capacity(style.len());
-    let mut rest = style;
-    while let Some(start) = rest.find("/*") {
-        css.push_str(&rest[..start]);
-        css.push(' ');
-        rest = rest[start + 2..]
-            .find("*/")
-            .map_or("", |end| &rest[start + 2 + end + 2..]);
-    }
-    css.push_str(rest);
+/// Does the element hide itself and its content: a `hidden` attribute, aria-hidden="true" or an
+/// inline display:none?
+fn hides_itself(el: &scraper::node::Element) -> bool {
+    el.attr("hidden").is_some()
+        || el
+            .attr("aria-hidden")
+            .is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+        || el
+            .attr("style")
+            .is_some_and(|style| inline_style_value(style, "display").as_deref() == Some("none"))
+}
 
+/// The inline `visibility` of the element: Some(true) for hidden/collapse, Some(false) for a value
+/// that shows it, None when it sets none or inherits it (`inherit`, `unset`). Inherited, so a child
+/// can show itself again.
+fn visibility_hidden(el: &scraper::node::Element) -> Option<bool> {
+    let visibility = inline_style_value(el.attr("style")?, "visibility")?;
+    match visibility.as_str() {
+        "inherit" | "unset" => None,
+        value => Some(matches!(value, "hidden" | "collapse")),
+    }
+}
+
+/// The lower-cased value an inline `style` attribute gives `property` (`display` or `visibility`), read
+/// as a browser reads it: comments are ignored and quoted strings or parentheses never end a
+/// declaration, the property name must match exactly (so `--x-display` is not `display`), a
+/// declaration whose value the property does not accept is dropped, and a later declaration wins
+/// unless an earlier one is `!important`.
+fn inline_style_value(style: &str, property: &str) -> Option<String> {
     let mut effective: Option<(String, bool)> = None;
-    for declaration in css.split(';') {
+    for declaration in css_declarations(style) {
         let Some((name, value)) = declaration.split_once(':') else {
             continue;
         };
@@ -829,14 +842,149 @@ fn inline_style_value(style: &str, property: &str) -> Option<String> {
             }
             _ => false,
         };
+        let value = value.trim_end().to_string();
+        if !is_valid_css_value(property, &value) {
+            continue;
+        }
         if effective
             .as_ref()
             .is_none_or(|(_, was_important)| important || !was_important)
         {
-            effective = Some((value.trim_end().to_string(), important));
+            effective = Some((value, important));
         }
     }
     effective.map(|(value, _)| value)
+}
+
+/// The declarations of an inline style without comments: split at every `;` that is outside a
+/// quoted string and outside parentheses.
+fn css_declarations(style: &str) -> Vec<String> {
+    let mut declarations = Vec::new();
+    let mut current = String::new();
+    let mut quote: Option<char> = None;
+    let mut depth = 0usize;
+    let mut chars = style.chars().peekable();
+    while let Some(c) = chars.next() {
+        if let Some(q) = quote {
+            current.push(c);
+            if c == '\\' {
+                if let Some(escaped) = chars.next() {
+                    current.push(escaped);
+                }
+            } else if c == q {
+                quote = None;
+            }
+            continue;
+        }
+        match c {
+            '/' if chars.peek() == Some(&'*') => {
+                chars.next();
+                let mut previous = ' ';
+                for next in chars.by_ref() {
+                    if previous == '*' && next == '/' {
+                        break;
+                    }
+                    previous = next;
+                }
+                current.push(' ');
+            }
+            '"' | '\'' => {
+                quote = Some(c);
+                current.push(c);
+            }
+            '(' => {
+                depth += 1;
+                current.push(c);
+            }
+            ')' => {
+                depth = depth.saturating_sub(1);
+                current.push(c);
+            }
+            ';' if depth == 0 => declarations.push(std::mem::take(&mut current)),
+            _ => current.push(c),
+        }
+    }
+    declarations.push(current);
+    declarations
+}
+
+/// Does `property` (`display` or `visibility`) accept `value`? Values with `var()` are accepted, as a
+/// browser accepts them before it knows what they resolve to.
+fn is_valid_css_value(property: &str, value: &str) -> bool {
+    const GLOBAL: &[&str] = &["inherit", "initial", "unset", "revert", "revert-layer"];
+    const DISPLAY_SINGLE: &[&str] = &[
+        "none",
+        "contents",
+        "block",
+        "inline",
+        "run-in",
+        "flow",
+        "flow-root",
+        "table",
+        "flex",
+        "grid",
+        "ruby",
+        "math",
+        "list-item",
+        "inline-block",
+        "inline-table",
+        "inline-flex",
+        "inline-grid",
+        "table-row-group",
+        "table-header-group",
+        "table-footer-group",
+        "table-row",
+        "table-cell",
+        "table-column-group",
+        "table-column",
+        "table-caption",
+        "ruby-base",
+        "ruby-text",
+        "ruby-base-container",
+        "ruby-text-container",
+        "-webkit-box",
+        "-webkit-inline-box",
+        "-webkit-flex",
+        "-webkit-inline-flex",
+        "-moz-box",
+        "-moz-inline-box",
+        "-ms-flexbox",
+        "-ms-inline-flexbox",
+        "-ms-grid",
+        "-ms-inline-grid",
+    ];
+    // Keywords of the multi-keyword syntax, e.g. `inline flex` or `block flow list-item`.
+    const DISPLAY_MULTI: &[&str] = &[
+        "block",
+        "inline",
+        "run-in",
+        "flow",
+        "flow-root",
+        "table",
+        "flex",
+        "grid",
+        "ruby",
+        "math",
+        "list-item",
+    ];
+    if value.contains("var(") || GLOBAL.contains(&value) {
+        return true;
+    }
+    match property {
+        "display" => {
+            let keywords: Vec<&str> = value.split_whitespace().collect();
+            match keywords.as_slice() {
+                [single] => DISPLAY_SINGLE.contains(single),
+                [_, _] | [_, _, _] => keywords
+                    .iter()
+                    .enumerate()
+                    .all(|(index, keyword)| DISPLAY_MULTI.contains(keyword) && !keywords[..index].contains(keyword)),
+                _ => false,
+            }
+        }
+        "visibility" => matches!(value, "visible" | "hidden" | "collapse"),
+        _ => true,
+    }
 }
 
 #[cfg(test)]
@@ -1096,6 +1244,22 @@ mod tests {
     }
 
     #[test]
+    fn hidden_content_of_a_label_does_not_name_the_control() {
+        for html in [
+            r#"<label for="q"><svg role="img" aria-hidden="true" aria-label="Search"></svg></label><input id="q">"#,
+            r#"<label for="q"><span hidden aria-label="Search"></span></label><input id="q">"#,
+            r#"<label for="q"><span style="display:none"><svg role="img" aria-label="Search"></svg></span></label><input id="q">"#,
+            r#"<label><span style="visibility:hidden">Search</span><input id="q"></label>"#,
+        ] {
+            let html = format!("<html><body>{html}</body></html>");
+            assert_eq!(form_label_warnings(&html).len(), 1, "hidden label content: {html}");
+        }
+        // A child can make itself visible again.
+        let visible = r#"<html><body><label for="q"><span style="visibility:hidden"><span style="visibility:visible">Search</span></span></label><input id="q"></body></html>"#;
+        assert!(form_label_warnings(visible).is_empty());
+    }
+
+    #[test]
     fn inline_styles_that_leave_a_control_visible_keep_it_checked() {
         for body in [
             // a later declaration wins
@@ -1106,6 +1270,8 @@ mod tests {
             r#"<input id="q" style="--previous-display:none;display:block">"#,
             // the nearest `visibility` decides
             r#"<div style="visibility:hidden"><input id="q" style="visibility:visible"></div>"#,
+            // a `;` in a quoted value does not end the declaration
+            r#"<input id="q" style="display:block; --literal:';display:none;'">"#,
         ] {
             let html = format!("<html><body>{body}</body></html>");
             assert_eq!(
@@ -1126,6 +1292,11 @@ mod tests {
             r#"<input id="q" style="visibility:collapse">"#,
             r#"<div style="visibility:visible"><input id="q" style="visibility:hidden"></div>"#,
             r#"<div style="visibility:hidden"><span style="visibility:inherit"><input id="q"></span></div>"#,
+            // a `/*` in a quoted value does not start a comment
+            r#"<input id="q" style="--literal:'/*';display:none">"#,
+            // a browser drops a declaration with an invalid value
+            r#"<input id="q" style="display:none;display:invalid">"#,
+            r#"<div style="visibility:hidden"><input id="q" style="visibility:invalid"></div>"#,
         ] {
             let html = format!("<html><body>{body}</body></html>");
             assert!(
