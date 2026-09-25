@@ -202,7 +202,9 @@ impl RequestRecord {
             parts.push(format!("{} in", thousands(input)));
         }
         if let Some(output) = usage.output_tokens {
-            let reasoning = match (usage.reasoning_tokens, self.reasoning_chars) {
+            // A reported zero says nothing worth a column (vLLM with thinking off, OpenAI
+            // non-reasoning answers), and next to reasoning text it did not count that text.
+            let reasoning = match (usage.reasoning_tokens.filter(|&n| n > 0), self.reasoning_chars) {
                 (Some(reasoning), _) => format!(" ({} reasoning)", thousands(reasoning)),
                 (None, Some(_)) => " (reasoning n/a)".to_string(),
                 (None, None) => String::new(),
@@ -488,14 +490,14 @@ mod tests {
         let r = RequestRecord {
             task: None,
             subject: None,
-            usage: usage(Some(1_234_567), Some(1000), Some(0)),
+            usage: usage(Some(1_234_567), Some(1000), Some(7)),
             // 6.85 s rounds half up to 6.9 s; 1000 / 6.85 = 145.99 tok/s.
             duration_ms: Some(6850),
             ..record(RequestOutcome::Ok)
         };
         assert_eq!(
             r.console_line(),
-            "  AI ✓ #12 SEO analysis · 1,234,567 in · 1,000 out (0 reasoning) · 6.9 s · 146 tok/s"
+            "  AI ✓ #12 SEO analysis · 1,234,567 in · 1,000 out (7 reasoning) · 6.9 s · 146 tok/s"
         );
         let r = RequestRecord {
             usage: usage(None, Some(5), None),
@@ -503,6 +505,50 @@ mod tests {
             ..r
         };
         assert_eq!(r.console_line(), "  AI ✓ #12 SEO analysis · 5 out · 0.0 s");
+    }
+
+    #[test]
+    fn a_zero_reasoning_count_is_left_out_of_the_line() {
+        // vLLM with thinking off and OpenAI's non-reasoning answers report `reasoning_tokens: 0`.
+        let r = RequestRecord {
+            task: None,
+            subject: None,
+            usage: usage(Some(19), Some(2), Some(0)),
+            duration_ms: Some(100),
+            ..record(RequestOutcome::Ok)
+        };
+        assert_eq!(
+            r.console_line(),
+            "  AI ✓ #12 SEO analysis · 19 in · 2 out · 0.1 s · 20 tok/s"
+        );
+        let cached = RequestRecord {
+            duration_ms: None,
+            ..record(RequestOutcome::CacheHit)
+        };
+        let cached = RequestRecord {
+            usage: r.usage,
+            task: None,
+            subject: None,
+            ..cached
+        };
+        assert_eq!(
+            cached.console_line(),
+            "  AI ⇢ #12 SEO analysis · cache hit · 19 in · 2 out"
+        );
+        // A zero next to reasoning text does not count that text.
+        let uncounted = RequestRecord {
+            reasoning_chars: Some(148),
+            ..r.clone()
+        };
+        assert_eq!(
+            uncounted.console_line(),
+            "  AI ✓ #12 SEO analysis · 19 in · 2 out (reasoning n/a) · 0.1 s · 20 tok/s"
+        );
+        // The event keeps the zero: the provider did report it.
+        assert_eq!(
+            serde_json::to_value(r.event()).expect("JSON")["reasoningTokens"],
+            serde_json::json!(0)
+        );
     }
 
     #[test]
