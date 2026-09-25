@@ -44,19 +44,194 @@ static RE_CROSSORIGIN: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)crossorigin")
 static RE_VUEPRESS_BOOTSTRAP: Lazy<Regex> = Lazy::new(|| Regex::new(r"__VUEPRESS(?:_VERSION)?__\s*=\s*\{").unwrap());
 
 /// A VuePress 1.x or 0.x client bundle, whose `path:"/…"` keys are page and sidebar links (#62). Only a
-/// script that sets the marker counts: VuePress sets it in its client bundle, never in a page, so an HTML
-/// page or a bundle that merely mentions or reads the marker is not one, and neither is one that shows
-/// the bootstrap in a string or a comment (the bootstrap must start a statement).
+/// script that runs the bootstrap counts: VuePress sets the marker in its client bundle, never in a page,
+/// so an HTML page or a bundle that merely mentions or reads the marker is not one, and neither is one
+/// that shows the bootstrap in a comment, a string or a template (the bootstrap must be code that starts
+/// a statement).
 fn is_vuepress_bundle(content: &str, content_type: ContentTypeId) -> bool {
-    content_type == ContentTypeId::Script
-        && RE_VUEPRESS_BOOTSTRAP
-            .find_iter(content)
-            .any(|bootstrap| starts_statement(&content[..bootstrap.start()]))
+    if content_type != ContentTypeId::Script {
+        return false;
+    }
+    let bootstraps: Vec<usize> = RE_VUEPRESS_BOOTSTRAP
+        .find_iter(content)
+        .map(|bootstrap| bootstrap.start())
+        .filter(|&start| starts_statement(&content[..start]))
+        .collect();
+    if bootstraps.is_empty() {
+        return false;
+    }
+    // A script the scan loses track of (it ends inside a comment, string or template) is judged by the
+    // statement boundary alone.
+    in_js_code(content, &bootstraps).is_none_or(|in_code| in_code.contains(&true))
+}
+
+/// Where the lexical scan of JavaScript is: in code, or in text that does not run.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum JsContext {
+    Code,
+    LineComment,
+    BlockComment,
+    Quoted(u8),
+    Template,
+    Regex { in_class: bool },
+}
+
+/// For each of the ascending byte `offsets` in `js`: is it in code, not in a comment, a string, the text
+/// of a template or a regular expression? None when the scan does not end in code, i.e. it lost track
+/// of the source. A `/` starts a regular expression where a value may start (after an operator, an
+/// opening bracket or a keyword such as `return`), otherwise it divides.
+fn in_js_code(js: &str, offsets: &[usize]) -> Option<Vec<bool>> {
+    const REGEX_KEYWORDS: &[&str] = &[
+        "return",
+        "typeof",
+        "instanceof",
+        "in",
+        "of",
+        "new",
+        "delete",
+        "void",
+        "throw",
+        "case",
+        "do",
+        "else",
+        "yield",
+        "await",
+    ];
+    let bytes = js.as_bytes();
+    let mut in_code = Vec::with_capacity(offsets.len());
+    let mut context = JsContext::Code;
+    // The brace depth at each open `${` of a template, and the current depth
+    let mut templates: Vec<usize> = Vec::new();
+    let mut braces = 0usize;
+    // The last token in code: a punctuator, a value (`"` for a string, template or regular expression,
+    // `a` for a word) and the word itself
+    let mut last: Option<u8> = None;
+    let mut word = String::new();
+    let mut in_word = false;
+    let mut i = 0;
+    while i < bytes.len() {
+        while in_code.len() < offsets.len() && offsets[in_code.len()] <= i {
+            in_code.push(offsets[in_code.len()] == i && context == JsContext::Code);
+        }
+        let c = bytes[i];
+        let next = bytes.get(i + 1).copied();
+        let mut step = 1;
+        match context {
+            JsContext::Code => {
+                let is_word = c.is_ascii_alphanumeric() || c == b'_' || c == b'$' || c >= 0x80;
+                if is_word {
+                    if !in_word {
+                        word.clear();
+                    }
+                    word.push(c as char);
+                    last = Some(b'a');
+                } else {
+                    match c {
+                        b' ' | b'\t' | b'\n' | b'\r' => {}
+                        b'/' if next == Some(b'/') => context = JsContext::LineComment,
+                        b'/' if next == Some(b'*') => {
+                            context = JsContext::BlockComment;
+                            step = 2;
+                        }
+                        b'/' => {
+                            let starts_value = match last {
+                                None => true,
+                                Some(b'a') => REGEX_KEYWORDS.contains(&word.as_str()),
+                                Some(b'"') | Some(b')') | Some(b']') => false,
+                                Some(_) => true,
+                            };
+                            if starts_value {
+                                context = JsContext::Regex { in_class: false };
+                            } else {
+                                last = Some(b'/');
+                            }
+                        }
+                        b'\'' | b'"' => context = JsContext::Quoted(c),
+                        b'`' => context = JsContext::Template,
+                        b'{' => {
+                            braces += 1;
+                            last = Some(c);
+                        }
+                        b'}' if templates.last() == Some(&braces) => {
+                            templates.pop();
+                            context = JsContext::Template;
+                        }
+                        b'}' => {
+                            braces = braces.saturating_sub(1);
+                            last = Some(c);
+                        }
+                        _ => last = Some(c),
+                    }
+                }
+                in_word = is_word;
+            }
+            JsContext::LineComment => {
+                if c == b'\n' {
+                    context = JsContext::Code;
+                }
+            }
+            JsContext::BlockComment => {
+                if c == b'*' && next == Some(b'/') {
+                    context = JsContext::Code;
+                    step = 2;
+                }
+            }
+            JsContext::Quoted(quote) => match c {
+                b'\\' => step = 2,
+                // An unescaped line break ends a broken string too, so the scan recovers
+                b'\n' => {
+                    context = JsContext::Code;
+                    last = Some(b'"');
+                }
+                _ if c == quote => {
+                    context = JsContext::Code;
+                    last = Some(b'"');
+                }
+                _ => {}
+            },
+            JsContext::Template => match c {
+                b'\\' => step = 2,
+                b'`' => {
+                    context = JsContext::Code;
+                    last = Some(b'"');
+                }
+                b'$' if next == Some(b'{') => {
+                    templates.push(braces);
+                    context = JsContext::Code;
+                    last = Some(b'{');
+                    step = 2;
+                }
+                _ => {}
+            },
+            JsContext::Regex { in_class } => match c {
+                b'\\' => step = 2,
+                b'[' => context = JsContext::Regex { in_class: true },
+                b']' => context = JsContext::Regex { in_class: false },
+                b'/' if !in_class => {
+                    context = JsContext::Code;
+                    last = Some(b'"');
+                }
+                b'\n' => {
+                    context = JsContext::Code;
+                    last = Some(b'"');
+                }
+                _ => {}
+            },
+        }
+        if context != JsContext::Code {
+            in_word = false;
+        }
+        i += step;
+    }
+    while in_code.len() < offsets.len() {
+        in_code.push(context == JsContext::Code);
+    }
+    (context == JsContext::Code && templates.is_empty()).then_some(in_code)
 }
 
 /// Does code that continues after `before` start a statement (or an expression within one)? That is
 /// after an optional `window.`, at the start of the script, on a new line, after a comment, or after
-/// a punctuator such as `;`, `,`, `{`, `(` or `=`. Text in a string or a comment follows other text.
+/// a punctuator such as `;`, `,`, `{`, `(` or `=`.
 fn starts_statement(before: &str) -> bool {
     let before = before.strip_suffix("window.").unwrap_or(before);
     let trimmed = before.trim_end_matches([' ', '\t']);
@@ -362,6 +537,12 @@ mod tests {
             r#"const example="__VUEPRESS_VERSION__ = {version:'0.14.11'}";"#,
             r#"/* Example: window.__VUEPRESS__={version:"1.9.9"} */"#,
             "// window.__VUEPRESS__={version:\"1.9.9\"}\n",
+            // a line break or a punctuator inside a comment, a template or a string
+            "/* VuePress bootstrap example:\nwindow.__VUEPRESS__={version:\"1.9.9\"}\n*/\n",
+            "const example=`VuePress bootstrap example:\nwindow.__VUEPRESS__={version:\"1.9.9\"}`;",
+            r#"const example='Example: ;window.__VUEPRESS__={version:"1.9.9"}';"#,
+            // a regular expression holding a quote does not start a string
+            r#"var q=/'/g;/* window.__VUEPRESS__={version:"1.9.9"} */"#,
         ] {
             let original = format!(r#"{example}const routes=[{{path:"/marker-text/",name:"Working route"}}];"#);
             let mut js = original.clone();
@@ -381,6 +562,8 @@ mod tests {
             "n.r(t),",
             "/* harmony import */ ",
             "import x from 'y'\n\n",
+            // strings, templates and regular expressions before it are skipped whole
+            r#"var s="a;b",r=/["'`]/g,t=`x${"}"}y`,d=4/2/1;"#,
         ] {
             let mut js = format!(
                 r#"{prefix}window.__VUEPRESS__ = {{version:"1.9.9",hash:"de4f7cf8"}};const Es=[{{name:"v-1",path:"/guide/"}}];"#
