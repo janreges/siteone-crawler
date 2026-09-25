@@ -3858,6 +3858,21 @@ fn ai_usage_counts_the_time_and_answers_of_failed_calls() {
 }
 
 #[test]
+fn ai_refusal_is_reported_with_its_tokens_and_speed() {
+    let tmp = TempDir::new("ai-telemetry-refusal");
+    let refusal = serde_json::json!({
+        "choices": [{"message": {"content": null, "refusal": "Review refusal"}, "finish_reason": "stop"}],
+        "usage": {"prompt_tokens": 7, "completion_tokens": 3, "completion_tokens_details": {"reasoning_tokens": 2}}
+    });
+    let mock = MockLlm::start(vec![chat_response(200, refusal.to_string())]);
+    let stderr = crawl_with_ai_seo(&one_page_site(&tmp), &mock, &[]);
+    assert_line(
+        &stderr,
+        r"  AI ✗ #1 SEO 1/1 · / · AI response had no content \(refusal: Review refusal\) · 7 in · 3 out \(2 reasoning\) · \d+\.\d s · \d+ tok/s",
+    );
+}
+
+#[test]
 fn ai_request_that_timed_out_is_not_retried() {
     let tmp = TempDir::new("ai-telemetry-timeout");
     // Slower than the 1 s timeout: the provider may still be generating (and charging for) it.

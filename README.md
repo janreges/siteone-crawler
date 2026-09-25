@@ -1159,7 +1159,7 @@ Every LLM request is reported on stderr as its response arrives: the task and it
   AI ⇢ #17 SEO 14/40 · /contact · cache hit · 1,020 in · 88 out
 ```
 
-`✓` answered, `↻` will be retried (HTTP 429/5xx or a connection error), `✗` failed, `⇢` answered from `--ai-cache-dir`. Output tokens include the reasoning; `(reasoning n/a)` means the response carried reasoning text without a count (e.g. MiniMax), and a response without usage still gets its line. The time covers only the HTTP attempt (send to body), never rate-limit waits or retry pauses. `--hide-progress-bar` hides the lines. The per-category token lines at the end of the run add the reasoning total and the average output speed. A host gets the same data as `aiRequest`, `aiProgress` and `aiUsage` events of the `--events-file` stream ([docs/EVENTS.md](docs/EVENTS.md)).
+`✓` answered, `↻` will be retried (HTTP 429/5xx or a connection error), `✗` failed (a failed response that reported usage, e.g. a refusal, also shows its tokens and speed), `⇢` answered from `--ai-cache-dir`. Output tokens include the reasoning; `(reasoning n/a)` means the response carried reasoning text without a count (e.g. MiniMax), and a response without usage still gets its line. The time covers only the HTTP attempt (send to body), never rate-limit waits or retry pauses. `--hide-progress-bar` hides the lines. The per-category token lines at the end of the run add the reasoning total and the average output speed. A host gets the same data as `aiRequest`, `aiProgress` and `aiUsage` events of the `--events-file` stream ([docs/EVENTS.md](docs/EVENTS.md)).
 
 #### Model list and connection check
 

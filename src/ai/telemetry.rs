@@ -166,14 +166,15 @@ impl RequestRecord {
         let mut parts = vec![head];
         parts.extend(self.subject.clone());
         let error = || self.error.clone().unwrap_or_else(|| "request failed".to_string());
+        let speed = || {
+            self.output_tokens_per_second()
+                .map(|speed| format!("{} tok/s", speed.round() as u64))
+        };
         match self.outcome {
             RequestOutcome::Ok => {
                 parts.extend(self.token_parts());
                 parts.extend(self.duration_ms.map(seconds));
-                parts.extend(
-                    self.output_tokens_per_second()
-                        .map(|speed| format!("{} tok/s", speed.round() as u64)),
-                );
+                parts.extend(speed());
             }
             RequestOutcome::Retry => {
                 parts.push(error());
@@ -182,7 +183,12 @@ impl RequestRecord {
             }
             RequestOutcome::Error => {
                 parts.push(error());
+                // A response rejected after all (a refusal, an error body with usage) cost tokens too.
+                if self.usage.is_some_and(|usage| usage.has_tokens()) {
+                    parts.extend(self.token_parts());
+                }
                 parts.extend(self.duration_ms.map(seconds));
+                parts.extend(speed());
             }
             RequestOutcome::CacheHit => {
                 parts.push("cache hit".to_string());
@@ -432,6 +438,24 @@ mod tests {
         assert_eq!(
             r.console_line(),
             "  AI ✗ #16 SEO 13/40 · /blog/x · AI provider error: model not found · 0.2 s"
+        );
+    }
+
+    #[test]
+    fn error_line_of_a_response_with_usage_shows_its_tokens_and_speed() {
+        // A refusal is a paid response: its tokens and speed are known like those of an answer.
+        let r = RequestRecord {
+            seq: 1,
+            task: None,
+            subject: Some("/".to_string()),
+            error: Some("AI response had no content (refusal: Review refusal)".to_string()),
+            usage: usage(Some(7), Some(3), Some(2)),
+            duration_ms: Some(68),
+            ..record(RequestOutcome::Error)
+        };
+        assert_eq!(
+            r.console_line(),
+            "  AI ✗ #1 SEO analysis · / · AI response had no content (refusal: Review refusal) · 7 in · 3 out (2 reasoning) · 0.1 s · 44 tok/s"
         );
     }
 
