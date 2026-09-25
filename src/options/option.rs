@@ -426,7 +426,7 @@ impl CrawlerOption {
                         return Err(CrawlerError::Config(format!(
                             "Option {} ({}) must be valid URL",
                             display_name,
-                            crate::utils::redact_url_userinfo(val)
+                            diagnostic_url(val)
                         )));
                     }
                 }
@@ -612,6 +612,19 @@ fn correct_url(url: &str) -> String {
     url.to_string()
 }
 
+/// The value of a URL option as a configuration diagnostic quotes it: without its query or
+/// fragment (`?…`, `#…`), where a key may be, and without userinfo. The value may not parse, so
+/// every `@` withholds the whole URL: a password may itself hold a `?`, `#` or `/`.
+fn diagnostic_url(value: &str) -> String {
+    if value.contains('@') {
+        return "[redacted URL]".to_string();
+    }
+    match value.find(['?', '#']) {
+        Some(end) => format!("{}{}…", &value[..end], &value[end..end + 1]),
+        None => value.to_string(),
+    }
+}
+
 /// Remove quotes from given string - as a quote we consider chars " ' `
 fn unquote_value(value: &mut String) {
     let bytes = value.as_bytes();
@@ -687,6 +700,50 @@ mod tests {
                 .unwrap();
 
             assert_eq!(option.get_value().unwrap().as_array().unwrap(), &vec![rule.to_string()]);
+        }
+    }
+
+    #[test]
+    fn an_invalid_url_option_is_quoted_without_the_credentials_of_its_value() {
+        for value in [
+            "http://127.0.0.1:BAD/v1?api_key=SECRET_SUFFIX",
+            "http://127.0.0.1:BAD/v1#SECRET_SUFFIX",
+            "http://user:SECRET_SUFFIX@127.0.0.1:BAD/v1",
+            "http://user:pa?SECRET_SUFFIX@127.0.0.1:BAD/v1",
+        ] {
+            let mut options = crate::options::core_options::get_options();
+            let option = options
+                .get_groups_mut()
+                .values_mut()
+                .find_map(|group| group.options.get_mut("aiEndpoint"))
+                .unwrap();
+
+            let error = option
+                .set_value_from_argv(&argv(&["siteone-crawler", &format!("--ai-endpoint={value}")]))
+                .unwrap_err()
+                .to_string();
+
+            assert!(error.contains("Option --ai-endpoint"), "{error}");
+            assert!(error.contains("must be valid URL"), "{error}");
+            assert!(!error.contains("SECRET_SUFFIX"), "{error}");
+        }
+    }
+
+    #[test]
+    fn a_diagnostic_shows_a_url_without_its_query_fragment_or_userinfo() {
+        for (value, shown) in [
+            ("http://127.0.0.1:BAD/v1", "http://127.0.0.1:BAD/v1"),
+            ("http://127.0.0.1:BAD/v1?api_key=SECRET", "http://127.0.0.1:BAD/v1?…"),
+            ("http://127.0.0.1:BAD/v1?", "http://127.0.0.1:BAD/v1?…"),
+            ("http://127.0.0.1:BAD/v1#SECRET", "http://127.0.0.1:BAD/v1#…"),
+            ("http://127.0.0.1:BAD/v1#a?SECRET", "http://127.0.0.1:BAD/v1#…"),
+            ("http://user:SECRET@127.0.0.1:BAD/v1", "[redacted URL]"),
+            // A `?`, `#` or `/` inside the userinfo: every `@` withholds the URL.
+            ("http://user:pa?SECRET@127.0.0.1:BAD/v1", "[redacted URL]"),
+            ("http://user:pa/SECRET@127.0.0.1:BAD/v1", "[redacted URL]"),
+            ("http://127.0.0.1:BAD/v1?email=a@b", "[redacted URL]"),
+        ] {
+            assert_eq!(diagnostic_url(value), shown, "{value}");
         }
     }
 

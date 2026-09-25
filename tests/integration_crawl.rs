@@ -5405,6 +5405,40 @@ fn ai_utility_modes_never_print_credentials() {
 }
 
 #[test]
+fn ai_utility_modes_never_quote_the_query_of_an_invalid_endpoint() {
+    // No userinfo: the query alone carries the key, also when no key is configured.
+    let endpoint = format!("--ai-endpoint=http://127.0.0.1:BAD/v1?api_key={KEY_SENTINEL}");
+    let key = format!("--ai-api-key={KEY_SENTINEL}");
+    let mut leaks = Vec::new();
+    for mode in ["--ai-check", "--ai-list-models"] {
+        for with_key in [false, true] {
+            let name = format!("{mode} (key configured: {with_key})");
+            let mut args = vec!["--ai-provider=openai-compatible", &endpoint, "--ai-model=m", mode];
+            if with_key {
+                args.push(&key);
+            }
+            let (code, answer, stderr) = run_ai_tool(&args);
+            assert_eq!(code, Some(101), "{name}: {answer}\n{stderr}");
+            assert_eq!(answer["ok"], false, "{name}: {answer}");
+            assert!(
+                answer["error"]
+                    .as_str()
+                    .is_some_and(|error| error.contains("--ai-endpoint")),
+                "{name}: {answer}"
+            );
+            leaks.extend(credential_leaks(
+                &name,
+                &[
+                    ("stdout".to_string(), answer.to_string()),
+                    ("stderr".to_string(), stderr),
+                ],
+            ));
+        }
+    }
+    assert!(leaks.is_empty(), "{}", leaks.join("\n"));
+}
+
+#[test]
 fn ai_utility_mode_errors_are_json_also_from_a_config_file_or_a_malformed_flag() {
     let tmp = TempDir::new("ai-utility-config");
     let config = tmp.path.join("crawler.conf");
