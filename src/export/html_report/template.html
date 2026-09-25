@@ -697,6 +697,36 @@
             height: auto;
         }
 
+        .paged-controls {
+            display: none;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            margin: 8px 0;
+        }
+
+        .js-enabled .paged-controls {
+            display: flex;
+        }
+
+        .js-enabled .paged-nojs {
+            display: none;
+        }
+
+        .paged-controls .btn {
+            margin-bottom: 0;
+            padding: 0.25rem 0.75rem;
+        }
+
+        .paged-controls .btn:disabled {
+            opacity: 0.4;
+            cursor: default;
+        }
+
+        .paged-th {
+            cursor: pointer;
+        }
+
         {$tabsCss}
 
     </style>
@@ -867,8 +897,275 @@
             document.getElementById('foundRows_' + tableId).textContent = 'Found ' + foundRows + ' row(s).';
         }
 
+        var tableFulltextDebouncers = {};
+
         function debouncedTableFulltext(tableId, searchTerm) {
-            debounce(tableFulltext, 250)(tableId, searchTerm);
+            if (!tableFulltextDebouncers[tableId]) {
+                tableFulltextDebouncers[tableId] = debounce(tableFulltext, 250);
+            }
+            tableFulltextDebouncers[tableId](tableId, searchTerm);
+        }
+
+        /* Paged sections (#99): Visited URLs and Image Gallery with more than 1000 items keep their rows
+           in a JSON array and only the current page in the DOM. The markup templates below mirror
+           src/export/html_report/paged.rs (VisitedUrlRow::to_html, GalleryImage::to_html, badge_html). */
+        var PAGED_TONES = {g: 'green', y: 'yellow', o: 'orange', r: 'red'};
+        var PAGED_SIZE_FILTERS = ['any', '> 5 MB', '> 1MB', '> 500kB', '> 100kB', '> 10kB', '< 10kB'];
+        var pagedStates = {};
+
+        function pagedEsc(value) {
+            return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+        }
+
+        function pagedBadge(text, tone) {
+            var cls = PAGED_TONES[tone];
+            return cls ? '<span class="badge ' + cls + '">' + pagedEsc(text) + '</span>' : pagedEsc(text);
+        }
+
+        function pagedVisitedUrlRow(r) {
+            return '<tr><td class="url"><a href="' + pagedEsc(r[0]) + '" target="_blank">' + pagedEsc(r[1]) + '</a></td>' +
+                '<td class="status">' + pagedBadge(r[3], r[4]) + '</td>' +
+                '<td class="type">' + pagedEsc(r[5]) + '</td>' +
+                '<td class="time">' + pagedBadge(r[7], r[8]) + '</td>' +
+                '<td class="size">' + pagedBadge(r[10], r[11]) + '</td>' +
+                '<td class="cacheLifetime">' + pagedBadge(r[13], r[14]) + '</td></tr>';
+        }
+
+        function pagedGalleryItem(r, px) {
+            return '<a href="' + pagedEsc(r[0]) + '" target="_blank"><img loading="lazy" width="' + px + '" height="' + px +
+                '" src="' + pagedEsc(r[0]) + '" alt="' + pagedEsc(r[4]) + '" title="' + pagedEsc(r[4]) + '"></a>';
+        }
+
+        function pagedState(id) {
+            var st = pagedStates[id];
+            if (st.data === null) {
+                st.data = JSON.parse(document.getElementById(id + '_data').textContent);
+                st.view = st.data;
+            }
+            return st;
+        }
+
+        function pagedThumbnailSize() {
+            var container = document.getElementById('igc');
+            var mode = container ? container.className : 'small';
+            return mode === 'medium' ? 200 : (mode === 'large' ? 360 : 140);
+        }
+
+        function pagedSizeMatches(size, category) {
+            var kb = size / 1024;
+            switch (category) {
+                case '> 5 MB': return kb > 5120;
+                case '> 1MB': return kb > 1024;
+                case '> 500kB': return kb > 500;
+                case '> 100kB': return kb > 100;
+                case '> 10kB': return kb > 10;
+                case '< 10kB': return kb < 10;
+                default: return true;
+            }
+        }
+
+        function pagedRender(id) {
+            var st = pagedState(id);
+            var pages = Math.max(1, Math.ceil(st.view.length / st.size));
+            st.page = Math.min(Math.max(st.page, 0), pages - 1);
+            var items = st.view.slice(st.page * st.size, (st.page + 1) * st.size);
+            var html = [];
+            var i;
+            if (st.kind === 'visited-urls') {
+                for (i = 0; i < items.length; i++) {
+                    html.push(pagedVisitedUrlRow(items[i]));
+                }
+                if (items.length === 0) {
+                    html.push('<tr><td colspan="6" class="warning">No rows found, please edit your search term.</td></tr>');
+                }
+            } else {
+                var px = pagedThumbnailSize();
+                for (i = 0; i < items.length; i++) {
+                    html.push(pagedGalleryItem(items[i], px));
+                }
+            }
+            document.getElementById(id + '_items').innerHTML = html.join('');
+            var info = 'Page ' + (st.page + 1) + ' of ' + pages + ' (' + st.view.length + ' items)';
+            document.querySelectorAll('.paged-info[data-paged-id="' + id + '"]').forEach(function (el) {
+                el.textContent = info;
+            });
+            document.querySelectorAll('.paged-prev[data-paged-id="' + id + '"]').forEach(function (el) {
+                el.disabled = st.page === 0;
+            });
+            document.querySelectorAll('.paged-next[data-paged-id="' + id + '"]').forEach(function (el) {
+                el.disabled = st.page >= pages - 1;
+            });
+            var found = document.getElementById('foundRows_' + id);
+            if (found) {
+                found.textContent = 'Found ' + st.view.length + ' row(s).';
+            }
+        }
+
+        function pagedUpdateView(id) {
+            var st = pagedState(id);
+            var list = st.data;
+            if (st.kind === 'visited-urls' && st.terms.length > 0) {
+                if (st.search === null) {
+                    st.search = st.data.map(function (r) {
+                        return (r[0] + ' ' + r[3] + ' ' + r[5] + ' ' + r[7] + ' ' + r[10] + ' ' + r[13]).toLowerCase();
+                    });
+                }
+                list = st.data.filter(function (r, index) {
+                    return st.terms.every(function (term) {
+                        return st.search[index].indexOf(term) !== -1;
+                    });
+                });
+            }
+            if (st.kind === 'image-gallery') {
+                list = st.data.filter(function (r) {
+                    return (st.filters.type === 'any' || r[2] === st.filters.type) &&
+                        (st.filters.source === 'any' || r[3] === st.filters.source) &&
+                        pagedSizeMatches(r[1], st.filters.size);
+                });
+            }
+            if (st.sortIndex >= 0) {
+                var index = st.sortIndex;
+                var numeric = st.sortType === 'number';
+                var direction = st.sortDir === 'ASC' ? 1 : -1;
+                list = list.slice().sort(function (a, b) {
+                    var x = numeric ? a[index] : String(a[index]);
+                    var y = numeric ? b[index] : String(b[index]);
+                    return (x > y ? 1 : (x < y ? -1 : 0)) * direction;
+                });
+            }
+            st.view = list;
+            st.page = 0;
+        }
+
+        function pagedSort(id, th) {
+            var st = pagedState(id);
+            var index = parseInt(th.getAttribute('data-sort'), 10);
+            st.sortDir = (st.sortIndex === index && st.sortDir === 'ASC') ? 'DESC' : 'ASC';
+            st.sortIndex = index;
+            st.sortType = th.getAttribute('data-type');
+            document.querySelectorAll('.paged-th[data-paged-id="' + id + '"]').forEach(function (header) {
+                var label = header.getAttribute('data-label');
+                if (header === th) {
+                    header.innerHTML = pagedEsc(label) + (st.sortDir === 'ASC' ? '&nbsp;🔼' : '&nbsp;🔽');
+                } else {
+                    header.textContent = label;
+                }
+            });
+            pagedUpdateView(id);
+            pagedRender(id);
+        }
+
+        function pagedFilter(id, key, value) {
+            pagedState(id).filters[key] = value;
+            pagedUpdateView(id);
+            pagedRender(id);
+        }
+
+        function pagedAddRadio(groupId, index, label, checked, onChange) {
+            var group = document.getElementById(groupId);
+            if (!group) {
+                return;
+            }
+            var input = document.createElement('input');
+            input.type = 'radio';
+            input.id = groupId + '-' + index;
+            input.name = groupId;
+            input.checked = checked;
+            input.addEventListener('change', onChange);
+            var labelEl = document.createElement('label');
+            labelEl.setAttribute('for', input.id);
+            labelEl.textContent = label;
+            group.appendChild(input);
+            group.appendChild(labelEl);
+        }
+
+        function pagedInitGallery(id) {
+            var st = pagedState(id);
+            var counts = {type: {}, source: {}};
+            st.data.forEach(function (r) {
+                counts.type[r[2]] = (counts.type[r[2]] || 0) + 1;
+                counts.source[r[3]] = (counts.source[r[3]] || 0) + 1;
+            });
+            [['typeFilters', 'type'], ['sourceFilters', 'source']].forEach(function (group) {
+                var groupCounts = counts[group[1]];
+                pagedAddRadio(group[0], 0, 'any (' + st.data.length + ')', true, function () {
+                    pagedFilter(id, group[1], 'any');
+                });
+                Object.keys(groupCounts).sort(function (a, b) {
+                    return groupCounts[b] - groupCounts[a];
+                }).forEach(function (value, index) {
+                    pagedAddRadio(group[0], index + 1, value + ' (' + groupCounts[value] + ')', false, function () {
+                        pagedFilter(id, group[1], value);
+                    });
+                });
+            });
+            PAGED_SIZE_FILTERS.forEach(function (category, index) {
+                var count = st.data.filter(function (r) {
+                    return pagedSizeMatches(r[1], category);
+                }).length;
+                if (count > 0) {
+                    pagedAddRadio('sizeFilters', index, category + ' (' + count + ')', index === 0, function () {
+                        pagedFilter(id, 'size', category);
+                    });
+                }
+            });
+        }
+
+        function initPagedSections() {
+            document.querySelectorAll('.paged[data-paged-id]').forEach(function (section) {
+                var id = section.getAttribute('data-paged-id');
+                pagedStates[id] = {
+                    kind: section.getAttribute('data-paged-kind'),
+                    data: null,
+                    view: null,
+                    search: null,
+                    page: 0,
+                    size: 100,
+                    sortIndex: -1,
+                    sortDir: 'ASC',
+                    sortType: 'string',
+                    terms: [],
+                    filters: {type: 'any', source: 'any', size: 'any'}
+                };
+                if (pagedStates[id].kind === 'image-gallery') {
+                    pagedInitGallery(id);
+                }
+            });
+            document.querySelectorAll('input.paged-fulltext[data-paged-id]').forEach(function (input) {
+                var id = input.getAttribute('data-paged-id');
+                var search = debounce(function (value) {
+                    pagedState(id).terms = value.trim().toLowerCase().split(/\s+/).filter(function (term) {
+                        return term !== '';
+                    });
+                    pagedUpdateView(id);
+                    pagedRender(id);
+                }, 250);
+                input.addEventListener('keyup', function () {
+                    search(input.value);
+                });
+            });
+            document.querySelectorAll('select.paged-size[data-paged-id]').forEach(function (select) {
+                select.addEventListener('change', function () {
+                    var id = select.getAttribute('data-paged-id');
+                    var st = pagedState(id);
+                    st.size = parseInt(select.value, 10);
+                    st.page = 0;
+                    pagedRender(id);
+                });
+            });
+            document.addEventListener('click', function (event) {
+                var target = event.target.closest('.paged-prev, .paged-next, .paged-th');
+                if (!target) {
+                    return;
+                }
+                var id = target.getAttribute('data-paged-id');
+                if (target.classList.contains('paged-th')) {
+                    pagedSort(id, target);
+                    return;
+                }
+                pagedState(id).page += target.classList.contains('paged-next') ? 1 : -1;
+                pagedRender(id);
+            });
         }
 
         document.addEventListener('DOMContentLoaded', function () {
@@ -906,6 +1203,9 @@
             imgFilters.forEach(f => {
                 f.addEventListener('change', onImageFilterClick);
             });
+
+            /* paged Visited URLs / Image Gallery sections (#99) */
+            initPagedSections();
         });
 
     </script>

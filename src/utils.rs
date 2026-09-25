@@ -663,36 +663,45 @@ pub fn get_colored_request_time(request_time: f64, str_pad_to: usize) -> String 
     let formatted = get_formatted_duration(request_time);
     let padded = format!("{:<width$}", formatted, width = str_pad_to);
 
-    if request_time >= 2.0 {
-        get_color_text(&padded, "red", true)
-    } else if request_time >= 1.0 {
-        get_color_text(&padded, "magenta", true)
-    } else if request_time >= 0.5 {
-        get_color_text(&padded, "yellow", false)
-    } else {
-        get_color_text(&padded, "green", false)
-    }
+    let (color, background) = get_request_time_color(request_time);
+    get_color_text(&padded, color, background)
 }
 
 pub fn get_colored_status_code(status_code: i32, str_pad_to: usize) -> String {
-    if (200..300).contains(&status_code) {
-        get_color_text(&format!("{:<width$}", status_code, width = str_pad_to), "green", false)
-    } else if (300..400).contains(&status_code) {
-        get_color_text(&format!("{:<width$}", status_code, width = str_pad_to), "yellow", true)
-    } else if (400..500).contains(&status_code) {
-        get_color_text(&format!("{:<width$}", status_code, width = str_pad_to), "magenta", true)
-    } else if (500..600).contains(&status_code) {
-        get_color_text(&format!("{:<width$}", status_code, width = str_pad_to), "red", true)
+    let text = if (200..600).contains(&status_code) {
+        status_code.to_string()
     } else {
-        get_color_text(
-            &format!(
-                "{:<width$}",
-                get_http_client_code_with_error_description(status_code, true),
-                width = str_pad_to
-            ),
-            "red",
-            true,
-        )
+        get_http_client_code_with_error_description(status_code, true)
+    };
+    let (color, background) = get_status_code_color(status_code);
+    get_color_text(&format!("{:<width$}", text, width = str_pad_to), color, background)
+}
+
+/// Colour name (for `get_color_text`) and background flag of an HTTP status code in tables; shared by
+/// `get_colored_status_code` and the paged HTML report.
+pub fn get_status_code_color(status_code: i32) -> (&'static str, bool) {
+    if (200..300).contains(&status_code) {
+        ("green", false)
+    } else if (300..400).contains(&status_code) {
+        ("yellow", true)
+    } else if (400..500).contains(&status_code) {
+        ("magenta", true)
+    } else {
+        ("red", true)
+    }
+}
+
+/// Colour name and background flag of a request time in tables; shared by `get_colored_request_time`
+/// and the paged HTML report.
+pub fn get_request_time_color(request_time: f64) -> (&'static str, bool) {
+    if request_time >= 2.0 {
+        ("red", true)
+    } else if request_time >= 1.0 {
+        ("magenta", true)
+    } else if request_time >= 0.5 {
+        ("yellow", false)
+    } else {
+        ("green", false)
     }
 }
 
@@ -914,7 +923,21 @@ pub fn strip_images(html_or_css: &str, placeholder_image: Option<&str>) -> Strin
 }
 
 pub fn get_colored_cache_lifetime(cache_lifetime: i64, str_pad_to: usize) -> String {
-    let color = if cache_lifetime <= 0 {
+    get_color_text(
+        &format!(
+            "{:<width$}",
+            get_formatted_cache_lifetime(cache_lifetime),
+            width = str_pad_to
+        ),
+        get_cache_lifetime_color(cache_lifetime),
+        false,
+    )
+}
+
+/// Colour name of a cache lifetime in tables; shared by `get_colored_cache_lifetime` and the paged
+/// HTML report.
+pub fn get_cache_lifetime_color(cache_lifetime: i64) -> &'static str {
+    if cache_lifetime <= 0 {
         "red"
     } else if cache_lifetime < 600 {
         "magenta"
@@ -922,17 +945,7 @@ pub fn get_colored_cache_lifetime(cache_lifetime: i64, str_pad_to: usize) -> Str
         "yellow"
     } else {
         "green"
-    };
-
-    get_color_text(
-        &format!(
-            "{:<width$}",
-            get_formatted_cache_lifetime(cache_lifetime),
-            width = str_pad_to
-        ),
-        color,
-        false,
-    )
+    }
 }
 
 pub fn is_asset_by_content_type(content_type: &str) -> bool {

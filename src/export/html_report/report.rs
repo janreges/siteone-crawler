@@ -17,6 +17,7 @@ use crate::utils;
 use crate::version;
 
 use super::badge::{Badge, BadgeColor};
+use super::paged::{self, GalleryImage, VisitedUrlRow};
 use super::tab::Tab;
 
 // SuperTable apl_code constants (matching the analyzer module constants)
@@ -690,7 +691,7 @@ impl<'a> HtmlReport<'a> {
         }
 
         let visited_urls = self.status.get_visited_urls();
-        let images: Vec<_> = visited_urls
+        let images: Vec<GalleryImage> = visited_urls
             .iter()
             .filter(|v| {
                 v.is_image()
@@ -700,46 +701,12 @@ impl<'a> HtmlReport<'a> {
                         visited_url::SOURCE_IMG_SRC | visited_url::SOURCE_INPUT_SRC | visited_url::SOURCE_CSS_URL
                     )
             })
+            .map(|image| self.gallery_image(image))
             .collect();
 
         if images.is_empty() {
             return None;
         }
-
-        let mut html = self.get_image_gallery_form_html();
-        html.push_str("<div id=\"igc\" class=\"small\"><div id=\"igcf\" class=\"scaleDown\"><div id=\"image-gallery\" class=\"image-gallery\">");
-
-        for image in &images {
-            let size = image.size.unwrap_or(0);
-            let content_type = image.content_type_header.as_deref().unwrap_or("");
-            let source_url = self.status.get_url_by_uq_id(&image.source_uq_id);
-            let source_url_str = source_url.as_deref().unwrap_or("");
-
-            let image_description = format!(
-                "{} ({}), found as {}",
-                utils::get_formatted_size(size, 0),
-                content_type,
-                image.get_source_description(Some(source_url_str)),
-            );
-
-            let image_type = content_type.replace("image/", "");
-
-            html.push_str(&format!(
-                "<a href=\"{}\" target=\"_blank\" data-size=\"{}\" data-source=\"{}\" data-type=\"{}\" data-sizematch=\"1\" data-typematch=\"1\" data-sourcematch=\"1\">",
-                html_escape(&image.url),
-                size,
-                html_escape(image.get_source_short_name()),
-                html_escape(&image_type),
-            ));
-            html.push_str(&format!(
-                "<img loading=\"lazy\" width=\"140\" height=\"140\" src=\"{}\" alt=\"{}\" title=\"{}\">",
-                html_escape(&image.url),
-                html_escape(&image_description),
-                html_escape(&image_description),
-            ));
-            html.push_str("</a>\n");
-        }
-        html.push_str("</div></div></div>");
 
         let badges = vec![Badge::with_title(
             images.len().to_string(),
@@ -747,7 +714,54 @@ impl<'a> HtmlReport<'a> {
             "Found images",
         )];
 
+        // Large galleries: page the thumbnails in the browser instead of putting all of them into the DOM (#99).
+        if images.len() > paged::PAGED_THRESHOLD {
+            let mut html = self.get_image_gallery_form_html(false);
+            html.push_str(&paged::image_gallery_section_html(&images));
+            return Some(Tab::new("Image Gallery", None, html, true, badges, Some(6)));
+        }
+
+        let mut html = self.get_image_gallery_form_html(true);
+        html.push_str("<div id=\"igc\" class=\"small\"><div id=\"igcf\" class=\"scaleDown\"><div id=\"image-gallery\" class=\"image-gallery\">");
+
+        for image in &images {
+            html.push_str(&format!(
+                "<a href=\"{}\" target=\"_blank\" data-size=\"{}\" data-source=\"{}\" data-type=\"{}\" data-sizematch=\"1\" data-typematch=\"1\" data-sourcematch=\"1\">",
+                html_escape(&image.url),
+                image.size,
+                html_escape(&image.source),
+                html_escape(&image.image_type),
+            ));
+            html.push_str(&format!(
+                "<img loading=\"lazy\" width=\"140\" height=\"140\" src=\"{}\" alt=\"{}\" title=\"{}\">",
+                html_escape(&image.url),
+                html_escape(&image.description),
+                html_escape(&image.description),
+            ));
+            html.push_str("</a>\n");
+        }
+        html.push_str("</div></div></div>");
+
         Some(Tab::new("Image Gallery", None, html, true, badges, Some(6)))
+    }
+
+    /// Gallery item data shared by the classic and the paged gallery.
+    fn gallery_image(&self, image: &visited_url::VisitedUrl) -> GalleryImage {
+        let size = image.size.unwrap_or(0);
+        let content_type = image.content_type_header.as_deref().unwrap_or("");
+        let source_url = self.status.get_url_by_uq_id(&image.source_uq_id);
+        GalleryImage {
+            url: image.url.clone(),
+            size,
+            image_type: content_type.replace("image/", ""),
+            source: image.get_source_short_name().to_string(),
+            description: format!(
+                "{} ({}), found as {}",
+                utils::get_formatted_size(size, 0),
+                content_type,
+                image.get_source_description(Some(source_url.as_deref().unwrap_or(""))),
+            ),
+        }
     }
 
     /// Video Gallery tab
@@ -972,15 +986,35 @@ impl<'a> HtmlReport<'a> {
         visited_urls_table.set_host_to_strip_from_urls(Some(self.get_initial_host()), Some(self.get_initial_scheme()));
         let badges = get_visited_urls_badges(&visited_urls_table);
         let order = get_super_table_order(SUPER_TABLE_VISITED_URLS);
+        // Large crawls: page the rows in the browser instead of putting all of them into the DOM (#99).
+        let content = if visited_urls_table.get_total_rows() > paged::PAGED_THRESHOLD {
+            self.get_paged_visited_urls_html()
+        } else {
+            visited_urls_table.get_html_output()
+        };
 
         Tab::new(
             &visited_urls_table.title,
             visited_urls_table.description.as_deref(),
-            visited_urls_table.get_html_output(),
+            content,
             false,
             badges,
             Some(order),
         )
+    }
+
+    /// Visited URLs in paged mode: the same rows (skipped URLs excluded) and texts as the classic table.
+    fn get_paged_visited_urls_html(&self) -> String {
+        let initial_host = self.get_initial_host();
+        let initial_scheme = self.get_initial_scheme();
+        let rows: Vec<VisitedUrlRow> = self
+            .status
+            .get_visited_urls()
+            .iter()
+            .filter(|vu| vu.status_code != visited_url::ERROR_SKIPPED)
+            .map(|vu| paged_visited_url_row(vu, &initial_host, &initial_scheme))
+            .collect();
+        format!("<h2>Visited URLs</h2>{}", paged::visited_urls_section_html(&rows))
     }
 
     /// Build the visited URLs SuperTable
@@ -1107,7 +1141,7 @@ impl<'a> HtmlReport<'a> {
                     let size_str = row.get("size").map(|s| s.as_str()).unwrap_or("0");
                     let size: i64 = size_str.parse().unwrap_or(0);
                     let formatted = row.get("sizeFormatted").map(|s| s.as_str()).unwrap_or("");
-                    if size > 1024 * 1024 {
+                    if size > LARGE_RESPONSE_BYTES {
                         utils::get_color_text(formatted, "red", true)
                     } else {
                         formatted.to_string()
@@ -1126,61 +1160,17 @@ impl<'a> HtmlReport<'a> {
                     8,
                     None,
                     Some(Box::new(|row: &HashMap<String, String>, _render_into: &str| {
-                        let cache_lifetime_str = row.get("cacheLifetime").map(|s| s.as_str()).unwrap_or("");
-                        let cache_type_flags: u32 = row.get("cacheTypeFlags").and_then(|s| s.parse().ok()).unwrap_or(0);
-                        let str_pad_to = 6;
-
-                        if let Ok(lifetime) = cache_lifetime_str.parse::<i64>() {
-                            utils::get_colored_cache_lifetime(lifetime, str_pad_to)
-                        } else if cache_type_flags & visited_url::CACHE_TYPE_HAS_NO_STORE != 0 {
-                            utils::get_color_text(
-                                &format!("{:<width$}", "0s (no-store)", width = str_pad_to),
-                                "red",
-                                true,
-                            )
-                        } else if cache_type_flags & visited_url::CACHE_TYPE_HAS_NO_CACHE != 0 {
-                            utils::get_color_text(
-                                &format!("{:<width$}", "0s (no-cache)", width = str_pad_to),
-                                "red",
-                                false,
-                            )
-                        } else if cache_type_flags & visited_url::CACHE_TYPE_HAS_ETAG != 0 {
-                            utils::get_color_text(
-                                &format!("{:<width$}", "ETag-only", width = str_pad_to),
-                                "magenta",
-                                false,
-                            )
-                        } else if cache_type_flags & visited_url::CACHE_TYPE_HAS_LAST_MODIFIED != 0 {
-                            utils::get_color_text(
-                                &format!("{:<width$}", "Last-Mod-only", width = str_pad_to),
-                                "magenta",
-                                false,
-                            )
-                        } else {
-                            utils::get_color_text(&format!("{:<width$}", "None", width = str_pad_to), "red", false)
-                        }
+                        let (lifetime, flags) = cache_fields_of_row(row);
+                        let (text, color, background) = visited_url_cache_cell(lifetime, flags);
+                        utils::get_color_text(&format!("{:<width$}", text, width = 6), color, background)
                     })),
                     false,
                     true,
                     false,
                     true,
                     Some(Box::new(|row: &HashMap<String, String>| {
-                        let cache_lifetime_str = row.get("cacheLifetime").map(|s| s.as_str()).unwrap_or("");
-                        let cache_type_flags: u32 = row.get("cacheTypeFlags").and_then(|s| s.parse().ok()).unwrap_or(0);
-
-                        if let Ok(lifetime) = cache_lifetime_str.parse::<i64>() {
-                            lifetime.to_string()
-                        } else if cache_type_flags & visited_url::CACHE_TYPE_HAS_NO_STORE != 0 {
-                            "-2".to_string()
-                        } else if cache_type_flags & visited_url::CACHE_TYPE_HAS_NO_CACHE != 0 {
-                            "-1".to_string()
-                        } else if cache_type_flags & visited_url::CACHE_TYPE_HAS_ETAG != 0 {
-                            "0.1".to_string()
-                        } else if cache_type_flags & visited_url::CACHE_TYPE_HAS_LAST_MODIFIED != 0 {
-                            "0.2".to_string()
-                        } else {
-                            "0.01".to_string()
-                        }
+                        let (lifetime, flags) = cache_fields_of_row(row);
+                        visited_url_cache_sort_value(lifetime, flags)
                     })),
                 );
                 col.forced_data_type = Some("number".to_string());
@@ -1210,8 +1200,9 @@ impl<'a> HtmlReport<'a> {
     // Helpers
     // -------------------------------------------------------------------------
 
-    /// Image gallery form HTML (size/mode/filter controls)
-    fn get_image_gallery_form_html(&self) -> String {
+    /// Image gallery form HTML (size/mode/filter controls). The classic DOM-based filter script is left
+    /// out in paged mode, where the pager builds the filters from the JSON items.
+    fn get_image_gallery_form_html(&self, with_filter_script: bool) -> String {
         let mut html = String::from(
             r#"
             <style>
@@ -1240,7 +1231,9 @@ impl<'a> HtmlReport<'a> {
             </script>"#,
         );
 
-        html.push_str(IMAGE_GALLERY_FILTER_SCRIPT);
+        if with_filter_script {
+            html.push_str(IMAGE_GALLERY_FILTER_SCRIPT);
+        }
 
         html.push_str(r#"<form id="imageDisplayForm">
                 <div class="form-group">
@@ -1908,8 +1901,93 @@ fn get_super_table_generic_badges(info: &SuperTableInfo) -> Vec<Badge> {
     badges
 }
 
-/// HTML-escape a string
-fn html_escape(s: &str) -> String {
+/// Responses larger than this are highlighted red in the Visited URLs "Size" column.
+const LARGE_RESPONSE_BYTES: i64 = 1024 * 1024;
+
+/// `cacheLifetime` and `cacheTypeFlags` of a Visited URLs table row.
+fn cache_fields_of_row(row: &HashMap<String, String>) -> (Option<i64>, u32) {
+    (
+        row.get("cacheLifetime").and_then(|s| s.parse::<i64>().ok()),
+        row.get("cacheTypeFlags").and_then(|s| s.parse().ok()).unwrap_or(0),
+    )
+}
+
+/// Text, colour and background flag of the Visited URLs "Cache" cell (shared by the classic table and
+/// the paged report).
+fn visited_url_cache_cell(cache_lifetime: Option<i64>, cache_type_flags: u32) -> (String, &'static str, bool) {
+    if let Some(lifetime) = cache_lifetime {
+        (
+            utils::get_formatted_cache_lifetime(lifetime),
+            utils::get_cache_lifetime_color(lifetime),
+            false,
+        )
+    } else if cache_type_flags & visited_url::CACHE_TYPE_HAS_NO_STORE != 0 {
+        ("0s (no-store)".to_string(), "red", true)
+    } else if cache_type_flags & visited_url::CACHE_TYPE_HAS_NO_CACHE != 0 {
+        ("0s (no-cache)".to_string(), "red", false)
+    } else if cache_type_flags & visited_url::CACHE_TYPE_HAS_ETAG != 0 {
+        ("ETag-only".to_string(), "magenta", false)
+    } else if cache_type_flags & visited_url::CACHE_TYPE_HAS_LAST_MODIFIED != 0 {
+        ("Last-Mod-only".to_string(), "magenta", false)
+    } else {
+        ("None".to_string(), "red", false)
+    }
+}
+
+/// Sort value of the Visited URLs "Cache" cell: the lifetime in seconds, or a marker ordering the
+/// variants without a lifetime (no-store < no-cache < none < ETag-only < Last-Mod-only).
+fn visited_url_cache_sort_value(cache_lifetime: Option<i64>, cache_type_flags: u32) -> String {
+    if let Some(lifetime) = cache_lifetime {
+        lifetime.to_string()
+    } else if cache_type_flags & visited_url::CACHE_TYPE_HAS_NO_STORE != 0 {
+        "-2".to_string()
+    } else if cache_type_flags & visited_url::CACHE_TYPE_HAS_NO_CACHE != 0 {
+        "-1".to_string()
+    } else if cache_type_flags & visited_url::CACHE_TYPE_HAS_ETAG != 0 {
+        "0.1".to_string()
+    } else if cache_type_flags & visited_url::CACHE_TYPE_HAS_LAST_MODIFIED != 0 {
+        "0.2".to_string()
+    } else {
+        "0.01".to_string()
+    }
+}
+
+/// Paged-mode row of the Visited URLs table: the texts, thresholds and colours of the classic columns.
+fn paged_visited_url_row(vu: &visited_url::VisitedUrl, initial_host: &str, initial_scheme: &str) -> VisitedUrlRow {
+    let (status_color, _) = utils::get_status_code_color(vu.status_code);
+    let (time_color, _) = utils::get_request_time_color(vu.request_time);
+    let (cache_text, cache_color, _) = visited_url_cache_cell(vu.cache_lifetime, vu.cache_type_flags);
+    let size = vu.size.unwrap_or(0);
+    VisitedUrlRow {
+        url: vu.url.clone(),
+        url_text: utils::truncate_url(
+            &vu.url,
+            80,
+            "\u{2026}",
+            Some(initial_host),
+            Some(initial_scheme),
+            Some(false),
+        ),
+        status: vu.status_code,
+        status_text: utils::remove_ansi_colors(&utils::get_colored_status_code(vu.status_code, 0)),
+        status_tone: paged::tone_of_color(status_color),
+        type_name: utils::get_content_type_name_by_id(vu.content_type),
+        time: vu.request_time,
+        time_text: utils::get_formatted_duration(vu.request_time),
+        time_tone: paged::tone_of_color(time_color),
+        size,
+        size_text: vu.size_formatted.clone().unwrap_or_default(),
+        size_tone: if size > LARGE_RESPONSE_BYTES { "r" } else { "" },
+        cache_sort: visited_url_cache_sort_value(vu.cache_lifetime, vu.cache_type_flags)
+            .parse()
+            .unwrap_or(0.0),
+        cache_text,
+        cache_tone: paged::tone_of_color(cache_color),
+    }
+}
+
+/// HTML-escape a string (also used by `paged.rs`, whose JS mirror `pagedEsc` escapes the same characters)
+pub(super) fn html_escape(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
@@ -2559,5 +2637,160 @@ mod technologies_tab_tests {
         assert_eq!(badges.len(), 1);
         assert_eq!(badges[0].value, "7");
         assert_eq!(badges[0].color, BadgeColor::Neutral);
+    }
+}
+
+#[cfg(test)]
+mod paged_report_tests {
+    use super::*;
+    use crate::info::Info;
+    use crate::result::storage::memory_storage::MemoryStorage;
+    use crate::types::ContentTypeId;
+
+    /// A status with `pages` HTML pages and `images` <img> images of https://example.com.
+    fn status_with(pages: usize, images: usize) -> Status {
+        let info = Info::new(
+            "SiteOne Crawler".to_string(),
+            "test".to_string(),
+            "2026-09-25 12:00:00".to_string(),
+            "siteone-crawler --url=https://example.com/".to_string(),
+            "localhost".to_string(),
+            "test-agent".to_string(),
+            "https://example.com/".to_string(),
+        );
+        let mut status = Status::new(
+            Box::new(MemoryStorage::new(false)),
+            false,
+            info,
+            std::time::Instant::now(),
+        );
+        status.add_ok_to_summary("test", "The summary is not empty.");
+        for i in 0..pages {
+            status.add_visited_url(
+                visited_url::VisitedUrl::new(
+                    format!("p{}", i),
+                    String::new(),
+                    visited_url::SOURCE_A_HREF,
+                    format!("https://example.com/page-{}", i),
+                    200,
+                    0.05,
+                    Some(2048),
+                    ContentTypeId::Html,
+                    Some("text/html".to_string()),
+                    None,
+                    None,
+                    false,
+                    true,
+                    0,
+                    Some(3600),
+                ),
+                None,
+                None,
+            );
+        }
+        for i in 0..images {
+            status.add_visited_url(
+                visited_url::VisitedUrl::new(
+                    format!("i{}", i),
+                    "p0".to_string(),
+                    visited_url::SOURCE_IMG_SRC,
+                    format!("https://example.com/img/{}.png", i),
+                    200,
+                    0.01,
+                    Some(512),
+                    ContentTypeId::Image,
+                    Some("image/png".to_string()),
+                    None,
+                    None,
+                    false,
+                    true,
+                    0,
+                    Some(86400),
+                ),
+                None,
+                None,
+            );
+        }
+        status
+    }
+
+    #[test]
+    fn visited_urls_up_to_the_threshold_stay_classic() {
+        let status = status_with(paged::PAGED_THRESHOLD, 0);
+        let tab = HtmlReport::new(&status, 5, None).get_visited_urls_tab();
+        assert!(!tab.tab_content.contains("visited-urls_data"));
+        assert!(tab.tab_content.contains("table-sortable"), "classic SuperTable markup");
+    }
+
+    #[test]
+    fn visited_urls_above_the_threshold_are_paged() {
+        let status = status_with(paged::PAGED_THRESHOLD + 1, 0);
+        let tab = HtmlReport::new(&status, 5, None).get_visited_urls_tab();
+        let html = &tab.tab_content;
+        assert!(html.starts_with("<h2>Visited URLs</h2>"));
+        assert!(html.contains("data-total=\"1001\""));
+        assert_eq!(html.matches("<tr><td class=\"url\">").count(), paged::FIRST_PAGE_SIZE);
+
+        let marker = "<script type=\"application/json\" id=\"visited-urls_data\">";
+        let start = html.find(marker).expect("JSON rows") + marker.len();
+        let end = start + html[start..].find("</script>").expect("end of JSON");
+        let rows: serde_json::Value = serde_json::from_str(&html[start..end]).expect("valid JSON");
+        assert_eq!(rows.as_array().unwrap().len(), 1001);
+        assert_eq!(rows[0][0], "https://example.com/page-0");
+        assert_eq!(rows[0][1], "/page-0", "same host-stripped text as the classic table");
+        assert_eq!(rows[0][4], "g", "2xx status is green");
+        assert_eq!(rows[0][14], "y", "1 h cache lifetime is yellow");
+        // The tab badges still count every row, not only the first page.
+        assert_eq!(tab.badges[0].value, "1001");
+    }
+
+    #[test]
+    fn image_gallery_switches_to_paged_mode_above_the_threshold() {
+        let status = status_with(1, paged::PAGED_THRESHOLD);
+        let tab = HtmlReport::new(&status, 5, None)
+            .get_image_gallery_tab()
+            .expect("gallery tab");
+        assert!(tab.tab_content.contains("id=\"image-gallery\""));
+        assert!(tab.tab_content.contains("function initializeFilters()"));
+        assert!(!tab.tab_content.contains("image-gallery_data"));
+
+        let status = status_with(1, paged::PAGED_THRESHOLD + 1);
+        let tab = HtmlReport::new(&status, 5, None)
+            .get_image_gallery_tab()
+            .expect("gallery tab");
+        let html = &tab.tab_content;
+        assert!(html.contains("<script type=\"application/json\" id=\"image-gallery_data\">"));
+        assert!(
+            !html.contains("function initializeFilters()"),
+            "the pager builds the filters from the JSON"
+        );
+        assert!(
+            html.contains("function updateClassName("),
+            "thumbnail size/mode switches stay"
+        );
+        assert_eq!(html.matches("<img loading=\"lazy\"").count(), paged::FIRST_PAGE_SIZE);
+        assert_eq!(tab.badges[0].value, "1001");
+    }
+
+    #[test]
+    fn cache_cell_keeps_the_classic_labels_colours_and_sort_values() {
+        assert_eq!(
+            visited_url_cache_cell(Some(3600), 0),
+            ("60 min".to_string(), "yellow", false)
+        );
+        assert_eq!(
+            visited_url_cache_cell(None, visited_url::CACHE_TYPE_HAS_NO_STORE),
+            ("0s (no-store)".to_string(), "red", true)
+        );
+        assert_eq!(
+            visited_url_cache_cell(None, visited_url::CACHE_TYPE_HAS_ETAG),
+            ("ETag-only".to_string(), "magenta", false)
+        );
+        assert_eq!(visited_url_cache_cell(None, 0), ("None".to_string(), "red", false));
+        assert_eq!(visited_url_cache_sort_value(Some(3600), 0), "3600");
+        assert_eq!(
+            visited_url_cache_sort_value(None, visited_url::CACHE_TYPE_HAS_LAST_MODIFIED),
+            "0.2"
+        );
     }
 }

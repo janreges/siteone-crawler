@@ -157,6 +157,9 @@ Additional reporting features:
 
 - **Built-in SMTP mailer** — send the HTML audit report directly to one or more email addresses via your own SMTP
   server. Configure sender, recipients, subject template, and SMTP credentials via CLI options.
+- **Large reports stay responsive** — above 1,000 items the Visited URLs table and the Image Gallery of the HTML
+  report are paged in the browser (100/500/1000 items per page; sorting, fulltext search and the gallery filters work
+  on all items). The report stays one self-contained file; without JavaScript the first 100 items are shown.
 - will provide you with data for **SEO analysis**, just add the `Title`, `Keywords` and `Description` extra columns
 - will provide useful **summaries and statistics** at the end of the processing
 
