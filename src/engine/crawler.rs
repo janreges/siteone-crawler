@@ -512,12 +512,13 @@ impl Crawler {
         let is_image = parsed_url.is_image();
         let set_origin = origin.is_some() && !is_image;
 
-        // For security: only send HTTP auth to same 2nd-level domain
-        let use_http_auth = initial_parsed_url
-            .domain_2nd_level
-            .as_ref()
-            .map(|d2| parsed_url.domain_2nd_level.as_deref() == Some(d2.as_str()))
-            .unwrap_or(parsed_url.host == initial_parsed_url.host);
+        // For security: only send credentials (--http-auth, --header) within the crawled site
+        let use_http_auth = ParsedUrl::may_send_credentials(
+            initial_parsed_url,
+            scheme,
+            &host,
+            parsed_url.port.unwrap_or(if scheme == "https" { 443 } else { 80 }),
+        );
 
         let url_basename = parsed_url.get_base_name();
 
@@ -1514,12 +1515,7 @@ impl Crawler {
         // Prevent parallel fetches for same domain
         self.robots_txt_cache.insert(cache_key.clone(), None);
 
-        let use_http_auth = self
-            .initial_parsed_url
-            .domain_2nd_level
-            .as_ref()
-            .map(|d2| domain.ends_with(d2.as_str()))
-            .unwrap_or(domain == self.initial_parsed_url.host.as_deref().unwrap_or(""));
+        let use_http_auth = ParsedUrl::may_send_credentials(&self.initial_parsed_url, scheme, domain, port);
 
         let (http_request_host, http_request_path) =
             Self::apply_http_request_transformations(domain, "/robots.txt", &self.options.transform_url);

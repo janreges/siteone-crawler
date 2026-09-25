@@ -122,6 +122,7 @@ pub async fn fetch_missing(
     // adds only within the crawled site).
     let user_agent = Crawler::build_final_user_agent(options);
     let timeout = options.timeout.clamp(1, 3600) as u64;
+    let initial_url = ParsedUrl::parse(&options.url, None);
 
     for (i, target) in targets.iter().enumerate() {
         if i > 0 {
@@ -131,6 +132,8 @@ pub async fn fetch_missing(
             report.failed += 1;
             continue;
         };
+        // Credentials (--http-auth, --header) only where the crawler itself would send them.
+        let use_credentials = ParsedUrl::may_send_credentials(&initial_url, &scheme, &host, port);
         let resp = client
             .request(
                 &host,
@@ -143,7 +146,7 @@ pub async fn fetch_missing(
                 ACCEPT_HEADER,
                 &options.accept_encoding,
                 None,
-                true,
+                use_credentials,
                 None,
             )
             .await;
@@ -268,5 +271,76 @@ mod tests {
             Some(("x.test".to_string(), 8080, "http".to_string()))
         );
         assert_eq!(split_url("not a url"), None);
+    }
+
+    /// Answers one request with a small HTML page and passes the request head back.
+    fn serve_page_once() -> (u16, std::sync::mpsc::Receiver<String>) {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut head = Vec::new();
+            let mut buf = [0u8; 1024];
+            while !head.windows(4).any(|window| window == b"\r\n\r\n") {
+                match std::io::Read::read(&mut stream, &mut buf) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => head.extend_from_slice(&buf[..n]),
+                }
+            }
+            sender.send(String::from_utf8_lossy(&head).into_owned()).ok();
+            let body = b"<html><body><p>Page</p></body></html>";
+            let mut response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            )
+            .into_bytes();
+            response.extend_from_slice(body);
+            std::io::Write::write_all(&mut stream, &response).ok();
+        });
+        (port, receiver)
+    }
+
+    /// #21: gap-fill sends `--header` credentials only where the crawler would: to the crawled
+    /// site, and for an IP host only on its port, never to another service on the same address.
+    #[tokio::test]
+    async fn gap_fill_sends_credentials_only_within_the_crawled_site() {
+        let (site_port, site_request) = serve_page_once();
+        let (other_port, other_request) = serve_page_once();
+        let options = crate::options::core_options::parse_argv(&[
+            "siteone-crawler".to_string(),
+            format!("--url=http://127.0.0.1:{site_port}/"),
+            format!("--config-file={}", if cfg!(windows) { "NUL" } else { "/dev/null" }),
+            "--header=Cookie: session=abc".to_string(),
+            "--http-cache-dir=".to_string(),
+        ])
+        .unwrap();
+        let info = crate::info::Info::new(
+            "SiteOne Crawler".to_string(),
+            crate::version::CODE.to_string(),
+            String::new(),
+            String::new(),
+            String::new(),
+            String::new(),
+            options.url.clone(),
+        );
+        let status = Arc::new(Mutex::new(Status::new(
+            Box::new(crate::result::storage::memory_storage::MemoryStorage::new(false)),
+            true,
+            info,
+            std::time::Instant::now(),
+        )));
+
+        let urls = vec![
+            format!("http://127.0.0.1:{site_port}/missing"),
+            format!("http://127.0.0.1:{other_port}/missing"),
+        ];
+        let report = fetch_missing(&urls, &options, &status, 10).await;
+        assert_eq!(report.fetched, 2);
+
+        let site_head = site_request.recv().unwrap().to_ascii_lowercase();
+        assert!(site_head.contains("cookie: session=abc"), "{site_head}");
+        let other_head = other_request.recv().unwrap().to_ascii_lowercase();
+        assert!(!other_head.contains("cookie:"), "{other_head}");
     }
 }

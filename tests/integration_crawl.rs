@@ -1527,3 +1527,112 @@ fn progress_interval_prints_plain_lines_to_stderr_in_json_mode() {
     let json: serde_json::Value = serde_json::from_slice(&output.stdout).expect("stdout stays pure JSON");
     assert_eq!(json["results"].as_array().map(Vec::len), Some(4));
 }
+
+/// #21: credentials stay within the crawled site also on a multi-label public suffix: another
+/// `*.co.uk` site is a different site, although both share the "2nd-level domain" `co.uk`.
+#[test]
+fn custom_headers_do_not_reach_other_sites_on_a_shared_public_suffix() {
+    let other_site = RecordingServer::start(vec![Route {
+        path: "/logo.png",
+        headers: vec![("Content-Type", "image/png".to_string())],
+        body: b"\x89PNG\r\n\x1a\n".to_vec(),
+    }]);
+    let site = RecordingServer::start(vec![Route {
+        path: "/",
+        headers: vec![("Content-Type", "text/html; charset=utf-8".to_string())],
+        body: format!(
+            "<html><head><title>Home</title></head><body><img src=\"http://www.other.co.uk:{}/logo.png\" alt=\"Logo\"></body></html>",
+            other_site.port()
+        )
+        .into_bytes(),
+    }]);
+
+    let output = run_built_crawler(&[
+        "--config-file=/dev/null",
+        &format!("--url=http://www.example.co.uk:{}/", site.port()),
+        "--single-page",
+        "--header=Cookie: session=SECRET_SUFFIX",
+        // Both hosts are local servers; nothing is resolved through DNS.
+        &format!("--resolve=www.example.co.uk:{}:127.0.0.1", site.port()),
+        &format!("--resolve=www.other.co.uk:{}:127.0.0.1", other_site.port()),
+        "--allowed-domain-for-external-files=www.other.co.uk",
+        LOCAL_ANALYZERS,
+        "--http-cache-dir=",
+        "--output-html-report=",
+        "--output-json-file=",
+        "--output-text-file=",
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let site_requests = site.requests();
+    assert!(
+        site_requests
+            .iter()
+            .any(|head| head.to_ascii_lowercase().contains("cookie: session=secret_suffix")),
+        "the crawled site gets the header: {site_requests:?}"
+    );
+    let other_requests = other_site.requests();
+    assert!(!other_requests.is_empty(), "the image on the other site was fetched");
+    for head in &other_requests {
+        assert!(!head.to_ascii_lowercase().contains("cookie:"), "{head}");
+    }
+}
+
+/// #21: on an IP-literal host the port tells services apart, so credentials go only to the
+/// crawled port, not to another service on the same address.
+#[test]
+fn credentials_do_not_reach_another_port_of_an_ip_host() {
+    let other_service = RecordingServer::start(vec![Route {
+        path: "/logo.png",
+        headers: vec![("Content-Type", "image/png".to_string())],
+        body: b"\x89PNG\r\n\x1a\n".to_vec(),
+    }]);
+    let site = RecordingServer::start(vec![Route {
+        path: "/",
+        headers: vec![("Content-Type", "text/html; charset=utf-8".to_string())],
+        body: format!(
+            "<html><head><title>Home</title></head><body><img src=\"http://127.0.0.1:{}/logo.png\" alt=\"Logo\"></body></html>",
+            other_service.port()
+        )
+        .into_bytes(),
+    }]);
+
+    let output = run_built_crawler(&[
+        "--config-file=/dev/null",
+        &format!("--url={}", site.url()),
+        "--single-page",
+        "--header=Cookie: session=SECRET_SUFFIX",
+        "--http-auth=user:pass",
+        LOCAL_ANALYZERS,
+        "--http-cache-dir=",
+        "--output-html-report=",
+        "--output-json-file=",
+        "--output-text-file=",
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let site_requests = site.requests();
+    assert!(
+        site_requests
+            .iter()
+            .any(|head| head.to_ascii_lowercase().contains("cookie: session=secret_suffix")),
+        "the crawled port gets the header: {site_requests:?}"
+    );
+    let other_requests = other_service.requests();
+    assert!(!other_requests.is_empty(), "the image on the other port was fetched");
+    for head in &other_requests {
+        let head = head.to_ascii_lowercase();
+        assert!(!head.contains("cookie:"), "{head}");
+        assert!(!head.contains("authorization:"), "{head}");
+    }
+}

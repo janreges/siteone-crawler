@@ -30,6 +30,176 @@ static FONT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\.(eot|ttf|woff2|wof
 /// Regex for 2nd level domain extraction
 static DOMAIN_2ND_LEVEL_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)([a-z0-9\-]+\.[a-z][a-z0-9]{0,10})$").unwrap());
 
+/// Multi-label public suffixes under which unrelated sites register their domains (`co.uk`,
+/// `com.au`, `github.io`, `a.run.app`, …). Not the full Public Suffix List — enough to keep
+/// credentials within one site on the common country-code domains and hosting platforms.
+const MULTI_LABEL_PUBLIC_SUFFIXES: &[&str] = &[
+    "co.uk",
+    "org.uk",
+    "me.uk",
+    "ltd.uk",
+    "plc.uk",
+    "net.uk",
+    "ac.uk",
+    "gov.uk",
+    "nhs.uk",
+    "sch.uk",
+    "police.uk",
+    "co.jp",
+    "ne.jp",
+    "or.jp",
+    "ac.jp",
+    "go.jp",
+    "ed.jp",
+    "gr.jp",
+    "lg.jp",
+    "com.au",
+    "net.au",
+    "org.au",
+    "edu.au",
+    "gov.au",
+    "asn.au",
+    "id.au",
+    "co.nz",
+    "net.nz",
+    "org.nz",
+    "govt.nz",
+    "ac.nz",
+    "school.nz",
+    "co.za",
+    "org.za",
+    "gov.za",
+    "ac.za",
+    "net.za",
+    "com.br",
+    "net.br",
+    "org.br",
+    "gov.br",
+    "edu.br",
+    "com.cn",
+    "net.cn",
+    "org.cn",
+    "gov.cn",
+    "edu.cn",
+    "com.hk",
+    "org.hk",
+    "gov.hk",
+    "edu.hk",
+    "com.tw",
+    "org.tw",
+    "gov.tw",
+    "edu.tw",
+    "co.kr",
+    "or.kr",
+    "go.kr",
+    "ac.kr",
+    "co.in",
+    "net.in",
+    "org.in",
+    "gov.in",
+    "ac.in",
+    "edu.in",
+    "co.il",
+    "org.il",
+    "ac.il",
+    "gov.il",
+    "com.sg",
+    "edu.sg",
+    "gov.sg",
+    "org.sg",
+    "com.my",
+    "gov.my",
+    "org.my",
+    "co.id",
+    "go.id",
+    "ac.id",
+    "or.id",
+    "co.th",
+    "go.th",
+    "ac.th",
+    "or.th",
+    "com.ph",
+    "gov.ph",
+    "com.vn",
+    "gov.vn",
+    "com.mx",
+    "org.mx",
+    "gob.mx",
+    "com.ar",
+    "gob.ar",
+    "com.co",
+    "gov.co",
+    "com.pe",
+    "gob.pe",
+    "com.tr",
+    "org.tr",
+    "gov.tr",
+    "edu.tr",
+    "com.pl",
+    "net.pl",
+    "org.pl",
+    "gov.pl",
+    "com.ua",
+    "gov.ua",
+    "com.sa",
+    "gov.sa",
+    "co.ae",
+    "gov.ae",
+    "ac.ae",
+    "com.eg",
+    "gov.eg",
+    "com.pk",
+    "gov.pk",
+    "com.ng",
+    "gov.ng",
+    "co.ke",
+    "go.ke",
+    "github.io",
+    "gitlab.io",
+    "netlify.app",
+    "vercel.app",
+    "pages.dev",
+    "workers.dev",
+    "web.app",
+    "firebaseapp.com",
+    "herokuapp.com",
+    "azurewebsites.net",
+    "appspot.com",
+    "blogspot.com",
+    "onrender.com",
+    "fly.dev",
+    "run.app",
+    "a.run.app",
+    "up.railway.app",
+    "railway.app",
+    "cloudfront.net",
+    "azurestaticapps.net",
+    "amplifyapp.com",
+    "ngrok-free.app",
+    "ngrok.io",
+    "ngrok.app",
+    "trycloudflare.com",
+    "r2.dev",
+    "wordpress.com",
+    "myshopify.com",
+    "wixsite.com",
+    "readthedocs.io",
+    "gitbook.io",
+    "surge.sh",
+    "deno.dev",
+    "replit.app",
+    "s3.amazonaws.com",
+    "elasticbeanstalk.com",
+];
+
+/// Second-level labels that, under a two-letter country-code TLD, make a public suffix even when
+/// `MULTI_LABEL_PUBLIC_SUFFIXES` does not list it (`gov.cz`, `com.es`), so a gap in that list keeps
+/// credentials on fewer hosts rather than sharing them across the whole suffix.
+const COUNTRY_CODE_SECOND_LEVEL_LABELS: &[&str] = &[
+    "com", "net", "org", "gov", "edu", "ac", "co", "or", "ne", "go", "gob", "mil", "nom", "sch", "ltd", "plc", "gv",
+    "gouv", "govt", "info", "biz",
+];
+
 /// Regex for extracting extensions from path+query
 static ESTIMATE_EXT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\.([0-9a-z]{1,5})").unwrap());
 
@@ -461,6 +631,72 @@ impl ParsedUrl {
             .map(|m| m.as_str().to_string())
     }
 
+    /// The registrable domain ("site") of `host`: the longest listed public suffix it ends with plus
+    /// one label (`www.example.co.uk` → `example.co.uk`, `svc.a.run.app` → itself); under a
+    /// two-letter TLD with a second-level label such as `gov` or `com`, its last three labels
+    /// (`www.example.gov.cz` → `example.gov.cz`); otherwise its last two labels. `None` for IP
+    /// addresses, single-label hosts such as `localhost`, and bare public suffixes.
+    pub fn registrable_domain(host: &str) -> Option<String> {
+        let host = host.trim_end_matches('.').to_ascii_lowercase();
+        if host.starts_with('[') || host.parse::<std::net::IpAddr>().is_ok() {
+            return None;
+        }
+        let labels: Vec<&str> = host.split('.').collect();
+        if labels.len() < 2 || labels.iter().any(|label| label.is_empty()) {
+            return None;
+        }
+        let suffix_labels = (2..=labels.len())
+            .rev()
+            .find(|&count| MULTI_LABEL_PUBLIC_SUFFIXES.contains(&labels[labels.len() - count..].join(".").as_str()))
+            .unwrap_or_else(|| {
+                let tld = labels[labels.len() - 1];
+                let is_country_code = tld.len() == 2 && tld.bytes().all(|b| b.is_ascii_alphabetic());
+                if is_country_code && COUNTRY_CODE_SECOND_LEVEL_LABELS.contains(&labels[labels.len() - 2]) {
+                    2
+                } else {
+                    1
+                }
+            });
+        if labels.len() <= suffix_labels {
+            return None;
+        }
+        Some(labels[labels.len() - suffix_labels - 1..].join("."))
+    }
+
+    /// Whether credentials configured for the crawl (`--http-auth`, `--header`) may be sent to
+    /// `host`: it shares the registrable domain of the initial host, or is exactly that host.
+    pub fn is_same_site(initial_host: &str, host: &str) -> bool {
+        match (Self::registrable_domain(initial_host), Self::registrable_domain(host)) {
+            (Some(initial_site), Some(site)) => initial_site == site,
+            _ => initial_host
+                .trim_end_matches('.')
+                .eq_ignore_ascii_case(host.trim_end_matches('.')),
+        }
+    }
+
+    /// Whether credentials configured for the crawl (`--http-auth`, `--header`) may be sent with a
+    /// request to `scheme://host:port`: the host belongs to the initial URL's site (`is_same_site`),
+    /// the request is not plain `http` when the crawl started on `https`, and for a host without a
+    /// registrable domain (an IP address, `localhost`) the port is the initial one too, because
+    /// there the port is what tells unrelated services apart.
+    pub fn may_send_credentials(initial: &ParsedUrl, scheme: &str, host: &str, port: u16) -> bool {
+        let Some(initial_host) = initial.host.as_deref() else {
+            return false;
+        };
+        let initial_is_https = initial
+            .scheme
+            .as_deref()
+            .is_none_or(|s| s.eq_ignore_ascii_case("https"));
+        if initial_is_https && !scheme.eq_ignore_ascii_case("https") {
+            return false;
+        }
+        if !Self::is_same_site(initial_host, host) {
+            return false;
+        }
+        let initial_port = initial.port.unwrap_or(if initial_is_https { 443 } else { 80 });
+        Self::registrable_domain(initial_host).is_some() || port == initial_port
+    }
+
     /// Get base name (last path part) of the URL
     pub fn get_base_name(&self) -> Option<String> {
         if self.path.is_empty() || self.path == "/" {
@@ -631,5 +867,123 @@ mod tests {
     fn test_domain_2nd_level() {
         let parsed = ParsedUrl::parse("https://sub.example.com/page", None);
         assert_eq!(parsed.domain_2nd_level.as_deref(), Some("example.com"));
+    }
+
+    #[test]
+    fn registrable_domain_respects_multi_label_public_suffixes() {
+        assert_eq!(
+            ParsedUrl::registrable_domain("www.example.com").as_deref(),
+            Some("example.com")
+        );
+        assert_eq!(
+            ParsedUrl::registrable_domain("Example.COM.").as_deref(),
+            Some("example.com")
+        );
+        assert_eq!(
+            ParsedUrl::registrable_domain("www.example.co.uk").as_deref(),
+            Some("example.co.uk")
+        );
+        assert_eq!(
+            ParsedUrl::registrable_domain("a.b.example.com.au").as_deref(),
+            Some("example.com.au")
+        );
+        assert_eq!(
+            ParsedUrl::registrable_domain("user1.github.io").as_deref(),
+            Some("user1.github.io")
+        );
+        assert_eq!(
+            ParsedUrl::registrable_domain("co.uk"),
+            None,
+            "a bare public suffix is not a site"
+        );
+        assert_eq!(ParsedUrl::registrable_domain("localhost"), None);
+        assert_eq!(ParsedUrl::registrable_domain("127.0.0.1"), None);
+        assert_eq!(ParsedUrl::registrable_domain("[::1]"), None);
+    }
+
+    #[test]
+    fn credentials_stay_within_the_site() {
+        assert!(ParsedUrl::is_same_site("www.example.com", "cdn.example.com"));
+        assert!(ParsedUrl::is_same_site("www.example.co.uk", "static.example.co.uk"));
+        assert!(!ParsedUrl::is_same_site("www.example.co.uk", "www.other.co.uk"));
+        assert!(!ParsedUrl::is_same_site("example.com", "evilexample.com"));
+        assert!(!ParsedUrl::is_same_site("user1.github.io", "user2.github.io"));
+        assert!(ParsedUrl::is_same_site("127.0.0.1", "127.0.0.1"));
+        assert!(!ParsedUrl::is_same_site("127.0.0.1", "localhost"));
+        assert!(ParsedUrl::is_same_site("localhost", "LOCALHOST"));
+    }
+
+    #[test]
+    fn registrable_domain_uses_the_longest_listed_suffix() {
+        assert_eq!(
+            ParsedUrl::registrable_domain("svc-a-uc.a.run.app").as_deref(),
+            Some("svc-a-uc.a.run.app")
+        );
+        assert_eq!(
+            ParsedUrl::registrable_domain("assets.bucket.s3.amazonaws.com").as_deref(),
+            Some("bucket.s3.amazonaws.com")
+        );
+        assert_eq!(ParsedUrl::registrable_domain("a.run.app"), None, "a bare public suffix");
+        assert!(!ParsedUrl::is_same_site("svc-a-uc.a.run.app", "svc-b-uc.a.run.app"));
+        assert!(!ParsedUrl::is_same_site("x.up.railway.app", "y.up.railway.app"));
+        assert!(!ParsedUrl::is_same_site("shop-a.myshopify.com", "shop-b.myshopify.com"));
+        assert!(ParsedUrl::is_same_site("x.up.railway.app", "X.up.railway.app."));
+    }
+
+    #[test]
+    fn unlisted_country_code_second_level_suffixes_are_public() {
+        assert_eq!(
+            ParsedUrl::registrable_domain("www.example.gov.cz").as_deref(),
+            Some("example.gov.cz")
+        );
+        assert_eq!(
+            ParsedUrl::registrable_domain("a.example.com.es").as_deref(),
+            Some("example.com.es")
+        );
+        assert_eq!(ParsedUrl::registrable_domain("com.es"), None, "a bare public suffix");
+        assert!(!ParsedUrl::is_same_site("www.example.gov.cz", "www.other.gov.cz"));
+        assert!(!ParsedUrl::is_same_site("a.example.com.es", "b.other.com.es"));
+        assert!(ParsedUrl::is_same_site("www.example.cz", "cdn.example.cz"));
+        assert!(
+            ParsedUrl::is_same_site("www.example.com", "cdn.example.com"),
+            "only two-letter TLDs"
+        );
+    }
+
+    #[test]
+    fn credentials_need_the_site_a_secure_scheme_and_for_ip_hosts_the_port() {
+        let https = ParsedUrl::parse("https://www.example.com/", None);
+        assert!(ParsedUrl::may_send_credentials(&https, "https", "cdn.example.com", 443));
+        assert!(
+            ParsedUrl::may_send_credentials(&https, "https", "www.example.com", 8443),
+            "another port of a domain is the same site"
+        );
+        assert!(
+            !ParsedUrl::may_send_credentials(&https, "http", "www.example.com", 80),
+            "never in cleartext when the crawl started on https"
+        );
+        assert!(!ParsedUrl::may_send_credentials(&https, "https", "www.other.com", 443));
+
+        let http = ParsedUrl::parse("http://www.example.com/", None);
+        assert!(ParsedUrl::may_send_credentials(&http, "http", "www.example.com", 80));
+        assert!(ParsedUrl::may_send_credentials(
+            &http,
+            "https",
+            "static.example.com",
+            443
+        ));
+
+        let ip = ParsedUrl::parse("http://127.0.0.1:8080/", None);
+        assert!(ParsedUrl::may_send_credentials(&ip, "http", "127.0.0.1", 8080));
+        assert!(
+            !ParsedUrl::may_send_credentials(&ip, "http", "127.0.0.1", 8081),
+            "another service on the same IP address"
+        );
+        let localhost = ParsedUrl::parse("http://localhost/", None);
+        assert!(ParsedUrl::may_send_credentials(&localhost, "http", "localhost", 80));
+        assert!(!ParsedUrl::may_send_credentials(&localhost, "http", "localhost", 3000));
+        let https_ip = ParsedUrl::parse("https://10.0.0.5/", None);
+        assert!(ParsedUrl::may_send_credentials(&https_ip, "https", "10.0.0.5", 443));
+        assert!(!ParsedUrl::may_send_credentials(&https_ip, "https", "10.0.0.5", 8443));
     }
 }
