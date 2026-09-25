@@ -1230,4 +1230,36 @@ mod tests {
             urls
         );
     }
+
+    #[test]
+    fn astro_image_with_encoded_ampersands_links_to_the_stored_file() {
+        // PR #87: `&amp;` / `&#38;` in an Astro image URL must not change the file name the link
+        // points to; it has to be the name the downloaded image is stored under.
+        let processor = HtmlProcessor::new(make_config());
+        let page = ParsedUrl::parse("https://example.com/", None);
+        for src in [
+            "/_image?href=%2F_astro%2Flogo.I81FHMZt.svg&amp;w=215&amp;h=40&amp;f=svg",
+            "/_image?href=%2F_astro%2Flogo.I81FHMZt.svg&#38;w=215&#38;h=40&#38;f=svg",
+            "/_image?href=%2F_astro%2Flogo.I81FHMZt.svg&w=215&h=40&f=svg",
+        ] {
+            let mut html = format!(r#"<html><head></head><body><img src="{src}"></body></html>"#);
+            processor.apply_content_changes_for_offline_version(&mut html, ContentTypeId::Html, &page, false);
+            assert!(html.contains(r#"<img src="_image.01662772d3.svg">"#), "{src} -> {html}");
+        }
+
+        // The name the offline exporter stores the downloaded image under.
+        let stored = crate::export::utils::offline_url_converter::OfflineUrlConverter::new(
+            page.clone(),
+            page.clone(),
+            ParsedUrl::parse(
+                "https://example.com/_image?href=%2F_astro%2Flogo.I81FHMZt.svg&w=215&h=40&f=svg",
+                None,
+            ),
+            None,
+            None,
+            Some("src"),
+        )
+        .convert_url_to_relative(false);
+        assert_eq!(stored, "_image.01662772d3.svg");
+    }
 }
