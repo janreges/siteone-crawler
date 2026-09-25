@@ -401,8 +401,9 @@ impl AiClient {
                     last_err = e.to_string();
                     // Do NOT retry on timeout: a paid completion may have been processed
                     // server-side, so retrying could double-charge. Only retry when we know
-                    // the request never reached/processed (connect/build errors).
-                    let retriable = e.is_connect() || e.is_request();
+                    // the request never reached/processed (connect/build errors). reqwest reports
+                    // a timeout as a request error too, hence the explicit exclusion.
+                    let retriable = !e.is_timeout() && (e.is_connect() || e.is_request());
                     let record = RequestRecord {
                         duration_ms: Some(elapsed_ms(sent_at)),
                         ..record

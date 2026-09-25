@@ -3782,6 +3782,23 @@ fn ai_provider_error_is_reported() {
 }
 
 #[test]
+fn ai_request_that_timed_out_is_not_retried() {
+    let tmp = TempDir::new("ai-telemetry-timeout");
+    // Slower than the 1 s timeout: the provider may still be generating (and charging for) it.
+    let mock = MockLlm::start(vec![MockResponse {
+        delay_ms: 2500,
+        ..chat_response(200, qwen_seo_answer())
+    }]);
+    let stderr = crawl_with_ai_seo(&one_page_site(&tmp), &mock, &["--ai-timeout=1"]);
+    assert_eq!(mock.request_bodies().len(), 1, "a timed-out request is sent once");
+    assert_line(
+        &stderr,
+        r"  AI ✗ #1 SEO analysis · AI request error: .*timed out.* · 1\.\d s",
+    );
+    assert!(!stderr.contains("AI ↻"), "stderr: {stderr}");
+}
+
+#[test]
 fn ai_cache_hit_is_reported() {
     let tmp = TempDir::new("ai-telemetry-cache");
     let cache = tmp.path.join("ai-cache");
