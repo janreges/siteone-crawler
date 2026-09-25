@@ -3964,6 +3964,85 @@ fn ai_usage_counts_the_time_and_answers_of_failed_calls() {
 }
 
 #[test]
+fn ai_usage_counts_a_success_whose_body_cannot_be_read() {
+    use std::io::{Read, Write};
+    // An endpoint that answers 200 but closes before the body it announced is complete.
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a free port");
+    let port = listener.local_addr().expect("a bound address").port();
+    let requests = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let counted = requests.clone();
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { continue };
+            counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            stream.set_read_timeout(Some(std::time::Duration::from_secs(5))).ok();
+            // The whole request first, so the answer cannot cut the sending short.
+            let mut data = Vec::new();
+            let mut buf = [0u8; 4096];
+            loop {
+                let text = String::from_utf8_lossy(&data).to_ascii_lowercase();
+                if let Some(end) = text.find("\r\n\r\n") {
+                    let length = text
+                        .lines()
+                        .find_map(|line| line.strip_prefix("content-length:"))
+                        .and_then(|value| value.trim().parse::<usize>().ok())
+                        .unwrap_or(0);
+                    if data.len() >= end + 4 + length {
+                        break;
+                    }
+                }
+                match stream.read(&mut buf) {
+                    Ok(0) | Err(_) => break,
+                    Ok(read) => data.extend_from_slice(&buf[..read]),
+                }
+            }
+            let body = r#"{"choices":[{"message":{"content":"#;
+            let head = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len() + 500
+            );
+            stream.write_all(head.as_bytes()).ok();
+            stream.write_all(body.as_bytes()).ok();
+            stream.shutdown(std::net::Shutdown::Both).ok();
+        }
+    });
+
+    let tmp = TempDir::new("ai-usage-unread-body");
+    let server = one_page_site(&tmp);
+    let events = tmp.path.join("events.ndjson");
+    let output = run_crawler(&[
+        "--config-file=/dev/null",
+        &format!("--url={}", server.url()),
+        LOCAL_ANALYZERS,
+        "--http-cache-dir=",
+        "--no-color",
+        "--ai-provider=openai-compatible",
+        &format!("--ai-endpoint=http://127.0.0.1:{port}/v1"),
+        "--ai-model=m",
+        "--ai-actions=seo",
+        "--ai-max-pages=1",
+        "--ai-cache-dir=",
+        &format!("--events-file={}", events.display()),
+    ]);
+    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+    assert_eq!(output.status.code(), Some(0), "{stderr}");
+    assert!(stderr.contains("AI response read error"), "{stderr}");
+    assert_eq!(requests.load(std::sync::atomic::Ordering::SeqCst), 1, "one AI request");
+    let text = std::fs::read_to_string(&events).expect("the events file");
+    let usage = text
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).expect("a JSON event"))
+        .find(|event| event["type"] == "aiUsage")
+        .unwrap_or_else(|| panic!("no aiUsage event in {text}"));
+    let counts = (
+        usage["calls"].as_u64(),
+        usage["callsWithoutUsage"].as_u64(),
+        usage["httpAttempts"].as_u64(),
+    );
+    assert_eq!(counts, (Some(1), Some(1), Some(1)), "{usage}");
+}
+
+#[test]
 fn ai_refusal_is_reported_with_its_tokens_and_speed() {
     let tmp = TempDir::new("ai-telemetry-refusal");
     let refusal = serde_json::json!({

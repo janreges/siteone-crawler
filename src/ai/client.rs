@@ -335,6 +335,10 @@ impl AiClient {
                     let body_text = match r.text().await {
                         Ok(text) => text,
                         Err(e) => {
+                            // A 2xx answer all the same: a completed call without token usage.
+                            if status.is_success() {
+                                super::usage::record(category, &Usage::default(), false);
+                            }
                             let record = RequestRecord {
                                 duration_ms: Some(elapsed_ms(sent_at)),
                                 ..record
