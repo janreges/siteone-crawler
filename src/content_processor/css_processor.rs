@@ -6,7 +6,7 @@
 use once_cell::sync::Lazy;
 use regex::Regex;
 
-use crate::content_processor::base_processor::{ProcessorConfig, convert_url_to_relative, is_relevant};
+use crate::content_processor::base_processor::{ProcessorConfig, StoredUrlFn, convert_url_to_relative, is_relevant};
 use crate::content_processor::content_processor::ContentProcessor;
 use crate::engine::found_url::UrlSource;
 use crate::engine::found_urls::FoundUrls;
@@ -120,6 +120,10 @@ impl ContentProcessor for CssProcessor {
             .to_string();
 
         *content = self.remove_unwanted_code_from_css(content);
+    }
+
+    fn set_stored_url(&mut self, stored_url: StoredUrlFn) {
+        self.config.stored_url = Some(stored_url);
     }
 
     fn is_content_type_relevant(&self, content_type: ContentTypeId) -> bool {

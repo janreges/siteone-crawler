@@ -1,6 +1,7 @@
 // SiteOne Crawler - ContentProcessor trait
 // (c) Jan Reges <jan.reges@siteone.cz>
 
+use crate::content_processor::base_processor::StoredUrlFn;
 use crate::engine::found_urls::FoundUrls;
 use crate::engine::parsed_url::ParsedUrl;
 use crate::types::ContentTypeId;
@@ -46,6 +47,10 @@ pub trait ContentProcessor: Send + Sync {
     ) {
         self.apply_content_changes_for_offline_version(content, content_type, url, remove_unwanted_code);
     }
+
+    /// Tell the processor how the crawler stored each visited URL, once the crawl is over (before the
+    /// offline and markdown exports). Only the processors that rewrite URLs use it.
+    fn set_stored_url(&mut self, _stored_url: StoredUrlFn) {}
 
     /// Check if this ContentProcessor is relevant for given content type
     fn is_content_type_relevant(&self, content_type: ContentTypeId) -> bool;

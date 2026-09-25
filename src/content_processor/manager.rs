@@ -5,6 +5,7 @@
 
 use std::time::Instant;
 
+use crate::content_processor::base_processor::StoredUrlFn;
 use crate::engine::found_urls::FoundUrls;
 use crate::engine::parsed_url::ParsedUrl;
 use crate::result::manager_stats::ManagerStats;
@@ -36,6 +37,14 @@ impl ContentProcessorManager {
         }
         self.processors.push(processor);
         Ok(())
+    }
+
+    /// Tell every processor how the crawler stored each visited URL (see
+    /// `ContentProcessor::set_stored_url`).
+    pub fn set_stored_url(&mut self, stored_url: StoredUrlFn) {
+        for processor in &mut self.processors {
+            processor.set_stored_url(stored_url.clone());
+        }
     }
 
     /// Get references to all registered processors

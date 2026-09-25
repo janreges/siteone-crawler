@@ -6,7 +6,7 @@
 use once_cell::sync::Lazy;
 use regex::Regex;
 
-use crate::content_processor::base_processor::{ProcessorConfig, convert_url_to_relative, is_relevant};
+use crate::content_processor::base_processor::{ProcessorConfig, StoredUrlFn, convert_url_to_relative, is_relevant};
 use crate::content_processor::content_processor::ContentProcessor;
 use crate::engine::found_url::UrlSource;
 use crate::engine::found_urls::FoundUrls;
@@ -918,6 +918,10 @@ impl ContentProcessor for HtmlProcessor {
                 *content = self.set_js_function_to_remove_all_anchor_listeners(content);
             }
         }
+    }
+
+    fn set_stored_url(&mut self, stored_url: StoredUrlFn) {
+        self.config.stored_url = Some(stored_url);
     }
 
     fn is_content_type_relevant(&self, content_type: ContentTypeId) -> bool {

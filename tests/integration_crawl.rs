@@ -2644,6 +2644,13 @@ fn force_relative_urls_exports_a_site_redirecting_to_its_www_twin() {
     for expected in [r#"href="style.css""#, r#"href="about.html""#, r#"src="img/a.png""#] {
         assert!(page.contains(expected), "missing {expected} in {page}");
     }
+    // The image, not the redirect record of /img/a.png stored at the export root (which is no image)
+    let css = std::fs::read_to_string(export.join("_www.site.test/style.css")).expect("the www stylesheet");
+    assert!(css.contains("url(img/a.png)"), "{css}");
+    assert_eq!(
+        std::fs::read(export.join("_www.site.test/img/a.png")).expect("the image"),
+        b"PNG"
+    );
     assert_eq!(dangling_references(&export), Vec::<String>::new());
 }
 
@@ -2795,6 +2802,81 @@ fn force_relative_urls_exports_redirects_to_the_www_twin_and_self_links() {
     assert_eq!(dangling_references(&export), Vec::<String>::new());
     let index_md = std::fs::read_to_string(markdown.join("index.md")).expect("index.md");
     assert!(index_md.contains("[Top](index.md#top)"), "{index_md}");
+}
+
+/// #35: when only /jump redirects to the www twin, its target page is stored under
+/// `_www.site.test/`, but the crawler fetches the links and images of that page from the initial
+/// origin and stores them at the export root, so with --force-relative-urls the twin's page leads
+/// there, in both file layouts.
+#[test]
+fn force_relative_urls_leads_links_of_a_redirected_www_twin_page_to_the_stored_files() {
+    let tmp = TempDir::new("force-relative-twin-links");
+    let site = tmp.path.join("site");
+    std::fs::create_dir_all(&site).expect("site dir");
+    let server = RedirectServer::start(
+        &site,
+        vec![Redirect {
+            host: Some("site.test"),
+            path: Some("/jump"),
+            location: "http://www.site.test:{port}/landing",
+        }],
+    );
+    let port = server.port();
+    std::fs::write(
+        site.join("index.html"),
+        r#"<html><head><title>Home</title></head><body><a href="/jump">Jump</a></body></html>"#,
+    )
+    .expect("index.html");
+    std::fs::write(
+        site.join("landing.html"),
+        r#"<html><head><title>Landing</title></head><body><a href="/next">Next</a><img src="/photo.png" alt="Photo"></body></html>"#,
+    )
+    .expect("landing.html");
+    std::fs::write(
+        site.join("next.html"),
+        r#"<html><head><title>Next</title></head><body>Next</body></html>"#,
+    )
+    .expect("next.html");
+    std::fs::write(site.join("photo.png"), "PNG").expect("png");
+
+    for (layout, landing, expected) in [
+        (
+            None,
+            "_www.site.test/landing.html",
+            [r#"href="../next.html""#, r#"src="../photo.png""#],
+        ),
+        (
+            Some("--offline-export-preserve-url-structure"),
+            "_www.site.test/landing/index.html",
+            [r#"href="../../next/index.html""#, r#"src="../../photo.png""#],
+        ),
+    ] {
+        let export = tmp.path.join(format!("export-{}", layout.is_some()));
+        let mut args = vec![
+            "--config-file=/dev/null".to_string(),
+            format!("--url=http://site.test:{port}/"),
+            format!("--resolve=site.test:{port}:127.0.0.1"),
+            format!("--resolve=www.site.test:{port}:127.0.0.1"),
+            LOCAL_ANALYZERS.to_string(),
+            "--http-cache-dir=".to_string(),
+            "--force-relative-urls".to_string(),
+            format!("--offline-export-dir={}", export.display()),
+        ];
+        args.extend(layout.map(str::to_string));
+        let output = run_crawler(&args.iter().map(String::as_str).collect::<Vec<_>>());
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "stderr: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let page = std::fs::read_to_string(export.join(landing)).expect("the redirect target is exported");
+        for reference in expected {
+            assert!(page.contains(reference), "{layout:?}: missing {reference} in {page}");
+        }
+        assert_eq!(dangling_references(&export), Vec::<String>::new(), "{layout:?}");
+    }
 }
 
 /// #35: a www-variant reference in a stylesheet downloaded from an allowed external domain is

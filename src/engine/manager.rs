@@ -10,7 +10,7 @@ use std::time::Instant;
 use crate::analysis::manager::AnalysisManager;
 use crate::components::super_table::SuperTable;
 use crate::content_processor::astro_processor::AstroProcessor;
-use crate::content_processor::base_processor::{DomainAllowFn, ProcessorConfig};
+use crate::content_processor::base_processor::{DomainAllowFn, ProcessorConfig, stored_url_lookup};
 use crate::content_processor::css_processor::CssProcessor;
 use crate::content_processor::html_processor::HtmlProcessor;
 use crate::content_processor::javascript_processor::JavaScriptProcessor;
@@ -669,6 +669,14 @@ impl Manager {
             if sitemap.should_be_activated() {
                 exporters.push(Box::new(sitemap));
             }
+        }
+
+        // With --force-relative-urls the offline and markdown exports lead every reference to the file its
+        // fetch was stored in, which is known now that the crawl is over (#35)
+        if options.force_relative_urls
+            && let (Ok(st), Ok(mut cpm)) = (status.lock(), crawler.get_content_processor_manager().lock())
+        {
+            cpm.set_stored_url(stored_url_lookup(&st.get_visited_urls()));
         }
 
         // 2. OfflineWebsiteExporter — run separately to collect exported file paths

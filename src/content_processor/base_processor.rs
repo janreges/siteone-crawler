@@ -3,14 +3,47 @@
 //
 // Provides shared utility methods used by all content processors.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::engine::parsed_url::ParsedUrl;
 use crate::export::utils::offline_url_converter::OfflineUrlConverter;
+use crate::result::visited_url::VisitedUrl;
 use crate::types::ContentTypeId;
+use crate::utils;
 
 /// Predicate that decides whether a domain is allowed (for static files / crawling).
 pub type DomainAllowFn = Arc<dyn Fn(&str) -> bool + Send + Sync>;
+
+/// How the crawler stored a URL it visited: its own content, or a redirect to this absolute URL.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StoredUrl {
+    Content,
+    Redirect(String),
+}
+
+/// Looks up how the crawler stored a visited URL (absolute, without fragment); None when it did not.
+pub type StoredUrlFn = Arc<dyn Fn(&str) -> Option<StoredUrl> + Send + Sync>;
+
+/// How the crawler stored `visited_urls`: the exported successful responses with their content, the
+/// redirects as a redirect to their Location.
+pub fn stored_url_lookup(visited_urls: &[VisitedUrl]) -> StoredUrlFn {
+    let stored: HashMap<String, StoredUrl> = visited_urls
+        .iter()
+        .filter_map(|visited| {
+            let stored = match visited.status_code {
+                200 | 201 => StoredUrl::Content,
+                301..=308 => {
+                    let location = visited.extras.as_ref()?.get("Location")?;
+                    StoredUrl::Redirect(utils::get_absolute_url_by_base_url(&visited.url, location))
+                }
+                _ => return None,
+            };
+            Some((ParsedUrl::parse(&visited.url, None).get_full_url(true, false), stored))
+        })
+        .collect();
+    Arc::new(move |url| stored.get(url).cloned())
+}
 
 /// Configuration extracted from CoreOptions, shared across processors.
 /// This avoids each processor needing a reference to the full crawler.
@@ -49,6 +82,9 @@ pub struct ProcessorConfig {
     /// Returns true if the given host is allowed for whole-domain crawling
     /// (`--allowed-domain-for-crawling`).
     pub is_external_domain_allowed_for_crawling: Option<DomainAllowFn>,
+    /// How the crawler stored each visited URL, known once the crawl is over (set before the
+    /// offline and markdown exports). Used by `--force-relative-urls`.
+    pub stored_url: Option<StoredUrlFn>,
 }
 
 impl std::fmt::Debug for ProcessorConfig {
@@ -84,6 +120,7 @@ impl std::fmt::Debug for ProcessorConfig {
                 "is_external_domain_allowed_for_crawling",
                 &self.is_external_domain_allowed_for_crawling.is_some(),
             )
+            .field("stored_url", &self.stored_url.is_some())
             .finish()
     }
 }
@@ -112,6 +149,7 @@ impl ProcessorConfig {
             initial_url,
             is_domain_allowed_for_static_files: None,
             is_external_domain_allowed_for_crawling: None,
+            stored_url: None,
         }
     }
 
@@ -163,6 +201,32 @@ pub fn is_initial_host_variant(url: &ParsedUrl, initial_url: &ParsedUrl) -> bool
     }
 }
 
+/// Where a reference to `url`, which the crawler fetched, leads: to `url` when it was stored with its
+/// content, or to where its redirects (the crawler fetches their targets as they are) end at stored
+/// content, keeping the fragment of the reference; to the redirect record `url` itself when they do not.
+/// None when nothing was stored for `url`.
+fn stored_target(url: &ParsedUrl, config: &ProcessorConfig) -> Option<ParsedUrl> {
+    let stored_url = config.stored_url.as_ref()?;
+    let mut stored = stored_url(&url.get_full_url(true, false))?;
+    let mut target = url.clone();
+    // A few hops, so that a redirect loop ends
+    for _ in 0..10 {
+        let StoredUrl::Redirect(location) = stored else {
+            return Some(target);
+        };
+        target = ParsedUrl::parse(&location, None);
+        if target.fragment.is_none() {
+            target.set_fragment(url.fragment.clone());
+        }
+        target.url = target.get_full_url(true, true);
+        match stored_url(&target.get_full_url(true, false)) {
+            Some(next) => stored = next,
+            None => break,
+        }
+    }
+    Some(url.clone())
+}
+
 /// Convert a URL to a relative path for offline use, following the offline-export options of `config`.
 /// When `offline_export_preserve_urls` is set, same-domain links become root-relative and cross-domain
 /// links stay absolute.
@@ -197,18 +261,22 @@ pub fn convert_url_to_relative(
     let mut parsed_target = ParsedUrl::parse(&normalized, Some(base_url));
 
     // --force-relative-urls: http/https and www/non-www variants of the initial host are the initial
-    // host, so their links lead to the same local files (#35), as the crawler fetched them from the
-    // initial origin, whatever host they were found on. Not on pages stored under the initial host's
-    // www twin (when the initial URL redirects there, the pages live under _www.host/ and their links
-    // stay within that copy). Redirect records are not normalized at all (see HtmlProcessor).
-    let is_on_initial_host_twin =
-        base_url.host != config.initial_url.host && is_initial_host_variant(base_url, &config.initial_url);
-    if config.force_relative_urls
-        && !is_on_initial_host_twin
-        && is_initial_host_variant(&parsed_target, &config.initial_url)
-    {
-        parsed_target.set_attributes(&config.initial_url, true, true, true);
-        parsed_target.url = parsed_target.get_full_url(true, true);
+    // host (#35): the crawler fetched them from the initial origin, whatever host they were found on.
+    // Redirect records are not normalized at all (see HtmlProcessor).
+    if config.force_relative_urls && is_initial_host_variant(&parsed_target, &config.initial_url) {
+        let mut initial_origin = parsed_target.clone();
+        initial_origin.set_attributes(&config.initial_url, true, true, true);
+        initial_origin.url = initial_origin.get_full_url(true, true);
+        let is_on_initial_host_twin =
+            base_url.host != config.initial_url.host && is_initial_host_variant(base_url, &config.initial_url);
+        match stored_target(&initial_origin, config) {
+            Some(target) => parsed_target = target,
+            // Nothing known about that fetch: a page stored under the initial host's www twin (the
+            // initial URL redirects there, so the pages live under _www.host/) keeps its links within
+            // that copy.
+            None if is_on_initial_host_twin => {}
+            None => parsed_target = initial_origin,
+        }
     }
 
     if config.offline_export_preserve_urls {
@@ -476,6 +544,104 @@ mod tests {
             convert_url_to_relative(&www_page, "https://www.example.com/style.css", Some("href"), &cfg),
             "../style.css"
         );
+    }
+
+    #[test]
+    fn stored_url_lookup_tells_content_from_redirects() {
+        let visited = |url: &str, status_code: i32, location: Option<&str>| {
+            VisitedUrl::new(
+                String::new(),
+                String::new(),
+                0,
+                url.to_string(),
+                status_code,
+                0.1,
+                None,
+                ContentTypeId::Html,
+                None,
+                None,
+                location
+                    .map(|location| std::collections::HashMap::from([("Location".to_string(), location.to_string())])),
+                false,
+                true,
+                0,
+                None,
+            )
+        };
+        let lookup = stored_url_lookup(&[
+            visited("https://example.com:8443/", 200, None),
+            visited("https://example.com/jump", 301, Some("https://www.example.com/landing")),
+            visited("https://example.com/old?page=2", 302, Some("/new")),
+            visited("https://example.com/missing", 404, None),
+        ]);
+        assert_eq!(lookup("https://example.com:8443/"), Some(StoredUrl::Content));
+        assert_eq!(
+            lookup("https://example.com/jump"),
+            Some(StoredUrl::Redirect("https://www.example.com/landing".to_string()))
+        );
+        assert_eq!(
+            lookup("https://example.com/old?page=2"),
+            Some(StoredUrl::Redirect("https://example.com/new".to_string()))
+        );
+        assert_eq!(lookup("https://example.com/missing"), None);
+        assert_eq!(lookup("https://example.com/unknown"), None);
+    }
+
+    #[test]
+    fn force_relative_urls_leads_variants_to_where_the_crawler_stored_them() {
+        // #35: the crawler fetches a variant from the initial origin, whatever host the page is on, so
+        // the reference leads to that fetch's file or, when the initial origin redirected, to the file
+        // of the redirect's target
+        let mut cfg = config(false, false);
+        cfg.force_relative_urls = true;
+        let allow_www: DomainAllowFn = Arc::new(|domain: &str| domain == "www.example.com");
+        cfg.is_external_domain_allowed_for_crawling = Some(allow_www);
+        let stored_url: StoredUrlFn = Arc::new(|url: &str| match url {
+            "https://example.com/next"
+            | "https://example.com/photo.png"
+            | "https://www.example.com/about"
+            | "https://www.example.com/img/a.png"
+            | "https://www.example.com/landing" => Some(StoredUrl::Content),
+            "https://example.com/about" | "https://example.com/img/a.png" => {
+                Some(StoredUrl::Redirect(url.replace("://", "://www.")))
+            }
+            "https://example.com/jump" => Some(StoredUrl::Redirect("https://www.example.com/landing".to_string())),
+            "https://example.com/away" => Some(StoredUrl::Redirect("https://other.com/".to_string())),
+            _ => None,
+        });
+        cfg.stored_url = Some(stored_url);
+
+        // A page stored under the www twin because /jump redirected there
+        let twin_page = ParsedUrl::parse("https://www.example.com/landing", None);
+        for (reference, attribute, expected) in [
+            ("/next", "href", "../next.html"),
+            ("/photo.png", "src", "../photo.png"),
+            // the initial origin redirected to the twin: its copy, not the redirect record
+            ("/about#team", "href", "about.html#team"),
+            ("https://example.com/img/a.png", "src", "img/a.png"),
+            // nothing known about it: kept within the twin's copy
+            ("/unknown", "href", "unknown.html"),
+        ] {
+            assert_eq!(
+                convert_url_to_relative(&twin_page, reference, Some(attribute), &cfg),
+                expected,
+                "{reference}"
+            );
+        }
+
+        let page = ParsedUrl::parse("https://example.com/", None);
+        for (reference, expected) in [
+            ("https://www.example.com/next", "next.html"),
+            ("https://www.example.com/jump", "_www.example.com/landing.html"),
+            // a redirect whose target was not stored leads to the redirect record
+            ("/away", "away.html"),
+        ] {
+            assert_eq!(
+                convert_url_to_relative(&page, reference, Some("href"), &cfg),
+                expected,
+                "{reference}"
+            );
+        }
     }
 
     #[test]
