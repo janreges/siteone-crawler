@@ -1,0 +1,80 @@
+{
+ "object": "list",
+ "data": [
+  {
+   "id": "nvidia/Qwen3.8-Flash-Next-NVFP4",
+   "object": "model",
+   "created": 1790348979,
+   "owned_by": "vllm",
+   "root": "nvidia/Qwen3.8-Flash-Next-NVFP4",
+   "parent": null,
+   "max_model_len": 262144,
+   "permission": [
+    {
+     "id": "modelperm-a5682bf02c104162",
+     "object": "model_permission",
+     "created": 1790348979,
+     "allow_create_engine": false,
+     "allow_sampling": true,
+     "allow_logprobs": true,
+     "allow_search_indices": false,
+     "allow_view": true,
+     "allow_fine_tuning": false,
+     "organization": "*",
+     "group": null,
+     "is_blocking": false
+    }
+   ]
+  },
+  {
+   "id": "deepseek-ai/DeepSeek-V4-Flash-0731",
+   "object": "model",
+   "created": 1790348979,
+   "owned_by": "vllm",
+   "root": "nvidia/Qwen3.8-Flash-Next-NVFP4",
+   "parent": null,
+   "max_model_len": 262144,
+   "permission": [
+    {
+     "id": "modelperm-9f8d02f94f280899",
+     "object": "model_permission",
+     "created": 1790348979,
+     "allow_create_engine": false,
+     "allow_sampling": true,
+     "allow_logprobs": true,
+     "allow_search_indices": false,
+     "allow_view": true,
+     "allow_fine_tuning": false,
+     "organization": "*",
+     "group": null,
+     "is_blocking": false
+    }
+   ]
+  },
+  {
+   "id": "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp",
+   "object": "model",
+   "created": 1790348979,
+   "owned_by": "vllm",
+   "root": "nvidia/Qwen3.8-Flash-Next-NVFP4",
+   "parent": null,
+   "max_model_len": 262144,
+   "permission": [
+    {
+     "id": "modelperm-8b49cc0dd16be7b3",
+     "object": "model_permission",
+     "created": 1790348979,
+     "allow_create_engine": false,
+     "allow_sampling": true,
+     "allow_logprobs": true,
+     "allow_search_indices": false,
+     "allow_view": true,
+     "allow_fine_tuning": false,
+     "organization": "*",
+     "group": null,
+     "is_blocking": false
+    }
+   ]
+  }
+ ]
+}

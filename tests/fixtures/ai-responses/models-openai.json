@@ -1,0 +1,26 @@
+{
+ "object": "list",
+ "data": [
+  {
+   "id": "gpt-audio-2025-08-28",
+   "object": "model",
+   "created": 1756256146,
+   "owned_by": "system",
+   "shutdown_date": null
+  },
+  {
+   "id": "gpt-5-2025-08-07",
+   "object": "model",
+   "created": 1754075360,
+   "owned_by": "system",
+   "shutdown_date": "2026-12-11"
+  },
+  {
+   "id": "gpt-5-mini",
+   "object": "model",
+   "created": 1754425928,
+   "owned_by": "system",
+   "shutdown_date": null
+  }
+ ]
+}

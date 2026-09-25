@@ -1,0 +1,35 @@
+{
+ "id": "0705c007c1004cbe2857cb580ee42da1",
+ "choices": [
+  {
+   "finish_reason": "stop",
+   "index": 0,
+   "message": {
+    "content": "<think>The user is asking me to reply with the single word \"OK\". This is a simple, direct request. I should comply.</think>\n\nOK",
+    "role": "assistant"
+   }
+  }
+ ],
+ "created": 1790348551,
+ "model": "MiniMax-M3",
+ "object": "chat.completion",
+ "usage": {
+  "total_tokens": 213,
+  "total_characters": 0,
+  "prompt_tokens": 183,
+  "completion_tokens": 30,
+  "prompt_tokens_details": {
+   "cached_tokens": 128
+  }
+ },
+ "input_sensitive": false,
+ "output_sensitive": false,
+ "input_sensitive_type": 0,
+ "output_sensitive_type": 0,
+ "output_sensitive_int": 0,
+ "service_tier": "standard",
+ "base_resp": {
+  "status_code": 0,
+  "status_msg": ""
+ }
+}

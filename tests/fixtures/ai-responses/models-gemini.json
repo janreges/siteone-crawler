@@ -1,0 +1,59 @@
+{
+ "models": [
+  {
+   "name": "models/gemini-2.5-flash",
+   "version": "001",
+   "displayName": "Gemini 2.5 Flash",
+   "description": "Stable version of Gemini 2.5 Flash, our mid-size multimodal model that supports up to 1 million tokens, released in June of 2025.",
+   "inputTokenLimit": 1048576,
+   "outputTokenLimit": 65536,
+   "supportedGenerationMethods": [
+    "generateContent",
+    "countTokens",
+    "createCachedContent",
+    "batchGenerateContent"
+   ],
+   "temperature": 1,
+   "topP": 0.95,
+   "topK": 64,
+   "maxTemperature": 2,
+   "thinking": true
+  },
+  {
+   "name": "models/gemini-2.5-pro",
+   "version": "2.5",
+   "displayName": "Gemini 2.5 Pro",
+   "description": "Stable release (June 17th, 2025) of Gemini 2.5 Pro",
+   "inputTokenLimit": 1048576,
+   "outputTokenLimit": 65536,
+   "supportedGenerationMethods": [
+    "generateContent",
+    "countTokens",
+    "createCachedContent",
+    "batchGenerateContent"
+   ],
+   "temperature": 1,
+   "topP": 0.95,
+   "topK": 64,
+   "maxTemperature": 2,
+   "thinking": true
+  },
+  {
+   "name": "models/gemini-2.5-flash-preview-tts",
+   "version": "gemini-2.5-flash-exp-tts-2025-05-19",
+   "displayName": "Gemini 2.5 Flash Preview TTS",
+   "description": "Gemini 2.5 Flash Preview TTS",
+   "inputTokenLimit": 8192,
+   "outputTokenLimit": 16384,
+   "supportedGenerationMethods": [
+    "countTokens",
+    "generateContent"
+   ],
+   "temperature": 1,
+   "topP": 0.95,
+   "topK": 64,
+   "maxTemperature": 2
+  }
+ ],
+ "nextPageToken": "CiRtb2RlbHMvdmVvLTMuMS1mYXN0LWdlbmVyYXRlLXByZXZpZXc="
+}

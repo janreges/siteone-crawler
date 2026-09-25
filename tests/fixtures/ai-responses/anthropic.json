@@ -1,0 +1,37 @@
+{
+ "model": "claude-haiku-4-5-20251001",
+ "id": "msg_011CfQMrFP695KKYvoya2dRq",
+ "type": "message",
+ "role": "assistant",
+ "content": [
+  {
+   "type": "thinking",
+   "thinking": "The user is asking me to reply with just the single word \"OK\". This is a straightforward request that I can easily fulfill.",
+   "signature": "EvkCCpoBCBIYAipAY//vZmAL14dzNcSvjZWz3CQX0dr6RCPdc9WKJPrvzNpEvipzdPbVA4fcZCvr/4yEGLlRdAaBFlYHvJ2iNcXR4jIZY2xhdWRlLWhhaWt1LTQtNS0yMDI1MTAwMTgAQgh0aGlua2luZ1okYTkwMzBiNDAtMDQ0MC00YTUyLWJhNWEtYmZjOWViZDc5ZjkwqAGGmtrVBhIMk2Hs3MFrp1xq4sjCGgz8OCG7Lg+YW4s0TssiMG6Fm9Xk9B09NG6w1UkHJ/qJaj13nzjJMbzyTJzHEhNW5oW1KZdtlbhOcdsJDnoBMSqLAW/qOoUBU/Wr9rOanze9oik6PrLODfbN9jvEkj5s5gV/RI3GFchhtGn5tlbIfKlfegaWKXk8Y/lbtujiuaXxyc750wlto20C7zSSDnzrOLTBz9pNpcMS2rTSOa0bERNigpwQViRzFzSyV4cFPLSYKz9j2XCg/iGTej5/fcfXyKzSbjve7LZqRF9QdCcYAQ=="
+  },
+  {
+   "type": "text",
+   "text": "OK"
+  }
+ ],
+ "container": null,
+ "stop_reason": "end_turn",
+ "stop_sequence": null,
+ "stop_details": null,
+ "usage": {
+  "input_tokens": 43,
+  "cache_creation_input_tokens": 0,
+  "cache_read_input_tokens": 0,
+  "cache_creation": {
+   "ephemeral_5m_input_tokens": 0,
+   "ephemeral_1h_input_tokens": 0
+  },
+  "output_tokens": 39,
+  "output_tokens_details": {
+   "thinking_tokens": 32
+  },
+  "service_tier": "standard",
+  "inference_geo": "not_available"
+ },
+ "diagnostics": null
+}
