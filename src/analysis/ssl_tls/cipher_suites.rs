@@ -57,14 +57,30 @@ pub(crate) const INSECURE_SUITES: [(u16, &str); 49] = [
     (0xC00D, "TLS_ECDH_RSA_WITH_3DES_EDE_CBC_SHA"),
 ];
 
-/// Static-RSA key exchange with otherwise modern ciphers: accepted, but without forward secrecy.
-pub(crate) const STATIC_RSA_SUITES: [(u16, &str); 6] = [
+/// Static-RSA key exchange with otherwise modern ciphers (AES, CAMELLIA, ARIA, SEED): accepted, but
+/// without forward secrecy.
+pub(crate) const STATIC_RSA_SUITES: [(u16, &str); 21] = [
     (0x002F, "TLS_RSA_WITH_AES_128_CBC_SHA"),
     (0x0035, "TLS_RSA_WITH_AES_256_CBC_SHA"),
     (0x003C, "TLS_RSA_WITH_AES_128_CBC_SHA256"),
     (0x003D, "TLS_RSA_WITH_AES_256_CBC_SHA256"),
     (0x009C, "TLS_RSA_WITH_AES_128_GCM_SHA256"),
     (0x009D, "TLS_RSA_WITH_AES_256_GCM_SHA384"),
+    (0xC09C, "TLS_RSA_WITH_AES_128_CCM"),
+    (0xC09D, "TLS_RSA_WITH_AES_256_CCM"),
+    (0xC0A0, "TLS_RSA_WITH_AES_128_CCM_8"),
+    (0xC0A1, "TLS_RSA_WITH_AES_256_CCM_8"),
+    (0x0041, "TLS_RSA_WITH_CAMELLIA_128_CBC_SHA"),
+    (0x0084, "TLS_RSA_WITH_CAMELLIA_256_CBC_SHA"),
+    (0x00BA, "TLS_RSA_WITH_CAMELLIA_128_CBC_SHA256"),
+    (0x00C0, "TLS_RSA_WITH_CAMELLIA_256_CBC_SHA256"),
+    (0xC07A, "TLS_RSA_WITH_CAMELLIA_128_GCM_SHA256"),
+    (0xC07B, "TLS_RSA_WITH_CAMELLIA_256_GCM_SHA384"),
+    (0xC03C, "TLS_RSA_WITH_ARIA_128_CBC_SHA256"),
+    (0xC03D, "TLS_RSA_WITH_ARIA_256_CBC_SHA384"),
+    (0xC050, "TLS_RSA_WITH_ARIA_128_GCM_SHA256"),
+    (0xC051, "TLS_RSA_WITH_ARIA_256_GCM_SHA384"),
+    (0x0096, "TLS_RSA_WITH_SEED_CBC_SHA"),
 ];
 
 /// IANA name of a probed suite.

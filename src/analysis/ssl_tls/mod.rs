@@ -84,7 +84,8 @@ impl SslTlsAnalyzer {
                 let msg = "TLS handshake failed — the server may only support obsolete protocols or cipher suites (e.g. SSL 3.0, RC4, 3DES, weak Diffie-Hellman) that are no longer considered secure.";
                 status.add_critical_to_summary("ssl-tls-handshake-failed", msg);
                 errors.push(format!("{} ({})", msg, detail));
-                probe_and_report_cipher_suites(hostname, port, &[0x0303, 0x0302, 0x0301], status, &mut result);
+                let versions = [0x0303, 0x0302, 0x0301, 0x0300];
+                probe_and_report_cipher_suites(hostname, port, &versions, status, &mut result);
                 result.insert("Errors".to_string(), errors.join(", "));
                 return result;
             }
@@ -637,6 +638,10 @@ fn report_cipher_suites(probe: &tls_probe::CipherProbeResult, status: &Status, r
             "None found (probe could not connect, the list may be incomplete)",
             Some("Probe could not connect, the list may be incomplete:"),
         ),
+        Some(tls_probe::Incomplete::Unanswered) => (
+            "None found (probe got no clear answer, the list may be incomplete)",
+            Some("Probe got no clear answer, the list may be incomplete:"),
+        ),
     };
     // One suite per line, so the HTML report can break the list (the text table joins the lines).
     let table_value = |suites: &[String]| {
@@ -866,6 +871,19 @@ mod tests {
             None,
             "no OK without a complete probe"
         );
+
+        let status = empty_status();
+        let mut table = HashMap::new();
+        let unanswered = tls_probe::CipherProbeResult {
+            accepted: Vec::new(),
+            incomplete: Some(tls_probe::Incomplete::Unanswered),
+        };
+        report_cipher_suites(&unanswered, &status, &mut table);
+        assert_eq!(
+            table["Insecure cipher suites"],
+            "None found (probe got no clear answer, the list may be incomplete)"
+        );
+        assert_eq!(summary_status(&status, "ssl-weak-cipher-suites"), None);
     }
 
     /// Run the SSL/TLS analyzer the way the analysis manager does after a crawl in which the initial
@@ -910,8 +928,9 @@ mod tests {
     }
 
     /// A server whose TLS handshake fails for a modern client (it answers rustls with a
-    /// handshake_failure alert) but that accepts TLS_RSA_WITH_3DES_EDE_CBC_SHA whenever it is offered.
-    fn legacy_only_tls_server() -> u16 {
+    /// handshake_failure alert) but that accepts TLS_RSA_WITH_3DES_EDE_CBC_SHA whenever it is offered,
+    /// with `server_version` or, when None, the version the client asked for.
+    fn legacy_only_tls_server(server_version: Option<[u8; 2]>) -> u16 {
         use std::io::{Read, Write};
         let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a free port");
         let port = listener.local_addr().expect("local address").port();
@@ -927,7 +946,7 @@ mod tests {
                     continue;
                 }
                 // handshake header(4) + client_version(2) + random(32), then the session id and the suites
-                let version = [hello[4], hello[5]];
+                let version = server_version.unwrap_or([hello[4], hello[5]]);
                 let suites_at = 39 + hello[38] as usize;
                 let offers_3des = hello
                     .get(suites_at + 2..)
@@ -953,7 +972,7 @@ mod tests {
 
     #[test]
     fn a_legacy_only_https_server_is_analyzed_although_no_url_could_be_crawled() {
-        let port = legacy_only_tls_server();
+        let port = legacy_only_tls_server(None);
         let status = analyze_failed_crawl(&format!("https://127.0.0.1:{}/", port));
         assert_eq!(
             summary_status(&status, "ssl-tls-handshake-failed"),
@@ -963,6 +982,26 @@ mod tests {
             summary_status(&status, "ssl-weak-cipher-suites"),
             Some(ItemStatus::Critical),
             "the insecure suites the server accepts are listed"
+        );
+    }
+
+    #[test]
+    fn an_sslv3_only_https_server_is_probed_with_sslv3_although_no_url_could_be_crawled() {
+        // It answers every ClientHello offering 3DES with an SSLv3 ServerHello.
+        let port = legacy_only_tls_server(Some([0x03, 0x00]));
+        let status = analyze_failed_crawl(&format!("https://127.0.0.1:{}/", port));
+        let insecure = status
+            .get_summary()
+            .get_items()
+            .iter()
+            .find(|item| item.apl_code == "ssl-weak-cipher-suites")
+            .map(|item| (item.status, item.text.clone()));
+        assert_eq!(
+            insecure,
+            Some((
+                ItemStatus::Critical,
+                "Server accepts insecure cipher suites: TLS_RSA_WITH_3DES_EDE_CBC_SHA (SSLv3).".to_string()
+            ))
         );
     }
 

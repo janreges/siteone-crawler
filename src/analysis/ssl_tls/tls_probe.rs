@@ -1,7 +1,7 @@
 // SiteOne Crawler - SSL/TLS protocol-version detection and weak cipher-suite probing (pure Rust)
 // (c) Jan Reges <jan.reges@siteone.cz>
 
-use std::io::{Read, Write};
+use std::io::{ErrorKind, Read, Write};
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -21,7 +21,8 @@ pub(crate) const MAX_CIPHER_PROBE_HANDSHAKES: usize = 20;
 /// … within at most this much time.
 pub(crate) const MAX_CIPHER_PROBE_TIME: Duration = Duration::from_secs(10);
 
-/// Largest answer read while waiting for a complete ServerHello (one TLS record is at most 16 KiB).
+/// Largest answer read while waiting for a complete ServerHello (it may span several records of at most
+/// 16 KiB each).
 const MAX_SERVER_HELLO_BYTES: usize = 64 * 1024;
 
 /// Suites offered by the legacy protocol-version probes: broad classic + ECDHE spread.
@@ -86,9 +87,16 @@ pub(crate) fn build_client_hello_with_suites(version: u16, hostname: &str, suite
             ext.extend_from_slice(&sni);
         }
 
-        // supported_groups, type 0x000a: secp256r1(0x0017), x25519(0x001d)
+        // supported_groups, type 0x000a: every elliptic curve a server may be limited to (x25519, x448,
+        // secp256r1/384r1/521r1, brainpool, the older secp/sect curves), so that no ECDHE suite is
+        // refused for want of a shared group. No FFDHE group (RFC 7919): a server with its own DH
+        // parameters would then have to refuse the DHE suites.
         {
-            let groups: [u16; 2] = [0x0017, 0x001d];
+            let groups: [u16; 30] = [
+                0x001d, 0x0017, 0x001e, 0x0018, 0x0019, 0x001a, 0x001b, 0x001c, 0x0016, 0x0015, 0x0014, 0x0013, 0x0012,
+                0x0011, 0x0010, 0x000f, 0x000e, 0x000d, 0x000c, 0x000b, 0x000a, 0x0009, 0x0008, 0x0007, 0x0006, 0x0005,
+                0x0004, 0x0003, 0x0002, 0x0001,
+            ];
             let mut gl = Vec::new();
             for g in groups {
                 gl.extend_from_slice(&g.to_be_bytes());
@@ -110,10 +118,14 @@ pub(crate) fn build_client_hello_with_suites(version: u16, hostname: &str, suite
             ext.extend_from_slice(&payload);
         }
 
-        // signature_algorithms, type 0x000d (TLS 1.2 only): RSA/ECDSA with SHA-256/384/512 and SHA-1,
-        // so strict TLS 1.2 servers do not abort the probe.
+        // signature_algorithms, type 0x000d (TLS 1.2 only): every scheme a TLS 1.2 server may sign its key
+        // exchange with — RSA PKCS#1, RSA-PSS, ECDSA, EdDSA and DSA with SHA-1 to SHA-512 — so that no
+        // suite is refused for want of a shared signature algorithm.
         if version >= 0x0303 {
-            let schemes: [u16; 8] = [0x0401, 0x0501, 0x0601, 0x0403, 0x0503, 0x0603, 0x0201, 0x0203];
+            let schemes: [u16; 23] = [
+                0x0804, 0x0805, 0x0806, 0x0809, 0x080a, 0x080b, 0x0401, 0x0501, 0x0601, 0x0403, 0x0503, 0x0603, 0x0807,
+                0x0808, 0x0402, 0x0502, 0x0602, 0x0301, 0x0303, 0x0302, 0x0201, 0x0203, 0x0202,
+            ];
             let mut list = Vec::new();
             for scheme in schemes {
                 list.extend_from_slice(&scheme.to_be_bytes());
@@ -264,41 +276,50 @@ pub(crate) enum ServerHelloReply {
     Hello { version: u16, cipher_suite: u16 },
     /// Not enough bytes yet.
     Incomplete,
-    /// An alert, another handshake message or a malformed answer: the offer was refused.
+    /// An alert: the offer was refused.
     Refused,
+    /// Neither an alert nor a well-formed ServerHello.
+    Malformed,
 }
 
-/// Parse the start of a server's answer. The ServerHello must be complete within the first record
-/// (servers send it first and unfragmented); anything else counts as a refusal.
+/// Parse the start of a server's answer: an alert, or a ServerHello, which may span several handshake
+/// records (RFC 5246 §6.2.1).
 pub(crate) fn parse_server_hello(buf: &[u8]) -> ServerHelloReply {
-    if buf.len() < 5 {
-        return ServerHelloReply::Incomplete;
+    // The handshake bytes of the records read so far; the last record may still be incomplete.
+    let mut handshake: Vec<u8> = Vec::new();
+    let mut record_at = 0;
+    loop {
+        if handshake.len() >= 4 {
+            if handshake[0] != 0x02 {
+                return ServerHelloReply::Malformed; // not a ServerHello
+            }
+            let hello_len = ((handshake[1] as usize) << 16) | ((handshake[2] as usize) << 8) | handshake[3] as usize;
+            if handshake.len() >= 4 + hello_len {
+                return parse_server_hello_body(&handshake[4..4 + hello_len]);
+            }
+        }
+        if buf.len() < record_at + 5 {
+            return ServerHelloReply::Incomplete;
+        }
+        match buf[record_at] {
+            0x16 => {}
+            0x15 if record_at == 0 => return ServerHelloReply::Refused,
+            _ => return ServerHelloReply::Malformed,
+        }
+        let record_end = record_at + 5 + u16::from_be_bytes([buf[record_at + 3], buf[record_at + 4]]) as usize;
+        handshake.extend_from_slice(&buf[record_at + 5..record_end.min(buf.len())]);
+        record_at = record_end;
     }
-    if buf[0] != 0x16 {
-        return ServerHelloReply::Refused; // 0x15 alert or anything else
-    }
-    let record_len = u16::from_be_bytes([buf[3], buf[4]]) as usize;
-    if buf.len() < 9 {
-        return ServerHelloReply::Incomplete;
-    }
-    if buf[5] != 0x02 {
-        return ServerHelloReply::Refused; // not a ServerHello
-    }
-    let hello_len = ((buf[6] as usize) << 16) | ((buf[7] as usize) << 8) | buf[8] as usize;
-    if record_len < 4 + hello_len {
-        return ServerHelloReply::Refused; // fragmented across records
-    }
-    if buf.len() < 9 + hello_len {
-        return ServerHelloReply::Incomplete;
-    }
-    // server_version(2) + random(32) + session_id_len(1) + session_id + cipher_suite(2) + compression(1)
-    let body = &buf[9..9 + hello_len];
+}
+
+/// server_version(2) + random(32) + session_id_len(1) + session_id + cipher_suite(2) + compression(1)
+fn parse_server_hello_body(body: &[u8]) -> ServerHelloReply {
     if body.len() < 35 {
-        return ServerHelloReply::Refused;
+        return ServerHelloReply::Malformed;
     }
     let suite_at = 35 + body[34] as usize;
     if body.len() < suite_at + 3 {
-        return ServerHelloReply::Refused;
+        return ServerHelloReply::Malformed;
     }
     ServerHelloReply::Hello {
         version: u16::from_be_bytes([body[0], body[1]]),
@@ -308,27 +329,33 @@ pub(crate) fn parse_server_hello(buf: &[u8]) -> ServerHelloReply {
 
 /// Read until the answer to a probing ClientHello is decided (the legacy version probe stops after
 /// 11 bytes, which is too early to see the cipher suite). Every read waits at most PROBE_TIMEOUT and
-/// never past `deadline`, so a server that trickles its answer cannot stretch the per-host budget;
-/// None means the deadline came first.
-fn read_server_hello(sock: &mut TcpStream, deadline: Instant) -> Option<ServerHelloReply> {
+/// never past `deadline`, so a server that trickles its answer cannot stretch the per-host budget.
+/// A ServerHello or an alert decides the offer, and so does a connection closed before any answer
+/// (servers without a shared suite often just close it). Silence, a cut-off or a malformed answer
+/// leave it undecided: Err says why.
+fn read_server_hello(sock: &mut TcpStream, deadline: Instant) -> Result<ServerHelloReply, Incomplete> {
     let mut buf: Vec<u8> = Vec::with_capacity(1024);
     let mut chunk = [0u8; 4096];
     loop {
         match parse_server_hello(&buf) {
             ServerHelloReply::Incomplete if buf.len() < MAX_SERVER_HELLO_BYTES => {}
-            ServerHelloReply::Incomplete => return Some(ServerHelloReply::Refused),
-            decided => return Some(decided),
+            ServerHelloReply::Incomplete | ServerHelloReply::Malformed => return Err(Incomplete::Unanswered),
+            decided => return Ok(decided),
         }
         let remaining = deadline.saturating_duration_since(Instant::now());
         if remaining.is_zero() {
-            return None;
+            return Err(Incomplete::LimitReached);
         }
         let _ = sock.set_read_timeout(Some(PROBE_TIMEOUT.min(remaining)));
         match sock.read(&mut chunk) {
-            Ok(0) => return Some(ServerHelloReply::Refused),
+            Ok(0) if buf.is_empty() => return Ok(ServerHelloReply::Refused),
+            Ok(0) => return Err(Incomplete::Unanswered),
             Ok(n) => buf.extend_from_slice(&chunk[..n]),
-            Err(_) if Instant::now() >= deadline => return None,
-            Err(_) => return Some(ServerHelloReply::Refused),
+            Err(_) if Instant::now() >= deadline => return Err(Incomplete::LimitReached),
+            Err(e) if buf.is_empty() && !matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
+                return Ok(ServerHelloReply::Refused); // connection reset
+            }
+            Err(_) => return Err(Incomplete::Unanswered),
         }
     }
 }
@@ -340,6 +367,9 @@ pub(crate) enum Incomplete {
     LimitReached,
     /// No address of the host accepted a TCP connection.
     Unreachable,
+    /// The server did not answer a probe clearly: it went silent, cut its answer off or sent neither
+    /// a ServerHello nor an alert.
+    Unanswered,
 }
 
 /// Outcome of one probing handshake.
@@ -388,15 +418,15 @@ fn offer_suites(addrs: &mut [SocketAddr], hostname: &str, version: u16, suites: 
         .write_all(&build_client_hello_with_suites(version, hostname, suites))
         .is_err()
     {
-        return Offer::Refused;
+        return Offer::Stopped(Incomplete::Unanswered);
     }
     match read_server_hello(&mut sock, deadline) {
-        None => Offer::Stopped(Incomplete::LimitReached),
-        Some(ServerHelloReply::Hello {
+        Err(reason) => Offer::Stopped(reason),
+        Ok(ServerHelloReply::Hello {
             version: negotiated,
             cipher_suite,
         }) if negotiated == version && suites.contains(&cipher_suite) => Offer::Accepted(cipher_suite),
-        Some(_) => Offer::Refused,
+        Ok(_) => Offer::Refused,
     }
 }
 
@@ -612,15 +642,64 @@ mod tests {
         }
     }
 
+    /// The captured ServerHello re-framed as two handshake records, split after `at` handshake bytes.
+    fn fragmented_server_hello(at: usize) -> Vec<u8> {
+        let handshake = &BADSSL_3DES_SERVER_HELLO[5..];
+        let record = |part: &[u8]| {
+            let mut record = vec![0x16, 0x03, 0x03];
+            record.extend_from_slice(&(part.len() as u16).to_be_bytes());
+            record.extend_from_slice(part);
+            record
+        };
+        [record(&handshake[..at]), record(&handshake[at..])].concat()
+    }
+
     #[test]
-    fn alerts_and_other_messages_are_refusals() {
+    fn a_server_hello_split_across_records_is_reassembled() {
+        // Split inside the handshake header and inside the body (RFC 5246 §6.2.1 allows both).
+        for at in [2, 20] {
+            let hello = fragmented_server_hello(at);
+            assert_eq!(
+                parse_server_hello(&hello),
+                ServerHelloReply::Hello {
+                    version: 0x0303,
+                    cipher_suite: 0x000A
+                },
+                "split at {at}"
+            );
+            for cut in [5 + at, 5 + at + 5, hello.len() - 1] {
+                assert_eq!(
+                    parse_server_hello(&hello[..cut]),
+                    ServerHelloReply::Incomplete,
+                    "split at {at}, cut at {cut}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn an_alert_is_a_refusal() {
         assert_eq!(
             parse_server_hello(&[0x15, 0x03, 0x03, 0x00, 0x02, 0x02, 0x28]),
             ServerHelloReply::Refused
         );
+    }
+
+    #[test]
+    fn other_answers_are_malformed() {
         let mut certificate = BADSSL_3DES_SERVER_HELLO;
         certificate[5] = 0x0b;
-        assert_eq!(parse_server_hello(&certificate), ServerHelloReply::Refused);
+        assert_eq!(parse_server_hello(&certificate), ServerHelloReply::Malformed);
+        assert_eq!(
+            parse_server_hello(b"HTTP/1.1 400 Bad Request"),
+            ServerHelloReply::Malformed
+        );
+        // An alert after the first bytes of a ServerHello, and a ServerHello too short for a suite.
+        let mut cut_off = fragmented_server_hello(20)[..25].to_vec();
+        cut_off.extend_from_slice(&[0x15, 0x03, 0x03, 0x00, 0x02, 0x02, 0x28]);
+        assert_eq!(parse_server_hello(&cut_off), ServerHelloReply::Malformed);
+        let short = [0x16, 0x03, 0x03, 0x00, 0x06, 0x02, 0x00, 0x00, 0x02, 0x03, 0x03];
+        assert_eq!(parse_server_hello(&short), ServerHelloReply::Malformed);
     }
 
     #[test]
@@ -678,6 +757,25 @@ mod tests {
         // TLS 1.2: insecure offer refused + static-RSA hit; TLS 1.1: insecure offer refused only.
         assert_eq!(handshakes, 3);
         assert_eq!(result.incomplete, None);
+    }
+
+    #[test]
+    fn static_rsa_is_found_beyond_aes() {
+        // CAMELLIA128-SHA, ARIA128-GCM-SHA256, SEED-SHA: static RSA key exchange like the AES suites.
+        for suite in [0x0041u16, 0xC050, 0x0096] {
+            let result = enumerate_weak_suites(&[0x0303], |_, offered| {
+                if offered.contains(&suite) {
+                    Offer::Accepted(suite)
+                } else {
+                    Offer::Refused
+                }
+            });
+            assert_eq!(result.accepted, vec![(0x0303, suite)], "0x{suite:04X}");
+            assert!(
+                cipher_suites::suite_name(suite).is_some_and(cipher_suites::lacks_forward_secrecy),
+                "0x{suite:04X} is reported as a suite without forward secrecy"
+            );
+        }
     }
 
     #[test]
@@ -758,6 +856,179 @@ mod tests {
             started.elapsed()
         );
         assert_eq!(result.incomplete, Some(Incomplete::LimitReached), "{result:?}");
+    }
+
+    const HANDSHAKE_FAILURE: [u8; 7] = [0x15, 0x03, 0x03, 0x00, 0x02, 0x02, 0x28];
+
+    /// A ServerHello record for `version` selecting `suite`, without session id and extensions.
+    fn server_hello(version: u16, suite: u16) -> Vec<u8> {
+        let [major, minor] = version.to_be_bytes();
+        let mut hello = vec![0x16, major, minor, 0x00, 0x2a, 0x02, 0x00, 0x00, 0x26, major, minor];
+        hello.extend_from_slice(&[0u8; 32]);
+        hello.push(0); // session id length
+        hello.extend_from_slice(&suite.to_be_bytes());
+        hello.push(0); // compression
+        hello
+    }
+
+    /// Read one TLS record (header included).
+    fn read_record(stream: &mut TcpStream) -> Option<Vec<u8>> {
+        let mut header = [0u8; 5];
+        stream.read_exact(&mut header).ok()?;
+        let mut record = header.to_vec();
+        record.resize(5 + u16::from_be_bytes([header[3], header[4]]) as usize, 0);
+        stream.read_exact(&mut record[5..]).ok()?;
+        Some(record)
+    }
+
+    /// The suites and extensions of a probing ClientHello, as a test server sees them.
+    struct SeenClientHello {
+        suites: Vec<u16>,
+        extensions: Vec<(u16, Vec<u8>)>,
+    }
+
+    impl SeenClientHello {
+        /// Parse a ClientHello record.
+        fn parse(record: &[u8]) -> Option<Self> {
+            let body = record.get(9..)?;
+            let u16_at = |at: usize| body.get(at..at + 2).map(|b| u16::from_be_bytes([b[0], b[1]]));
+            let list = |bytes: &[u8]| -> Vec<u16> {
+                bytes
+                    .chunks_exact(2)
+                    .map(|pair| u16::from_be_bytes([pair[0], pair[1]]))
+                    .collect()
+            };
+            // client_version(2) + random(32), then session id, suites, compression methods, extensions
+            let mut pos = 35 + *body.get(34)? as usize;
+            let suites_len = u16_at(pos)? as usize;
+            let suites = list(body.get(pos + 2..pos + 2 + suites_len)?);
+            pos += 2 + suites_len;
+            pos += 1 + *body.get(pos)? as usize;
+            let mut extensions = Vec::new();
+            if let Some(extensions_len) = u16_at(pos) {
+                let end = pos + 2 + extensions_len as usize;
+                pos += 2;
+                while pos + 4 <= end {
+                    let len = u16_at(pos + 2)? as usize;
+                    extensions.push((u16_at(pos)?, body.get(pos + 4..pos + 4 + len)?.to_vec()));
+                    pos += 4 + len;
+                }
+            }
+            Some(Self { suites, extensions })
+        }
+
+        /// The code points of a list extension (supported_groups, signature_algorithms).
+        fn list(&self, extension: u16) -> Vec<u16> {
+            self.extensions
+                .iter()
+                .find(|(kind, _)| *kind == extension)
+                .and_then(|(_, data)| data.get(2..))
+                .map(|codes| {
+                    codes
+                        .chunks_exact(2)
+                        .map(|pair| u16::from_be_bytes([pair[0], pair[1]]))
+                        .collect()
+                })
+                .unwrap_or_default()
+        }
+    }
+
+    /// A TLS 1.2 server whose only weak suite is TLS_ECDHE_RSA_WITH_NULL_SHA. Like OpenSSL, it picks it
+    /// only when the ClientHello also offers what its key exchange and certificate need (`negotiates`);
+    /// every other handshake ends with a handshake_failure alert.
+    fn weak_ecdhe_server(negotiates: fn(&SeenClientHello) -> bool) -> u16 {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a free port");
+        let port = listener.local_addr().expect("local address").port();
+        std::thread::spawn(move || {
+            for mut stream in listener.incoming().flatten() {
+                let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
+                let answer = match read_record(&mut stream).as_deref().and_then(SeenClientHello::parse) {
+                    Some(hello) if hello.suites.contains(&0xC010) && negotiates(&hello) => server_hello(0x0303, 0xC010),
+                    _ => HANDSHAKE_FAILURE.to_vec(),
+                };
+                let _ = stream.write_all(&answer);
+            }
+        });
+        port
+    }
+
+    #[test]
+    fn servers_limited_to_p384_p521_or_rsa_pss_still_reveal_weak_suites() {
+        let servers: [(&str, fn(&SeenClientHello) -> bool); 3] = [
+            ("P-384 only", |hello| hello.list(0x000a).contains(&0x0018)),
+            ("P-521 only", |hello| hello.list(0x000a).contains(&0x0019)),
+            ("RSA-PSS only", |hello| hello.list(0x000d).contains(&0x0804)),
+        ];
+        for (server, negotiates) in servers {
+            let port = weak_ecdhe_server(negotiates);
+            let mut budget = ProbeBudget::new(MAX_CIPHER_PROBE_HANDSHAKES, MAX_CIPHER_PROBE_TIME);
+            let result = probe_weak_cipher_suites("127.0.0.1", port, &[0x0303], &mut budget);
+            assert_eq!(result.accepted, vec![(0x0303, 0xC010)], "{server}");
+            assert_eq!(result.incomplete, None, "{server}");
+        }
+    }
+
+    /// A server that sends `first_answer` to the first handshake, keeps that connection open for `hold`
+    /// and then closes it; every later handshake ends with a handshake_failure alert.
+    fn server_answering_first(first_answer: Vec<u8>, hold: Duration) -> u16 {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a free port");
+        let port = listener.local_addr().expect("local address").port();
+        std::thread::spawn(move || {
+            let mut first_answer = Some(first_answer);
+            for mut stream in listener.incoming().flatten() {
+                let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
+                let _ = read_record(&mut stream);
+                match first_answer.take() {
+                    Some(answer) => {
+                        std::thread::spawn(move || {
+                            let _ = stream.write_all(&answer);
+                            std::thread::sleep(hold);
+                        });
+                    }
+                    None => {
+                        let _ = stream.write_all(&HANDSHAKE_FAILURE);
+                    }
+                }
+            }
+        });
+        port
+    }
+
+    fn probe_local(port: u16) -> CipherProbeResult {
+        let mut budget = ProbeBudget::new(MAX_CIPHER_PROBE_HANDSHAKES, MAX_CIPHER_PROBE_TIME);
+        probe_weak_cipher_suites("127.0.0.1", port, &[0x0303], &mut budget)
+    }
+
+    #[test]
+    fn a_server_that_goes_quiet_leaves_the_probe_incomplete() {
+        // No answer within PROBE_TIMEOUT, long before the per-host deadline: not a refusal.
+        let port = server_answering_first(Vec::new(), PROBE_TIMEOUT + Duration::from_secs(1));
+        let result = probe_local(port);
+        assert!(result.accepted.is_empty(), "{result:?}");
+        assert_eq!(result.incomplete, Some(Incomplete::Unanswered), "{result:?}");
+    }
+
+    #[test]
+    fn a_cut_off_server_hello_leaves_the_probe_incomplete() {
+        // The record header and the first 20 bytes of the ServerHello, then the connection closes.
+        let port = server_answering_first(BADSSL_3DES_SERVER_HELLO[..25].to_vec(), Duration::ZERO);
+        let result = probe_local(port);
+        assert!(result.accepted.is_empty(), "{result:?}");
+        assert_eq!(result.incomplete, Some(Incomplete::Unanswered), "{result:?}");
+    }
+
+    #[test]
+    fn a_connection_closed_without_an_answer_is_a_refusal() {
+        // Servers that do not share a suite often just close the connection instead of sending an alert.
+        let port = server_answering_first(Vec::new(), Duration::ZERO);
+        let result = probe_local(port);
+        assert_eq!(
+            result,
+            CipherProbeResult {
+                accepted: Vec::new(),
+                incomplete: None
+            }
+        );
     }
 
     // Live check against badssl.com: CARGO_PROFILE_DEV_DEBUG=0 cargo test --lib live_badssl -- --ignored --nocapture
