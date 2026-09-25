@@ -14,7 +14,7 @@ use chromiumoxide::cdp::browser_protocol::page::{
 use chromiumoxide::page::ScreenshotParams;
 use md5::{Digest, Md5};
 
-use crate::browser::viewport;
+use crate::browser::{cookie_consent, viewport};
 use crate::options::core_options::CoreOptions;
 
 /// Chromium compositor capture-surface height limit (~2^14 px). Taller full-page captures
@@ -83,9 +83,11 @@ pub struct Screenshots {
 
 /// Capture the page in every `--screenshot-viewport` size. The first size is the render viewport
 /// the page was loaded in; each further size resizes the page (device pixel ratio 1, desktop
-/// mode), lets it settle and captures, and the render viewport is restored at the end. With one
-/// size the file names stay as they were; with several, every file gets a `_<W>x<H>` suffix.
-/// A failed or timed-out capture ends the series and is reported in `error`.
+/// mode), lets it settle and captures, and the render viewport is restored at the end. Cookie
+/// banners and `--screenshot-hide-selector` elements are hidden before every capture, as a
+/// responsive page can mount them only in some sizes. With one size the file names stay as they
+/// were; with several, every file gets a `_<W>x<H>` suffix. A failed or timed-out capture ends
+/// the series and is reported in `error`.
 pub async fn capture_all(page: &Page, options: &CoreOptions, url: &str) -> Screenshots {
     let viewports =
         viewport::parse_viewports(&options.screenshot_viewport).unwrap_or_else(|_| vec![viewport::DEFAULT_VIEWPORT]);
@@ -99,6 +101,13 @@ pub async fn capture_all(page: &Page, options: &CoreOptions, url: &str) -> Scree
                 break;
             }
             tokio::time::sleep(Duration::from_millis(VIEWPORT_SETTLE_MS)).await;
+        }
+        // Best-effort cookie-banner removal before capture (fail-soft).
+        if options.screenshot_hide_cookie_banners || options.screenshot_hide_selector.is_some() {
+            let _ = tokio::time::timeout(Duration::from_secs(5), cookie_consent::dismiss(page, options)).await;
+            // Let the banner-hide reflow settle before snapping (animations are settled
+            // separately inside capture).
+            tokio::time::sleep(Duration::from_millis(400)).await;
         }
         let name_viewport = suffixed.then_some((width, height));
         match tokio::time::timeout(CAPTURE_TIMEOUT, capture(page, options, url, name_viewport)).await {

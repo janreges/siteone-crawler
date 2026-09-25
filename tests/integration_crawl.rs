@@ -2335,6 +2335,90 @@ fn screenshots_are_captured_in_every_viewport() {
     assert_eq!(rows.len(), 2, "{rows:?}");
 }
 
+/// A green page that mounts a red, full-screen cookie banner only in viewports narrower than
+/// 500 px, i.e. when it is resized to a further `--screenshot-viewport` size.
+#[cfg(feature = "browser")]
+const NARROW_COOKIE_BANNER_PAGE: &str = r#"<!doctype html>
+<html><head><title>Narrow banner</title><style>
+html,body{margin:0;background:rgb(0,180,0)}
+#cookie-banner{position:fixed;inset:0;background:rgb(220,0,0);z-index:9999}
+</style></head><body><h1>Content</h1><script>
+function render(){
+  if(innerWidth<500&&!document.querySelector('#cookie-banner')){
+    var e=document.createElement('div');
+    e.id='cookie-banner';e.className='site-overlay';e.textContent='Cookie consent';document.body.append(e);
+  }
+}
+render();addEventListener('resize',render);
+</script></body></html>"#;
+
+/// The color at (100, 100) of the desktop and the mobile screenshot of `NARROW_COOKIE_BANNER_PAGE`
+/// captured with `--screenshot-viewport=desktop,mobile` and the given hide option.
+#[cfg(feature = "browser")]
+fn narrow_banner_screenshot_colors(hide_option: &str) -> ([u8; 3], [u8; 3]) {
+    let tmp = TempDir::new("viewport-banner");
+    let site = tmp.path.join("site");
+    std::fs::create_dir_all(&site).expect("site dir");
+    std::fs::write(site.join("index.html"), NARROW_COOKIE_BANNER_PAGE).expect("index.html");
+    let server = LocalServer::start(&site);
+    let shots = tmp.path.join("shots");
+
+    let output = run_crawler(&[
+        "--config-file=/dev/null",
+        &format!("--url={}", server.url()),
+        "--single-page",
+        "--browser",
+        "--browser-no-sandbox",
+        "--screenshots",
+        &format!("--screenshots-dir={}", shots.display()),
+        "--screenshot-viewport=desktop,mobile",
+        hide_option,
+        LOCAL_ANALYZERS,
+        "--http-cache-dir=",
+        "--output-html-report=",
+        "--output-json-file=",
+        "--output-text-file=",
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let color = |suffix: &str| {
+        let file = std::fs::read_dir(&shots)
+            .expect("screenshots dir")
+            .map(|entry| entry.expect("dir entry").path())
+            .find(|f| f.to_string_lossy().ends_with(suffix))
+            .unwrap_or_else(|| panic!("a {suffix} screenshot"));
+        image::open(&file).expect("a PNG").to_rgb8().get_pixel(100, 100).0
+    };
+    (color("_1920x1080.png"), color("_390x844.png"))
+}
+
+/// `--screenshot-hide-cookie-banners` also hides a banner that appears only in a further viewport
+/// size (#46).
+#[cfg(feature = "browser")]
+#[test]
+#[ignore]
+fn cookie_banners_are_hidden_in_every_viewport() {
+    let (desktop, mobile) = narrow_banner_screenshot_colors("--screenshot-hide-cookie-banners");
+    assert_eq!(desktop, [0, 180, 0]);
+    assert_eq!(mobile, [0, 180, 0], "the banner covers the mobile screenshot");
+}
+
+/// `--screenshot-hide-selector` also hides an element that appears only in a further viewport
+/// size (#46).
+#[cfg(feature = "browser")]
+#[test]
+#[ignore]
+fn hide_selector_is_applied_in_every_viewport() {
+    let (desktop, mobile) = narrow_banner_screenshot_colors("--screenshot-hide-selector=.site-overlay");
+    assert_eq!(desktop, [0, 180, 0]);
+    assert_eq!(mobile, [0, 180, 0], "the overlay covers the mobile screenshot");
+}
+
 /// #35: with --force-relative-urls a link to the https variant of the initial URL is fetched on the
 /// initial scheme *and port* (it used to be requested as http://host:443/…), so the page is exported.
 #[test]

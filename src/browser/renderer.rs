@@ -214,17 +214,6 @@ impl BrowserRenderer {
         // Screenshots (each capture bounded) only when content succeeded; a failed capture is
         // recorded instead of dropped.
         let screenshots = if outcome.is_ok() && self.options.screenshots {
-            // Best-effort cookie-banner removal before capture (fail-soft).
-            if self.options.screenshot_hide_cookie_banners || self.options.screenshot_hide_selector.is_some() {
-                let _ = tokio::time::timeout(
-                    Duration::from_secs(5),
-                    crate::browser::cookie_consent::dismiss(&page, &self.options),
-                )
-                .await;
-                // Let the banner-hide reflow settle before snapping (animations are settled
-                // separately inside screenshot::capture).
-                tokio::time::sleep(Duration::from_millis(400)).await;
-            }
             crate::browser::screenshot::capture_all(&page, &self.options, url).await
         } else {
             crate::browser::screenshot::Screenshots::default()
