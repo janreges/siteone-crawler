@@ -821,10 +821,10 @@ fn visibility_hidden(el: &scraper::node::Element) -> Option<bool> {
 }
 
 /// The lower-cased value an inline `style` attribute gives `property` (`display` or `visibility`), read
-/// as a browser reads it: comments are ignored and quoted strings or parentheses never end a
-/// declaration, the property name must match exactly (so `--x-display` is not `display`), a
-/// declaration whose value the property does not accept is dropped, and a later declaration wins
-/// unless an earlier one is `!important`.
+/// as a browser reads it: comments are ignored and quoted strings or ()/[]/{} blocks never end a
+/// declaration, the property name must match exactly (so `--x-display` is not `display`), escapes
+/// are decoded (`\62 lock` is `block`), a declaration whose value the property does not accept is
+/// dropped, and a later declaration wins unless an earlier one is `!important`.
 fn inline_style_value(style: &str, property: &str) -> Option<String> {
     let mut effective: Option<(String, bool)> = None;
     for declaration in css_declarations(style) {
@@ -834,7 +834,7 @@ fn inline_style_value(style: &str, property: &str) -> Option<String> {
         if !name.trim().eq_ignore_ascii_case(property) {
             continue;
         }
-        let mut value = value.trim().to_ascii_lowercase();
+        let mut value = decode_css_escapes(value.trim()).to_ascii_lowercase();
         let important = match value.rfind('!') {
             Some(bang) if value[bang + 1..].trim() == "important" => {
                 value.truncate(bang);
@@ -857,7 +857,7 @@ fn inline_style_value(style: &str, property: &str) -> Option<String> {
 }
 
 /// The declarations of an inline style without comments: split at every `;` that is outside a
-/// quoted string and outside parentheses.
+/// quoted string and outside ()/[]/{} blocks.
 fn css_declarations(style: &str) -> Vec<String> {
     let mut declarations = Vec::new();
     let mut current = String::new();
@@ -892,11 +892,11 @@ fn css_declarations(style: &str) -> Vec<String> {
                 quote = Some(c);
                 current.push(c);
             }
-            '(' => {
+            '(' | '[' | '{' => {
                 depth += 1;
                 current.push(c);
             }
-            ')' => {
+            ')' | ']' | '}' => {
                 depth = depth.saturating_sub(1);
                 current.push(c);
             }
@@ -906,6 +906,37 @@ fn css_declarations(style: &str) -> Vec<String> {
     }
     declarations.push(current);
     declarations
+}
+
+/// `value` with its CSS escapes decoded: `\` and 1–6 hex digits (and one optional white space after
+/// them) is that code point, `\` and any other character is that character.
+fn decode_css_escapes(value: &str) -> String {
+    if !value.contains('\\') {
+        return value.to_string();
+    }
+    let mut decoded = String::with_capacity(value.len());
+    let mut chars = value.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c != '\\' {
+            decoded.push(c);
+            continue;
+        }
+        let mut hex = String::new();
+        while hex.len() < 6
+            && let Some(digit) = chars.peek().filter(|digit| digit.is_ascii_hexdigit())
+        {
+            hex.push(*digit);
+            chars.next();
+        }
+        if hex.is_empty() {
+            decoded.extend(chars.next());
+        } else {
+            let code = u32::from_str_radix(&hex, 16).unwrap_or(0);
+            decoded.push(char::from_u32(code).filter(|c| *c != '\0').unwrap_or('\u{fffd}'));
+            chars.next_if(|c| c.is_whitespace());
+        }
+    }
+    decoded
 }
 
 /// Does `property` (`display` or `visibility`) accept `value`? Values with `var()` are accepted, as a
@@ -953,32 +984,26 @@ fn is_valid_css_value(property: &str, value: &str) -> bool {
         "-ms-grid",
         "-ms-inline-grid",
     ];
-    // Keywords of the multi-keyword syntax, e.g. `inline flex` or `block flow list-item`.
-    const DISPLAY_MULTI: &[&str] = &[
-        "block",
-        "inline",
-        "run-in",
-        "flow",
-        "flow-root",
-        "table",
-        "flex",
-        "grid",
-        "ruby",
-        "math",
-        "list-item",
-    ];
+    // The multi-keyword syntax: an outside and an inside keyword (`inline flex`), or `list-item` with
+    // an optional outside keyword and an optional `flow`/`flow-root` (`block flow list-item`).
+    const DISPLAY_OUTSIDE: &[&str] = &["block", "inline", "run-in"];
+    const DISPLAY_INSIDE: &[&str] = &["flow", "flow-root", "table", "flex", "grid", "ruby", "math"];
     if value.contains("var(") || GLOBAL.contains(&value) {
         return true;
     }
     match property {
         "display" => {
             let keywords: Vec<&str> = value.split_whitespace().collect();
-            match keywords.as_slice() {
-                [single] => DISPLAY_SINGLE.contains(single),
-                [_, _] | [_, _, _] => keywords
-                    .iter()
-                    .enumerate()
-                    .all(|(index, keyword)| DISPLAY_MULTI.contains(keyword) && !keywords[..index].contains(keyword)),
+            let count = |set: &[&str]| keywords.iter().filter(|keyword| set.contains(keyword)).count();
+            let (outside, inside) = (count(DISPLAY_OUTSIDE), count(DISPLAY_INSIDE));
+            let (list_item, flow) = (count(&["list-item"]), count(&["flow", "flow-root"]));
+            match keywords.len() {
+                1 => DISPLAY_SINGLE.contains(&keywords[0]),
+                2 | 3 if outside + inside + list_item == keywords.len() && outside <= 1 => match list_item {
+                    0 => keywords.len() == 2 && inside == 1,
+                    1 => inside == flow && flow <= 1,
+                    _ => false,
+                },
                 _ => false,
             }
         }
@@ -1272,6 +1297,14 @@ mod tests {
             r#"<div style="visibility:hidden"><input id="q" style="visibility:visible"></div>"#,
             // a `;` in a quoted value does not end the declaration
             r#"<input id="q" style="display:block; --literal:';display:none;'">"#,
+            // nor one in a [] or {} block of a custom property
+            r#"<input id="q" style="display:block;--x:[;display:none;]">"#,
+            r#"<input id="q" style="display:block;--x:{;display:none;}">"#,
+            // an escaped keyword is the keyword (`\62 lock` = `block`)
+            r#"<input id="q" style="display:none;display:\62 lock">"#,
+            // valid multi-keyword values
+            r#"<input id="q" style="display:none;display:inline flex">"#,
+            r#"<input id="q" style="display:none;display:list-item inline flow-root">"#,
         ] {
             let html = format!("<html><body>{body}</body></html>");
             assert_eq!(
@@ -1296,6 +1329,11 @@ mod tests {
             r#"<input id="q" style="--literal:'/*';display:none">"#,
             // a browser drops a declaration with an invalid value
             r#"<input id="q" style="display:none;display:invalid">"#,
+            r#"<input id="q" style="display:none;display:inline block">"#,
+            r#"<input id="q" style="display:none;display:flex grid!important">"#,
+            r#"<input id="q" style="display:none;display:list-item flex">"#,
+            // an escaped keyword is the keyword (`\6e one` = `none`)
+            r#"<input id="q" style="display:\6e one">"#,
             r#"<div style="visibility:hidden"><input id="q" style="visibility:invalid"></div>"#,
         ] {
             let html = format!("<html><body>{body}</body></html>");
