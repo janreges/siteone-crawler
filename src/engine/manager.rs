@@ -114,6 +114,7 @@ impl Manager {
                 format!("{} SiteOne-Crawler/{}", base, version::CODE)
             }
         };
+        let final_user_agent = Crawler::reported_user_agent(&options, final_user_agent);
 
         let crawler_info = Info::new(
             "SiteOne Crawler".to_string(),
@@ -169,7 +170,8 @@ impl Manager {
             options.http_cache_compression,
             options.http_cache_ttl,
             options.accept_invalid_certs,
-        );
+        )
+        .with_custom_headers(&options.http_headers);
 
         // Select the fetcher. Direct HTTP is the default path (unchanged behavior).
         // With the `browser` feature and `--browser`, render pages in a real Chromium instead.
@@ -183,6 +185,11 @@ impl Manager {
                             "⚠️  --browser: HTTP auth is applied to the status/headers fetch but NOT to the browser navigation; the rendered page may be the unauthenticated version."
                         );
                     }
+                    if !options.http_headers.is_empty() {
+                        eprintln!(
+                            "⚠️  --browser: --header values are applied to the status/headers fetch but NOT to the browser navigation; the rendered page may be the anonymous version."
+                        );
+                    }
                     // Browser renders live; give it a cache-free inner client so the metadata
                     // (status/headers) matches the live rendered DOM rather than a cached snapshot.
                     let browser_http = HttpClient::new(
@@ -192,7 +199,8 @@ impl Manager {
                         false,
                         None,
                         options.accept_invalid_certs,
-                    );
+                    )
+                    .with_custom_headers(&options.http_headers);
                     std::sync::Arc::new(crate::browser::BrowserRenderer::new(options.clone(), browser_http).await?)
                 } else {
                     std::sync::Arc::new(http_client)

@@ -327,6 +327,7 @@ mod tests {
             timeout: 5,
             proxy: None,
             http_auth: None,
+            http_headers: Vec::new(),
             accept_invalid_certs: false,
             timezone: None,
             show_version_only: false,

@@ -235,7 +235,9 @@ impl CrawlerOption {
                         array_values.clear();
                         has_default_been_replaced = true;
                     }
-                    if is_literal_array_assignment {
+                    // Header values legitimately contain commas (`Accept-Language: cs,en;q=0.8`),
+                    // so every `--header` is one value, like the literal `:=` form.
+                    if is_literal_array_assignment || self.option_type == OptionType::HttpHeader {
                         array_values.push(av.clone());
                     } else if av.contains(',') {
                         let parts: Vec<String> = av
@@ -503,6 +505,12 @@ impl CrawlerOption {
                     )));
                 }
             }
+            OptionType::HttpHeader => {
+                // The value is not echoed: it is usually a secret (cookie, token).
+                if let Err(reason) = crate::engine::http_client::parse_custom_header(val) {
+                    return Err(CrawlerError::Config(format!("Option {} {}", display_name, reason)));
+                }
+            }
         }
 
         // Extra validations for numeric range
@@ -561,7 +569,8 @@ impl CrawlerOption {
             | OptionType::Email
             | OptionType::HostAndPort
             | OptionType::ReplaceContent
-            | OptionType::Resolve => Ok(OptionValue::Str(val.to_string())),
+            | OptionType::Resolve
+            | OptionType::HttpHeader => Ok(OptionValue::Str(val.to_string())),
             OptionType::Url => {
                 let corrected = correct_url(val);
                 Ok(OptionValue::Str(corrected))

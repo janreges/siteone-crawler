@@ -470,8 +470,13 @@ fn invalid_option_exits_with_code_101() {
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("Unknown options: --nonexistent-option=foo"),
+        stderr.contains("Unknown options: --nonexistent-option"),
         "Error should mention the unknown option, got: {}",
+        stderr
+    );
+    assert!(
+        !stderr.contains("--nonexistent-option=foo"),
+        "Error should not echo the value (it may be a secret), got: {}",
         stderr
     );
 }
@@ -1223,4 +1228,127 @@ fn dns_analysis_is_skipped_for_ip_literal_hosts() {
         .find(|item| item["aplCode"] == "dns")
         .expect("a DNS summary item");
     assert_eq!(dns["status"], "INFO", "{dns}");
+}
+
+/// #21: a `--header` on the command line overrides the same header from the config file, which
+/// comes first; only one value is sent.
+#[test]
+fn command_line_header_overrides_the_config_file() {
+    let tmp = TempDir::new("header-override");
+    let config = tmp.path.join("crawler.conf");
+    std::fs::write(&config, "--header=Cookie: session=from-config\n").expect("config file");
+    let site = RecordingServer::start(vec![Route {
+        path: "/",
+        headers: vec![("Content-Type", "text/html; charset=utf-8".to_string())],
+        body: b"<html><head><title>Home</title></head><body>Home</body></html>".to_vec(),
+    }]);
+
+    let output = run_built_crawler(&[
+        &format!("--config-file={}", config.display()),
+        &format!("--url={}", site.url()),
+        "--single-page",
+        "--header=Cookie: session=from-cli",
+        LOCAL_ANALYZERS,
+        "--http-cache-dir=",
+        "--output-html-report=",
+        "--output-json-file=",
+        "--output-text-file=",
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let requests = site.requests();
+    assert!(!requests.is_empty(), "the crawled host was requested");
+    for head in &requests {
+        let head = head.to_ascii_lowercase();
+        let cookies: Vec<&str> = head.lines().filter(|line| line.starts_with("cookie:")).collect();
+        assert_eq!(cookies, vec!["cookie: session=from-cli"], "{head}");
+    }
+}
+
+/// #21: `--header` values reach the crawled host (replacing a default header of the same name)
+/// but never another domain, and they are masked in the JSON output.
+#[test]
+fn custom_headers_reach_the_crawled_host_only() {
+    let external = RecordingServer::start(vec![Route {
+        path: "/logo.png",
+        headers: vec![("Content-Type", "image/png".to_string())],
+        body: b"\x89PNG\r\n\x1a\n".to_vec(),
+    }]);
+    let site = RecordingServer::start(vec![Route {
+        path: "/",
+        headers: vec![("Content-Type", "text/html; charset=utf-8".to_string())],
+        body: format!(
+            "<html><head><title>Home</title></head><body><img src=\"http://external.test:{}/logo.png\" alt=\"Logo\"></body></html>",
+            external.port()
+        )
+        .into_bytes(),
+    }]);
+
+    let output = run_built_crawler(&[
+        "--config-file=/dev/null",
+        &format!("--url={}", site.url()),
+        "--single-page",
+        "--output=json",
+        "--header=Cookie: session=SECRET_SUFFIX",
+        "-H",
+        "User-Agent: CustomAgent/1.0",
+        // A second domain on a local server: `external.test` is resolved to 127.0.0.1.
+        &format!("--resolve=external.test:{}:127.0.0.1", external.port()),
+        "--allowed-domain-for-external-files=external.test",
+        LOCAL_ANALYZERS,
+        "--http-cache-dir=",
+        "--output-html-report=",
+        "--output-json-file=",
+        "--output-text-file=",
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let site_requests = site.requests();
+    assert!(!site_requests.is_empty(), "the crawled host was requested");
+    for head in &site_requests {
+        let head = head.to_ascii_lowercase();
+        assert!(head.contains("cookie: session=secret_suffix"), "{head}");
+        let user_agents: Vec<&str> = head.lines().filter(|line| line.starts_with("user-agent:")).collect();
+        assert_eq!(
+            user_agents,
+            vec!["user-agent: customagent/1.0"],
+            "the default is replaced: {head}"
+        );
+    }
+
+    let external_requests = external.requests();
+    assert!(
+        !external_requests.is_empty(),
+        "the image on the other domain was fetched"
+    );
+    for head in &external_requests {
+        let head = head.to_ascii_lowercase();
+        assert!(!head.contains("cookie:"), "{head}");
+        assert!(!head.contains("customagent"), "{head}");
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        !stdout.contains("SECRET_SUFFIX"),
+        "header values are masked in the output"
+    );
+    let json: serde_json::Value = serde_json::from_str(&stdout).expect("JSON on stdout");
+    assert_eq!(
+        json["crawler"]["finalUserAgent"], "CustomAgent/1.0",
+        "reports show the User-Agent that the crawled host received"
+    );
+    assert_eq!(
+        json["options"]["httpHeaders"],
+        serde_json::json!(["Cookie: ***", "User-Agent: ***"])
+    );
 }

@@ -146,6 +146,10 @@ impl RecordingServer {
         format!("http://127.0.0.1:{}/", self.port)
     }
 
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
     /// The head (request line and headers) of every request received so far.
     pub fn requests(&self) -> Vec<String> {
         self.requests.lock().unwrap().clone()

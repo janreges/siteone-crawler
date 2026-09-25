@@ -14,6 +14,7 @@ use std::time::Duration;
 
 use md5::{Digest, Md5};
 
+use crate::engine::crawler::Crawler;
 use crate::engine::http_client::HttpClient;
 use crate::engine::parsed_url::ParsedUrl;
 use crate::engine::robots_txt::RobotsTxt;
@@ -108,7 +109,8 @@ pub async fn fetch_missing(
         options.http_cache_compression,
         options.http_cache_ttl,
         options.accept_invalid_certs,
-    );
+    )
+    .with_custom_headers(&options.http_headers);
 
     // Politeness: at least 250 ms between sends, or the configured 1/max-reqs-per-sec if slower.
     let delay = if options.max_reqs_per_sec > 0.0 {
@@ -116,12 +118,9 @@ pub async fn fetch_missing(
     } else {
         Duration::from_millis(250)
     };
-    let user_agent = status
-        .lock()
-        .ok()
-        .map(|st| st.get_crawler_info().final_user_agent)
-        .filter(|ua| !ua.is_empty())
-        .unwrap_or_else(|| format!("SiteOne-Crawler/{}", crate::version::CODE));
+    // The crawler's own user agent (the reported one may be a `--header` value, which the client
+    // adds only within the crawled site).
+    let user_agent = Crawler::build_final_user_agent(options);
     let timeout = options.timeout.clamp(1, 3600) as u64;
 
     for (i, target) in targets.iter().enumerate() {

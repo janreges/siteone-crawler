@@ -80,6 +80,9 @@ pub struct CoreOptions {
     pub proxy: Option<String>,
     #[serde(serialize_with = "crate::utils::serialize_optional_secret")]
     pub http_auth: Option<String>,
+    /// Custom request headers (`--header`), raw `Name: value`; values are masked when serialized.
+    #[serde(serialize_with = "crate::utils::serialize_redacted_headers")]
+    pub http_headers: Vec<String>,
     pub accept_invalid_certs: bool,
     pub timezone: Option<String>,
     pub show_version_only: bool,
@@ -368,6 +371,7 @@ impl CoreOptions {
             timeout: 5,
             proxy: None,
             http_auth: None,
+            http_headers: Vec::new(),
             accept_invalid_certs: false,
             timezone: None,
             show_version_only: false,
@@ -1201,6 +1205,11 @@ impl CoreOptions {
             "httpAuth" => {
                 if let Some(s) = value.as_str() {
                     self.http_auth = Some(s.to_string());
+                }
+            }
+            "httpHeaders" => {
+                if let Some(arr) = value.as_array() {
+                    self.http_headers = arr.clone();
                 }
             }
             "acceptInvalidCerts" => {
@@ -2371,6 +2380,11 @@ pub fn get_options() -> Options {
                 "--http-auth", Some("-ha"), "httpAuth", OptionType::String, false,
                 "Basic HTTP authentication in `username:password` format.",
                 None, true, false, None,
+            ),
+            CrawlerOption::new(
+                "--header", Some("-H"), "httpHeaders", OptionType::HttpHeader, true,
+                "Custom HTTP request header in `Name: value` format, e.g. `--header=\"Cookie: session=abc\"`. Can be specified multiple times (the last value of a name wins, so the command line overrides the config file); commas in the value are kept. Sent only within the `--http-auth` scope and replaces a default header of the same name (`Host`, `Content-Length` and hop-by-hop headers such as `Connection` cannot be set).",
+                None, true, true, None,
             ),
             CrawlerOption::new(
                 "--accept-invalid-certs", Some("-aic"), "acceptInvalidCerts", OptionType::Bool, false,
@@ -4031,7 +4045,8 @@ pub fn parse_argv(argv: &[String]) -> Result<CoreOptions, CrawlerError> {
         let is_literal_array_assignment = assignment.is_some_and(|parsed| parsed.is_literal_array);
         let supports_literal_array = known_options.get(arg_without_value).is_some_and(|is_array| *is_array);
         if !known_options.contains_key(arg_without_value) || (is_literal_array_assignment && !supports_literal_array) {
-            unknown_options.push(arg.to_string());
+            // Only the part before `=`: the value may be a secret (e.g. a mistyped `--header`).
+            unknown_options.push(arg.split('=').next().unwrap_or(arg).to_string());
         } else if assignment.is_none() && !bool_options.contains(arg_without_value) {
             // Known non-bool option without '=' — the next token is its value, skip it
             i += 1;
@@ -4115,6 +4130,7 @@ pub fn get_help_text() -> String {
                 OptionType::Dir => "=<dir>",
                 OptionType::HostAndPort => "=<host:port>",
                 OptionType::Resolve => "=<domain:port:ip>",
+                OptionType::HttpHeader => "=<header>",
                 OptionType::Bool => "",
             };
             let name_and_value = format!("{}{}", option.name, type_suffix);
@@ -4238,6 +4254,7 @@ mod tests {
             timeout: 5,
             proxy: None,
             http_auth: None,
+            http_headers: Vec::new(),
             accept_invalid_certs: false,
             timezone: None,
             show_version_only: false,
@@ -4807,12 +4824,16 @@ mod tests {
     #[test]
     fn h01_literal_assignment_is_rejected_for_non_array_and_unknown_options() {
         let config = h01_config_file();
-        for arg in ["--url:=https://other.test/", "--not-an-option:=value"] {
+        for (arg, reported) in [
+            ("--url:=https://other.test/", "--url:"),
+            ("--not-an-option:=value", "--not-an-option:"),
+        ] {
             let error = parse_argv(&h01_argv(&config, &[arg])).unwrap_err();
             assert!(
-                error.to_string().contains(&format!("Unknown options: {arg}")),
+                error.to_string().contains(&format!("Unknown options: {reported}")),
                 "{error}"
             );
+            assert!(!error.to_string().contains(arg), "values are not echoed: {error}");
         }
     }
 
@@ -4831,7 +4852,68 @@ mod tests {
                 .values()
                 .map(|group| group.options.len())
                 .sum::<usize>(),
-            218
+            219
         );
+    }
+
+    #[test]
+    fn header_option_is_repeatable_and_keeps_commas() {
+        let config = h01_config_file();
+        let options = parse_argv(&h01_argv(
+            &config,
+            &["--header=Accept-Language: cs,en;q=0.8", "-H", "Cookie: a=1; b=2"],
+        ))
+        .unwrap();
+
+        assert_eq!(
+            options.http_headers,
+            vec![
+                "Accept-Language: cs,en;q=0.8".to_string(),
+                "Cookie: a=1; b=2".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn unknown_option_errors_never_echo_values() {
+        let config = h01_config_file();
+        let error = parse_argv(&h01_argv(
+            &config,
+            &[
+                "--headr=Cookie: SECRET_SUFFIX",
+                "--tokn",
+                "SECRET_SUFFIX",
+                "--not-an-option:=SECRET_SUFFIX",
+            ],
+        ))
+        .unwrap_err();
+        let message = error.to_string();
+        assert!(
+            message.contains("Unknown options: --headr, --tokn, --not-an-option:"),
+            "{message}"
+        );
+        assert!(!message.contains("SECRET_SUFFIX"), "{message}");
+    }
+
+    #[test]
+    fn invalid_header_option_is_a_config_error() {
+        let config = h01_config_file();
+        for arg in [
+            "--header=NoColonHere",
+            "--header=Bad Name: x",
+            "--header=: no-name",
+            "--header=Host: example.test",
+            "--header=Content-Length: 5",
+            "--header=X-Test: a\r\nInjected: b",
+            "--header=Transfer-Encoding: chunked",
+            "--header=Connection: keep-alive",
+            "--header=Upgrade: websocket",
+            "--header=Cookie=session:SECRET_SUFFIX",
+        ] {
+            let error = parse_argv(&h01_argv(&config, &[arg])).unwrap_err();
+            assert!(matches!(error, CrawlerError::Config(_)), "{arg:?}: {error}");
+            assert!(error.to_string().contains("--header"), "{arg:?}: {error}");
+            assert!(!error.to_string().contains("SECRET_SUFFIX"), "{arg:?}: {error}");
+        }
     }
 }

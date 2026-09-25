@@ -25,6 +25,8 @@ pub struct HttpClient {
     client: reqwest::Client,
     /// Basic HTTP auth in format "username:password"
     http_auth: Option<String>,
+    /// Custom request headers from `--header`, sent in the same scope as `http_auth`
+    custom_headers: Vec<(HeaderName, HeaderValue)>,
     /// Cache directory. If None, caching is disabled
     cache_dir: Option<String>,
     /// Whether to compress cached data with gzip
@@ -46,10 +48,22 @@ impl HttpClient {
         Self {
             client,
             http_auth,
+            custom_headers: Vec::new(),
             cache_dir,
             compression,
             cache_ttl,
         }
+    }
+
+    /// Set the `--header` values (`Name: value`, validated when the options were parsed). A name
+    /// given more than once keeps its last value, so the command line overrides the config file.
+    pub fn with_custom_headers(mut self, headers: &[String]) -> Self {
+        self.custom_headers.clear();
+        for (name, value) in headers.iter().filter_map(|raw| parse_custom_header(raw).ok()) {
+            self.custom_headers.retain(|(existing, _)| *existing != name);
+            self.custom_headers.push((name, value));
+        }
+        self
     }
 
     /// Build the shared reqwest::Client with proxy support.
@@ -89,7 +103,9 @@ impl HttpClient {
             .no_zstd()
     }
 
-    /// Perform an HTTP request (GET or HEAD)
+    /// Perform an HTTP request (GET or HEAD).
+    /// `use_http_auth_if_configured` marks a request within the crawled site's scope: only then are
+    /// the `--http-auth` credentials and the `--header` values sent.
     #[allow(clippy::too_many_arguments)]
     pub async fn request(
         &self,
@@ -167,6 +183,14 @@ impl HttpClient {
             request_headers.insert(name, v);
         }
 
+        // `--header` values are credentials like `--http-auth`: sent only within its scope, and
+        // applied last so they replace a default header of the same name.
+        if use_http_auth_if_configured {
+            for (name, value) in &self.custom_headers {
+                request_headers.insert(name.clone(), value.clone());
+            }
+        }
+
         // Use shared client with per-request timeout
         let client = self.client.clone();
 
@@ -195,8 +219,12 @@ impl HttpClient {
 
         let request = request.headers(request_headers);
 
-        // Add basic auth if configured and requested
-        let request = if use_http_auth_if_configured {
+        // Add basic auth if configured and requested; a custom `Authorization` header wins
+        let has_custom_authorization = self
+            .custom_headers
+            .iter()
+            .any(|(name, _)| *name == reqwest::header::AUTHORIZATION);
+        let request = if use_http_auth_if_configured && !has_custom_authorization {
             if let Some(ref auth) = self.http_auth {
                 let parts: Vec<&str> = auth.splitn(2, ':').collect();
                 if parts.len() == 2 {
@@ -409,11 +437,23 @@ impl HttpClient {
         Some(format!("{}/{}{}", cache_dir, cache_key, ext))
     }
 
-    /// Generate a cache key from request parameters
+    /// Generate a cache key from request parameters. Configured credentials (`--http-auth`,
+    /// `--header`) are part of the key, so authenticated and anonymous responses never share an
+    /// entry; without credentials the key is the same as in earlier versions.
     fn get_cache_key(&self, host: &str, port: u16, args: &[String], extension: Option<&str>) -> String {
         let mut hasher = Md5::new();
         for arg in args {
             hasher.update(arg.as_bytes());
+        }
+        if let Some(auth) = &self.http_auth {
+            hasher.update(b"\0http-auth:");
+            hasher.update(auth.as_bytes());
+        }
+        for (name, value) in &self.custom_headers {
+            hasher.update(b"\0header:");
+            hasher.update(name.as_str().as_bytes());
+            hasher.update(b":");
+            hasher.update(value.as_bytes());
         }
         let md5 = crate::utils::to_lower_hex(hasher.finalize());
         let ext_suffix = extension.map(|e| format!(".{}", e)).unwrap_or_default();
@@ -545,6 +585,49 @@ pub fn decode_body(raw: &[u8], content_encoding: &str) -> std::io::Result<Vec<u8
         body = decoded;
     }
     Ok(body)
+}
+
+/// Parse one `--header` value (`Name: value`). The name must be an HTTP token and the value must
+/// not contain line breaks; `Host`, `Content-Length` and the hop-by-hop headers come from the
+/// request or the connection itself and cannot be set. Errors continue the sentence
+/// "Option --header …" and never repeat the input, which may be a secret (cookie, token).
+pub fn parse_custom_header(raw: &str) -> Result<(HeaderName, HeaderValue), String> {
+    if raw.contains(['\r', '\n']) {
+        return Err("must not contain line breaks".to_string());
+    }
+    let Some((name, value)) = raw.split_once(':') else {
+        return Err("must be in `Name: value` format".to_string());
+    };
+    let name = name.trim();
+    let header_name = HeaderName::from_bytes(name.as_bytes()).map_err(|_| "has an invalid header name".to_string())?;
+    if matches!(
+        header_name.as_str(),
+        "host"
+            | "content-length"
+            | "connection"
+            | "keep-alive"
+            | "proxy-connection"
+            | "te"
+            | "trailer"
+            | "transfer-encoding"
+            | "upgrade"
+    ) {
+        return Err(format!("cannot set the {name} header"));
+    }
+    let header_value = HeaderValue::from_bytes(value.trim().as_bytes())
+        .map_err(|_| format!("has an invalid value for header '{name}'"))?;
+    Ok((header_name, header_value))
+}
+
+/// The `User-Agent` set with `--header`, if any (the last one wins, as on requests). Reports show
+/// it as the crawler's user agent, because it is what the crawled site receives.
+pub fn custom_user_agent(headers: &[String]) -> Option<String> {
+    headers
+        .iter()
+        .rev()
+        .filter_map(|raw| parse_custom_header(raw).ok())
+        .find(|(name, _)| *name == reqwest::header::USER_AGENT)
+        .and_then(|(_, value)| value.to_str().ok().map(str::to_string))
 }
 
 #[cfg(test)]
@@ -748,5 +831,194 @@ mod tests {
         );
         let head = request_head.recv().unwrap().to_ascii_lowercase();
         assert!(head.contains("accept-encoding: gzip, deflate, br"), "{head}");
+    }
+
+    #[test]
+    fn parse_custom_header_accepts_name_value_pairs() {
+        let (name, value) = parse_custom_header("Cookie: a=1; b=2").unwrap();
+        assert_eq!(name.as_str(), "cookie");
+        assert_eq!(value.to_str().unwrap(), "a=1; b=2");
+        let (_, value) = parse_custom_header("Accept-Language:cs,en;q=0.8").unwrap();
+        assert_eq!(value.to_str().unwrap(), "cs,en;q=0.8");
+        let (_, value) = parse_custom_header("X-Empty:").unwrap();
+        assert_eq!(value.to_str().unwrap(), "");
+    }
+
+    #[test]
+    fn parse_custom_header_rejects_invalid_input() {
+        for raw in [
+            "NoColonHere",
+            "Bad Name: x",
+            ": no-name",
+            "X-Test: a\r\nInjected: b",
+            "X-Test: a\nb",
+            "Host: example.test",
+            "content-length: 5",
+            // Hop-by-hop headers belong to the connection, not to the request.
+            "Connection: keep-alive",
+            "Keep-Alive: timeout=5",
+            "Proxy-Connection: keep-alive",
+            "TE: trailers",
+            "Trailer: Expires",
+            "Transfer-Encoding: chunked",
+            "Upgrade: websocket",
+        ] {
+            assert!(parse_custom_header(raw).is_err(), "{raw:?}");
+        }
+    }
+
+    #[test]
+    fn parse_custom_header_errors_never_repeat_the_input() {
+        for raw in [
+            "Cookie=session:SECRET_SUFFIX",
+            "X SECRET_SUFFIX: value",
+            "SECRET_SUFFIX",
+            "X-Token: SECRET_SUFFIX\u{7f}",
+        ] {
+            let error = parse_custom_header(raw).unwrap_err();
+            assert!(!error.contains("SECRET_SUFFIX"), "{raw:?}: {error}");
+            assert!(!error.contains("session"), "{raw:?}: {error}");
+        }
+    }
+
+    #[tokio::test]
+    async fn custom_headers_are_sent_only_within_the_auth_scope() {
+        let client = HttpClient::new(None, None, None, false, None, false).with_custom_headers(&[
+            "User-Agent: CustomAgent/1.0".to_string(),
+            "Cookie: session=abc".to_string(),
+            "Accept-Language: cs,en;q=0.8".to_string(),
+        ]);
+
+        let (port, request_head) = serve_once(raw_response("Content-Type: text/html\r\n", b"ok"));
+        client
+            .request(
+                "127.0.0.1",
+                port,
+                "http",
+                "/",
+                "GET",
+                5,
+                "default-agent",
+                "*/*",
+                "gzip",
+                None,
+                true,
+                None,
+            )
+            .await
+            .unwrap();
+        let head = request_head.recv().unwrap().to_ascii_lowercase();
+        assert!(head.contains("user-agent: customagent/1.0"), "{head}");
+        assert!(
+            !head.contains("default-agent"),
+            "the custom header replaces the default: {head}"
+        );
+        assert!(head.contains("cookie: session=abc"), "{head}");
+        assert!(head.contains("accept-language: cs,en;q=0.8"), "{head}");
+
+        let (port, request_head) = serve_once(raw_response("Content-Type: text/html\r\n", b"ok"));
+        client
+            .request(
+                "127.0.0.1",
+                port,
+                "http",
+                "/",
+                "GET",
+                5,
+                "default-agent",
+                "*/*",
+                "gzip",
+                None,
+                false,
+                None,
+            )
+            .await
+            .unwrap();
+        let head = request_head.recv().unwrap().to_ascii_lowercase();
+        assert!(head.contains("user-agent: default-agent"), "{head}");
+        assert!(
+            !head.contains("cookie:"),
+            "outside the scope nothing custom is sent: {head}"
+        );
+    }
+
+    #[test]
+    fn credentials_are_part_of_the_cache_key() {
+        let cache = || Some("/tmp/cache".to_string());
+        let args = vec!["example.com".to_string(), "/page".to_string()];
+        let key = |client: &HttpClient| client.get_cache_key("example.com", 443, &args, Some("html"));
+
+        let anonymous = HttpClient::new(None, None, cache(), false, None, false);
+        let cookie_a = HttpClient::new(None, None, cache(), false, None, false)
+            .with_custom_headers(&["Cookie: session=a".to_string()]);
+        let cookie_b = HttpClient::new(None, None, cache(), false, None, false)
+            .with_custom_headers(&["Cookie: session=b".to_string()]);
+        let basic_auth = HttpClient::new(None, Some("user:pass".to_string()), cache(), false, None, false);
+
+        assert_ne!(key(&anonymous), key(&cookie_a));
+        assert_ne!(key(&cookie_a), key(&cookie_b));
+        assert_ne!(key(&anonymous), key(&basic_auth));
+        assert_eq!(
+            key(&cookie_a),
+            key(&HttpClient::new(None, None, cache(), false, None, false)
+                .with_custom_headers(&["Cookie: session=a".to_string()])),
+            "the same credentials give the same key"
+        );
+
+        // Without credentials the key is unchanged, so existing caches stay valid.
+        let mut hasher = Md5::new();
+        for arg in &args {
+            hasher.update(arg.as_bytes());
+        }
+        let md5 = crate::utils::to_lower_hex(hasher.finalize());
+        assert_eq!(key(&anonymous), format!("example.com-443/{}/{}.html", &md5[..2], md5));
+    }
+
+    /// The config file comes before the command line, so the last value of a header wins and a
+    /// `--header` on the command line overrides the config file; only one line is sent.
+    #[tokio::test]
+    async fn repeated_custom_header_names_keep_the_last_value() {
+        let client = HttpClient::new(None, None, None, false, None, false).with_custom_headers(&[
+            "Cookie: from=config".to_string(),
+            "User-Agent: ConfigAgent/1.0".to_string(),
+            "cookie: from=cli".to_string(),
+        ]);
+        let (port, request_head) = serve_once(raw_response("Content-Type: text/html\r\n", b"ok"));
+        client
+            .request(
+                "127.0.0.1",
+                port,
+                "http",
+                "/",
+                "GET",
+                5,
+                "default-agent",
+                "*/*",
+                "gzip",
+                None,
+                true,
+                None,
+            )
+            .await
+            .unwrap();
+        let head = request_head.recv().unwrap().to_ascii_lowercase();
+        let cookies: Vec<&str> = head.lines().filter(|line| line.starts_with("cookie:")).collect();
+        assert_eq!(cookies, vec!["cookie: from=cli"], "{head}");
+        assert!(head.contains("user-agent: configagent/1.0"), "{head}");
+    }
+
+    #[test]
+    fn custom_user_agent_is_the_last_user_agent_header() {
+        let headers = |raw: &[&str]| raw.iter().map(|h| h.to_string()).collect::<Vec<_>>();
+        assert_eq!(custom_user_agent(&headers(&["Cookie: a=1"])), None);
+        assert_eq!(
+            custom_user_agent(&headers(&[
+                "User-Agent: First/1.0",
+                "Cookie: a=1",
+                "user-agent: Second/2.0"
+            ]))
+            .as_deref(),
+            Some("Second/2.0")
+        );
     }
 }

@@ -163,9 +163,9 @@ impl Crawler {
         let initial_parsed_url = ParsedUrl::parse(&options.url, None);
         let final_user_agent = Self::build_final_user_agent(&options);
 
-        // Set the final user agent in status
+        // Set the final user agent in status, as reports show it
         let status = {
-            status.set_final_user_agent(&final_user_agent);
+            status.set_final_user_agent(&Self::reported_user_agent(&options, final_user_agent.clone()));
             status
         };
 
@@ -1642,8 +1642,18 @@ impl Crawler {
         }
     }
 
+    /// The user agent that reports show: a `User-Agent` from `--header`, because it replaces
+    /// `final_user_agent` on the crawled site's requests; in `--browser` mode `final_user_agent`,
+    /// which Chromium requests the rendered documents with.
+    pub(crate) fn reported_user_agent(options: &CoreOptions, final_user_agent: String) -> String {
+        if options.browser_enabled {
+            return final_user_agent;
+        }
+        crate::engine::http_client::custom_user_agent(&options.http_headers).unwrap_or(final_user_agent)
+    }
+
     /// Build final user agent string
-    fn build_final_user_agent(options: &CoreOptions) -> String {
+    pub(crate) fn build_final_user_agent(options: &CoreOptions) -> String {
         let base = if let Some(ref ua) = options.user_agent {
             ua.clone()
         } else {
@@ -1951,6 +1961,22 @@ fn filter_query_params(url: &str, keep_params: &[String]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reports_show_the_user_agent_of_the_rendered_documents() {
+        let mut options = crate::options::core_options::parse_argv(&[
+            "siteone-crawler".to_string(),
+            "--url=https://example.test".to_string(),
+            format!("--config-file={}", if cfg!(windows) { "NUL" } else { "/dev/null" }),
+            "--header=User-Agent: Custom/1.0".to_string(),
+        ])
+        .unwrap();
+        let computed = || "Computed/2.0".to_string();
+        assert_eq!(Crawler::reported_user_agent(&options, computed()), "Custom/1.0");
+        // Chromium requests the rendered documents with the computed User-Agent.
+        options.browser_enabled = true;
+        assert_eq!(Crawler::reported_user_agent(&options, computed()), "Computed/2.0");
+    }
 
     #[test]
     fn m08_random_query_params_without_existing_query() {

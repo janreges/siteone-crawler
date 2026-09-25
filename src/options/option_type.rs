@@ -19,6 +19,8 @@ pub enum OptionType {
     HostAndPort,
     ReplaceContent,
     Resolve,
+    /// `Name: value` request header; each occurrence is one value (never comma-split).
+    HttpHeader,
 }
 
 impl fmt::Display for OptionType {
@@ -37,6 +39,7 @@ impl fmt::Display for OptionType {
             OptionType::HostAndPort => write!(f, "HOST_AND_PORT"),
             OptionType::ReplaceContent => write!(f, "REPLACE_CONTENT"),
             OptionType::Resolve => write!(f, "RESOLVE"),
+            OptionType::HttpHeader => write!(f, "HTTP_HEADER"),
         }
     }
 }

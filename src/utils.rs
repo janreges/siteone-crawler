@@ -508,6 +508,26 @@ pub fn serialize_optional_secret<S: serde::Serializer>(
     serde::Serialize::serialize(&value.as_ref().map(|_| "***"), serializer)
 }
 
+/// Mask the value of a `--header` argument but keep the header name: `Cookie: a=1` → `Cookie: ***`.
+pub fn redact_header_value(header: &str) -> String {
+    let unquoted = header.trim().trim_matches(['\'', '"', '`']);
+    match unquoted.split_once(':') {
+        Some((name, _)) => format!("{}: ***", name.trim()),
+        None => "***".to_string(),
+    }
+}
+
+/// Serialize `--header` values with their values masked (see `redact_header_value`).
+pub fn serialize_redacted_headers<S: serde::Serializer>(values: &[String], serializer: S) -> Result<S::Ok, S::Error> {
+    serde::Serialize::serialize(
+        &values
+            .iter()
+            .map(|value| redact_header_value(value))
+            .collect::<Vec<_>>(),
+        serializer,
+    )
+}
+
 fn is_secret_flag(flag: &str) -> bool {
     matches!(
         flag,
@@ -520,6 +540,11 @@ fn is_url_flag(flag: &str) -> bool {
         flag,
         "--url" | "-u" | "--proxy" | "-p" | "--upload-to" | "-upt" | "--ai-endpoint"
     )
+}
+
+/// `--header` / `-H`, including the literal-array form `--header:=`.
+fn is_header_flag(flag: &str) -> bool {
+    matches!(flag.strip_suffix(':').unwrap_or(flag), "--header" | "-H")
 }
 
 /// Replace IPv4 addresses with `127.0.0.1` so internal infrastructure IPs (e.g. a private
@@ -578,6 +603,7 @@ pub fn format_command_from_argv(argv: &[String]) -> String {
     let mut safe_argv = vec![argv[0].clone()];
     let mut secret_value = false;
     let mut url_value = false;
+    let mut header_value = false;
     for arg in &argv[1..] {
         if secret_value {
             safe_argv.push("***".to_string());
@@ -585,17 +611,23 @@ pub fn format_command_from_argv(argv: &[String]) -> String {
         } else if url_value {
             safe_argv.push(redact_url_userinfo(arg));
             url_value = false;
+        } else if header_value {
+            safe_argv.push(redact_header_value(arg));
+            header_value = false;
         } else if let Some((flag, value)) = arg.split_once('=') {
             safe_argv.push(if is_secret_flag(flag) {
                 format!("{flag}=***")
             } else if is_url_flag(flag) {
                 format!("{flag}={}", redact_url_userinfo(value))
+            } else if is_header_flag(flag) {
+                format!("{flag}={}", redact_header_value(value))
             } else {
                 arg.clone()
             });
         } else {
             secret_value = is_secret_flag(arg);
             url_value = is_url_flag(arg);
+            header_value = is_header_flag(arg);
             safe_argv.push(arg.clone());
         }
     }
@@ -1107,6 +1139,41 @@ mod tests {
             "--single-page".to_string(),
         ];
         assert_eq!(format_command_from_argv(&argv), "siteone-crawler --single-page");
+    }
+
+    #[test]
+    fn header_values_are_masked_in_commands_and_serialized_options() {
+        let argv: Vec<String> = [
+            "siteone-crawler",
+            "--url=https://example.test/",
+            "--header=Cookie: session=SECRET_SUFFIX",
+            "-H",
+            "Authorization: Bearer SECRET_SUFFIX",
+            "--header:=X-Api-Key: SECRET_SUFFIX",
+            "--single-page",
+        ]
+        .iter()
+        .map(|arg| arg.to_string())
+        .collect();
+        let command = format_command_from_argv(&argv);
+        assert!(!command.contains("SECRET_SUFFIX"), "{command}");
+        assert!(command.contains("--header='Cookie: ***'"), "{command}");
+        assert!(command.contains("-H 'Authorization: ***'"), "{command}");
+        assert!(command.contains("--header:='X-Api-Key: ***'"), "{command}");
+        assert!(command.ends_with("--single-page"), "{command}");
+        assert!(!get_safe_command(&command).contains("SECRET_SUFFIX"));
+
+        let options = crate::options::core_options::parse_argv(&[
+            "siteone-crawler".to_string(),
+            "--url=https://example.test".to_string(),
+            format!("--config-file={}", if cfg!(windows) { "NUL" } else { "/dev/null" }),
+            "--header=Cookie: session=SECRET_SUFFIX".to_string(),
+        ])
+        .unwrap();
+        assert_eq!(options.http_headers, vec!["Cookie: session=SECRET_SUFFIX".to_string()]);
+        let json = serde_json::to_string(&options).unwrap();
+        assert!(!json.contains("SECRET_SUFFIX"), "{json}");
+        assert!(json.contains(r#""httpHeaders":["Cookie: ***"]"#), "{json}");
     }
 
     // -- get_flat_response_headers --
