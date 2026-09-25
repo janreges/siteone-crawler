@@ -2352,33 +2352,54 @@ function render(){
 render();addEventListener('resize',render);
 </script></body></html>"#;
 
-/// The color at (100, 100) of the desktop and the mobile screenshot of `NARROW_COOKIE_BANNER_PAGE`
-/// captured with `--screenshot-viewport=desktop,mobile` and the given hide option.
+/// A tall page that removes its banner and mounts it again on every resize while narrower than
+/// 500 px, as a responsive consent component re-rendering on resize does.
 #[cfg(feature = "browser")]
-fn narrow_banner_screenshot_colors(hide_option: &str) -> ([u8; 3], [u8; 3]) {
+const REMOUNTING_COOKIE_BANNER_PAGE: &str = r#"<!doctype html>
+<html><head><title>Remounting banner</title><style>
+html,body{margin:0;background:rgb(0,180,0)}
+#cookie-banner{position:fixed;inset:0;background:rgb(220,0,0);z-index:9999}
+</style></head><body><h1>Content</h1><div style="height:1800px"></div><script>
+function render(){
+  document.querySelectorAll('#cookie-banner').forEach(function(e){e.remove();});
+  if(innerWidth<500){
+    var e=document.createElement('div');
+    e.id='cookie-banner';e.className='site-overlay';e.textContent='Cookie consent';document.body.append(e);
+  }
+}
+render();addEventListener('resize',render);
+</script></body></html>"#;
+
+/// The color at (100, 100) of the desktop and the mobile screenshot of `page` captured with
+/// `--screenshot-viewport=desktop,mobile` and the given options.
+#[cfg(feature = "browser")]
+fn banner_screenshot_colors(page: &str, options: &[&str]) -> ([u8; 3], [u8; 3]) {
     let tmp = TempDir::new("viewport-banner");
     let site = tmp.path.join("site");
     std::fs::create_dir_all(&site).expect("site dir");
-    std::fs::write(site.join("index.html"), NARROW_COOKIE_BANNER_PAGE).expect("index.html");
+    std::fs::write(site.join("index.html"), page).expect("index.html");
     let server = LocalServer::start(&site);
     let shots = tmp.path.join("shots");
 
-    let output = run_crawler(&[
+    let url = format!("--url={}", server.url());
+    let shots_dir = format!("--screenshots-dir={}", shots.display());
+    let mut args = vec![
         "--config-file=/dev/null",
-        &format!("--url={}", server.url()),
+        url.as_str(),
         "--single-page",
         "--browser",
         "--browser-no-sandbox",
         "--screenshots",
-        &format!("--screenshots-dir={}", shots.display()),
+        shots_dir.as_str(),
         "--screenshot-viewport=desktop,mobile",
-        hide_option,
         LOCAL_ANALYZERS,
         "--http-cache-dir=",
         "--output-html-report=",
         "--output-json-file=",
         "--output-text-file=",
-    ]);
+    ];
+    args.extend_from_slice(options);
+    let output = run_crawler(&args);
     assert_eq!(
         output.status.code(),
         Some(0),
@@ -2403,7 +2424,7 @@ fn narrow_banner_screenshot_colors(hide_option: &str) -> ([u8; 3], [u8; 3]) {
 #[test]
 #[ignore]
 fn cookie_banners_are_hidden_in_every_viewport() {
-    let (desktop, mobile) = narrow_banner_screenshot_colors("--screenshot-hide-cookie-banners");
+    let (desktop, mobile) = banner_screenshot_colors(NARROW_COOKIE_BANNER_PAGE, &["--screenshot-hide-cookie-banners"]);
     assert_eq!(desktop, [0, 180, 0]);
     assert_eq!(mobile, [0, 180, 0], "the banner covers the mobile screenshot");
 }
@@ -2414,9 +2435,33 @@ fn cookie_banners_are_hidden_in_every_viewport() {
 #[test]
 #[ignore]
 fn hide_selector_is_applied_in_every_viewport() {
-    let (desktop, mobile) = narrow_banner_screenshot_colors("--screenshot-hide-selector=.site-overlay");
+    let (desktop, mobile) =
+        banner_screenshot_colors(NARROW_COOKIE_BANNER_PAGE, &["--screenshot-hide-selector=.site-overlay"]);
     assert_eq!(desktop, [0, 180, 0]);
     assert_eq!(mobile, [0, 180, 0], "the overlay covers the mobile screenshot");
+}
+
+/// Full-page screenshots keep the viewport of each size, so a page that mounts its banner again on
+/// resize cannot cover the capture after the banner was hidden (#46).
+#[cfg(feature = "browser")]
+#[test]
+#[ignore]
+fn banners_stay_hidden_in_full_page_screenshots() {
+    for hide_option in [
+        "--screenshot-hide-cookie-banners",
+        "--screenshot-hide-selector=.site-overlay",
+    ] {
+        let (desktop, mobile) = banner_screenshot_colors(
+            REMOUNTING_COOKIE_BANNER_PAGE,
+            &["--screenshot-mode=full-page", hide_option],
+        );
+        assert_eq!(desktop, [0, 180, 0], "{hide_option}");
+        assert_eq!(
+            mobile,
+            [0, 180, 0],
+            "{hide_option}: the banner covers the mobile screenshot"
+        );
+    }
 }
 
 /// #35: with --force-relative-urls a link to the https variant of the initial URL is fetched on the

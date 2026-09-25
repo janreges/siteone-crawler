@@ -7,7 +7,9 @@
 // removes scroll-lock, then hides a curated set of consent containers plus any
 // fixed/sticky high-z-index overlay whose text matches cookie/consent keywords
 // (English + Czech). Also honours a user-supplied list of CSS selectors
-// (--screenshot-hide-selector).
+// (--screenshot-hide-selector). The hidden selectors (and the ids of heuristically hidden
+// overlays) also go into a style sheet, so an element the page mounts again (e.g. a responsive
+// banner re-rendered on the resize to a full-page capture) stays hidden.
 //
 // Caveats — this is a screenshot-cleanliness helper, not a privacy tool: the accept-all
 // fallback can GRANT cookie consent on sites that expose no reject control, and the
@@ -31,21 +33,32 @@ var __lock__=['didomi-popup-open','qc-cmp-ui-showing','sp-message-open','cmplz-b
 [document.documentElement,document.body].forEach(function(el){if(!el)return;__lock__.forEach(function(c){try{el.classList.remove(c);}catch(x){}});try{el.style.overflow='';el.style.position='';}catch(x){}});
 var __hide__=['#onetrust-consent-sdk','#onetrust-banner-sdk','#CookieConsent','#CybotCookiebotDialog','#cookiescript_injected','#didomi-host','#didomi-popup','#usercentrics-root','#usercentrics-cmp-ui','#qc-cmp2-container','.qc-cmp2-container','#truste-consent-track','.truste_overlay','.truste_box_overlay','[id^="sp_message_container"]','#cmplz-cookiebanner-container','.cmplz-cookiebanner','#cookie-law-info-bar','#cookie-notice','.cookie-notice','.cookie-banner','#cookie-banner','.cookie-consent','#cookie-consent','#cookieConsent','.cookieconsent','.cc-window','.cookie-bar','#cookiebar','.cookie-popup','.cookie-modal','.cookies-popup','.gdpr','.gdpr-banner','#gdpr','.iubenda-cs-container','#iubenda-cs-banner','.osano-cm-window','#termly-code-snippet-support','#cookiebanner','.cookiebanner','[aria-label="cookieconsent"]','[class*="cookie"][class*="consent"]','[id*="cookie"][class*="banner"]'];
 __hide__.forEach(function(sel){try{document.querySelectorAll(sel).forEach(function(el){el.style.setProperty('display','none','important');});}catch(x){}});
-try{var __kw__=/cookie|consent|gdpr|souhlas|p[řr]ijmout|odm[íi]tnout|soukrom|z[áa]sady ochrany|personaliz/i;var __all__=document.querySelectorAll('body *');for(var i=0;i<__all__.length;i++){var el=__all__[i];var st=getComputedStyle(el);if((st.position==='fixed'||st.position==='sticky')&&((parseInt(st.zIndex,10)||0)>=1000)){var t=(el.innerText||'').slice(0,400);if(__kw__.test(t)){el.style.setProperty('display','none','important');}}}}catch(x){}
+__keep_hidden__(__hide__);
+try{var __kw__=/cookie|consent|gdpr|souhlas|p[řr]ijmout|odm[íi]tnout|soukrom|z[áa]sady ochrany|personaliz/i;var __all__=document.querySelectorAll('body *');for(var i=0;i<__all__.length;i++){var el=__all__[i];var st=getComputedStyle(el);if((st.position==='fixed'||st.position==='sticky')&&((parseInt(st.zIndex,10)||0)>=1000)){var t=(el.innerText||'').slice(0,400);if(__kw__.test(t)){el.style.setProperty('display','none','important');if(el.id){__keep_hidden__(['#'+CSS.escape(el.id)]);}}}}}catch(x){}
+"#;
+
+/// Adds `display:none` rules for the given selectors to one style sheet of the page, so elements
+/// matching them stay hidden when the page mounts them again. Invalid selectors are skipped (each
+/// rule on its own, so one cannot void the others).
+const KEEP_HIDDEN_JS: &str = r#"
+function __keep_hidden__(sels){try{var st=document.getElementById('__siteone_hide__');if(!st){st=document.createElement('style');st.id='__siteone_hide__';(document.head||document.documentElement).appendChild(st);}sels.forEach(function(sel){try{document.querySelector(sel);st.appendChild(document.createTextNode(sel+'{display:none!important}'));}catch(x){}});}catch(x){}}
 "#;
 
 /// Build the injectable script. Always hides the user-supplied `selectors`; when `full`
-/// is true, also runs the CMP dismissal + curated hide + heuristic logic.
+/// is true, also runs the CMP dismissal + curated hide + heuristic logic. What it hides stays
+/// hidden through a style sheet (see `KEEP_HIDDEN_JS`).
 fn build_script(selectors: &[String], full: bool) -> String {
     let user_json = serde_json::to_string(selectors).unwrap_or_else(|_| "[]".to_string());
     let mut s = String::new();
     s.push_str("(function(){try{var __user__=");
     s.push_str(&user_json);
     s.push(';');
+    s.push_str(KEEP_HIDDEN_JS);
     if full {
         s.push_str(FULL_JS);
     }
     s.push_str("try{__user__.forEach(function(sel){try{document.querySelectorAll(sel).forEach(function(el){el.style.setProperty('display','none','important');});}catch(e){}});}catch(e){}");
+    s.push_str("__keep_hidden__(__user__);");
     s.push_str("}catch(e){}})();");
     s
 }
@@ -83,5 +96,8 @@ mod tests {
         let minimal = build_script(&[".only".to_string()], false);
         assert!(minimal.contains(".only"));
         assert!(!minimal.contains("onetrust")); // CMP logic omitted when not full
+        // user selectors stay hidden through the style sheet in both modes
+        assert!(minimal.contains("__keep_hidden__(__user__);"));
+        assert!(full.contains("__keep_hidden__(__hide__);"));
     }
 }

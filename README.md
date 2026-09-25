@@ -923,7 +923,9 @@ at most 16384 px) or the presets `desktop` (1920x1080), `tablet` (768x1024) and 
 The first size is the render viewport: the page is loaded, auto-scrolled and captured in it, and
 the screenshot animation uses it. For each further size the page is resized (device pixel ratio 1,
 desktop mode — only the viewport changes, not the user agent), left to settle and captured again;
-`--screenshot-hide-cookie-banners` and `--screenshot-hide-selector` are applied again before each capture.
+`--screenshot-hide-cookie-banners` and `--screenshot-hide-selector` are applied again before each capture,
+and what they hide stays hidden when the page mounts it again (e.g. a responsive banner re-rendered
+when a full-page capture resizes the page).
 With a single size the file names are unchanged; with several, every file name ends with the size,
 e.g. `example_com_about_c30b28d2_390x844.png`. The "Browser screenshots" table lists one row per file.
 
