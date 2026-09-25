@@ -211,10 +211,9 @@ impl BrowserRenderer {
             }
         };
 
-        // Screenshot (bounded) only when content succeeded; capture the error instead of dropping it.
-        let mut screenshot_path = None;
-        let mut screenshot_error = None;
-        if outcome.is_ok() && self.options.screenshots {
+        // Screenshots (each capture bounded) only when content succeeded; a failed capture is
+        // recorded instead of dropped.
+        let screenshots = if outcome.is_ok() && self.options.screenshots {
             // Best-effort cookie-banner removal before capture (fail-soft).
             if self.options.screenshot_hide_cookie_banners || self.options.screenshot_hide_selector.is_some() {
                 let _ = tokio::time::timeout(
@@ -226,23 +225,17 @@ impl BrowserRenderer {
                 // separately inside screenshot::capture).
                 tokio::time::sleep(Duration::from_millis(400)).await;
             }
-            match tokio::time::timeout(
-                Duration::from_secs(30),
-                crate::browser::screenshot::capture(&page, &self.options, url),
-            )
-            .await
-            {
-                Ok(Ok(p)) => screenshot_path = Some(p),
-                Ok(Err(e)) => screenshot_error = Some(e),
-                Err(_) => screenshot_error = Some("screenshot timed out".to_string()),
-            }
-        }
+            crate::browser::screenshot::capture_all(&page, &self.options, url).await
+        } else {
+            crate::browser::screenshot::Screenshots::default()
+        };
 
         // Cleanup — ALWAYS abort the collector tasks and close the page, on success and error.
         let mut diagnostics = collector.finish();
         diagnostics.render_total_ms = start.elapsed().as_millis() as u64;
-        diagnostics.screenshot_path = screenshot_path;
-        diagnostics.screenshot_error = screenshot_error;
+        diagnostics.screenshot_path = screenshots.first;
+        diagnostics.extra_screenshots = screenshots.extra;
+        diagnostics.screenshot_error = screenshots.error;
         // A navigation that hit the hard timeout (readiness signal never reached) → record a
         // warning so the page isn't reported as fully OK despite an incomplete render.
         if nav_timed_out && outcome.is_ok() {

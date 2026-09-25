@@ -67,6 +67,8 @@ pub struct BrowserDiagnostics {
     pub network_errors: Vec<NetworkError>,
     pub violations: Vec<SecurityIssue>,
     pub screenshot_path: Option<String>,
+    /// Screenshots in the further `--screenshot-viewport` sizes (the first size is `screenshot_path`).
+    pub extra_screenshots: Vec<String>,
     /// Set when rendering failed and the crawler fell back to the plain HTTP response.
     pub render_error: Option<String>,
     /// Set when the screenshot capture failed (carries the reason).

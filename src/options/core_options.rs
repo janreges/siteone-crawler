@@ -964,21 +964,14 @@ impl CoreOptions {
                     core.browser_wait
                 )));
             }
-            // Viewport must be WxH (otherwise it would silently fall back to 1920x1080).
-            let viewport_ok = core
-                .screenshot_viewport
-                .split_once(['x', 'X'])
-                .map(|(w, h)| {
-                    matches!(
-                        (w.trim().parse::<u32>(), h.trim().parse::<u32>()),
-                        (Ok(w), Ok(h)) if w > 0 && h > 0
-                    )
-                })
-                .unwrap_or(false);
-            if !viewport_ok {
+            // Viewports must be WxH sizes or presets (otherwise they would silently fall back to
+            // 1920x1080).
+            if let Err(reason) = crate::browser::viewport::parse_viewports(&core.screenshot_viewport) {
                 return Err(CrawlerError::Config(format!(
-                    "Invalid --screenshot-viewport '{}'. Use WxH, e.g. 1920x1080.",
-                    core.screenshot_viewport
+                    "Invalid --screenshot-viewport '{}': {}. Example: 1920x1080 or desktop,mobile (at most {} sizes).",
+                    core.screenshot_viewport,
+                    reason,
+                    crate::browser::viewport::MAX_VIEWPORTS
                 )));
             }
             if core.screenshots {
@@ -3891,7 +3884,7 @@ pub fn get_options() -> Options {
             ),
             CrawlerOption::new(
                 "--screenshot-viewport", None, "screenshotViewport", OptionType::String, false,
-                "Viewport size `WxH` used for rendering and viewport screenshots.",
+                "Viewport size(s) for rendering and screenshots: `WxH` (each side up to 16384) or a preset `desktop`, `tablet`, `mobile`. A comma-separated list (up to 5) captures every page in each size; the first one is the render viewport.",
                 Some("1920x1080"), false, false, None,
             ),
             CrawlerOption::new(
@@ -3916,7 +3909,7 @@ pub fn get_options() -> Options {
             ),
             CrawlerOption::new(
                 "--screenshots-animation-width", None, "screenshotsAnimationWidth", OptionType::Int, false,
-                "Animation width in px (2-8192, default 1024); height is derived from the --screenshot-viewport aspect ratio.",
+                "Animation width in px (2-8192, default 1024); height is derived from the aspect ratio of the first --screenshot-viewport size.",
                 Some("1024"), false, false, Some(vec!["2".to_string(), "8192".to_string()]),
             ),
             CrawlerOption::new(
@@ -5031,5 +5024,32 @@ mod tests {
                 .unwrap()
                 .browser_auto_scroll
         );
+    }
+
+    #[cfg(feature = "browser")]
+    #[test]
+    fn screenshot_viewport_accepts_presets_and_lists_and_rejects_the_rest() {
+        let config = h01_config_file();
+        let options = parse_argv(&h01_argv(
+            &config,
+            &["--browser", "--screenshot-viewport=desktop,1280x720,mobile"],
+        ))
+        .unwrap();
+        assert_eq!(options.screenshot_viewport, "desktop,1280x720,mobile");
+
+        for value in [
+            "desktop,phone",
+            "1x1,2x2,3x3,4x4,5x5,6x6",
+            "0x100",
+            "",
+            "1920x1080,20000x20000",
+        ] {
+            let arg = format!("--screenshot-viewport={value}");
+            let error = parse_argv(&h01_argv(&config, &["--browser", &arg])).unwrap_err();
+            assert!(
+                error.to_string().contains("Invalid --screenshot-viewport"),
+                "{value:?}: {error}"
+            );
+        }
     }
 }

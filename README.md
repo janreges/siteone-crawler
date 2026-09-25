@@ -816,12 +816,12 @@ Browser is auto-detected (Chrome/Chromium/Edge/Brave); if none is found you're o
 | `--screenshots` | off | Capture a screenshot of every rendered page (requires `--browser`). |
 | `--screenshots-dir=<dir>` | `tmp/screenshots/` | Output directory for screenshots. |
 | `--screenshot-mode=<m>` | `viewport` | `viewport` (set resolution) or `full-page` (full scroll height). |
-| `--screenshot-viewport=<WxH>` | `1920x1080` | Render/viewport size. |
+| `--screenshot-viewport=<WxH,...>` | `1920x1080` | Render/viewport size: `WxH` or a preset `desktop` (1920x1080), `tablet` (768x1024), `mobile` (390x844). A comma-separated list (up to 5) captures every page in each size; the first one is used for rendering. |
 | `--screenshot-format=<f>` | `png` | `png`, `jpg`, or `webp`. |
 | `--screenshot-quality=<1-100>` | 80 | Quality for `jpg`/`webp`. |
 | `--screenshots-animation=<fmt>` | — | Assemble screenshots into an animation; `gif`, `mp4`, or `gif,mp4`. |
 | `--screenshots-animation-frame-duration=<s>` | 2 | Seconds each page is shown in the animation (0.2–10). |
-| `--screenshots-animation-width=<px>` | 1024 | Output width in pixels; height is derived from `--screenshot-viewport` aspect ratio. |
+| `--screenshots-animation-width=<px>` | 1024 | Output width in pixels; height is derived from the aspect ratio of the first `--screenshot-viewport` size. |
 | `--ffmpeg-path=<path>` | — | Explicit ffmpeg binary (auto-detected from PATH otherwise). Required for MP4. |
 | `--screenshot-hide-cookie-banners` | off | Before each screenshot, try to dismiss/hide cookie consent banners (best-effort). |
 | `--screenshot-hide-selector=<css>` | — | Comma-separated CSS selectors to hide before each screenshot (site-specific banners). |
@@ -851,6 +851,21 @@ infinite feeds always use the full 5 s and keep growing while scrolled (more ite
 use `--browser-auto-scroll=0` when timing or a stable page matters; pages that scroll an inner
 container instead of the document (e.g. `body { height: 100%; overflow: auto }`) are not scrolled.
 
+#### Screenshots in several viewports
+
+`--screenshot-viewport` accepts a comma-separated list of up to 5 sizes — `WxH` values (each side
+at most 16384 px) or the presets `desktop` (1920x1080), `tablet` (768x1024) and `mobile` (390x844):
+
+```bash
+./siteone-crawler --url=https://my.domain.tld --browser --screenshots --screenshot-viewport=desktop,tablet,mobile
+```
+
+The first size is the render viewport: the page is loaded, auto-scrolled and captured in it, and
+the screenshot animation uses it. For each further size the page is resized (device pixel ratio 1,
+desktop mode — only the viewport changes, not the user agent), left to settle and captured again.
+With a single size the file names are unchanged; with several, every file name ends with the size,
+e.g. `example_com_about_c30b28d2_390x844.png`. The "Browser screenshots" table lists one row per file.
+
 #### Screenshot animation
 
 When capturing screenshots (`--browser --screenshots`), you can assemble them into an
@@ -859,7 +874,7 @@ animation in crawl order:
 - `--screenshots-animation=gif,mp4` — formats to produce (`gif`, `mp4`, or both).
 - `--screenshots-animation-frame-duration=2` — seconds each page is shown (0.2–10).
 - `--screenshots-animation-width=1024` — output width in px; height is derived from
-  the `--screenshot-viewport` aspect ratio.
+  the aspect ratio of the first `--screenshot-viewport` size.
 - `--ffmpeg-path=/path/to/ffmpeg` — explicit ffmpeg binary (auto-detected from PATH
   otherwise). **Required for MP4**; GIF works without ffmpeg.
 

@@ -58,7 +58,7 @@ impl AnimationExporter {
                 .screenshots_dir
                 .clone()
                 .unwrap_or_else(|| "tmp/screenshots".to_string()),
-            viewport: parse_viewport(&options.screenshot_viewport),
+            viewport: crate::browser::viewport::first_viewport(&options.screenshot_viewport),
         }
     }
 
@@ -375,14 +375,6 @@ fn parse_formats(s: &str) -> Vec<AnimationFormat> {
     out
 }
 
-/// Parse a `WxH` viewport string, falling back to 1920x1080 (matches the crawler default).
-fn parse_viewport(s: &str) -> (u32, u32) {
-    s.split_once(['x', 'X'])
-        .and_then(|(w, h)| Some((w.trim().parse::<u32>().ok()?, h.trim().parse::<u32>().ok()?)))
-        .filter(|(w, h)| *w > 0 && *h > 0)
-        .unwrap_or((1920, 1080))
-}
-
 /// Round down to the nearest even number (libx264 + yuv420p require even dimensions).
 fn even(n: u32) -> u32 {
     n - (n % 2)
@@ -486,12 +478,6 @@ mod tests {
         assert_eq!(parse_formats("gif,bogus"), vec![AnimationFormat::Gif]);
         assert_eq!(parse_formats("gif,gif"), vec![AnimationFormat::Gif]);
         assert!(parse_formats("").is_empty());
-    }
-
-    #[test]
-    fn parse_viewport_parses_and_falls_back() {
-        assert_eq!(parse_viewport("1280x720"), (1280, 720));
-        assert_eq!(parse_viewport("nonsense"), (1920, 1080));
     }
 
     #[test]

@@ -1,11 +1,13 @@
 // SiteOne Crawler - Browser rendering subsystem
 // (c) Jan Reges <jan.reges@siteone.cz>
 //
-// Optional, opt-in browser rendering mode. Page diagnostics types live here and are
-// always compiled (so `HttpResponse` can carry an inert `Option<BrowserDiagnostics>`),
-// while the actual Chromium driver lives behind the `browser` Cargo feature.
+// Optional, opt-in browser rendering mode. Page diagnostics types and the screenshot
+// viewport parser live here and are always compiled (so `HttpResponse` can carry an inert
+// `Option<BrowserDiagnostics>` and options are validated in every build), while the actual
+// Chromium driver lives behind the `browser` Cargo feature.
 
 pub mod diagnostics;
+pub mod viewport;
 
 #[cfg(feature = "browser")]
 mod auto_scroll;

@@ -1946,3 +1946,87 @@ fn browser_auto_scroll_captures_content_revealed_on_scroll() {
     );
     assert!(!rendered("not-scrolled", &["--browser-auto-scroll=0"]).contains("revealed-on-scroll"));
 }
+
+/// Unknown `--screenshot-viewport` entries are a configuration error (#46).
+#[cfg(feature = "browser")]
+#[test]
+fn screenshot_viewport_rejects_unknown_entries() {
+    let output = run_built_crawler(&[
+        "--config-file=/dev/null",
+        "--url=https://example.com/",
+        "--browser",
+        "--screenshot-viewport=desktop,phone",
+    ]);
+    assert_eq!(output.status.code(), Some(101));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("'phone' is neither WxH nor one of desktop, tablet, mobile"),
+        "stderr: {stderr}"
+    );
+}
+
+/// Width and height of a PNG file, read from its IHDR chunk.
+#[cfg(feature = "browser")]
+fn png_size(path: &Path) -> (u32, u32) {
+    let bytes = std::fs::read(path).expect("screenshot file");
+    let read_u32 = |at: usize| u32::from_be_bytes(bytes[at..at + 4].try_into().expect("4 bytes"));
+    (read_u32(16), read_u32(20))
+}
+
+/// Every page is captured in each `--screenshot-viewport` size, with the size in the file name
+/// and one table row per file (#46).
+#[cfg(feature = "browser")]
+#[test]
+#[ignore]
+fn screenshots_are_captured_in_every_viewport() {
+    let tmp = TempDir::new("viewports");
+    let site = tmp.path.join("site");
+    write_site(&site, 0);
+    let server = LocalServer::start(&site);
+    let shots = tmp.path.join("shots");
+
+    let output = run_built_crawler(&[
+        "--config-file=/dev/null",
+        &format!("--url={}", server.url()),
+        "--single-page",
+        "--browser",
+        "--browser-no-sandbox",
+        "--screenshots",
+        &format!("--screenshots-dir={}", shots.display()),
+        "--screenshot-viewport=desktop,mobile",
+        "--output=json",
+        "--analyzer-filter-regex=/BrowserConsole/",
+        "--http-cache-dir=",
+        "--output-html-report=",
+        "--output-json-file=",
+        "--output-text-file=",
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let files: Vec<std::path::PathBuf> = std::fs::read_dir(&shots)
+        .expect("screenshots dir")
+        .map(|entry| entry.expect("dir entry").path())
+        .collect();
+    assert_eq!(files.len(), 2, "{files:?}");
+    let desktop = files
+        .iter()
+        .find(|f| f.to_string_lossy().ends_with("_1920x1080.png"))
+        .expect("desktop screenshot");
+    let mobile = files
+        .iter()
+        .find(|f| f.to_string_lossy().ends_with("_390x844.png"))
+        .expect("mobile screenshot");
+    assert_eq!(png_size(desktop), (1920, 1080));
+    assert_eq!(png_size(mobile), (390, 844));
+
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).expect("JSON on stdout");
+    let rows = json["tables"]["browser-screenshots"]["rows"]
+        .as_array()
+        .expect("screenshot rows");
+    assert_eq!(rows.len(), 2, "{rows:?}");
+}

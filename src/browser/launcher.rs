@@ -115,10 +115,10 @@ pub async fn launch(options: &CoreOptions, executable: &Path) -> CrawlerResult<(
         builder = builder.respect_https_errors();
     }
 
-    // Viewport used for rendering and viewport screenshots (from --screenshot-viewport).
-    // window_size affects the OS window (headful); viewport sets the actual render surface
-    // (headless otherwise defaults to 800x600).
-    let (vw, vh) = parse_viewport(&options.screenshot_viewport);
+    // Render viewport: the first --screenshot-viewport size (further sizes are applied per
+    // screenshot). window_size affects the OS window (headful); viewport sets the actual render
+    // surface (headless otherwise defaults to 800x600).
+    let (vw, vh) = crate::browser::viewport::first_viewport(&options.screenshot_viewport);
     builder = builder.window_size(vw, vh).viewport(Viewport {
         width: vw,
         height: vh,
@@ -232,26 +232,4 @@ mod tests {
         assert_eq!(proxy_server_arg(None), None);
         assert_eq!(proxy_server_arg(Some("   ")), None);
     }
-
-    #[test]
-    fn viewport_parsing() {
-        assert_eq!(parse_viewport("1280x720"), (1280, 720));
-        assert_eq!(parse_viewport("bad"), (1920, 1080));
-    }
-}
-
-/// Parse a `WxH` viewport string into `(width, height)`, falling back to 1920x1080.
-fn parse_viewport(s: &str) -> (u32, u32) {
-    let mut parts = s.split(['x', 'X']);
-    let w = parts
-        .next()
-        .and_then(|p| p.trim().parse::<u32>().ok())
-        .filter(|&w| w > 0)
-        .unwrap_or(1920);
-    let h = parts
-        .next()
-        .and_then(|p| p.trim().parse::<u32>().ok())
-        .filter(|&h| h > 0)
-        .unwrap_or(1080);
-    (w, h)
 }

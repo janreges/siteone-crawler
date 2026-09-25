@@ -55,13 +55,18 @@ impl Analyzer for BrowserConsoleAnalyzer {
         // sub-request or a screenshot failure) doesn't get masked as "Browser OK".
         let mut pages_with_issues = 0usize;
         let mut screenshot_count = 0usize;
+        let mut screenshot_pages = 0usize;
         let mut screenshot_dir = String::new();
 
         for u in &visited {
             let Some(diag) = status.get_browser_diagnostics(&u.uq_id) else {
                 continue;
             };
-            if let Some(path) = &diag.screenshot_path {
+            if diag.screenshot_path.is_some() || !diag.extra_screenshots.is_empty() {
+                screenshot_pages += 1;
+            }
+            // One row per file: the first --screenshot-viewport size, then the further sizes.
+            for path in diag.screenshot_path.iter().chain(diag.extra_screenshots.iter()) {
                 screenshot_count += 1;
                 if screenshot_dir.is_empty() {
                     screenshot_dir = std::path::Path::new(path)
@@ -250,13 +255,19 @@ impl Analyzer for BrowserConsoleAnalyzer {
         );
 
         if screenshot_count > 0 {
-            status.add_ok_to_summary(
-                "screenshots",
-                &format!(
+            // With several --screenshot-viewport sizes a page has several files.
+            let text = if screenshot_count == screenshot_pages {
+                format!(
                     "Captured {} page screenshot(s) into '{}'.",
                     screenshot_count, screenshot_dir
-                ),
-            );
+                )
+            } else {
+                format!(
+                    "Captured {} screenshot(s) of {} page(s) into '{}'.",
+                    screenshot_count, screenshot_pages, screenshot_dir
+                )
+            };
+            status.add_ok_to_summary("screenshots", &text);
         }
     }
 
@@ -278,5 +289,104 @@ impl Analyzer for BrowserConsoleAnalyzer {
 
     fn get_exec_counts(&self) -> &HashMap<String, usize> {
         self.base.get_exec_counts()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::browser::diagnostics::BrowserDiagnostics;
+    use crate::info::Info;
+    use crate::output::multi_output::MultiOutput;
+    use crate::result::storage::memory_storage::MemoryStorage;
+    use crate::result::visited_url::VisitedUrl;
+    use crate::types::ContentTypeId;
+
+    /// Runs the analyzer over pages with the given screenshot files (the first one is
+    /// `screenshot_path`, the rest `extra_screenshots`); returns the screenshot table's paths and
+    /// the "screenshots" summary text.
+    fn analyze_screenshots(pages: &[&[&str]]) -> (Vec<String>, Option<String>) {
+        let info = Info::new(
+            "SiteOne Crawler".to_string(),
+            "test".to_string(),
+            String::new(),
+            String::new(),
+            String::new(),
+            String::new(),
+            "https://example.com/".to_string(),
+        );
+        let mut status = Status::new(
+            Box::new(MemoryStorage::new(false)),
+            true,
+            info,
+            std::time::Instant::now(),
+        );
+        for (index, files) in pages.iter().enumerate() {
+            let uq_id = format!("page{index:04}");
+            let visited = VisitedUrl::new(
+                uq_id.clone(),
+                String::new(),
+                0,
+                format!("https://example.com/page-{index}"),
+                200,
+                0.1,
+                Some(100),
+                ContentTypeId::Html,
+                Some("text/html".to_string()),
+                None,
+                None,
+                false,
+                true,
+                0,
+                None,
+            );
+            status.add_visited_url(visited, None, None);
+            status.add_browser_diagnostics(
+                &uq_id,
+                BrowserDiagnostics {
+                    screenshot_path: files.first().map(|file| file.to_string()),
+                    extra_screenshots: files.iter().skip(1).map(|file| file.to_string()).collect(),
+                    ..Default::default()
+                },
+            );
+        }
+
+        let mut analyzer = BrowserConsoleAnalyzer::new();
+        analyzer.set_activated(true);
+        analyzer.analyze(&status, &mut MultiOutput::new());
+
+        let paths = status
+            .get_super_table_rows("browser-screenshots")
+            .into_iter()
+            .map(|row| row["path"].clone())
+            .collect();
+        let captured = status
+            .get_summary()
+            .get_items()
+            .iter()
+            .find(|item| item.apl_code == "screenshots")
+            .map(|item| item.text.clone());
+        (paths, captured)
+    }
+
+    #[test]
+    fn screenshots_table_has_one_row_per_file() {
+        let (paths, captured) =
+            analyze_screenshots(&[&["shots/example_com_1920x1080.png", "shots/example_com_390x844.png"]]);
+
+        assert_eq!(paths.len(), 2, "{paths:?}");
+        assert!(paths.contains(&"shots/example_com_1920x1080.png".to_string()));
+        assert!(paths.contains(&"shots/example_com_390x844.png".to_string()));
+        assert_eq!(
+            captured.as_deref(),
+            Some("Captured 2 screenshot(s) of 1 page(s) into 'shots'.")
+        );
+    }
+
+    #[test]
+    fn one_screenshot_per_page_keeps_the_page_count_text() {
+        let (_, captured) = analyze_screenshots(&[&["shots/a.png"], &["shots/b.png"]]);
+
+        assert_eq!(captured.as_deref(), Some("Captured 2 page screenshot(s) into 'shots'."));
     }
 }
