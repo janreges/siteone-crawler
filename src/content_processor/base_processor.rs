@@ -265,6 +265,17 @@ pub fn convert_url_to_relative(
     // Redirect records are not normalized at all (see HtmlProcessor).
     if config.force_relative_urls && is_initial_host_variant(&parsed_target, &config.initial_url) {
         let mut initial_origin = parsed_target.clone();
+        // The crawler fetched the reference resolved against the page: resolve a path relative to it
+        // (`../next`) and dot segments (`./x/../next`), so the lookup finds that fetch
+        if !initial_origin.path.is_empty() {
+            let path = if initial_origin.path.starts_with('/') {
+                initial_origin.path.clone()
+            } else {
+                let base_directory = base_url.path.rfind('/').map_or("/", |i| &base_url.path[..=i]);
+                format!("{}{}", base_directory, initial_origin.path)
+            };
+            initial_origin.path = normalize_path(&path);
+        }
         initial_origin.set_attributes(&config.initial_url, true, true, true);
         initial_origin.url = initial_origin.get_full_url(true, true);
         let is_on_initial_host_twin =
@@ -598,6 +609,7 @@ mod tests {
         cfg.is_external_domain_allowed_for_crawling = Some(allow_www);
         let stored_url: StoredUrlFn = Arc::new(|url: &str| match url {
             "https://example.com/next"
+            | "https://example.com/docs/next"
             | "https://example.com/photo.png"
             | "https://www.example.com/about"
             | "https://www.example.com/img/a.png"
@@ -624,6 +636,21 @@ mod tests {
         ] {
             assert_eq!(
                 convert_url_to_relative(&twin_page, reference, Some(attribute), &cfg),
+                expected,
+                "{reference}"
+            );
+        }
+
+        // References relative to a nested twin page are resolved before the lookup
+        let nested_twin_page = ParsedUrl::parse("https://www.example.com/docs/landing", None);
+        for (reference, attribute, expected) in [
+            ("../next", "href", "../../next.html"),
+            ("./x/../next", "href", "../../docs/next.html"),
+            ("next", "href", "../../docs/next.html"),
+            ("../photo.png", "src", "../../photo.png"),
+        ] {
+            assert_eq!(
+                convert_url_to_relative(&nested_twin_page, reference, Some(attribute), &cfg),
                 expected,
                 "{reference}"
             );

@@ -2816,16 +2816,23 @@ fn force_relative_urls_leads_links_of_a_redirected_www_twin_page_to_the_stored_f
     std::fs::create_dir_all(&site).expect("site dir");
     let server = RedirectServer::start(
         &site,
-        vec![Redirect {
-            host: Some("site.test"),
-            path: Some("/jump"),
-            location: "http://www.site.test:{port}/landing",
-        }],
+        vec![
+            Redirect {
+                host: Some("site.test"),
+                path: Some("/jump"),
+                location: "http://www.site.test:{port}/landing",
+            },
+            Redirect {
+                host: Some("site.test"),
+                path: Some("/jump-deep"),
+                location: "http://www.site.test:{port}/docs/landing",
+            },
+        ],
     );
     let port = server.port();
     std::fs::write(
         site.join("index.html"),
-        r#"<html><head><title>Home</title></head><body><a href="/jump">Jump</a></body></html>"#,
+        r#"<html><head><title>Home</title></head><body><a href="/jump">Jump</a><a href="/jump-deep">Deep</a></body></html>"#,
     )
     .expect("index.html");
     std::fs::write(
@@ -2839,17 +2846,40 @@ fn force_relative_urls_leads_links_of_a_redirected_www_twin_page_to_the_stored_f
     )
     .expect("next.html");
     std::fs::write(site.join("photo.png"), "PNG").expect("png");
+    // references relative to a nested twin page
+    std::fs::create_dir_all(site.join("docs")).expect("docs dir");
+    std::fs::write(
+        site.join("docs/landing.html"),
+        r#"<html><head><title>Docs</title></head><body><a href="../next">Up</a><img src="../photo.png" alt="Photo"></body></html>"#,
+    )
+    .expect("docs/landing.html");
 
-    for (layout, landing, expected) in [
+    for (layout, pages) in [
         (
             None,
-            "_www.site.test/landing.html",
-            [r#"href="../next.html""#, r#"src="../photo.png""#],
+            [
+                (
+                    "_www.site.test/landing.html",
+                    [r#"href="../next.html""#, r#"src="../photo.png""#],
+                ),
+                (
+                    "_www.site.test/docs/landing.html",
+                    [r#"href="../../next.html""#, r#"src="../../photo.png""#],
+                ),
+            ],
         ),
         (
             Some("--offline-export-preserve-url-structure"),
-            "_www.site.test/landing/index.html",
-            [r#"href="../../next/index.html""#, r#"src="../../photo.png""#],
+            [
+                (
+                    "_www.site.test/landing/index.html",
+                    [r#"href="../../next/index.html""#, r#"src="../../photo.png""#],
+                ),
+                (
+                    "_www.site.test/docs/landing/index.html",
+                    [r#"href="../../../next/index.html""#, r#"src="../../../photo.png""#],
+                ),
+            ],
         ),
     ] {
         let export = tmp.path.join(format!("export-{}", layout.is_some()));
@@ -2872,9 +2902,11 @@ fn force_relative_urls_leads_links_of_a_redirected_www_twin_page_to_the_stored_f
             String::from_utf8_lossy(&output.stderr)
         );
 
-        let page = std::fs::read_to_string(export.join(landing)).expect("the redirect target is exported");
-        for reference in expected {
-            assert!(page.contains(reference), "{layout:?}: missing {reference} in {page}");
+        for (landing, expected) in pages {
+            let page = std::fs::read_to_string(export.join(landing)).expect("the redirect target is exported");
+            for reference in expected {
+                assert!(page.contains(reference), "{layout:?}: missing {reference} in {page}");
+            }
         }
         assert_eq!(dangling_references(&export), Vec::<String>::new(), "{layout:?}");
     }
