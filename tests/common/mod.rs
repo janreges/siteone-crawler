@@ -236,3 +236,141 @@ impl Drop for TempDir {
         std::fs::remove_dir_all(&self.path).ok();
     }
 }
+
+/// A redirect rule of `RedirectServer`: a request for `host` (any host when `None`) and `path`
+/// (any path when `None`) gets `301 Moved Permanently` to `location`, in which `{port}` is replaced
+/// by the server port and `{path}` by the request path and query.
+pub struct Redirect {
+    pub host: Option<&'static str>,
+    pub path: Option<&'static str>,
+    pub location: &'static str,
+}
+
+/// Minimal HTTP/1.1 server on 127.0.0.1 for crawls that need redirects, which the built-in
+/// `--serve-offline` server cannot produce. A request matching a `Redirect` rule gets a 301, any
+/// other request the file below `root` (`/x/` → `x/index.html`, `/x` → `x`, `x.html` or
+/// `x/index.html`) or a 404. One request per connection. Stopped when dropped.
+pub struct RedirectServer {
+    port: u16,
+    stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+
+impl RedirectServer {
+    pub fn start(root: &Path, redirects: Vec<Redirect>) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("a free port");
+        let port = listener.local_addr().expect("the local address").port();
+        let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let thread_stop = stop.clone();
+        let root = root.to_path_buf();
+        let thread = std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                if thread_stop.load(std::sync::atomic::Ordering::SeqCst) {
+                    break;
+                }
+                if let Ok(stream) = stream {
+                    redirect_server_respond(stream, &root, &redirects, port);
+                }
+            }
+        });
+        RedirectServer {
+            port,
+            stop,
+            thread: Some(thread),
+        }
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+}
+
+impl Drop for RedirectServer {
+    fn drop(&mut self) {
+        self.stop.store(true, std::sync::atomic::Ordering::SeqCst);
+        // wake up the blocking accept()
+        TcpStream::connect(("127.0.0.1", self.port)).ok();
+        if let Some(thread) = self.thread.take() {
+            thread.join().ok();
+        }
+    }
+}
+
+fn redirect_server_respond(mut stream: TcpStream, root: &Path, redirects: &[Redirect], port: u16) {
+    use std::io::{Read, Write};
+
+    stream.set_read_timeout(Some(Duration::from_secs(5))).ok();
+    let mut request = Vec::new();
+    let mut buffer = [0u8; 4096];
+    while !request.windows(4).any(|window| window == b"\r\n\r\n") {
+        match stream.read(&mut buffer) {
+            Ok(0) | Err(_) => break,
+            Ok(read) => request.extend_from_slice(&buffer[..read]),
+        }
+    }
+    let request = String::from_utf8_lossy(&request);
+    let mut request_line = request.lines().next().unwrap_or("").split_whitespace();
+    let method = request_line.next().unwrap_or("GET");
+    let target = request_line.next().unwrap_or("/");
+    let host = request
+        .lines()
+        .find_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            name.eq_ignore_ascii_case("host").then(|| value.trim())
+        })
+        .unwrap_or("");
+    let host = host.split(':').next().unwrap_or("");
+    let path = target.split(['?', '#']).next().unwrap_or("/");
+
+    let redirect = redirects
+        .iter()
+        .find(|rule| rule.host.is_none_or(|h| h == host) && rule.path.is_none_or(|p| p == path));
+    let (status, content_type, location, body) = if let Some(rule) = redirect {
+        let location = rule
+            .location
+            .replace("{port}", &port.to_string())
+            .replace("{path}", target);
+        ("301 Moved Permanently", "text/html", Some(location), Vec::new())
+    } else {
+        let relative = path.trim_start_matches('/');
+        let candidates = if relative.is_empty() || relative.ends_with('/') {
+            vec![format!("{relative}index.html")]
+        } else {
+            vec![
+                relative.to_string(),
+                format!("{relative}.html"),
+                format!("{relative}/index.html"),
+            ]
+        };
+        let file = candidates
+            .iter()
+            .map(|candidate| root.join(candidate))
+            .find(|file| !path.contains("..") && file.is_file());
+        match file {
+            Some(file) => {
+                let content_type = match file.extension().and_then(|ext| ext.to_str()) {
+                    Some("html") => "text/html; charset=utf-8",
+                    Some("css") => "text/css",
+                    Some("png") => "image/png",
+                    _ => "application/octet-stream",
+                };
+                ("200 OK", content_type, None, std::fs::read(file).unwrap_or_default())
+            }
+            None => ("404 Not Found", "text/html", None, b"Not found".to_vec()),
+        }
+    };
+
+    let mut response = format!(
+        "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n",
+        body.len()
+    );
+    if let Some(location) = location {
+        response.push_str(&format!("Location: {location}\r\n"));
+    }
+    response.push_str("\r\n");
+    stream.write_all(response.as_bytes()).ok();
+    if method != "HEAD" {
+        stream.write_all(&body).ok();
+    }
+    stream.flush().ok();
+}

@@ -2650,7 +2650,7 @@ pub fn get_options() -> Options {
             ),
             CrawlerOption::new(
                 "--force-relative-urls", Some("-fru"), "forceRelativeUrls", OptionType::Bool, false,
-                "Normalize all discovered URLs matching the initial domain (incl. www variant and protocol differences) to relative paths. Prevents duplicate files in offline export when the site uses inconsistent URL formats.",
+                "Normalize all discovered URLs matching the initial domain (incl. www variant and protocol differences) to canonical form. Prevents duplicate files in offline export when the site uses inconsistent URL formats (http/https, www/non-www): links to these variants become relative links to the same local files.",
                 Some("false"), false, false, None,
             ),
             CrawlerOption::new(

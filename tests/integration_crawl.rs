@@ -10,7 +10,10 @@
 
 mod common;
 
-use common::{LocalServer, RecordingServer, Route, TempDir, run_built_crawler, run_crawler, run_crawler_json};
+use common::{
+    LocalServer, RecordingServer, Redirect, RedirectServer, Route, TempDir, run_built_crawler, run_crawler,
+    run_crawler_json,
+};
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -2029,4 +2032,264 @@ fn screenshots_are_captured_in_every_viewport() {
         .as_array()
         .expect("screenshot rows");
     assert_eq!(rows.len(), 2, "{rows:?}");
+}
+
+/// #35: with --force-relative-urls a link to the https variant of the initial URL is fetched on the
+/// initial scheme *and port* (it used to be requested as http://host:443/…), so the page is exported.
+#[test]
+fn force_relative_urls_fetches_scheme_variants_from_the_initial_port() {
+    let tmp = TempDir::new("force-relative");
+    let site = tmp.path.join("site");
+    std::fs::create_dir_all(&site).expect("site dir");
+    std::fs::write(
+        site.join("index.html"),
+        r#"<html><head><title>Home</title></head><body><a href="https://127.0.0.1/page4.html">Page 4</a></body></html>"#,
+    )
+    .expect("index.html");
+    std::fs::write(
+        site.join("page4.html"),
+        r#"<html><head><title>Page 4</title></head><body><a href="/">Home</a></body></html>"#,
+    )
+    .expect("page4.html");
+    let server = LocalServer::start(&site);
+    let export = tmp.path.join("export");
+
+    let output = run_built_crawler(&[
+        "--config-file=/dev/null",
+        &format!("--url={}", server.url()),
+        LOCAL_ANALYZERS,
+        "--http-cache-dir=",
+        "--force-relative-urls",
+        &format!("--offline-export-dir={}", export.display()),
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    assert!(
+        export.join("page4.html").is_file(),
+        "https://127.0.0.1/page4.html is fetched from the local server and exported"
+    );
+    let index = std::fs::read_to_string(export.join("index.html")).expect("index.html");
+    assert!(index.contains(r#"href="page4.html""#), "{index}");
+}
+
+/// All files below `dir`, recursively.
+fn exported_files(dir: &Path) -> Vec<std::path::PathBuf> {
+    let mut files = Vec::new();
+    for entry in std::fs::read_dir(dir).expect("export dir").flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            files.extend(exported_files(&path));
+        } else {
+            files.push(path);
+        }
+    }
+    files
+}
+
+/// Local links, asset references and meta-refresh targets of the exported HTML, CSS and Markdown
+/// files that do not resolve to an exported file, and meta refreshes that reload their own page
+/// (fragments and query strings ignored, absolute URLs skipped).
+fn dangling_references(export: &Path) -> Vec<String> {
+    let html_reference = regex::Regex::new(r#"\s(?:href|src|srcset)="([^"]*)""#).unwrap();
+    let meta_refresh_reference = regex::Regex::new(r#"(?i)<meta[^>]*\burl=([^"'>\s]+)"#).unwrap();
+    let css_reference = regex::Regex::new(r#"url\(['"]?([^'")]+)['"]?\)"#).unwrap();
+    let markdown_reference = regex::Regex::new(r"\]\(([^)\s]+)\)").unwrap();
+    let mut dangling = Vec::new();
+    for file in exported_files(export) {
+        let patterns = match file.extension().and_then(|ext| ext.to_str()) {
+            Some("html") => vec![&html_reference, &meta_refresh_reference],
+            Some("css") => vec![&css_reference],
+            Some("md") => vec![&markdown_reference],
+            _ => continue,
+        };
+        let text = std::fs::read_to_string(&file).expect("exported text file");
+        let directory = file.parent().expect("parent dir");
+        for pattern in patterns {
+            for caps in pattern.captures_iter(&text) {
+                for candidate in caps[1].split(", ") {
+                    let reference = candidate.split_whitespace().next().unwrap_or("");
+                    let target = reference.split(['#', '?']).next().unwrap_or("");
+                    // fragment-only links, absolute URLs and other schemes (mailto:, data:, …)
+                    if target.is_empty() || reference.contains(':') || reference.starts_with("//") {
+                        continue;
+                    }
+                    let resolved = directory.join(target);
+                    let problem = if !resolved.is_file() {
+                        "missing"
+                    } else if std::ptr::eq(pattern, &meta_refresh_reference)
+                        && resolved.canonicalize().ok() == file.canonicalize().ok()
+                    {
+                        "reloads itself"
+                    } else {
+                        continue;
+                    };
+                    dangling.push(format!(
+                        "{} -> {} ({problem})",
+                        file.strip_prefix(export).unwrap().display(),
+                        reference
+                    ));
+                }
+            }
+        }
+    }
+    dangling
+}
+
+/// #35: when the initial URL redirects to its www twin, the pages are stored under
+/// `_www.site.test/` and the root holds the redirect records. With --force-relative-urls every
+/// record leads to the twin's copy (never to itself) and the pages keep their links to that copy.
+#[test]
+fn force_relative_urls_exports_a_site_redirecting_to_its_www_twin() {
+    let tmp = TempDir::new("force-relative-redirect");
+    let site = tmp.path.join("site");
+    std::fs::create_dir_all(site.join("img")).expect("site dir");
+    let server = RedirectServer::start(
+        &site,
+        vec![Redirect {
+            host: Some("site.test"),
+            path: None,
+            location: "http://www.site.test:{port}{path}",
+        }],
+    );
+    let port = server.port();
+    std::fs::write(
+        site.join("index.html"),
+        format!(
+            r#"<html><head><title>Home</title><link rel="stylesheet" href="/style.css"></head><body>
+<a href="/about">About</a> <a href="http://site.test:{port}/contact">Contact</a> <img src="/img/a.png" alt="a">
+</body></html>"#
+        ),
+    )
+    .expect("index.html");
+    std::fs::write(
+        site.join("about.html"),
+        r#"<html><head><title>About</title></head><body><a href="/">Home</a></body></html>"#,
+    )
+    .expect("about.html");
+    std::fs::write(
+        site.join("contact.html"),
+        r#"<html><head><title>Contact</title></head><body><a href="/about">About</a></body></html>"#,
+    )
+    .expect("contact.html");
+    std::fs::write(site.join("style.css"), "body{background:url(/img/a.png)}").expect("css");
+    std::fs::write(site.join("img/a.png"), "PNG").expect("png");
+    let export = tmp.path.join("export");
+
+    let output = run_built_crawler(&[
+        "--config-file=/dev/null",
+        &format!("--url=http://site.test:{port}/"),
+        &format!("--resolve=site.test:{port}:127.0.0.1"),
+        &format!("--resolve=www.site.test:{port}:127.0.0.1"),
+        LOCAL_ANALYZERS,
+        "--http-cache-dir=",
+        "--force-relative-urls",
+        &format!("--offline-export-dir={}", export.display()),
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    for file in ["index.html", "about.html", "contact.html", "style.css", "img/a.png"] {
+        let copy = format!("_www.site.test/{file}");
+        assert!(export.join(&copy).is_file(), "{copy} is exported");
+    }
+    let record = std::fs::read_to_string(export.join("index.html")).expect("index.html");
+    assert!(record.contains("url=_www.site.test/index.html"), "{record}");
+    let page = std::fs::read_to_string(export.join("_www.site.test/index.html")).expect("the www copy");
+    for expected in [r#"href="style.css""#, r#"href="about.html""#, r#"src="img/a.png""#] {
+        assert!(page.contains(expected), "missing {expected} in {page}");
+    }
+    assert_eq!(dangling_references(&export), Vec::<String>::new());
+}
+
+/// #35: with --force-relative-urls, links to the http/https and www/non-www variants of the initial
+/// URL are fetched from the initial origin and lead to the same local files. `--resolve` points the
+/// test host to the local server, so no DNS is needed.
+#[test]
+fn force_relative_urls_exports_www_and_scheme_variants_as_the_same_files() {
+    let tmp = TempDir::new("force-relative-www");
+    let site = tmp.path.join("site");
+    std::fs::create_dir_all(site.join("img")).expect("site dir");
+    std::fs::write(
+        site.join("index.html"),
+        r#"<html><head><title>Home</title><link rel="stylesheet" href="https://www.site.test/style.css"></head><body>
+<a href="http://www.site.test/page1">1</a> <a href="https://site.test/page2">2</a>
+<a href="https://www.site.test/page3">3</a> <img src="//www.site.test/img/a.png" alt="a">
+<a href="https://www.site.test/">Home</a>
+</body></html>"#,
+    )
+    .expect("index.html");
+    for page in ["page1", "page2", "page3"] {
+        std::fs::write(
+            site.join(format!("{page}.html")),
+            format!(r#"<html><head><title>{page}</title></head><body><a href="https://www.site.test/">Home</a></body></html>"#),
+        )
+        .expect("page");
+    }
+    std::fs::write(
+        site.join("style.css"),
+        "body{background:url(https://www.site.test/img/a.png)}",
+    )
+    .expect("css");
+    std::fs::write(site.join("img/a.png"), "PNG").expect("png");
+    let server = LocalServer::start(&site);
+    let port = server
+        .url()
+        .trim_end_matches('/')
+        .rsplit(':')
+        .next()
+        .unwrap()
+        .to_string();
+    let export = tmp.path.join("export");
+
+    let output = run_built_crawler(&[
+        "--config-file=/dev/null",
+        &format!("--url=http://site.test:{port}/"),
+        &format!("--resolve=site.test:{port}:127.0.0.1"),
+        LOCAL_ANALYZERS,
+        "--http-cache-dir=",
+        "--force-relative-urls",
+        &format!("--offline-export-dir={}", export.display()),
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    for file in [
+        "index.html",
+        "page1.html",
+        "page2.html",
+        "page3.html",
+        "style.css",
+        "img/a.png",
+    ] {
+        assert!(export.join(file).is_file(), "{file} is exported");
+    }
+    assert!(!export.join("_www.site.test").exists(), "no copy of the www variant");
+    assert_eq!(dangling_references(&export), Vec::<String>::new());
+    let index = std::fs::read_to_string(export.join("index.html")).expect("index.html");
+    for expected in [
+        r#"href="style.css""#,
+        r#"href="page1.html""#,
+        r#"href="page2.html""#,
+        r#"href="page3.html""#,
+        r#"src="img/a.png""#,
+    ] {
+        assert!(index.contains(expected), "missing {expected} in {index}");
+    }
+    let page1 = std::fs::read_to_string(export.join("page1.html")).expect("page1.html");
+    assert!(page1.contains(r#"href="index.html""#), "{page1}");
+    let css = std::fs::read_to_string(export.join("style.css")).expect("style.css");
+    assert!(css.contains("url(img/a.png)"), "{css}");
 }

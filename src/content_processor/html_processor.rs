@@ -507,7 +507,17 @@ impl HtmlProcessor {
         result = RE_PORT_NORMALIZE.replace_all(&result, "$1").to_string();
 
         // Build patterns for href=, src=, url=, url( attributes
-        let escaped_root = regex::escape(&base_url_root);
+        // With --force-relative-urls every http/https and www/non-www variant of the initial origin
+        // counts as the origin of a page stored under the initial host (#35)
+        let escaped_root = if self.config.force_relative_urls && url.host == self.config.initial_url.host {
+            let initial_host = self.config.initial_url.host.as_deref().unwrap_or("");
+            format!(
+                r"(?:https?:)?//(?:www\.)?{}/",
+                regex::escape(initial_host.strip_prefix("www.").unwrap_or(initial_host))
+            )
+        } else {
+            regex::escape(&base_url_root)
+        };
         let attr_patterns = [
             format!(r#"(?i)(href=(["'])){esc}([^"']*)(["'])"#, esc = escaped_root),
             format!(r#"(?i)(src=(["'])){esc}([^"']*)(["'])"#, esc = escaped_root),
@@ -544,16 +554,7 @@ impl HtmlProcessor {
 
     /// Offline (relative) form of one URL found in `attribute` of the page at `parsed_base_url`.
     fn convert_url(&self, parsed_base_url: &ParsedUrl, url: &str, attribute: Option<&str>) -> String {
-        convert_url_to_relative(
-            parsed_base_url,
-            url,
-            &self.config.initial_url,
-            attribute,
-            self.config.offline_export_preserve_urls,
-            self.config.offline_export_no_url_rewriting,
-            self.config.is_domain_allowed_for_static_files.clone(),
-            self.config.is_external_domain_allowed_for_crawling.clone(),
-        )
+        convert_url_to_relative(parsed_base_url, url, attribute, &self.config)
     }
 
     /// Offline form of one attribute value: a single URL, or a candidate list for `srcset` and
@@ -1453,5 +1454,68 @@ mod tests {
         let mut html = format!("<html><head></head><body>{script}</body></html>");
         processor.apply_content_changes_for_offline_version(&mut html, ContentTypeId::Html, &page, false);
         assert!(html.contains(script), "{html}");
+    }
+
+    #[test]
+    fn force_relative_urls_keeps_links_of_a_page_stored_under_the_www_twin() {
+        // #35: when the initial URL redirects to its www twin, the pages are stored under _www.host/
+        // and their links stay within that copy
+        let mut config = make_config();
+        config.force_relative_urls = true;
+        let allow_www: crate::content_processor::base_processor::DomainAllowFn =
+            std::sync::Arc::new(|domain: &str| domain == "www.example.com");
+        config.is_external_domain_allowed_for_crawling = Some(allow_www);
+        let processor = HtmlProcessor::new(config);
+        let page = ParsedUrl::parse("https://www.example.com/", None);
+        let mut html = r#"<html><head><link rel="stylesheet" href="/style.css"></head><body>
+<a href="/about">About</a> <a href="https://www.example.com/contact">Contact</a>
+<a href="https://example.com/news">News</a> <img srcset="https://www.example.com/img/a.jpg 2x">
+</body></html>"#
+            .to_string();
+        processor.apply_content_changes_for_offline_version(&mut html, ContentTypeId::Html, &page, false);
+        for expected in [
+            r#"href="style.css""#,
+            r#"href="about.html""#,
+            r#"href="contact.html""#,
+            r#"srcset="img/a.jpg 2x""#,
+            // a link to the initial host leads to its redirect record
+            r#"href="../news.html""#,
+        ] {
+            assert!(html.contains(expected), "missing {expected} in {html}");
+        }
+    }
+
+    #[test]
+    fn force_relative_urls_links_www_and_scheme_variants_to_local_files() {
+        // #35: variants of the initial host are the initial host in the offline export
+        let mut config = make_config();
+        config.force_relative_urls = true;
+        let processor = HtmlProcessor::new(config);
+        let page = ParsedUrl::parse("https://example.com/", None);
+        let mut html = r#"<html><head></head><body>
+<a href="http://www.example.com/page1">1</a>
+<a href="https://www.example.com/page2">2</a>
+<a href="http://example.com/page3">3</a>
+<img src="//www.example.com/img/a.jpg" srcset="https://www.example.com/img/b.jpg 2x">
+<svg><use xlink:href="https://www.example.com/icons.svg#logo"></use></svg>
+<a href="www.example.com/page7">7</a>
+</body></html>"#
+            .to_string();
+        processor.apply_content_changes_for_offline_version(&mut html, ContentTypeId::Html, &page, false);
+        for expected in [
+            r#"href="page1.html""#,
+            r#"href="page2.html""#,
+            r#"href="page3.html""#,
+            r#" src="img/a.jpg""#,
+            r#" srcset="img/b.jpg 2x""#,
+            // attributes the rewriting passes skip still lose the variant origin
+            r#"xlink:href="/icons.svg#logo""#,
+            // a scheme-less "www.example.com/…" is a relative path by the URL standard, converted
+            // like any other relative path and not treated as the initial host
+            r#"href="www.example.com/page7.com""#,
+        ] {
+            assert!(html.contains(expected), "missing {expected} in {html}");
+        }
+        assert!(!html.contains("_www.example.com"), "{html}");
     }
 }

@@ -1281,13 +1281,12 @@ impl Crawler {
             let initial_host_no_www = initial_host.strip_prefix("www.").unwrap_or(initial_host);
 
             if url_host_no_www.eq_ignore_ascii_case(initial_host_no_www) {
-                // Normalize host to match initial URL
-                if url.host.as_deref() != initial_url.host.as_deref() {
+                // Normalize a www/scheme variant to the initial origin: host, scheme and the port that
+                // belongs to them, otherwise https://www.site/ would be requested as http://site:443/ (#35)
+                if url.host.as_deref() != initial_url.host.as_deref() || url.scheme != initial_url.scheme {
                     url.host = initial_url.host.clone();
-                }
-                // Normalize scheme to match initial URL
-                if url.scheme != initial_url.scheme {
                     url.scheme = initial_url.scheme.clone();
+                    url.port = initial_url.port;
                 }
                 // Rebuild the url string
                 url.url = url.get_full_url(true, true);
@@ -2320,6 +2319,34 @@ mod tests {
         Crawler::normalize_url_to_initial(&mut url, &initial);
         assert_eq!(url.path, "/some/deep/path");
         assert_eq!(url.query.as_deref(), Some("q=1"));
+    }
+
+    #[test]
+    fn normalize_switches_port_with_scheme() {
+        // #35: https://www.site/… must be requested on the initial scheme *and* port, not http://site:443/…
+        let initial = ParsedUrl::parse("http://site.test:18434/", None);
+        let mut url = ParsedUrl::parse("https://www.site.test/page4", None);
+        Crawler::normalize_url_to_initial(&mut url, &initial);
+        assert_eq!(url.get_full_url(true, false), "http://site.test:18434/page4");
+
+        let initial = ParsedUrl::parse("https://example.com/", None);
+        let mut url = ParsedUrl::parse("http://www.example.com/page", None);
+        Crawler::normalize_url_to_initial(&mut url, &initial);
+        assert_eq!(url.get_full_url(true, false), "https://example.com/page");
+    }
+
+    #[test]
+    fn normalize_moves_www_variant_to_the_initial_port() {
+        // #35: a www variant on the initial scheme is the initial origin too, port included
+        let initial = ParsedUrl::parse("http://site.test:18434/", None);
+        let mut url = ParsedUrl::parse("http://www.site.test/page1", None);
+        Crawler::normalize_url_to_initial(&mut url, &initial);
+        assert_eq!(url.get_full_url(true, false), "http://site.test:18434/page1");
+
+        // a URL on the initial host and scheme keeps its explicit port
+        let mut url = ParsedUrl::parse("http://site.test:3000/api", None);
+        Crawler::normalize_url_to_initial(&mut url, &initial);
+        assert_eq!(url.get_full_url(true, false), "http://site.test:3000/api");
     }
 
     #[test]

@@ -573,7 +573,7 @@ For a clearer list, I recommend going to the documentation: 🌐 https://crawler
 | `--keep-query-param=<name>` | Keep only the specified query parameter(s) in discovered URLs; all others are removed.<br>Can be specified multiple times. If `--remove-query-params` is also set, all parameters<br>are removed regardless. |
 | `--add-random-query-params` | Add random query parameters to each URL to bypass caches. |
 | `--transform-url=<from->to>` | Transform URLs before crawling. Use `from -> to` for simple replacement or `/regex/ -> replacement`.<br>Can be specified multiple times. |
-| `--force-relative-urls` | Normalize all discovered URLs matching the initial domain (incl. www variant and protocol<br>differences) to canonical form. Prevents duplicate files in offline export when the site<br>uses inconsistent URL formats (http/https, www/non-www). |
+| `--force-relative-urls` | Normalize all discovered URLs matching the initial domain (incl. www variant and protocol<br>differences) to canonical form. Prevents duplicate files in offline export when the site<br>uses inconsistent URL formats (http/https, www/non-www): links to these variants become<br>relative links to the same local files. A scheme-less `www.example.com/page` is a relative<br>path by the URL standard and is not treated as the initial host. |
 | `--ignore-robots-txt` | Ignore robots.txt content. |
 | `--ignore-html-comments` | Ignore URLs found inside HTML comments (`<!-- ... -->`), which search engines also<br>ignore, so commented links are not crawled or reported as broken. |
 | `--http-cache-dir=<dir>` | Cache dir for HTTP responses. Disable with `--http-cache-dir='off'` or `--no-cache`.<br>Default is `~/.cache/siteone-crawler/http-cache` (XDG-compliant, respects `$XDG_CACHE_HOME`). |

@@ -104,8 +104,6 @@ impl ContentProcessor for CssProcessor {
         url: &ParsedUrl,
         _remove_unwanted_code: bool,
     ) {
-        let initial_url = &self.config.initial_url;
-
         *content = RE_CSS_URL_OFFLINE
             .replace_all(content, |caps: &regex::Captures| {
                 let quote = caps.get(1).map_or("", |m| m.as_str());
@@ -116,16 +114,7 @@ impl ContentProcessor for CssProcessor {
                     return caps.get(0).map_or("", |m| m.as_str()).to_string();
                 }
 
-                let relative_url = convert_url_to_relative(
-                    url,
-                    found_url,
-                    initial_url,
-                    None,
-                    self.config.offline_export_preserve_urls,
-                    self.config.offline_export_no_url_rewriting,
-                    self.config.is_domain_allowed_for_static_files.clone(),
-                    self.config.is_external_domain_allowed_for_crawling.clone(),
-                );
+                let relative_url = convert_url_to_relative(url, found_url, None, &self.config);
                 format!("url({}{}{})", quote, relative_url, quote)
             })
             .to_string();
