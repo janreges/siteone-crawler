@@ -68,3 +68,46 @@ fn technologies_table_reaches_text_json_and_html_outputs() {
         "the HTML report has a Technologies tab"
     );
 }
+
+#[test]
+fn deeply_nested_label_does_not_abort_the_crawl() {
+    // The label-text walk must not recurse once per nesting level: a <label> wrapping thousands of
+    // nested elements overflowed a crawler worker's stack and aborted the whole process (#112).
+    let tmp = TempDir::new("deep-label");
+    let site = tmp.path.join("site");
+    std::fs::create_dir_all(&site).expect("site dir");
+    let depth = 20_000;
+    std::fs::write(
+        site.join("index.html"),
+        format!(
+            r#"<!DOCTYPE html><html lang="en"><head><title>Deep</title></head><body><main><label for="q">{}{}</label><input id="q"></main></body></html>"#,
+            "<span>".repeat(depth),
+            "</span>".repeat(depth)
+        ),
+    )
+    .expect("index.html");
+    let server = LocalServer::start(&site);
+
+    let output = run_crawler(&[
+        "--config-file=/dev/null",
+        &format!("--url={}", server.url()),
+        "--analyzer-filter-regex=/Accessibility/",
+        "--http-cache-dir=",
+        "--output=json",
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "status: {:?}, stderr: {}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).expect("JSON on stdout");
+    let form_labels = json["summary"]["items"]
+        .as_array()
+        .expect("summary items")
+        .iter()
+        .find(|item| item["aplCode"] == "pages-without-form-labels")
+        .expect("form-label summary item");
+    assert_eq!(form_labels["status"], "WARNING", "the label has no text: {form_labels}");
+}

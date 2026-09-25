@@ -421,7 +421,7 @@ Summarizes results from accessibility checks.
 
 *   **Analysis name:** The specific accessibility check.
 *   **OK / Notice / Warning / Critical:** Counts for each severity level.
-*   **Missing form labels:** a control counts as labelled by a `<label for>` or wrapping `<label>` with text, `aria-label`, `aria-labelledby`, `title` or (for `<input>`/`<textarea>`) a non-empty `placeholder`, like axe's `label` rule. Controls hidden from assistive technology (`hidden`, `aria-hidden="true"`, inline `display:none`/`visibility:hidden` on the control or an ancestor) are skipped.
+*   **Missing form labels:** a control counts as labelled by a `<label for>` or wrapping `<label>` with text (its own text, a nested image's `alt` or an `aria-label` inside it, e.g. on an SVG icon), `aria-label`, `aria-labelledby`, `title` or (for `<input>`/`<textarea>`) a non-empty `placeholder`, like axe's `label` rule. Controls hidden from assistive technology (`hidden`, `aria-hidden="true"`, inline `display:none` on the control or an ancestor, or an inline `visibility:hidden`/`collapse` that no nearer element overrides; comments, custom properties and overridden declarations in the `style` attribute do not count) are skipped.
 
 ### 3.15. Source Domains
 

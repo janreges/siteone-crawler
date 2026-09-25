@@ -744,44 +744,99 @@ fn input_is_labeled(input: &scraper::ElementRef, document: &Html) -> bool {
         .any(|el| el.value().name() == "label" && label_has_text(&el))
 }
 
-/// Does a <label> have text of its own? Text inside nested form controls (the options of a wrapped
-/// <select>, a <textarea> value) and scripts does not count; the alt text of a nested image does.
+/// Does a <label> have text of its own? Its text, the alt text of a nested image and the aria-label
+/// of the label or of an element in it (e.g. an SVG icon) count; nested form controls (the options
+/// of a wrapped <select>, a <textarea> value, their aria-label) and scripts do not.
+/// The walk keeps its own stack: recursing once per nesting level overflows on deeply nested markup.
 fn label_has_text(label: &scraper::ElementRef) -> bool {
-    fn has_text(node: ego_tree::NodeRef<scraper::Node>) -> bool {
-        node.children().any(|child| match child.value() {
-            scraper::Node::Text(text) => !text.trim().is_empty(),
+    let mut pending: Vec<ego_tree::NodeRef<scraper::Node>> = vec![**label];
+    while let Some(node) = pending.pop() {
+        match node.value() {
+            scraper::Node::Text(text) if !text.trim().is_empty() => return true,
             scraper::Node::Element(el) => match el.name() {
-                "select" | "textarea" | "script" | "style" => false,
-                "img" => attr_non_empty(el.attr("alt")),
-                _ => has_text(child),
+                "input" | "select" | "textarea" | "script" | "style" => {}
+                _ if attr_non_empty(el.attr("aria-label")) => return true,
+                "img" if attr_non_empty(el.attr("alt")) => return true,
+                _ => pending.extend(node.children()),
             },
-            _ => false,
-        })
+            _ => {}
+        }
     }
-    attr_non_empty(label.value().attr("aria-label")) || has_text(**label)
+    false
 }
 
 /// Is the control hidden from assistive technology: a `hidden` attribute, aria-hidden="true" or an
-/// inline display:none / visibility:hidden on the control or on an ancestor? Nobody can reach such
-/// a control, so it needs no label.
+/// inline display:none on the control or on an ancestor, or an inline visibility:hidden/collapse on
+/// the nearest of them that sets `visibility` (it is inherited, so a child can make itself visible
+/// again)? Nobody can reach such a control, so it needs no label.
 fn is_hidden_from_assistive_tech(element: &scraper::ElementRef) -> bool {
-    std::iter::once(*element)
-        .chain(element.ancestors().filter_map(scraper::ElementRef::wrap))
-        .any(|el| {
-            let v = el.value();
-            let inline_hidden = v.attr("style").is_some_and(|style| {
-                let style = style
-                    .chars()
-                    .filter(|c| !c.is_whitespace())
-                    .collect::<String>()
-                    .to_ascii_lowercase();
-                style.contains("display:none") || style.contains("visibility:hidden")
-            });
-            v.attr("hidden").is_some()
-                || v.attr("aria-hidden")
-                    .is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
-                || inline_hidden
-        })
+    let mut visibility_decided = false;
+    for el in std::iter::once(*element).chain(element.ancestors().filter_map(scraper::ElementRef::wrap)) {
+        let v = el.value();
+        if v.attr("hidden").is_some()
+            || v.attr("aria-hidden")
+                .is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+        {
+            return true;
+        }
+        let Some(style) = v.attr("style") else {
+            continue;
+        };
+        if inline_style_value(style, "display").as_deref() == Some("none") {
+            return true;
+        }
+        if !visibility_decided
+            && let Some(visibility) = inline_style_value(style, "visibility")
+            && !matches!(visibility.as_str(), "inherit" | "unset")
+        {
+            if matches!(visibility.as_str(), "hidden" | "collapse") {
+                return true;
+            }
+            visibility_decided = true;
+        }
+    }
+    false
+}
+
+/// The lower-cased value an inline `style` attribute gives `property`: comments are ignored, the
+/// property name must match exactly (so `--x-display` is not `display`), and a later declaration
+/// wins unless an earlier one is `!important`.
+fn inline_style_value(style: &str, property: &str) -> Option<String> {
+    let mut css = String::with_capacity(style.len());
+    let mut rest = style;
+    while let Some(start) = rest.find("/*") {
+        css.push_str(&rest[..start]);
+        css.push(' ');
+        rest = rest[start + 2..]
+            .find("*/")
+            .map_or("", |end| &rest[start + 2 + end + 2..]);
+    }
+    css.push_str(rest);
+
+    let mut effective: Option<(String, bool)> = None;
+    for declaration in css.split(';') {
+        let Some((name, value)) = declaration.split_once(':') else {
+            continue;
+        };
+        if !name.trim().eq_ignore_ascii_case(property) {
+            continue;
+        }
+        let mut value = value.trim().to_ascii_lowercase();
+        let important = match value.rfind('!') {
+            Some(bang) if value[bang + 1..].trim() == "important" => {
+                value.truncate(bang);
+                true
+            }
+            _ => false,
+        };
+        if effective
+            .as_ref()
+            .is_none_or(|(_, was_important)| important || !was_important)
+        {
+            effective = Some((value.trim_end().to_string(), important));
+        }
+    }
+    effective.map(|(value, _)| value)
 }
 
 #[cfg(test)]
@@ -1005,6 +1060,20 @@ mod tests {
     }
 
     #[test]
+    fn aria_label_inside_a_label_counts_as_its_text() {
+        for html in [
+            r#"<html><body><label for="q"><svg role="img" aria-label="Search"></svg></label><input id="q"></body></html>"#,
+            r#"<html><body><label for="q"><span aria-label="Search"></span></label><input id="q"></body></html>"#,
+            r#"<html><body><label><svg role="img" aria-label="Search"></svg><input id="q"></label></body></html>"#,
+        ] {
+            assert!(form_label_warnings(html).is_empty(), "expected no finding for {html}");
+        }
+        // The name of a nested form control is still not text of the label.
+        let nested_control = r#"<html><body><label for="q"><select aria-label="City"><option>Prague</option></select></label><input id="q"></body></html>"#;
+        assert_eq!(form_label_warnings(nested_control).len(), 1);
+    }
+
+    #[test]
     fn placeholder_labels_inputs_and_textareas_but_not_selects() {
         assert!(
             form_label_warnings(r#"<html><body><input type="text" placeholder="Search"></body></html>"#).is_empty()
@@ -1024,6 +1093,46 @@ mod tests {
             .len(),
             1
         );
+    }
+
+    #[test]
+    fn inline_styles_that_leave_a_control_visible_keep_it_checked() {
+        for body in [
+            // a later declaration wins
+            r#"<input id="q" style="display:none;display:block">"#,
+            r#"<input id="q" style="display:none;display:block !important">"#,
+            // a comment or a custom property is not a `display` declaration
+            r#"<input id="q" style="/* display:none */ display:block">"#,
+            r#"<input id="q" style="--previous-display:none;display:block">"#,
+            // the nearest `visibility` decides
+            r#"<div style="visibility:hidden"><input id="q" style="visibility:visible"></div>"#,
+        ] {
+            let html = format!("<html><body>{body}</body></html>");
+            assert_eq!(
+                form_label_warnings(&html).len(),
+                1,
+                "visible control must be checked: {body}"
+            );
+        }
+    }
+
+    #[test]
+    fn inline_styles_that_hide_a_control_are_read_as_css() {
+        for body in [
+            r#"<input id="q" style="display:/**/none">"#,
+            r#"<input id="q" style="DISPLAY: None">"#,
+            r#"<input id="q" style="display:none !important;display:block">"#,
+            r#"<div style="display:none"><input id="q" style="display:block"></div>"#,
+            r#"<input id="q" style="visibility:collapse">"#,
+            r#"<div style="visibility:visible"><input id="q" style="visibility:hidden"></div>"#,
+            r#"<div style="visibility:hidden"><span style="visibility:inherit"><input id="q"></span></div>"#,
+        ] {
+            let html = format!("<html><body>{body}</body></html>");
+            assert!(
+                form_label_warnings(&html).is_empty(),
+                "hidden control must be skipped: {body}"
+            );
+        }
     }
 
     #[test]
