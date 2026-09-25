@@ -3859,7 +3859,7 @@ pub fn get_options() -> Options {
             ),
             CrawlerOption::new(
                 "--browser-auto-scroll", None, "browserAutoScroll", OptionType::Bool, false,
-                "Before capturing each rendered page, scroll it to the bottom and back (at most ~5 s, within --browser-timeout) so lazy-loaded images and scroll-triggered content are rendered. Turn off with `--browser-auto-scroll=0`.",
+                "Before capturing each rendered page, scroll it to the bottom and back (at most ~5 s, then up to 3 s for the requests the scrolling started, within --browser-timeout) so lazy-loaded images and scroll-triggered content are rendered. Turn off with `--browser-auto-scroll=0`.",
                 Some("true"), false, false, None,
             ),
             CrawlerOption::new(

@@ -1953,13 +1953,13 @@ fn sitemap_xml_gz_export_is_gzip_compressed() {
 // Browser rendering (#62, #46) — needs a Chromium-family browser; run with `-- --ignored`
 // ---------------------------------------------------------------------------
 
-/// Renders the single page at `server` with `--browser` (plus `extra`) and returns the HTML the
+/// Renders the single page at `url` with `--browser` (plus `extra`) and returns the HTML the
 /// offline export captured; `name` names the export directory inside `tmp`.
 #[cfg(feature = "browser")]
-fn render_offline(tmp: &TempDir, server: &LocalServer, name: &str, extra: &[&str]) -> String {
+fn render_offline(tmp: &TempDir, url: &str, name: &str, extra: &[&str]) -> String {
     let offline = tmp.path.join(name);
     let offline_arg = format!("--offline-export-dir={}", offline.display());
-    let url_arg = format!("--url={}", server.url());
+    let url_arg = format!("--url={url}");
     let mut args = vec![
         "--config-file=/dev/null",
         url_arg.as_str(),
@@ -2013,7 +2013,7 @@ fn browser_auto_scroll_finishes_when_the_budget_runs_out() {
     std::fs::write(site.join("index.html"), SLOW_SETTLE_PAGE).expect("index.html");
     let server = LocalServer::start(&site);
 
-    let html = render_offline(&tmp, &server, "offline", &["--browser-timeout=8"]);
+    let html = render_offline(&tmp, &server.url(), "offline", &["--browser-timeout=8"]);
 
     assert!(
         !html.contains("data-siteone-freeze"),
@@ -2057,7 +2057,7 @@ fn browser_auto_scroll_captures_content_revealed_on_scroll() {
     std::fs::write(site.join("index.html"), REVEAL_ON_SCROLL_PAGE).expect("index.html");
     let server = LocalServer::start(&site);
 
-    let rendered = |name: &str, extra: &[&str]| render_offline(&tmp, &server, name, extra);
+    let rendered = |name: &str, extra: &[&str]| render_offline(&tmp, &server.url(), name, extra);
 
     let scrolled = rendered("scrolled", &[]);
     assert!(scrolled.contains("revealed-on-scroll"));
@@ -2066,6 +2066,107 @@ fn browser_auto_scroll_captures_content_revealed_on_scroll() {
         "the settle style is not captured"
     );
     assert!(!rendered("not-scrolled", &["--browser-auto-scroll=0"]).contains("revealed-on-scroll"));
+}
+
+/// A page that fetches a section from `/section` when its bottom is scrolled into view.
+#[cfg(feature = "browser")]
+const FETCH_ON_SCROLL_PAGE: &str = r#"<!doctype html>
+<html><head><title>Fetch on scroll</title></head>
+<body>
+<h1>Top</h1>
+<div style="height:4000px">spacer</div>
+<div id="sentinel">bottom</div>
+<script>
+new IntersectionObserver(function (entries, observer) {
+  if (entries[0].isIntersecting) {
+    observer.disconnect();
+    fetch('/section').then(function (r) { return r.text(); }).then(function (html) {
+      document.getElementById('sentinel').insertAdjacentHTML('beforeend', html);
+    });
+  }
+}).observe(document.getElementById('sentinel'));
+</script>
+</body></html>"#;
+
+/// A server on 127.0.0.1 with `FETCH_ON_SCROLL_PAGE` at `/` and its section at `/section`, which
+/// is answered only after `delay` (on the page's origin: the built-in server's CSP blocks fetches
+/// from other origins); each connection on its own thread. Stopped when dropped.
+#[cfg(feature = "browser")]
+struct SlowSectionServer {
+    port: u16,
+    stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
+#[cfg(feature = "browser")]
+impl SlowSectionServer {
+    fn start(delay: std::time::Duration) -> Self {
+        use std::io::{Read, Write};
+        use std::sync::atomic::Ordering;
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a free port");
+        let port = listener.local_addr().expect("a bound address").port();
+        let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let stopped = stop.clone();
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                if stopped.load(Ordering::SeqCst) {
+                    break;
+                }
+                let Ok(mut stream) = stream else { continue };
+                std::thread::spawn(move || {
+                    stream.set_read_timeout(Some(std::time::Duration::from_secs(5))).ok();
+                    let mut head = [0u8; 4096];
+                    let read = stream.read(&mut head).unwrap_or(0);
+                    let head = &head[..read];
+                    let (status, body) = if head.starts_with(b"GET / ") {
+                        ("200 OK", FETCH_ON_SCROLL_PAGE)
+                    } else if head.starts_with(b"GET /section ") {
+                        std::thread::sleep(delay);
+                        ("200 OK", "<p>section-fetched-on-scroll</p>")
+                    } else {
+                        ("404 Not Found", "")
+                    };
+                    let response = format!(
+                        "HTTP/1.1 {status}\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\
+                         Connection: close\r\n\r\n{body}",
+                        body.len()
+                    );
+                    stream.write_all(response.as_bytes()).ok();
+                });
+            }
+        });
+        SlowSectionServer { port, stop }
+    }
+
+    fn url(&self) -> String {
+        format!("http://127.0.0.1:{}/", self.port)
+    }
+}
+
+#[cfg(feature = "browser")]
+impl Drop for SlowSectionServer {
+    fn drop(&mut self) {
+        self.stop.store(true, std::sync::atomic::Ordering::SeqCst);
+        // Wake the blocking `accept` so the thread sees the flag.
+        std::net::TcpStream::connect(("127.0.0.1", self.port)).ok();
+    }
+}
+
+/// Content that the scrolling starts loading is waited for before the capture, even when it
+/// arrives after the scrolling has ended (#62).
+#[cfg(feature = "browser")]
+#[test]
+#[ignore]
+fn browser_auto_scroll_waits_for_content_fetched_on_scroll() {
+    let server = SlowSectionServer::start(std::time::Duration::from_millis(1200));
+    let tmp = TempDir::new("auto-scroll-fetch");
+
+    let html = render_offline(&tmp, &server.url(), "offline", &[]);
+
+    assert!(html.contains("section-fetched-on-scroll"), "{html}");
+    assert!(
+        !html.contains("data-siteone-freeze"),
+        "the settle style is not captured"
+    );
 }
 
 /// Unknown `--screenshot-viewport` entries are a configuration error (#46).

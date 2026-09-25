@@ -39,10 +39,15 @@ static RE_PATH_UPPER_SLASH: Lazy<Regex> = Lazy::new(|| Regex::new(r#"Path:"/"#).
 
 static RE_CROSSORIGIN: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)crossorigin").unwrap());
 
-/// A VuePress 1.x (`window.__VUEPRESS__`) or 0.x (`window.__VUEPRESS_VERSION__`) client bundle, whose
-/// `path:"/…"` keys are page and sidebar links (#62).
-fn is_vuepress_bundle(content: &str) -> bool {
-    content.contains("__VUEPRESS__") || content.contains("__VUEPRESS_VERSION__")
+/// The VuePress client bootstrap: `window.__VUEPRESS__={…}` (1.x) or `window.__VUEPRESS_VERSION__={…}`
+/// (0.x).
+static RE_VUEPRESS_BOOTSTRAP: Lazy<Regex> = Lazy::new(|| Regex::new(r"__VUEPRESS(?:_VERSION)?__\s*=\s*\{").unwrap());
+
+/// A VuePress 1.x or 0.x client bundle, whose `path:"/…"` keys are page and sidebar links (#62). Only a
+/// script that sets the marker counts: VuePress sets it in its client bundle, never in a page, so an HTML
+/// page or a bundle that merely mentions or reads the marker is not one.
+fn is_vuepress_bundle(content: &str, content_type: ContentTypeId) -> bool {
+    content_type == ContentTypeId::Script && RE_VUEPRESS_BOOTSTRAP.is_match(content)
 }
 
 pub struct JavaScriptProcessor {
@@ -160,7 +165,7 @@ impl ContentProcessor for JavaScriptProcessor {
     fn apply_content_changes_for_offline_version(
         &self,
         content: &mut String,
-        _content_type: ContentTypeId,
+        content_type: ContentTypeId,
         _url: &ParsedUrl,
         _remove_unwanted_code: bool,
     ) {
@@ -194,7 +199,7 @@ impl ContentProcessor for JavaScriptProcessor {
         }
         // path/Path keys become href only in VuePress bundles, where they are sidebar links (PHP
         // commit 9bea99b); elsewhere they are route definitions, e.g. React Router's (#62)
-        if is_vuepress_bundle(content) {
+        if is_vuepress_bundle(content, content_type) {
             if content.to_lowercase().contains("path:\"/") {
                 *content = RE_PATH_SLASH
                     .replace_all(content, &format!("href:{}+\"", webpack_path_prefix))
@@ -291,6 +296,37 @@ mod tests {
         let processor = JavaScriptProcessor::new(make_config());
         let url = ParsedUrl::parse("https://example.com/assets/index-B0occCfy.js", None);
         let original = r#"l.jsx(kW,{children:l.jsxs(wW,{children:[l.jsx(vc,{path:"/",element:l.jsx(TSe,{})}),l.jsx(vc,{path:"/auth",element:l.jsx(dje,{})}),l.jsx(vc,{path:"*",element:l.jsx(lje,{})})]})})"#;
+        let mut js = original.to_string();
+        processor.apply_content_changes_for_offline_version(&mut js, ContentTypeId::Script, &url, false);
+        assert_eq!(js, original);
+    }
+
+    #[test]
+    fn html_mentioning_the_vuepress_marker_keeps_its_route_paths() {
+        // #62: a page that only writes about the VuePress marker (in prose or a code sample) is not
+        // a VuePress bundle; its inline route table keeps its `path` keys.
+        let processor = JavaScriptProcessor::new(make_config());
+        let url = ParsedUrl::parse("https://example.com/marker-text/", None);
+        for mention in [
+            "<p>VuePress detection checks __VUEPRESS__.</p>",
+            r#"<pre><code>window.__VUEPRESS__={version:"1.9.9",hash:"de4f7cf8"};</code></pre>"#,
+        ] {
+            let original = format!(
+                r#"<!doctype html><html><head><title>React docs site</title></head><body>{mention}<div id="app">Initial</div><script>const routes=[{{path:"/marker-text/",name:"Working route"}}];</script></body></html>"#
+            );
+            let mut html = original.clone();
+            processor.apply_content_changes_for_offline_version(&mut html, ContentTypeId::Html, &url, false);
+            assert_eq!(html, original);
+        }
+    }
+
+    #[test]
+    fn bundle_reading_the_vuepress_marker_keeps_its_route_paths() {
+        // #62: a bundle that only reads the marker (e.g. to detect VuePress) does not set it, so it
+        // is not a VuePress client bundle.
+        let processor = JavaScriptProcessor::new(make_config());
+        let url = ParsedUrl::parse("https://example.com/assets/index-B0occCfy.js", None);
+        let original = r#"var isVuePress=!!window.__VUEPRESS__;l.jsx(vc,{path:"/auth",element:l.jsx(dje,{})})"#;
         let mut js = original.to_string();
         processor.apply_content_changes_for_offline_version(&mut js, ContentTypeId::Script, &url, false);
         assert_eq!(js, original);
