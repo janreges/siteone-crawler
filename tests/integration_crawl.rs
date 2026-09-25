@@ -4428,6 +4428,36 @@ fn ai_answers_never_carry_the_configured_key() {
 }
 
 #[test]
+fn ai_answers_never_carry_the_configured_key_written_with_json_escapes() {
+    // A gateway that escapes slashes in JSON (as PHP does) echoes a key that holds some. The SEO
+    // action decodes the answer, which would bring the key back.
+    const KEY: &str = "sk-C5/SENTINEL/credential/0123456789";
+    let escaped = KEY.replace('/', r"\/");
+    let forms = [KEY.to_string(), escaped.clone(), KEY.replace('/', r"\\/")];
+    let tmp = TempDir::new("ai-answer-escaped-key");
+    let server = one_page_site(&tmp);
+    let content = format!(
+        r#"{{"scores":{{"overall":80}},"recommendations":{{"title":"Title {escaped}"}},"debugCredential":"{escaped}"}}"#
+    );
+    let mock = MockLlm::start(vec![chat_response(200, chat_answer(&content))]);
+    let out = tmp.path.join("seo");
+    // The second run is answered from the cache the first one wrote.
+    for run in ["answered", "cached"] {
+        let texts = crawl_answered_by(&server, &mock, KEY, &out, &["--ai-actions=seo", "--output=json"]);
+        for (source, text) in &texts {
+            for form in &forms {
+                assert!(!text.contains(form.as_str()), "{run}: {form} in {source}");
+            }
+        }
+        let stdout = &texts[0].1;
+        assert!(
+            stdout.contains("Title [redacted]"),
+            "{run}: the answer reached stdout: {stdout}"
+        );
+    }
+}
+
+#[test]
 fn ai_cache_hit_is_reported() {
     let tmp = TempDir::new("ai-telemetry-cache");
     let cache = tmp.path.join("ai-cache");

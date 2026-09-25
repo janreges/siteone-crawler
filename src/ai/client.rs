@@ -521,9 +521,7 @@ impl AiClient {
     /// the answer is cached, parsed and published. Only a key of 20+ characters is blanked out.
     fn without_api_key(&self, text: String) -> String {
         match self.config.api_key.as_deref() {
-            Some(key) if key.chars().count() >= MIN_KEY_CHARS_BLANKED_IN_ANSWERS && text.contains(key) => {
-                text.replace(key, "[redacted]")
-            }
+            Some(key) if key.chars().count() >= MIN_KEY_CHARS_BLANKED_IN_ANSWERS => blank_key(text, key),
             _ => text,
         }
     }
@@ -751,6 +749,56 @@ fn snippet(s: &str) -> String {
     }
 }
 
+/// `text` with every occurrence of `key` replaced by `[redacted]`. An answer is usually JSON that
+/// the actions decode later, so a JSON string whose decoded value holds the key (written with
+/// escapes such as `\/` or `\u002d`) is written anew without it; the rest of `text` is kept as is.
+fn blank_key(text: String, key: &str) -> String {
+    let text = if text.contains(key) {
+        text.replace(key, "[redacted]")
+    } else {
+        text
+    };
+    if !text.contains('\\') {
+        return text;
+    }
+    let mut blanked = String::with_capacity(text.len());
+    let mut rest = text.as_str();
+    while let Some(start) = rest.find('"') {
+        blanked.push_str(&rest[..start]);
+        let from_quote = &rest[start..];
+        let Some(end) = json_string_len(from_quote) else {
+            // An unterminated string cannot be decoded, and so hides nothing.
+            rest = from_quote;
+            break;
+        };
+        let literal = &from_quote[..end];
+        match serde_json::from_str::<String>(literal) {
+            Ok(decoded) if decoded.contains(key) => {
+                blanked.push_str(&serde_json::Value::String(decoded.replace(key, "[redacted]")).to_string())
+            }
+            _ => blanked.push_str(literal),
+        }
+        rest = &from_quote[end..];
+    }
+    blanked.push_str(rest);
+    blanked
+}
+
+/// The byte length of the JSON string literal at the start of `s` (which starts with `"`), up to
+/// and including its closing quote; `None` when it does not end.
+fn json_string_len(s: &str) -> Option<usize> {
+    let bytes = s.as_bytes();
+    let mut i = 1;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\\' => i += 2,
+            b'"' => return Some(i + 1),
+            _ => i += 1,
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -958,6 +1006,82 @@ mod tests {
             let answer = format!(r#"{{"title":"{key}"}}"#);
             assert_eq!(client.without_api_key(answer.clone()), answer);
         }
+    }
+
+    /// Every string of the JSON in `answer` (the part between the first `{` and the last `}`),
+    /// decoded.
+    fn decoded_strings(answer: &str) -> Vec<String> {
+        fn collect(value: &serde_json::Value, out: &mut Vec<String>) {
+            match value {
+                serde_json::Value::String(s) => out.push(s.clone()),
+                serde_json::Value::Array(items) => items.iter().for_each(|v| collect(v, out)),
+                serde_json::Value::Object(map) => map.iter().for_each(|(k, v)| {
+                    out.push(k.clone());
+                    collect(v, out)
+                }),
+                _ => {}
+            }
+        }
+        let json = &answer[answer.find('{').expect("JSON")..=answer.rfind('}').expect("JSON")];
+        let value: serde_json::Value = serde_json::from_str(json).expect("still valid JSON");
+        let mut out = Vec::new();
+        collect(&value, &mut out);
+        out
+    }
+
+    #[test]
+    fn a_key_written_with_json_escapes_is_blanked_out_of_the_decoded_answer() {
+        // The actions decode the answer's JSON, so `\/` or `\u002d` inside a string would bring
+        // back a key that a literal search misses.
+        let slash_key = "sk-VA/credential/0123456789abcdef";
+        let hyphen_key = "sk-C5-credential-0123456789abcdef";
+        let wrapped =
+            "Here you go:\n```json\n{\"k\\u0073-C5\":\"\\u0073k-C5-credential-0123456789abcdef\"}\n```\nDone.";
+        let cases = [
+            (
+                slash_key,
+                r#"{"scores":{"overall":80},"recommendations":{"title":"Title sk-VA\/credential\/0123456789abcdef"},"debugCredential":"sk-VA\/credential\/0123456789abcdef"}"#.to_string(),
+            ),
+            (
+                hyphen_key,
+                r#"{"summary":"Provider note sk\u002dC5\u002dcredential\u002d0123456789abcdef","list":["sk-C5-credential-0123456789abcdef"]}"#.to_string(),
+            ),
+            (hyphen_key, wrapped.to_string()),
+        ];
+        for (key, answer) in cases {
+            let client = client_with_connection("http://127.0.0.1:9/v1", key);
+            let blanked = client.without_api_key(answer.clone());
+            let strings = decoded_strings(&blanked);
+            assert!(
+                strings.iter().all(|s| !s.contains(key)),
+                "the key is back once decoded: {strings:?}"
+            );
+            assert!(strings.iter().any(|s| s.contains("[redacted]")), "{blanked}");
+        }
+        // The text around the JSON is kept as it was.
+        let client = client_with_connection("http://127.0.0.1:9/v1", hyphen_key);
+        let blanked = client.without_api_key(wrapped.to_string());
+        assert!(blanked.starts_with("Here you go:\n```json\n{"), "{blanked}");
+        assert!(blanked.ends_with("}\n```\nDone."), "{blanked}");
+    }
+
+    #[test]
+    fn an_answer_without_the_key_is_left_byte_for_byte() {
+        let client = client_with_connection("http://127.0.0.1:9/v1", "sk-VA/credential/0123456789abcdef");
+        for answer in [
+            r#"{"a":"x\/y","b":"\u0041\n","c":["\"quoted\""]}"#,
+            r#"prose with a "quote and an unterminated \"string"#,
+            "a trailing backslash \\",
+            "\"",
+            "",
+        ] {
+            assert_eq!(client.without_api_key(answer.to_string()), answer);
+        }
+        // Below 20 characters a key is not blanked, however it is written.
+        let short = "sk-19-chars-key-xyz";
+        let client = client_with_connection("http://127.0.0.1:9/v1", short);
+        let answer = r#"{"title":"sk\u002d19-chars-key-xyz"}"#;
+        assert_eq!(client.without_api_key(answer.to_string()), answer);
     }
 
     fn client_with_connection(endpoint: &str, api_key: &str) -> AiClient {
