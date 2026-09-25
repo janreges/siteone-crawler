@@ -941,6 +941,41 @@ fn events_file_records_the_whole_run() {
     );
 }
 
+#[test]
+fn events_file_never_carries_the_credentials_of_the_url() {
+    let tmp = TempDir::new("events-url-credentials");
+    let site = tmp.path.join("site");
+    write_site(&site, 0);
+    let server = LocalServer::start(&site);
+    let mut leaks = Vec::new();
+    for (name, userinfo) in [
+        ("plain", "user:PW_SENTINEL_0006"),
+        ("undecodable", "%FFuser:PW_SENTINEL_0006"),
+    ] {
+        let events = tmp.path.join(format!("{name}.ndjson"));
+        let url = server.url().replacen("http://", &format!("http://{userinfo}@"), 1);
+        run_crawler(&[
+            "--config-file=/dev/null",
+            &format!("--url={url}"),
+            "--single-page",
+            LOCAL_ANALYZERS,
+            "--http-cache-dir=",
+            &format!("--events-file={}", events.display()),
+        ]);
+        let text = std::fs::read_to_string(&events).expect("the event file exists");
+        let first: serde_json::Value =
+            serde_json::from_str(text.lines().next().unwrap_or_default()).expect("a JSON event");
+        assert_eq!(first["type"], "runStarted", "{name}");
+        assert_eq!(first["url"], server.url(), "{name}: the URL without its userinfo");
+        leaks.extend(
+            text.lines()
+                .filter(|line| line.contains("PW_SENTINEL_0006"))
+                .map(|line| format!("{name}: {line}")),
+        );
+    }
+    assert!(leaks.is_empty(), "{}", leaks.join("\n"));
+}
+
 /// Without `--events-file` nothing changes: the stream is entirely opt-in.
 #[test]
 fn no_events_file_means_no_events() {

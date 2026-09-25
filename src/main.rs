@@ -167,7 +167,7 @@ async fn main() {
             protocol: siteone_crawler::events::PROTOCOL,
             version: siteone_crawler::version::CODE,
             executed_at: chrono::Local::now().to_rfc3339(),
-            url: options.url.clone(),
+            url: utils::redact_url_userinfo(&options.url),
             working_dir: std::env::current_dir()
                 .map(|d| d.to_string_lossy().into_owned())
                 .unwrap_or_default(),

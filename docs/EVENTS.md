@@ -58,7 +58,7 @@ captured from vLLM (and answered the first request with HTTP 429).
 | `protocol` | int | Protocol version (see [Compatibility](#compatibility)). |
 | `version` | string | Crawler version, as `--version` prints it. |
 | `executedAt` | string | Start time, RFC 3339 with the local offset. |
-| `url` | string | The `--url` of the run. |
+| `url` | string | The `--url` of the run, without its userinfo (`user:password@`). |
 | `workingDir` | string | The crawler's working directory; relative paths in `artifact` events resolve against it. |
 
 ```json
