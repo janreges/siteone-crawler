@@ -189,7 +189,11 @@ pub fn convert_url_to_relative(
     // Normalize HTML entities in URL before parsing so it matches what FoundUrl stored.
     // Only decode entities (not full normalize_url which also trims trailing &, quotes, etc.
     // — those transformations are for discovery, not for offline conversion of already-parsed URLs).
-    let normalized = target_url.replace("&#38;", "&").replace("&amp;", "&");
+    let mut normalized = target_url.replace("&#38;", "&").replace("&amp;", "&");
+    // A query-only reference (`?page=2`) belongs to the page's own path, not to the site root
+    if normalized.starts_with('?') {
+        normalized = format!("{}{}", base_url.path, normalized);
+    }
     let mut parsed_target = ParsedUrl::parse(&normalized, Some(base_url));
 
     // --force-relative-urls: http/https and www/non-www variants of the initial host are the initial
@@ -502,6 +506,28 @@ mod tests {
         assert_eq!(
             convert_url_to_relative(&guide, "../style.css", Some("href"), &cfg),
             "../../style.css"
+        );
+    }
+
+    #[test]
+    fn query_only_reference_resolves_against_the_page_path() {
+        // `?tab=2` on /about means /about?tab=2, not /?tab=2
+        let about = ParsedUrl::parse("https://example.com/about", None);
+        assert_eq!(
+            convert_url_to_relative(&about, "?tab=2", Some("href"), &config(false, false)),
+            "about.d686b9030b.html"
+        );
+        let blog = ParsedUrl::parse("https://example.com/blog/", None);
+        assert_eq!(
+            convert_url_to_relative(&blog, "?tab=2#top", Some("href"), &config(false, false)),
+            "../blog/index.d686b9030b.html#top"
+        );
+
+        let mut cfg = config(false, false);
+        cfg.offline_export_preserve_url_structure = true;
+        assert_eq!(
+            convert_url_to_relative(&about, "?tab=2", Some("href"), &cfg),
+            "../about/index.d686b9030b.html"
         );
     }
 }

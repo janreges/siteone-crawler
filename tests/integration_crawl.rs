@@ -2313,6 +2313,7 @@ fn write_nested_site(dir: &Path) {
             "about.html",
             r#"<html><head><title>About</title><link rel="stylesheet" href="/style.css"></head><body>
 <a href="team">Team</a> <a href="/docs/guide#usage">Guide</a> <img src="img/photo.png" alt="photo">
+<a href="?page=2">Page 2</a>
 </body></html>"#,
         ),
         (
