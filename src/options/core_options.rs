@@ -332,6 +332,7 @@ pub struct CoreOptions {
     pub browser_wait_extra_ms: i64,
     pub browser_timeout: i64,
     pub browser_render_all: bool,
+    pub browser_auto_scroll: bool,
     pub browser_auto_download: bool,
 
     // screenshot settings (browser mode only)
@@ -620,6 +621,7 @@ impl CoreOptions {
             browser_wait_extra_ms: 0,
             browser_timeout: 30,
             browser_render_all: false,
+            browser_auto_scroll: true,
             browser_auto_download: false,
 
             // screenshot settings
@@ -2211,6 +2213,11 @@ impl CoreOptions {
             "browserRenderAll" => {
                 if let Some(b) = value.as_bool() {
                     self.browser_render_all = b;
+                }
+            }
+            "browserAutoScroll" => {
+                if let Some(b) = value.as_bool() {
+                    self.browser_auto_scroll = b;
                 }
             }
             "browserAutoDownload" => {
@@ -3858,6 +3865,11 @@ pub fn get_options() -> Options {
                 Some("false"), false, false, None,
             ),
             CrawlerOption::new(
+                "--browser-auto-scroll", None, "browserAutoScroll", OptionType::Bool, false,
+                "Before capturing each rendered page, scroll it to the bottom and back (at most ~5 s, within --browser-timeout) so lazy-loaded images and scroll-triggered content are rendered. Turn off with `--browser-auto-scroll=0`.",
+                Some("true"), false, false, None,
+            ),
+            CrawlerOption::new(
                 "--browser-auto-download", None, "browserAutoDownload", OptionType::Bool, false,
                 "Pre-consent to downloading chrome-headless-shell when no browser is found (for non-interactive/CI runs; interactive runs prompt instead).",
                 Some("false"), false, false, None,
@@ -4503,6 +4515,7 @@ mod tests {
             browser_wait_extra_ms: 0,
             browser_timeout: 30,
             browser_render_all: false,
+            browser_auto_scroll: true,
             browser_auto_download: false,
 
             // screenshot settings
@@ -4903,7 +4916,7 @@ mod tests {
                 .values()
                 .map(|group| group.options.len())
                 .sum::<usize>(),
-            221
+            222
         );
     }
 
@@ -5001,6 +5014,22 @@ mod tests {
         assert!(
             error.to_string().contains("Invalid --sitemap-changefreq 'sometimes'"),
             "{error}"
+        );
+    }
+
+    #[test]
+    fn browser_auto_scroll_is_on_by_default_and_can_be_turned_off() {
+        let config = h01_config_file();
+        assert!(parse_argv(&h01_argv(&config, &[])).unwrap().browser_auto_scroll);
+        assert!(
+            !parse_argv(&h01_argv(&config, &["--browser-auto-scroll=0"]))
+                .unwrap()
+                .browser_auto_scroll
+        );
+        assert!(
+            parse_argv(&h01_argv(&config, &["--browser-auto-scroll"]))
+                .unwrap()
+                .browser_auto_scroll
         );
     }
 }

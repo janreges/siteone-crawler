@@ -55,11 +55,11 @@ const FREEZE_ANIMATIONS_JS: &str = r#"(function(){
 
 /// Settle delay after freezing animations, so the compositor paints the final frame before
 /// the screenshot samples it.
-const FREEZE_SETTLE_MS: u64 = 150;
+pub(crate) const FREEZE_SETTLE_MS: u64 = 150;
 
 /// Settle running CSS/Web animations before capture: finite reveals jump to their end,
 /// infinite loops freeze in place (fail-soft: a CDP evaluation error just snaps the page as-is).
-async fn freeze_animations(page: &Page) {
+pub(crate) async fn freeze_animations(page: &Page) {
     let _ = page.evaluate(FREEZE_ANIMATIONS_JS).await;
 }
 

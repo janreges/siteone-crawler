@@ -1827,3 +1827,122 @@ fn sitemap_xml_gz_export_is_gzip_compressed() {
         "one per URL: {xml}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Browser rendering (#62, #46) — needs a Chromium-family browser; run with `-- --ignored`
+// ---------------------------------------------------------------------------
+
+/// Renders the single page at `server` with `--browser` (plus `extra`) and returns the HTML the
+/// offline export captured; `name` names the export directory inside `tmp`.
+#[cfg(feature = "browser")]
+fn render_offline(tmp: &TempDir, server: &LocalServer, name: &str, extra: &[&str]) -> String {
+    let offline = tmp.path.join(name);
+    let offline_arg = format!("--offline-export-dir={}", offline.display());
+    let url_arg = format!("--url={}", server.url());
+    let mut args = vec![
+        "--config-file=/dev/null",
+        url_arg.as_str(),
+        "--single-page",
+        "--browser",
+        "--browser-no-sandbox",
+        LOCAL_ANALYZERS,
+        "--http-cache-dir=",
+        "--output-html-report=",
+        "--output-json-file=",
+        "--output-text-file=",
+        offline_arg.as_str(),
+    ];
+    args.extend_from_slice(extra);
+    let output = run_built_crawler(&args);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    std::fs::read_to_string(offline.join("index.html")).expect("rendered index.html")
+}
+
+/// A page too tall to scroll through within the cap. Every change of its `<head>` (the settle
+/// style the crawler injects and removes) records the scroll position and then blocks the main
+/// thread for 1.5 s, so the steps after scrolling are slow.
+#[cfg(feature = "browser")]
+const SLOW_SETTLE_PAGE: &str = r#"<!doctype html>
+<html><head><title>Slow settle</title></head>
+<body data-scroll-y="initial">
+<div style="height:60000px">tall</div>
+<script>
+new MutationObserver(function () {
+  document.body.setAttribute('data-scroll-y', String(Math.round(window.scrollY)));
+  var until = Date.now() + 1500;
+  while (Date.now() < until) {}
+}).observe(document.head, { childList: true });
+</script>
+</body></html>"#;
+
+/// Even when the scrolling uses up the render budget, auto-scroll returns to the top and removes
+/// its settle style before the HTML is captured (#62).
+#[cfg(feature = "browser")]
+#[test]
+#[ignore]
+fn browser_auto_scroll_finishes_when_the_budget_runs_out() {
+    let tmp = TempDir::new("auto-scroll-budget");
+    let site = tmp.path.join("site");
+    std::fs::create_dir_all(&site).expect("site dir");
+    std::fs::write(site.join("index.html"), SLOW_SETTLE_PAGE).expect("index.html");
+    let server = LocalServer::start(&site);
+
+    let html = render_offline(&tmp, &server, "offline", &["--browser-timeout=8"]);
+
+    assert!(
+        !html.contains("data-siteone-freeze"),
+        "the settle style is not captured: {html}"
+    );
+    assert!(
+        html.contains(r#"data-scroll-y="0""#),
+        "the page is back at the top: {html}"
+    );
+}
+
+/// A page that adds a paragraph only when its bottom is scrolled into view.
+#[cfg(feature = "browser")]
+const REVEAL_ON_SCROLL_PAGE: &str = r#"<!doctype html>
+<html><head><title>Reveal on scroll</title></head>
+<body>
+<h1>Top</h1>
+<div style="height:4000px">spacer</div>
+<div id="sentinel">bottom</div>
+<script>
+new IntersectionObserver(function (entries, observer) {
+  if (entries[0].isIntersecting) {
+    var p = document.createElement('p');
+    p.textContent = ['revealed', 'on', 'scroll'].join('-');
+    document.body.appendChild(p);
+    observer.disconnect();
+  }
+}).observe(document.getElementById('sentinel'));
+</script>
+</body></html>"#;
+
+/// `--browser` scrolls each page before capturing it (on by default), so content revealed on
+/// scroll is in the rendered HTML; `--browser-auto-scroll=0` captures the unscrolled page (#62).
+#[cfg(feature = "browser")]
+#[test]
+#[ignore]
+fn browser_auto_scroll_captures_content_revealed_on_scroll() {
+    let tmp = TempDir::new("auto-scroll");
+    let site = tmp.path.join("site");
+    std::fs::create_dir_all(&site).expect("site dir");
+    std::fs::write(site.join("index.html"), REVEAL_ON_SCROLL_PAGE).expect("index.html");
+    let server = LocalServer::start(&site);
+
+    let rendered = |name: &str, extra: &[&str]| render_offline(&tmp, &server, name, extra);
+
+    let scrolled = rendered("scrolled", &[]);
+    assert!(scrolled.contains("revealed-on-scroll"));
+    assert!(
+        !scrolled.contains("data-siteone-freeze"),
+        "the settle style is not captured"
+    );
+    assert!(!rendered("not-scrolled", &["--browser-auto-scroll=0"]).contains("revealed-on-scroll"));
+}

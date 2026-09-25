@@ -8,6 +8,8 @@
 pub mod diagnostics;
 
 #[cfg(feature = "browser")]
+mod auto_scroll;
+#[cfg(feature = "browser")]
 pub mod cookie_consent;
 #[cfg(feature = "browser")]
 pub mod launcher;

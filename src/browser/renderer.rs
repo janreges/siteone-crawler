@@ -194,6 +194,12 @@ impl BrowserRenderer {
                 if self.options.browser_wait_extra_ms > 0 {
                     tokio::time::sleep(Duration::from_millis(self.options.browser_wait_extra_ms as u64)).await;
                 }
+                // Scroll through the page so lazy-loaded images and scroll-triggered content are
+                // rendered before the HTML is captured and screenshotted — within what is left of
+                // --browser-timeout (nothing is left when the navigation itself timed out).
+                if self.options.browser_auto_scroll {
+                    crate::browser::auto_scroll::run(&page, hard_timeout.saturating_sub(start.elapsed())).await;
+                }
                 // Brief grace so late CDP diagnostic events are collected before we stop listening.
                 tokio::time::sleep(Duration::from_millis(50)).await;
                 // content() must not hang the crawl — bound it.

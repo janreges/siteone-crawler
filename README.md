@@ -812,6 +812,7 @@ Browser is auto-detected (Chrome/Chromium/Edge/Brave); if none is found you're o
 | `--browser-wait-extra=<ms>` | 0 | Extra settle delay after the wait condition. |
 | `--browser-timeout=<sec>` | 30 | Hard navigation+render timeout per page. |
 | `--browser-render-all` | off | Render every URL (default: only HTML documents; assets via HTTP). |
+| `--browser-auto-scroll` | on | Scroll each rendered page to the bottom and back before capturing it, so lazy-loaded and scroll-triggered content is rendered (at most ~5 s, within `--browser-timeout`); `--browser-auto-scroll=0` turns it off. |
 | `--screenshots` | off | Capture a screenshot of every rendered page (requires `--browser`). |
 | `--screenshots-dir=<dir>` | `tmp/screenshots/` | Output directory for screenshots. |
 | `--screenshot-mode=<m>` | `viewport` | `viewport` (set resolution) or `full-page` (full scroll height). |
@@ -834,6 +835,21 @@ their final state, and infinite loops (spinners, auto-play hero animations) are 
 current frame. The result looks fully loaded instead of half-rendered. This is automatic and
 needs no flag. Scroll-driven animations whose progress is bound to the scroll position (rather
 than to time) are not covered by this.
+
+#### Lazy-loaded and scroll-triggered content
+
+Many pages load images or reveal sections only when they are scrolled into view. Before the
+rendered HTML is captured (and before screenshots), every page taller than the viewport is
+therefore scrolled to the bottom in steps of about 0.8 of the viewport height every 120 ms (at most
+5 s, always within `--browser-timeout`); the animations started by the scrolling are then settled
+and the page returns to the top. Offline and markdown exports then contain the lazy-loaded images
+and the revealed content, and full-page screenshots show them. The scrolling adds up to a few
+seconds per long page (counted in its response time); `--browser-auto-scroll=0` turns it off.
+Side effects to keep in mind: scroll-depth popups (newsletter or exit-intent modals) can appear in
+screenshots and in the captured HTML — hide them in screenshots with `--screenshot-hide-selector`;
+infinite feeds always use the full 5 s and keep growing while scrolled (more items and links), so
+use `--browser-auto-scroll=0` when timing or a stable page matters; pages that scroll an inner
+container instead of the document (e.g. `body { height: 100%; overflow: auto }`) are not scrolled.
 
 #### Screenshot animation
 

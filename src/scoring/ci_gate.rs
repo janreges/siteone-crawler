@@ -527,6 +527,7 @@ mod tests {
             browser_wait_extra_ms: 0,
             browser_timeout: 30,
             browser_render_all: false,
+            browser_auto_scroll: true,
             browser_auto_download: false,
 
             // screenshot settings
