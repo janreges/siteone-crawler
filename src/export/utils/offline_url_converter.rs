@@ -175,7 +175,10 @@ impl OfflineUrlConverter {
             if self.is_external_domain_allowed_for_crawling(host)
                 || (self.target_url.is_static_file() && self.is_domain_allowed_for_static_files(host))
                 || (!self.target_url.is_static_file()
-                    && self.target_url_source_attribute.as_deref() == Some("src")
+                    && matches!(
+                        self.target_url_source_attribute.as_deref(),
+                        Some("src") | Some("srcset")
+                    )
                     && self.is_domain_allowed_for_static_files(host))
             {
                 return None;

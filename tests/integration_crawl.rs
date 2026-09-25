@@ -2396,7 +2396,11 @@ fn exported_files(dir: &Path) -> Vec<std::path::PathBuf> {
 /// files that do not resolve to an exported file, and meta refreshes that reload their own page
 /// (fragments and query strings ignored, absolute URLs skipped).
 fn dangling_references(export: &Path) -> Vec<String> {
-    let html_reference = regex::Regex::new(r#"\s(?:href|src|srcset)="([^"]*)""#).unwrap();
+    // lazy-loading image attributes included (#109)
+    let html_reference = regex::Regex::new(
+        r#"\s(?:href|src|srcset|data-src|data-lazy-src|data-original|data-srcset|data-lazy-srcset)="([^"]*)""#,
+    )
+    .unwrap();
     let meta_refresh_reference = regex::Regex::new(r#"(?i)<meta[^>]*\burl=([^"'>\s]+)"#).unwrap();
     let css_reference = regex::Regex::new(r#"url\(['"]?([^'")]+)['"]?\)"#).unwrap();
     let markdown_reference = regex::Regex::new(r"\]\(([^)\s]+)\)").unwrap();
@@ -2712,6 +2716,146 @@ fn force_relative_urls_exports_variant_references_of_external_stylesheets() {
     );
     let css = std::fs::read_to_string(export.join("_cdn.test/style.css")).expect("the CDN stylesheet");
     assert!(css.contains("url(../img.png)"), "{css}");
+    assert_eq!(dangling_references(&export), Vec::<String>::new());
+}
+
+/// #109: an image's attribute text is one attribute value (nothing in it is crawled or rewritten),
+/// and a `>` in a quoted image URL does not end the tag, so that image is downloaded and exported.
+#[test]
+fn image_attributes_are_read_as_the_browser_reads_them() {
+    let png = || Route {
+        path: "",
+        headers: vec![("Content-Type", "image/png".to_string())],
+        body: PNG_1X1.to_vec(),
+    };
+    let server = RecordingServer::start(vec![
+        Route {
+            path: "/",
+            headers: vec![("Content-Type", "text/html; charset=utf-8".to_string())],
+            body: br#"<html><head><title>Images</title></head><body>
+<img src="/real.png" alt="Today's diagram: data-original=/ghost1.png">
+<img src="/real.png" title="Today's diagram: src=/ghost2.png">
+<img src="/placeholder.png" data-src="/image?width=200&filter=>10" alt="Filtered">
+</body></html>"#
+                .to_vec(),
+        },
+        Route {
+            path: "/real.png",
+            ..png()
+        },
+        Route {
+            path: "/placeholder.png",
+            ..png()
+        },
+        Route {
+            path: "/image",
+            ..png()
+        },
+    ]);
+    let tmp = TempDir::new("image-attributes");
+    let export = tmp.path.join("export");
+
+    let output = run_crawler(&[
+        "--config-file=/dev/null",
+        &format!("--url={}", server.url()),
+        LOCAL_ANALYZERS,
+        "--http-cache-dir=",
+        &format!("--offline-export-dir={}", export.display()),
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let requests: Vec<String> = server
+        .requests()
+        .iter()
+        .filter_map(|head| head.split_whitespace().nth(1).map(str::to_string))
+        .collect();
+    assert!(!requests.iter().any(|path| path.contains("ghost")), "{requests:?}");
+    assert!(
+        requests.iter().any(|path| path == "/image?width=200&filter=%3E10"),
+        "{requests:?}"
+    );
+    let index = std::fs::read_to_string(export.join("index.html")).expect("index.html");
+    for expected in [
+        r#"alt="Today's diagram: data-original=/ghost1.png""#,
+        r#"title="Today's diagram: src=/ghost2.png""#,
+    ] {
+        assert!(index.contains(expected), "missing {expected} in {index}");
+    }
+    assert!(!index.contains("filter=>10"), "{index}");
+    assert_eq!(dangling_references(&export), Vec::<String>::new());
+}
+
+/// #109: extension-less images on a domain allowed by --allowed-domain-for-external-files that
+/// are referenced by lazy srcsets (on <img> and <source>) are downloaded and the srcsets lead to the
+/// saved files; a domain that is not allowed stays online.
+#[test]
+fn lazy_srcsets_of_allowed_extensionless_cdn_images_lead_to_the_saved_files() {
+    let png = |path| Route {
+        path,
+        headers: vec![("Content-Type", "image/png".to_string())],
+        body: PNG_1X1.to_vec(),
+    };
+    let cdn = RecordingServer::start(vec![png("/one"), png("/two"), png("/three"), png("/four")]);
+    let cdn_port = cdn.port();
+    let site = RecordingServer::start(vec![Route {
+        path: "/",
+        headers: vec![("Content-Type", "text/html; charset=utf-8".to_string())],
+        body: format!(
+            r#"<html><head><title>CDN images</title></head><body>
+<img data-src="http://cdn.test:{cdn_port}/one" data-srcset="http://cdn.test:{cdn_port}/two 1x, http://cdn.test:{cdn_port}/three 2x" alt="a">
+<picture><source data-lazy-srcset="http://cdn.test:{cdn_port}/four 1x" type="image/png"><img data-srcset="http://denied.test:{cdn_port}/five 1x" alt="b"></picture>
+</body></html>"#
+        )
+        .into_bytes(),
+    }]);
+    let tmp = TempDir::new("lazy-srcset-cdn");
+    let export = tmp.path.join("export");
+
+    let output = run_crawler(&[
+        "--config-file=/dev/null",
+        &format!("--url={}", site.url()),
+        &format!("--resolve=cdn.test:{cdn_port}:127.0.0.1"),
+        &format!("--resolve=denied.test:{cdn_port}:127.0.0.1"),
+        "--allowed-domain-for-external-files=cdn.test",
+        LOCAL_ANALYZERS,
+        "--http-cache-dir=",
+        &format!("--offline-export-dir={}", export.display()),
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let cdn_requests = cdn.requests();
+    for path in ["/one", "/two", "/three", "/four"] {
+        assert!(
+            cdn_requests
+                .iter()
+                .any(|head| head.starts_with(&format!("GET {path} "))),
+            "{path} is downloaded: {cdn_requests:?}"
+        );
+    }
+    assert!(
+        !cdn_requests.iter().any(|head| head.starts_with("GET /five ")),
+        "{cdn_requests:?}"
+    );
+    let index = std::fs::read_to_string(export.join("index.html")).expect("index.html");
+    for expected in [
+        r#" data-src="_cdn.test/one.jpg""#,
+        r#" data-srcset="_cdn.test/two.jpg 1x, _cdn.test/three.jpg 2x""#,
+        r#" data-lazy-srcset="_cdn.test/four.jpg 1x""#,
+        // not allowed for external files: online, without the port the export strips
+        r#" data-srcset="http://denied.test/five 1x""#,
+    ] {
+        assert!(index.contains(expected), "missing {expected} in {index}");
+    }
     assert_eq!(dangling_references(&export), Vec::<String>::new());
 }
 

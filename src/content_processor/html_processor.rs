@@ -40,21 +40,24 @@ static RE_FONT_LINK: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r#"(?is)<link\s+[^>]*href=(?:["']([^"']+\.(?:eot|ttf|woff2|woff|otf)[^"']*)["']|([^\s>"']+\.(?:eot|ttf|woff2|woff|otf)[^\s>"']*))[^>]*>"#).unwrap()
 });
 
-/// `<img>` and `<source>` tags. Their image attributes, lazy-loading variants included, are
-/// downloaded and rewritten attribute by attribute (#109).
-static RE_IMG_OR_SOURCE_TAG: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?is)<(img|source)\s[^>]*>").unwrap());
+/// `<img>` and `<source>` tags: 1 = tag name, 2 = attributes. Their image attributes, lazy-loading
+/// variants included, are downloaded and rewritten attribute by attribute (#109). Read as the browser
+/// reads them: a quoted value runs to its closing quote, so a `>` or the other kind of quote in it
+/// neither ends the tag nor starts another attribute.
+static RE_IMG_OR_SOURCE_TAG: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"(?is)<(img|source)([\s/](?:[\s/]|[^\s/>=]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'>][^\s>]*)?)?)*)>"#)
+        .unwrap()
+});
 
 /// Start of an `<img>`/`<source>` tag as captured by `RE_HREF_SRC` / `RE_SRCSET_ATTR`; such tags
 /// are left to `update_img_and_source_paths_to_relative()`.
 static RE_IMG_OR_SOURCE_TAG_START: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)^<(?:img|source)\s").unwrap());
 
-/// One `name=value` attribute of a tag: 1 = the whitespace before the name (attribute boundary, so
-/// `src` never matches inside `data-src`), 2 = name, 3/4/5 = double-quoted, single-quoted or
-/// unquoted value. An unquoted value never starts with `\`, so escaped markup in JS strings
-/// (`src=\"…\"`) is not taken for an attribute, and a quoted value never contains the other quote,
-/// so markup concatenated in JS strings (`'<img src="' + src + '">'`) is not either.
+/// One attribute in the attributes of `RE_IMG_OR_SOURCE_TAG`, which it reads one after another, never
+/// inside a value: 1 = the separator before the name, 2 = name, 3/4/5 = double-quoted, single-quoted
+/// or unquoted value (none for an attribute without a value).
 static RE_TAG_ATTRIBUTE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r#"(\s)([^\s"'>/=]+)\s*=\s*(?:"([^"']*)"|'([^'"]*)'|([^\s"'>\\][^\s"'>]*))"#).unwrap());
+    Lazy::new(|| Regex::new(r#"([\s/]*)([^\s/>=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>][^\s>]*))?)?"#).unwrap());
 
 /// URL-valued image attributes of `<img>`/`<source>`: `src` and its lazy-loading variants.
 const IMAGE_URL_ATTRIBUTES: &[&str] = &["src", "data-src", "data-lazy-src", "data-original"];
@@ -234,19 +237,17 @@ impl HtmlProcessor {
         let mut img_srcs: Vec<&str> = Vec::new();
         let mut source_srcs: Vec<&str> = Vec::new();
         let mut srcset_values: Vec<&str> = Vec::new();
-        for tag in RE_IMG_OR_SOURCE_TAG.captures_iter(html) {
+        for tag in split_at_scripts(html)
+            .into_iter()
+            .flat_map(|part| RE_IMG_OR_SOURCE_TAG.captures_iter(part))
+        {
             let is_img = tag[1].eq_ignore_ascii_case("img");
-            let tag_html = tag.get(0).map_or("", |m| m.as_str());
-            for attribute in RE_TAG_ATTRIBUTE.captures_iter(tag_html) {
+            let attributes = tag.get(2).map_or("", |m| m.as_str());
+            for attribute in RE_TAG_ATTRIBUTE.captures_iter(attributes) {
                 let name = attribute[2].to_ascii_lowercase();
-                let value = attribute
-                    .get(3)
-                    .or_else(|| attribute.get(4))
-                    .or_else(|| attribute.get(5))
-                    .map_or("", |m| m.as_str());
-                if value.trim().is_empty() {
+                let Some((_, value)) = image_attribute_value(&attribute) else {
                     continue;
-                }
+                };
                 if IMAGE_URL_ATTRIBUTES.contains(&name.as_str()) {
                     if is_img {
                         img_srcs.push(value);
@@ -607,34 +608,33 @@ impl HtmlProcessor {
     /// Rewrite the image attributes of `<img>` and `<source>` tags (#109): `src`, `srcset` and their
     /// lazy-loading variants, each attribute on its own and converted with a `src`/`srcset` hint.
     fn update_img_and_source_paths_to_relative(&self, html: &str, parsed_base_url: &ParsedUrl) -> String {
-        RE_IMG_OR_SOURCE_TAG
-            .replace_all(html, |tag: &regex::Captures| {
-                RE_TAG_ATTRIBUTE
-                    .replace_all(&tag[0], |attribute: &regex::Captures| {
-                        let full_match = attribute.get(0).map_or("", |m| m.as_str());
-                        let name = attribute[2].to_ascii_lowercase();
-                        let hint = if IMAGE_URL_ATTRIBUTES.contains(&name.as_str()) {
-                            "src"
-                        } else if IMAGE_SRCSET_ATTRIBUTES.contains(&name.as_str()) {
-                            "srcset"
-                        } else {
-                            return full_match.to_string();
-                        };
-                        let (quote, value) = match (attribute.get(3), attribute.get(4)) {
-                            (Some(double_quoted), _) => ("\"", double_quoted.as_str()),
-                            (None, Some(single_quoted)) => ("'", single_quoted.as_str()),
-                            (None, None) => ("", attribute.get(5).map_or("", |m| m.as_str())),
-                        };
-                        match self.convert_attribute_value(hint, value, parsed_base_url) {
-                            Some(new_value) => {
-                                format!("{}{}={}{}{}", &attribute[1], &attribute[2], quote, new_value, quote)
-                            }
-                            None => full_match.to_string(),
-                        }
-                    })
-                    .into_owned()
-            })
-            .into_owned()
+        let replace_tag = |tag: &regex::Captures| {
+            let attributes = RE_TAG_ATTRIBUTE.replace_all(&tag[2], |attribute: &regex::Captures| {
+                let full_match = attribute.get(0).map_or("", |m| m.as_str());
+                let name = attribute[2].to_ascii_lowercase();
+                let hint = if IMAGE_URL_ATTRIBUTES.contains(&name.as_str()) {
+                    "src"
+                } else if IMAGE_SRCSET_ATTRIBUTES.contains(&name.as_str()) {
+                    "srcset"
+                } else {
+                    return full_match.to_string();
+                };
+                let Some((quote, value)) = image_attribute_value(attribute) else {
+                    return full_match.to_string();
+                };
+                match self.convert_attribute_value(hint, value, parsed_base_url) {
+                    Some(new_value) => {
+                        format!("{}{}={}{}{}", &attribute[1], &attribute[2], quote, new_value, quote)
+                    }
+                    None => full_match.to_string(),
+                }
+            });
+            format!("<{}{}>", &tag[1], attributes)
+        };
+        split_at_scripts(html)
+            .into_iter()
+            .map(|part| RE_IMG_OR_SOURCE_TAG.replace_all(part, replace_tag))
+            .collect()
     }
 
     /// Update all HTML paths to relative for offline version
@@ -931,6 +931,38 @@ impl ContentProcessor for HtmlProcessor {
     fn set_debug_mode(&mut self, debug_mode: bool) {
         self.debug_mode = debug_mode;
     }
+}
+
+/// `html` cut where the content of every `<script>` block starts and ends: markup in a script is a JS
+/// string, so a quoted value of an `<img>`/`<source>` read there must not run past the script (#109).
+fn split_at_scripts(html: &str) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let mut start = 0;
+    for script in RE_SCRIPT_BLOCK.captures_iter(html) {
+        if let Some(content) = script.get(1) {
+            parts.push(&html[start..content.start()]);
+            parts.push(content.as_str());
+            start = content.end();
+        }
+    }
+    parts.push(&html[start..]);
+    parts
+}
+
+/// Quote and value of an image attribute captured by `RE_TAG_ATTRIBUTE`, when the value can be a URL
+/// (or srcset). Not when it is empty, holds a quote or starts with `\`: that is markup built by
+/// concatenation in a JS string (`'<img src="' + src + '">'`) or escaped in one (`src=\"…\"`).
+fn image_attribute_value<'a>(attribute: &regex::Captures<'a>) -> Option<(&'static str, &'a str)> {
+    let (quote, value) = match (attribute.get(3), attribute.get(4), attribute.get(5)) {
+        (Some(double_quoted), _, _) => ("\"", double_quoted.as_str()),
+        (None, Some(single_quoted), _) => ("'", single_quoted.as_str()),
+        (None, None, Some(unquoted)) => ("", unquoted.as_str()),
+        (None, None, None) => return None,
+    };
+    if value.trim().is_empty() || value.contains(['"', '\'']) || value.starts_with('\\') {
+        return None;
+    }
+    Some((quote, value))
 }
 
 /// Decode HTML entities in URL attribute values.
@@ -1467,6 +1499,138 @@ mod tests {
         let mut html = format!("<html><head></head><body>{script}</body></html>");
         processor.apply_content_changes_for_offline_version(&mut html, ContentTypeId::Html, &page, false);
         assert!(html.contains(script), "{html}");
+    }
+
+    /// Image tags whose alt/title text holds the other kind of quote and attribute-like text: the
+    /// text is one attribute value, nothing in it is an image URL (#109).
+    const IMAGES_WITH_ATTRIBUTE_LIKE_TEXT: &str = r#"<html><head></head><body>
+<img src="/img/real1.png" alt="Today's diagram: data-original=/img/ghost1.png">
+<img src="/img/real2.png" title='The "src=/img/ghost2.png" text'>
+<picture><source srcset="/img/real3.webp" title="Today's set: data-srcset=/img/ghost3.webp"></picture>
+</body></html>"#;
+
+    #[test]
+    fn attribute_like_text_of_images_is_not_crawled() {
+        let processor = HtmlProcessor::new(make_config());
+        let source = ParsedUrl::parse("https://example.com/blog/", None);
+        let found = processor.find_urls(IMAGES_WITH_ATTRIBUTE_LIKE_TEXT, &source).unwrap();
+        let mut urls: Vec<&str> = found.get_urls().values().map(|u| u.url.as_str()).collect();
+        urls.sort();
+        assert_eq!(urls, vec!["/img/real1.png", "/img/real2.png", "/img/real3.webp"]);
+    }
+
+    #[test]
+    fn attribute_like_text_of_images_is_left_intact() {
+        let processor = HtmlProcessor::new(make_config());
+        let page = ParsedUrl::parse("https://example.com/blog/", None);
+        let mut html = IMAGES_WITH_ATTRIBUTE_LIKE_TEXT.to_string();
+        processor.apply_content_changes_for_offline_version(&mut html, ContentTypeId::Html, &page, false);
+        for expected in [
+            r#"<img src="../img/real1.png" alt="Today's diagram: data-original=/img/ghost1.png">"#,
+            r#"<img src="../img/real2.png" title='The "src=/img/ghost2.png" text'>"#,
+            r#"<source srcset="../img/real3.webp" title="Today's set: data-srcset=/img/ghost3.webp">"#,
+        ] {
+            assert!(html.contains(expected), "missing {expected} in {html}");
+        }
+    }
+
+    #[test]
+    fn image_markup_in_a_script_never_hides_the_images_after_the_script() {
+        // #109: a quoted value of image markup in a JS string ends with the script at the latest, so
+        // an unclosed one does not swallow the image after the script
+        let processor = HtmlProcessor::new(make_config());
+        let page = ParsedUrl::parse("https://example.com/blog/", None);
+        let script = r#"<script>var s = '<img alt="' + title;</script>"#;
+        let html =
+            format!(r#"<html><head></head><body>{script}<p>Text</p><img src="/img/real.png" alt="x"></body></html>"#);
+        let found = processor.find_urls(&html, &page).unwrap();
+        let urls: Vec<&str> = found.get_urls().values().map(|u| u.url.as_str()).collect();
+        assert_eq!(urls, vec!["/img/real.png"]);
+
+        let mut html = html.clone();
+        processor.apply_content_changes_for_offline_version(&mut html, ContentTypeId::Html, &page, false);
+        for expected in [script, r#"<img src="../img/real.png" alt="x">"#] {
+            assert!(html.contains(expected), "missing {expected} in {html}");
+        }
+    }
+
+    #[test]
+    fn image_urls_with_a_greater_than_sign_are_extracted_and_rewritten() {
+        // #109: a `>` inside a quoted value does not end the tag
+        let processor = HtmlProcessor::new(make_config());
+        let page = ParsedUrl::parse("https://example.com/", None);
+        let html = r#"<html><head></head><body><img id="t" src="/image?width=200&filter=>10">
+<img src="/img/ph.gif" data-src="/lazy?filter=>5" alt="x"> <img alt="Home > Products" src="/img/after.png">
+</body></html>"#;
+        let found = processor.find_urls(html, &page).unwrap();
+        let urls: Vec<&str> = found.get_urls().values().map(|u| u.url.as_str()).collect();
+        for expected in [
+            "/image?width=200&filter=>10",
+            "/lazy?filter=>5",
+            "/img/ph.gif",
+            "/img/after.png",
+        ] {
+            assert!(
+                urls.contains(&expected),
+                "{expected} should be extracted. Found: {urls:?}"
+            );
+        }
+
+        let stored = |url: &str| {
+            OfflineUrlConverter::new(
+                page.clone(),
+                page.clone(),
+                ParsedUrl::parse(url, None),
+                None,
+                None,
+                Some("src"),
+            )
+            .convert_url_to_relative(false)
+        };
+        let mut html = html.to_string();
+        processor.apply_content_changes_for_offline_version(&mut html, ContentTypeId::Html, &page, false);
+        for expected in [
+            format!(
+                r#"<img id="t" src="{}">"#,
+                stored("https://example.com/image?width=200&filter=>10")
+            ),
+            format!(
+                r#" data-src="{}" alt="x">"#,
+                stored("https://example.com/lazy?filter=>5")
+            ),
+            r#"<img alt="Home > Products" src="img/after.png">"#.to_string(),
+        ] {
+            assert!(html.contains(&expected), "missing {expected} in {html}");
+        }
+    }
+
+    #[test]
+    fn lazy_srcset_of_allowed_extensionless_external_images_is_rewritten() {
+        // #109: extension-less images on a domain allowed by --allowed-domain-for-external-files are
+        // downloaded from lazy srcsets too, so the srcsets point to their local copies
+        let mut config = make_config();
+        let allow_static: crate::content_processor::base_processor::DomainAllowFn =
+            std::sync::Arc::new(|domain: &str| domain == "images.cdn.test");
+        config.is_domain_allowed_for_static_files = Some(allow_static);
+        let processor = HtmlProcessor::new(config);
+        let page = ParsedUrl::parse("https://example.com/blog/", None);
+        let mut html = r#"<html><head></head><body>
+<img data-src="https://images.cdn.test/one" data-srcset="https://images.cdn.test/two 1x, https://images.cdn.test/three 2x">
+<picture><source data-lazy-srcset="https://images.cdn.test/four 1x"><img srcset="https://images.cdn.test/five 2x" src="/ph.gif"></picture>
+<img srcset="https://denied.test/six 1x">
+</body></html>"#
+            .to_string();
+        processor.apply_content_changes_for_offline_version(&mut html, ContentTypeId::Html, &page, false);
+        for expected in [
+            r#" data-src="../_images.cdn.test/one.jpg""#,
+            r#" data-srcset="../_images.cdn.test/two.jpg 1x, ../_images.cdn.test/three.jpg 2x""#,
+            r#" data-lazy-srcset="../_images.cdn.test/four.jpg 1x""#,
+            r#" srcset="../_images.cdn.test/five.jpg 2x""#,
+            // a domain not allowed for external files stays online
+            r#" srcset="https://denied.test/six 1x""#,
+        ] {
+            assert!(html.contains(expected), "missing {expected} in {html}");
+        }
     }
 
     #[test]
