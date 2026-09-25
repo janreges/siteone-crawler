@@ -12,6 +12,7 @@ use std::time::Instant;
 
 use once_cell::sync::Lazy;
 use regex::bytes::{Captures, Regex, RegexBuilder, RegexSet, RegexSetBuilder};
+use scraper::{Html, Selector};
 use serde::Deserialize;
 
 use crate::analysis::analyzer::Analyzer;
@@ -55,15 +56,8 @@ const SIGNATURES_JSON: &str = include_str!("technologies/signatures.json");
 static SIGNATURES: Lazy<Signatures> =
     Lazy::new(|| Signatures::parse(SIGNATURES_JSON).expect("the embedded technology signatures are valid"));
 
-/// `<script ... src=...>`; groups 1/2/3 = double-quoted / single-quoted / bare value. The attribute
-/// must follow whitespace, so `data-src` is not mistaken for `src`.
-static RE_SCRIPT_SRC: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r#"(?i-u)<script\b[^>]*?\ssrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))"#).unwrap());
-static RE_META_TAG: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i-u)<meta\b[^>]*>").unwrap());
-static RE_META_NAME: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r#"(?i-u)\sname\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))"#).unwrap());
-static RE_META_CONTENT: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r#"(?i-u)\scontent\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))"#).unwrap());
+static SELECTOR_META: Lazy<Selector> = Lazy::new(|| Selector::parse("meta[name][content]").unwrap());
+static SELECTOR_SCRIPT_SRC: Lazy<Selector> = Lazy::new(|| Selector::parse("script[src]").unwrap());
 
 #[derive(Deserialize)]
 struct SignatureFile {
@@ -228,21 +222,19 @@ impl Signatures {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Hit {
     tech: usize,
-    version: Option<String>,
+    versions: BTreeSet<String>,
     evidence: String,
 }
 
-/// Record a hit. A technology found by several rules on one page counts once; the first evidence
-/// and the first version any rule captured win.
+/// Record a hit. A technology found by several rules on one page counts once, with the first
+/// evidence and every version any rule captured (a page can load two versions of one library).
 fn add_hit(hits: &mut Vec<Hit>, tech: usize, version: Option<String>, evidence: String) {
     if let Some(hit) = hits.iter_mut().find(|hit| hit.tech == tech) {
-        if hit.version.is_none() {
-            hit.version = version;
-        }
+        hit.versions.extend(version);
     } else {
         hits.push(Hit {
             tech,
-            version,
+            versions: version.into_iter().collect(),
             evidence: shorten_evidence(&evidence),
         });
     }
@@ -255,15 +247,6 @@ fn version_of(caps: &Captures<'_>) -> Option<String> {
         .flatten()
         .map(|m| String::from_utf8_lossy(m.as_bytes()).trim_matches('.').to_string())
         .find(|version| !version.is_empty())
-}
-
-/// Value of the attribute matched by `re` (one of the three quoting groups) in a tag.
-fn attribute_value<'t>(re: &Regex, tag: &'t [u8]) -> Option<&'t [u8]> {
-    let caps = re.captures(tag)?;
-    caps.get(1)
-        .or_else(|| caps.get(2))
-        .or_else(|| caps.get(3))
-        .map(|m| m.as_bytes())
 }
 
 /// Collapse whitespace and cut to MAX_EVIDENCE_CHARS characters.
@@ -281,7 +264,7 @@ fn shorten_evidence(evidence: &str) -> String {
 
 /// Technologies recognized in one response. Cookie values are never used or shown, only names;
 /// script evidence drops the query string.
-fn detect(signatures: &Signatures, headers: &HashMap<String, String>, body: &[u8]) -> Vec<Hit> {
+fn detect(signatures: &Signatures, headers: &HashMap<String, String>, body: &str) -> Vec<Hit> {
     let mut hits: Vec<Hit> = Vec::new();
 
     for rule in &signatures.headers {
@@ -311,33 +294,30 @@ fn detect(signatures: &Signatures, headers: &HashMap<String, String>, body: &[u8
         }
     }
 
-    for tag in RE_META_TAG.find_iter(body) {
-        let tag = tag.as_bytes();
-        let (Some(name), Some(content)) = (
-            attribute_value(&RE_META_NAME, tag),
-            attribute_value(&RE_META_CONTENT, tag),
-        ) else {
+    // <meta> and <script src> come from the parsed document: attribute values are decoded, and markup
+    // in comments, <textarea> text or custom elements such as <script-widget> is not a tag.
+    let document = Html::parse_document(body);
+    for meta in document.select(&SELECTOR_META) {
+        let (Some(name), Some(content)) = (meta.value().attr("name"), meta.value().attr("content")) else {
             continue;
         };
-        let name = String::from_utf8_lossy(name).to_ascii_lowercase();
+        let name = name.to_ascii_lowercase();
         for rule in signatures.meta.iter().filter(|rule| rule.key == name) {
-            if let Some(caps) = rule.pattern.captures(content) {
-                let evidence = format!("meta {}: {}", name, String::from_utf8_lossy(content));
+            if let Some(caps) = rule.pattern.captures(content.as_bytes()) {
+                let evidence = format!("meta {}: {}", name, content);
                 add_hit(&mut hits, rule.tech, version_of(&caps), evidence);
             }
         }
     }
 
-    for caps in RE_SCRIPT_SRC.captures_iter(body) {
-        let Some(src) = caps.get(1).or_else(|| caps.get(2)).or_else(|| caps.get(3)) else {
+    for script in document.select(&SELECTOR_SCRIPT_SRC) {
+        let Some(src) = script.value().attr("src") else {
             continue;
         };
-        let src = src.as_bytes();
-        for index in signatures.scripts.set.matches(src).iter() {
+        for index in signatures.scripts.set.matches(src.as_bytes()).iter() {
             let rule = &signatures.scripts.rules[index];
-            if let Some(rule_caps) = rule.pattern.captures(src) {
-                let src_text = String::from_utf8_lossy(src);
-                let without_query = src_text.split('?').next().unwrap_or("");
+            if let Some(rule_caps) = rule.pattern.captures(src.as_bytes()) {
+                let without_query = src.split('?').next().unwrap_or("");
                 add_hit(
                     &mut hits,
                     rule.tech,
@@ -348,9 +328,12 @@ fn detect(signatures: &Signatures, headers: &HashMap<String, String>, body: &[u8
         }
     }
 
+    let body = body.as_bytes();
     for index in signatures.html.set.matches(body).iter() {
         let rule = &signatures.html.rules[index];
-        if let Some(caps) = rule.pattern.captures(body) {
+        // A versioned marker can appear with several versions; an unversioned one needs only one match.
+        let limit = if rule.pattern.captures_len() > 1 { usize::MAX } else { 1 };
+        for caps in rule.pattern.captures_iter(body).take(limit) {
             let matched = caps
                 .get(0)
                 .map(|m| String::from_utf8_lossy(m.as_bytes()).into_owned())
@@ -540,17 +523,11 @@ impl Analyzer for TechnologiesAnalyzer {
 
         let s = Instant::now();
         let no_headers = HashMap::new();
-        let hits = detect(
-            &SIGNATURES,
-            headers.unwrap_or(&no_headers),
-            body.unwrap_or("").as_bytes(),
-        );
+        let hits = detect(&SIGNATURES, headers.unwrap_or(&no_headers), body.unwrap_or(""));
         for hit in hits {
             let detection = self.detections.entry(hit.tech).or_default();
             detection.pages += 1;
-            if let Some(version) = hit.version {
-                detection.versions.insert(version);
-            }
+            detection.versions.extend(hit.versions);
             if detection.evidence.is_empty() {
                 detection.evidence = hit.evidence;
             }
@@ -590,11 +567,19 @@ mod tests {
         pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
     }
 
-    /// (technology name, version) pairs recognized in one response.
+    /// (technology name, version) pairs recognized in one response; a technology without a
+    /// version appears once with `None`.
     fn detected(pairs: &[(&str, &str)], html: &str) -> Vec<(String, Option<String>)> {
-        detect(&SIGNATURES, &headers(pairs), html.as_bytes())
+        detect(&SIGNATURES, &headers(pairs), html)
             .into_iter()
-            .map(|hit| (SIGNATURES.technologies[hit.tech].name.clone(), hit.version))
+            .flat_map(|hit| {
+                let name = &SIGNATURES.technologies[hit.tech].name;
+                if hit.versions.is_empty() {
+                    vec![(name.clone(), None)]
+                } else {
+                    hit.versions.into_iter().map(|v| (name.clone(), Some(v))).collect()
+                }
+            })
             .collect()
     }
 
@@ -714,6 +699,38 @@ mod tests {
     }
 
     #[test]
+    fn inactive_markup_is_not_a_meta_tag_or_a_script() {
+        for markup in [
+            r#"<!-- <meta name="generator" content="WordPress 4.0"><script src="/js/jquery-1.12.4.min.js"></script> -->"#,
+            r#"<textarea><meta name="generator" content="WordPress 4.0"><script src="/js/jquery-1.12.4.min.js"></script></textarea>"#,
+            r#"<meta-data name="generator" content="WordPress 4.0"><script-widget src="/js/jquery-1.12.4.min.js"></script-widget>"#,
+        ] {
+            let found = detected(&[], &format!("<html><head></head><body>{markup}</body></html>"));
+            assert!(found.is_empty(), "{markup}: {found:?}");
+        }
+    }
+
+    #[test]
+    fn raw_html_markers_still_match_comments() {
+        let html = "<html><head><!-- This site is optimized with the Yoast SEO plugin v22.6 - https://yoast.com/wordpress/plugins/seo/ --></head></html>";
+        assert!(has(&detected(&[], html), "Yoast SEO", Some("22.6")));
+    }
+
+    #[test]
+    fn meta_and_script_attributes_are_read_as_parsed_values() {
+        for html in [
+            // a `>` inside a quoted attribute value does not end the tag
+            r#"<meta data-note="x > y" name="generator" content="WordPress 6.5.2"><script data-note="x > y" src="/js/jquery-3.7.1.min.js"></script>"#,
+            // character references are decoded
+            r#"<meta name="generator" content="Word&#80;ress 6.5.2"><script src="/js/jquery&#x2d;3.7.1.min.js"></script>"#,
+        ] {
+            let found = detected(&[], html);
+            assert!(has(&found, "WordPress", Some("6.5.2")), "{html}: {found:?}");
+            assert!(has(&found, "jQuery", Some("3.7.1")), "{html}: {found:?}");
+        }
+    }
+
+    #[test]
     fn detects_google_tag_manager_snippet() {
         let html = "<script>(function(w,d,s,l,i){j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;})(window,document,'script','dataLayer','GTM-ABC1234');</script>";
         assert!(has(&detected(&[], html), "Google Tag Manager", None));
@@ -775,6 +792,39 @@ mod tests {
     }
 
     #[test]
+    fn every_version_on_one_page_is_kept() {
+        let modern = r#"<script src="/js/jquery-3.7.1.min.js"></script>"#;
+        let legacy = r#"<script src="/js/jquery-1.12.4.min.js"></script>"#;
+        for (html, first) in [
+            (format!("{modern}{legacy}"), "script /js/jquery-3.7.1.min.js"),
+            (format!("{legacy}{modern}"), "script /js/jquery-1.12.4.min.js"),
+        ] {
+            let mut analyzer = TechnologiesAnalyzer::new();
+            analyzer.analyze_visited_url(&page("https://example.com/"), Some(&html), None);
+            let rows = analyzer.table_rows();
+            let jquery = rows.iter().find(|r| r["technology"] == "jQuery").expect("jQuery row");
+            assert_eq!(jquery["version"], "1.12.4, 3.7.1", "{html}");
+            assert_eq!(jquery["pages"], "1", "{html}");
+            assert_eq!(jquery["evidence"], first, "{html}");
+        }
+    }
+
+    #[test]
+    fn every_version_of_an_html_marker_on_one_page_is_kept() {
+        let html = r#"<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">"#;
+        let mut analyzer = TechnologiesAnalyzer::new();
+        analyzer.analyze_visited_url(&page("https://example.com/"), Some(html), None);
+        let rows = analyzer.table_rows();
+        let icons = rows
+            .iter()
+            .find(|r| r["technology"] == "Font Awesome")
+            .expect("Font Awesome row");
+        assert_eq!(icons["version"], "4.7.0, 6.5.1");
+        assert_eq!(icons["pages"], "1");
+    }
+
+    #[test]
     fn redirects_are_not_counted_as_pages() {
         let mut analyzer = TechnologiesAnalyzer::new();
         let nginx = headers(&[("server", "nginx/1.25.3")]);
@@ -795,7 +845,7 @@ mod tests {
                 "set-cookie",
                 "laravel_session=SECRET-SESSION; path=/; HttpOnly\n_ga=GA1.2.3",
             )]),
-            br#"<script src="https://maps.googleapis.com/maps/api/js?key=SECRET-KEY&callback=init"></script>
+            r#"<script src="https://maps.googleapis.com/maps/api/js?key=SECRET-KEY&callback=init"></script>
                 <script src="https://www.googletagmanager.com/gtm.js?id=GTM-SECRET"></script>"#,
         );
         let evidence: Vec<&str> = found.iter().map(|hit| hit.evidence.as_str()).collect();
