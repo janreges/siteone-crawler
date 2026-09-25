@@ -247,12 +247,18 @@ impl HttpClient {
                     .get("content-encoding")
                     .map(|values| values.join(", "))
                     .unwrap_or_default();
-                // A body that cannot be read or decoded is handled alike: no body.
-                let body = resp
-                    .bytes()
-                    .await
-                    .ok()
-                    .and_then(|raw| decode_body(&raw, &content_encoding).ok());
+                // A body that cannot be read or decoded is handled alike: no body. Decoding runs off the
+                // async workers and must finish within the request timeout, like reading the body.
+                let deadline = start_time + timeout;
+                let body = match resp.bytes().await {
+                    Ok(raw) => {
+                        tokio::task::spawn_blocking(move || decode_body_until(&raw, &content_encoding, Some(deadline)))
+                            .await
+                            .ok()
+                            .and_then(Result::ok)
+                    }
+                    Err(_) => None,
+                };
                 let elapsed = start_time.elapsed().as_secs_f64();
 
                 HttpResponse::new(url.to_string(), status, body, resp_headers, elapsed)
@@ -552,6 +558,13 @@ fn convert_response_headers(headers: &reqwest::header::HeaderMap) -> HashMap<Str
 /// empty value and an empty body (HEAD, 204, 304) leave the bytes unchanged, and so does a coding
 /// this client cannot decode (e.g. `zstd`) — the body is then kept exactly as received.
 pub fn decode_body(raw: &[u8], content_encoding: &str) -> std::io::Result<Vec<u8>> {
+    decode_body_until(raw, content_encoding, None)
+}
+
+/// [`decode_body`] that gives up with `ErrorKind::TimedOut` once `deadline` passes, so decompressing
+/// a response cannot outlive the request timeout. Every coding must reach the end of its stream: a
+/// truncated `deflate` body is an error, not a shorter page.
+pub fn decode_body_until(raw: &[u8], content_encoding: &str, deadline: Option<Instant>) -> std::io::Result<Vec<u8>> {
     let codings: Vec<String> = content_encoding
         .split(',')
         .map(|coding| coding.trim().to_ascii_lowercase())
@@ -566,25 +579,70 @@ pub fn decode_body(raw: &[u8], content_encoding: &str) -> std::io::Result<Vec<u8
 
     let mut body = raw.to_vec();
     for coding in codings.iter().rev() {
-        let mut decoded = Vec::new();
-        match coding.as_str() {
-            "br" => {
-                std::io::Read::read_to_end(&mut brotli::Decompressor::new(&body[..], 4096), &mut decoded)?;
-            }
-            "gzip" | "x-gzip" => {
-                std::io::Read::read_to_end(&mut flate2::read::MultiGzDecoder::new(&body[..]), &mut decoded)?;
-            }
-            _ => {
-                // `deflate` is zlib-wrapped by the spec, but some servers send a raw deflate stream.
-                if std::io::Read::read_to_end(&mut flate2::read::ZlibDecoder::new(&body[..]), &mut decoded).is_err() {
-                    decoded.clear();
-                    std::io::Read::read_to_end(&mut flate2::read::DeflateDecoder::new(&body[..]), &mut decoded)?;
-                }
-            }
-        }
-        body = decoded;
+        body = match coding.as_str() {
+            "br" => read_until(brotli::Decompressor::new(&body[..], 4096), deadline)?,
+            "gzip" | "x-gzip" => read_until(flate2::read::MultiGzDecoder::new(&body[..]), deadline)?,
+            // `deflate` is zlib-wrapped by the spec, but some servers send a raw deflate stream.
+            _ => match inflate_until(&body, true, deadline) {
+                Err(error) if error.kind() != std::io::ErrorKind::TimedOut => inflate_until(&body, false, deadline)?,
+                result => result?,
+            },
+        };
     }
     Ok(body)
+}
+
+fn check_deadline(deadline: Option<Instant>) -> std::io::Result<()> {
+    if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::TimedOut,
+            "decoding the response body exceeded the request timeout",
+        ));
+    }
+    Ok(())
+}
+
+/// Read a decoder to its end in chunks, checking `deadline` between them.
+fn read_until(mut reader: impl std::io::Read, deadline: Option<Instant>) -> std::io::Result<Vec<u8>> {
+    let mut decoded = Vec::new();
+    let mut chunk = vec![0u8; 64 * 1024];
+    loop {
+        check_deadline(deadline)?;
+        let read = reader.read(&mut chunk)?;
+        if read == 0 {
+            return Ok(decoded);
+        }
+        decoded.extend_from_slice(&chunk[..read]);
+    }
+}
+
+/// Inflate a zlib-wrapped (`zlib_header`) or raw deflate stream up to its end marker. flate2's
+/// readers report a stream that stops early as a normal end of input, so this drives the inflater
+/// directly and treats input that runs out before the end marker as an error.
+fn inflate_until(input: &[u8], zlib_header: bool, deadline: Option<Instant>) -> std::io::Result<Vec<u8>> {
+    let mut inflater = flate2::Decompress::new(zlib_header);
+    let mut decoded: Vec<u8> = Vec::with_capacity(input.len().saturating_mul(4).max(1024));
+    loop {
+        check_deadline(deadline)?;
+        if decoded.len() == decoded.capacity() {
+            decoded.reserve(decoded.capacity().max(64 * 1024));
+        }
+        let consumed = inflater.total_in() as usize;
+        let produced = decoded.len();
+        let status = inflater
+            .decompress_vec(&input[consumed..], &mut decoded, flate2::FlushDecompress::None)
+            .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
+        if matches!(status, flate2::Status::StreamEnd) {
+            return Ok(decoded);
+        }
+        let progressed = inflater.total_in() as usize != consumed || decoded.len() != produced;
+        if !progressed && decoded.len() < decoded.capacity() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "the deflate stream ends before its end marker",
+            ));
+        }
+    }
 }
 
 /// Parse one `--header` value (`Name: value`). The name must be an HTTP token and the value must
@@ -709,6 +767,43 @@ mod tests {
         assert_eq!(decode_body(&zlib_compress(PAGE), "deflate").unwrap(), PAGE);
         // Some servers send a raw deflate stream although `deflate` means zlib-wrapped data.
         assert_eq!(decode_body(&raw_deflate_compress(PAGE), "deflate").unwrap(), PAGE);
+    }
+
+    #[test]
+    fn decode_body_rejects_truncated_deflate_streams() {
+        let zlib = zlib_compress(&PAGE.repeat(20));
+        assert!(
+            decode_body(&zlib[..zlib.len() / 2], "deflate").is_err(),
+            "truncated zlib"
+        );
+        assert!(
+            decode_body(&zlib[..zlib.len() - 4], "deflate").is_err(),
+            "zlib without its checksum"
+        );
+        let raw = raw_deflate_compress(&PAGE.repeat(20));
+        assert!(
+            decode_body(&raw[..raw.len() / 2], "deflate").is_err(),
+            "truncated raw deflate"
+        );
+        // Complete streams still decode, including the raw-deflate fallback.
+        assert_eq!(decode_body(&zlib, "deflate").unwrap(), PAGE.repeat(20));
+        assert_eq!(decode_body(&raw, "deflate").unwrap(), PAGE.repeat(20));
+    }
+
+    #[test]
+    fn decoding_stops_once_the_request_deadline_has_passed() {
+        let page = vec![b'x'; 8 * 1024 * 1024];
+        let passed = Some(Instant::now() - std::time::Duration::from_millis(1));
+        for (body, coding) in [
+            (gzip_compress(&page), "gzip"),
+            (br_compress(&page), "br"),
+            (zlib_compress(&page), "deflate"),
+        ] {
+            let error = decode_body_until(&body, coding, passed).unwrap_err();
+            assert_eq!(error.kind(), std::io::ErrorKind::TimedOut, "{coding}");
+        }
+        let future = Some(Instant::now() + std::time::Duration::from_secs(60));
+        assert_eq!(decode_body_until(&gzip_compress(PAGE), "gzip", future).unwrap(), PAGE);
     }
 
     #[test]
