@@ -99,6 +99,8 @@ pub struct CoreOptions {
     pub show_scheme_and_host: bool,
     pub do_not_truncate_url: bool,
     pub hide_progress_bar: bool,
+    /// `--progress-interval` in seconds; 0 = one output row per URL
+    pub progress_interval: i64,
     pub hide_columns: Vec<String>,
     pub no_color: bool,
     pub force_color: bool,
@@ -388,6 +390,7 @@ impl CoreOptions {
             show_scheme_and_host: false,
             do_not_truncate_url: false,
             hide_progress_bar: false,
+            progress_interval: 0,
             hide_columns: Vec::new(),
             no_color: false,
             force_color: false,
@@ -1050,6 +1053,11 @@ impl CoreOptions {
             if !options.is_explicitly_set("outputTextFile") {
                 core.output_text_file = None;
             }
+            // CI job logs are size-limited (GitLab: 4 MiB by default): a progress line every 10 s
+            // instead of a row per URL, unless the user chose the interval.
+            if !options.is_explicitly_set("progressInterval") {
+                core.progress_interval = 10;
+            }
         }
 
         // Warn if --html-to-markdown-output is set without --html-to-markdown
@@ -1277,6 +1285,11 @@ impl CoreOptions {
             "hideProgressBar" => {
                 if let Some(b) = value.as_bool() {
                     self.hide_progress_bar = b;
+                }
+            }
+            "progressInterval" => {
+                if let Some(n) = value.as_int() {
+                    self.progress_interval = n;
                 }
             }
             "hideColumns" => {
@@ -2462,6 +2475,11 @@ pub fn get_options() -> Options {
                 Some("false"), false, false, None,
             ),
             CrawlerOption::new(
+                "--progress-interval", None, "progressInterval", OptionType::Int, false,
+                "Print at most one compact progress line every N seconds, printed as URLs finish (plus a final one), instead of one table row per URL; rows of failed URLs (4xx/5xx, errors) are still printed. The text report keeps every row. `0` = row per URL; `--ci` implies `10` unless set.",
+                Some("0"), false, false, Some(vec!["0".to_string(), "86400".to_string()]),
+            ),
+            CrawlerOption::new(
                 "--hide-columns", Some("-hc"), "hideColumns", OptionType::String, false,
                 "Hide specified columns from the progress table. Comma-separated list: type, time, size, cache.",
                 None, true, false, None,
@@ -3239,7 +3257,7 @@ pub fn get_options() -> Options {
                 "ci",
                 OptionType::Bool,
                 false,
-                "Enable CI/CD quality gate. Crawler exits with code 10 if thresholds are not met.",
+                "Enable CI/CD quality gate. Crawler exits with code 10 if thresholds are not met. Implies `--progress-interval=10` unless that option is given.",
                 Some("false"),
                 false,
                 false,
@@ -4269,6 +4287,7 @@ mod tests {
             show_scheme_and_host: false,
             do_not_truncate_url: false,
             hide_progress_bar: false,
+            progress_interval: 0,
             hide_columns: Vec::new(),
             no_color: false,
             force_color: false,
@@ -4852,7 +4871,7 @@ mod tests {
                 .values()
                 .map(|group| group.options.len())
                 .sum::<usize>(),
-            219
+            220
         );
     }
 
@@ -4915,5 +4934,24 @@ mod tests {
             assert!(error.to_string().contains("--header"), "{arg:?}: {error}");
             assert!(!error.to_string().contains("SECRET_SUFFIX"), "{arg:?}: {error}");
         }
+    }
+
+    #[test]
+    fn ci_implies_progress_interval_unless_given() {
+        let config = h01_config_file();
+        let interval = |extra: &[&str]| parse_argv(&h01_argv(&config, extra)).unwrap().progress_interval;
+
+        assert_eq!(interval(&[]), 0, "one row per URL by default");
+        assert_eq!(interval(&["--progress-interval=3"]), 3);
+        assert_eq!(interval(&["--ci"]), 10, "--ci keeps CI logs small");
+        assert_eq!(
+            interval(&["--ci", "--progress-interval=0"]),
+            0,
+            "an explicit value wins"
+        );
+        assert!(
+            parse_argv(&h01_argv(&config, &["--progress-interval=-1"])).is_err(),
+            "the interval cannot be negative"
+        );
     }
 }

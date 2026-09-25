@@ -4,6 +4,7 @@
 
 use std::collections::HashMap;
 use std::io::Write;
+use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 
@@ -12,6 +13,7 @@ use crate::components::super_table::SuperTable;
 use crate::extra_column::ExtraColumn;
 use crate::output::output::{BasicStats, CrawlerInfo, Output};
 use crate::output::output_type::OutputType;
+use crate::output::progress_reporter::ProgressReporter;
 use crate::scoring::ci_gate::CiGateResult;
 use crate::scoring::quality_score::QualityScores;
 use crate::utils;
@@ -31,6 +33,10 @@ pub struct JsonOutput {
     /// For progress display on stderr
     hide_progress_bar: bool,
     max_stderr_length: usize,
+    /// `--progress-interval` in seconds; 0 = redraw the progress line for every URL
+    progress_interval: u64,
+    /// Throttled progress lines, created with the results table when `progress_interval > 0`
+    progress: Option<ProgressReporter>,
 }
 
 impl JsonOutput {
@@ -40,6 +46,7 @@ impl JsonOutput {
         hide_progress_bar: bool,
         print_to_output: bool,
         options_json: Option<Value>,
+        progress_interval: u64,
     ) -> Self {
         Self {
             crawler_info,
@@ -49,6 +56,8 @@ impl JsonOutput {
             options_json,
             hide_progress_bar,
             max_stderr_length: 0,
+            progress_interval,
+            progress: None,
         }
     }
 
@@ -84,6 +93,13 @@ impl Output for JsonOutput {
 
     fn add_table_header(&mut self) {
         self.json.insert("results".to_string(), Value::Array(Vec::new()));
+        // `--progress-interval`: the crawl clock starts with the results table.
+        if self.progress_interval > 0 {
+            self.progress = Some(ProgressReporter::new(
+                Duration::from_secs(self.progress_interval),
+                Instant::now(),
+            ));
+        }
     }
 
     fn add_table_row(
@@ -135,6 +151,18 @@ impl Output for JsonOutput {
             results.push(row);
         }
 
+        // `--progress-interval`: one plain stderr line per interval instead of a `\r` redraw per URL.
+        if let Some(progress) = self.progress.as_mut() {
+            let line = progress.record(status, elapsed_time, progress_status, Instant::now());
+            if let Some(line) = line
+                && !self.hide_progress_bar
+                && self.print_to_output
+            {
+                eprintln!("{line}");
+            }
+            return;
+        }
+
         // Print progress to stderr in JSON mode
         if !self.hide_progress_bar && self.print_to_output {
             let parts: Vec<&str> = progress_status.splitn(2, '/').collect();
@@ -164,6 +192,19 @@ impl Output for JsonOutput {
 
             eprint!("{}", padded);
             let _ = std::io::stderr().flush();
+        }
+    }
+
+    fn finish_progress(&mut self) {
+        if self.hide_progress_bar || !self.print_to_output {
+            return;
+        }
+        if let Some(line) = self
+            .progress
+            .as_ref()
+            .and_then(|progress| progress.finish(Instant::now()))
+        {
+            eprintln!("{line}");
         }
     }
 
@@ -302,7 +343,7 @@ mod tests {
     use crate::scoring::quality_score::{CategoryScore, QualityScores};
 
     fn make_json_output() -> JsonOutput {
-        JsonOutput::new(CrawlerInfo::default(), vec![], true, false, None)
+        JsonOutput::new(CrawlerInfo::default(), vec![], true, false, None, 0)
     }
 
     fn make_pass_result() -> CiGateResult {

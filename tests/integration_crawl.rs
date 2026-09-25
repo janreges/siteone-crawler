@@ -1352,3 +1352,178 @@ fn custom_headers_reach_the_crawled_host_only() {
         serde_json::json!(["Cookie: ***", "User-Agent: ***"])
     );
 }
+
+/// #104: with `--progress-interval` the console gets periodic progress lines instead of one table
+/// row per URL, while the text report keeps every row.
+#[test]
+fn progress_interval_replaces_url_rows_on_stdout() {
+    let tmp = TempDir::new("progress-interval");
+    let site = tmp.path.join("site");
+    write_site(&site, 3);
+    let server = LocalServer::start(&site);
+    let text_report = tmp.path.join("report.txt");
+
+    let output = run_built_crawler(&[
+        "--config-file=/dev/null",
+        &format!("--url={}", server.url()),
+        LOCAL_ANALYZERS,
+        "--http-cache-dir=",
+        "--progress-interval=60",
+        // Colored notices end with an ANSI reset that would prefix the next console line.
+        "--no-color",
+        "--output-html-report=",
+        "--output-json-file=",
+        &format!("--output-text-file={}", text_report.display()),
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(!stdout.contains("/page-2.html"), "no per-URL rows on stdout: {stdout}");
+    let progress: Vec<&str> = stdout.lines().filter(|line| line.starts_with("Progress: ")).collect();
+    assert_eq!(
+        progress.len(),
+        1,
+        "a crawl shorter than the interval prints only the final line: {stdout}"
+    );
+    assert!(progress[0].starts_with("Progress: 4/4 (100%) | "), "{}", progress[0]);
+
+    let report = std::fs::read_to_string(&text_report).expect("the text report is written");
+    for page in ["/page-1.html", "/page-2.html", "/page-3.html"] {
+        assert!(report.contains(page), "the text report keeps the row of {page}");
+    }
+}
+
+/// #104: with `--progress-interval` the console still gets the rows of failed URLs, right when
+/// they finish, so a CI log shows what failed.
+#[test]
+fn progress_interval_keeps_rows_of_failed_urls_on_stdout() {
+    let html = |body: &str| format!("<html><head><title>T</title></head><body>{body}</body></html>");
+    let server = RecordingServer::start(vec![
+        Route {
+            path: "/",
+            headers: vec![("Content-Type", "text/html; charset=utf-8".to_string())],
+            body: html(r#"<a href="/ok.html">OK</a> <a href="/boom">Boom</a> <a href="/missing">Missing</a>"#)
+                .into_bytes(),
+        },
+        Route {
+            path: "/ok.html",
+            headers: vec![("Content-Type", "text/html; charset=utf-8".to_string())],
+            body: html("<p>OK</p>").into_bytes(),
+        },
+        Route {
+            path: "/boom",
+            headers: vec![
+                ("Status", "500 Internal Server Error".to_string()),
+                ("Content-Type", "text/html; charset=utf-8".to_string()),
+            ],
+            body: html("<p>Boom</p>").into_bytes(),
+        },
+    ]);
+
+    let output = run_crawler(&[
+        "--config-file=/dev/null",
+        &format!("--url={}", server.url()),
+        LOCAL_ANALYZERS,
+        "--http-cache-dir=",
+        "--progress-interval=60",
+        "--no-color",
+        "--output-html-report=",
+        "--output-json-file=",
+        "--output-text-file=",
+    ]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // The URL rows come before the final progress line; the tables after it may list URLs too.
+    let rows: Vec<&str> = stdout
+        .lines()
+        .take_while(|line| !line.starts_with("Progress: "))
+        .filter(|line| line.contains(" | "))
+        .collect();
+    let row_of = |path: &str| rows.iter().find(|row| row.contains(&format!(" {path} ")));
+    assert!(
+        row_of("/boom").is_some_and(|row| row.contains("500")),
+        "the 500 row is on stdout: {stdout}"
+    );
+    assert!(
+        row_of("/missing").is_some_and(|row| row.contains("404")),
+        "the 404 row is on stdout: {stdout}"
+    );
+    assert!(row_of("/ok.html").is_none(), "no row for the 200 URL: {stdout}");
+    assert!(
+        stdout.lines().any(|line| line.starts_with("Progress: 4/4 (100%) | ")),
+        "{stdout}"
+    );
+}
+
+/// #104: `--hide-progress-bar` also hides the `--progress-interval` lines in JSON mode.
+#[test]
+fn hide_progress_bar_suppresses_progress_lines_in_json_mode() {
+    let tmp = TempDir::new("progress-interval-hidden");
+    let site = tmp.path.join("site");
+    write_site(&site, 1);
+    let server = LocalServer::start(&site);
+
+    let output = run_built_crawler(&[
+        "--config-file=/dev/null",
+        &format!("--url={}", server.url()),
+        LOCAL_ANALYZERS,
+        "--http-cache-dir=",
+        "--output=json",
+        "--progress-interval=60",
+        "--hide-progress-bar",
+        "--output-html-report=",
+        "--output-json-file=",
+        "--output-text-file=",
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!stderr.contains("Progress"), "{stderr}");
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).expect("stdout stays pure JSON");
+    assert_eq!(json["results"].as_array().map(Vec::len), Some(2));
+}
+
+/// #104: in JSON mode the stderr progress follows the same interval, as plain lines.
+#[test]
+fn progress_interval_prints_plain_lines_to_stderr_in_json_mode() {
+    let tmp = TempDir::new("progress-interval-json");
+    let site = tmp.path.join("site");
+    write_site(&site, 3);
+    let server = LocalServer::start(&site);
+
+    let output = run_built_crawler(&[
+        "--config-file=/dev/null",
+        &format!("--url={}", server.url()),
+        LOCAL_ANALYZERS,
+        "--http-cache-dir=",
+        "--output=json",
+        "--progress-interval=60",
+        "--output-html-report=",
+        "--output-json-file=",
+        "--output-text-file=",
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!stderr.contains('\r'), "no carriage-return redraws: {stderr:?}");
+    let progress: Vec<&str> = stderr.lines().filter(|line| line.starts_with("Progress: ")).collect();
+    assert_eq!(progress.len(), 1, "{stderr}");
+    assert!(progress[0].starts_with("Progress: 4/4 (100%) | "), "{}", progress[0]);
+
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).expect("stdout stays pure JSON");
+    assert_eq!(json["results"].as_array().map(Vec::len), Some(4));
+}

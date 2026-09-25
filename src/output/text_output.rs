@@ -4,12 +4,14 @@
 
 use std::collections::HashMap;
 use std::io::Write;
+use std::time::{Duration, Instant};
 
 use crate::components::summary::summary::Summary;
 use crate::components::super_table::SuperTable;
 use crate::extra_column::ExtraColumn;
 use crate::output::output::{BasicStats, CrawlerInfo, Output};
 use crate::output::output_type::OutputType;
+use crate::output::progress_reporter::ProgressReporter;
 use crate::scoring::ci_gate::CiGateResult;
 use crate::scoring::quality_score::QualityScores;
 use crate::types::ContentTypeId;
@@ -47,6 +49,10 @@ pub struct TextOutput {
     workers: usize,
     memory_limit: String,
     disable_animation: bool,
+    /// `--progress-interval` in seconds; 0 = one console row per URL
+    progress_interval: u64,
+    /// Throttled progress lines, created with the URL table when `progress_interval > 0`
+    progress: Option<ProgressReporter>,
 
     /// Cached computed URL column size
     cached_url_column_size: Option<usize>,
@@ -69,6 +75,7 @@ impl TextOutput {
         memory_limit: String,
         print_to_output: bool,
         disable_animation: bool,
+        progress_interval: u64,
     ) -> Self {
         let terminal_width = utils::get_console_width().min(345);
         let compact_mode = terminal_width < 140;
@@ -111,6 +118,8 @@ impl TextOutput {
             workers,
             memory_limit,
             disable_animation,
+            progress_interval,
+            progress: None,
             cached_url_column_size: None,
         }
     }
@@ -144,6 +153,26 @@ impl TextOutput {
             let _ = std::io::stdout().flush();
         }
         self.output_text.push_str(output);
+    }
+
+    /// Add a line of the URL table (header or row). With `--progress-interval` the console gets
+    /// periodic progress lines instead, so the table only goes to the text report
+    /// (`--output-text-file`); only rows of failed URLs (`is_failure`) are still printed, so a CI
+    /// log shows what failed.
+    fn add_url_table_text(&mut self, text: &str, is_failure: bool) {
+        if self.progress.is_some() && !is_failure {
+            self.output_text.push_str(text);
+        } else {
+            self.add_to_output(text);
+        }
+    }
+
+    /// Print a `--progress-interval` line; console only, it is not part of the text report.
+    fn print_progress_line(&self, line: &str) {
+        if self.print_to_output {
+            println!("{line}");
+            let _ = std::io::stdout().flush();
+        }
     }
 
     pub fn get_output_text(&self) -> &str {
@@ -277,6 +306,13 @@ impl Output for TextOutput {
     }
 
     fn add_table_header(&mut self) {
+        // `--progress-interval`: the crawl clock starts with the URL table.
+        if self.progress_interval > 0 {
+            self.progress = Some(ProgressReporter::new(
+                Duration::from_secs(self.progress_interval),
+                Instant::now(),
+            ));
+        }
         let url_col_size = self.get_url_column_size();
         let mut header = format!("{:<width$} | Status", "URL", width = url_col_size);
         if !self.is_column_hidden("type") {
@@ -324,11 +360,14 @@ impl Output for TextOutput {
         header.push('\n');
 
         let header_len = header.len();
-        self.add_to_output(&format!(
-            "{}{}\n",
-            utils::get_color_text(&header, "gray", false),
-            "-".repeat(header_len)
-        ));
+        self.add_url_table_text(
+            &format!(
+                "{}{}\n",
+                utils::get_color_text(&header, "gray", false),
+                "-".repeat(header_len)
+            ),
+            false,
+        );
     }
 
     fn add_table_row(
@@ -467,11 +506,31 @@ impl Output for TextOutput {
         }
         output.push_str(&format!("{}\n", extra_headers_content));
 
+        // HTTP errors and negative statuses (connection error, timeout, skipped)
+        let is_failure = !(0..400).contains(&status);
         if !extra_new_line.is_empty() {
             let combined = format!("{}{}\n", output, extra_new_line.trim_end());
-            self.add_to_output(&combined);
+            self.add_url_table_text(&combined, is_failure);
         } else {
-            self.add_to_output(&output);
+            self.add_url_table_text(&output, is_failure);
+        }
+
+        let progress_line = self
+            .progress
+            .as_mut()
+            .and_then(|progress| progress.record(status, elapsed_time, progress_status, Instant::now()));
+        if let Some(line) = progress_line {
+            self.print_progress_line(&line);
+        }
+    }
+
+    fn finish_progress(&mut self) {
+        let final_line = self
+            .progress
+            .as_ref()
+            .and_then(|progress| progress.finish(Instant::now()));
+        if let Some(line) = final_line {
+            self.print_progress_line(&line);
         }
     }
 

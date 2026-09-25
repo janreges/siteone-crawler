@@ -260,6 +260,11 @@ impl Manager {
         let run_result = crawler.run().await;
         crate::events::phase_finished("crawl", crawl_started.elapsed().as_millis() as u64);
 
+        // Close the throttled `--progress-interval` output with the final state of the crawl.
+        if let Ok(mut out) = crawler.get_output().lock() {
+            out.finish_progress();
+        }
+
         // Shut down the browser on EVERY exit path (no-op for the direct-HTTP fetcher) so a
         // crawl error never leaks the Chromium process / handler task. No fetches occur after this.
         fetcher_handle.shutdown().await;
@@ -852,6 +857,7 @@ impl Manager {
                 options.memory_limit.clone(),
                 options.output_type == OutputType::Text, // print_to_output
                 options.ci,                              // disable_animation
+                options.progress_interval as u64,        // progress_interval
             )));
         }
 
@@ -871,6 +877,7 @@ impl Manager {
                 options.hide_progress_bar,
                 options.output_type == OutputType::Json, // print_to_output
                 options_json,
+                options.progress_interval as u64,
             )));
         }
 

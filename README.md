@@ -522,6 +522,7 @@ For a clearer list, I recommend going to the documentation: 🌐 https://crawler
 | `--do-not-truncate-url` | In the text output, long URLs are truncated by default to `--url-column-size` so the table does not<br>wrap due to long URLs. With this option, you can turn off the truncation. |
 | `--show-scheme-and-host` | On text output, show scheme and host also for origin domain URLs. |
 | `--hide-progress-bar` | Hide progress bar visible in text and JSON output for more compact view. |
+| `--progress-interval=<int>` | Instead of one table row per URL, print at most one compact progress line every N seconds, printed as URLs<br>finish, and a final one when crawling ends, e.g. `Progress: 22232/29504 (75%) \| 31 URLs/s \| avg 70 ms \| 2xx 22000, 3xx 100, 4xx 120, 5xx 2, err 10 \| 00:12:03`.<br>Rows of failed URLs (4xx/5xx, connection error, timeout, skipped) are still printed as they finish, so the log<br>shows what failed. Keeps CI job logs small (GitLab stops a job log at 4 MB by default). The text report<br>(`--output-text-file`) still contains every row. In JSON mode the progress lines go to stderr (hidden by `--hide-progress-bar`).<br>Default is `0` (one row per URL); `--ci` sets `10` unless this option is given. |
 | `--hide-columns=<list>` | Hide specified columns from the progress table. Comma-separated list of column names:<br>`type`, `time`, `size`, `cache`. Example: `--hide-columns=cache` or `--hide-columns=cache,type`. |
 | `--no-color` | Disable colored output. |
 | `--force-color` | Force colored output regardless of support detection. |
@@ -742,7 +743,7 @@ Convert a local HTML file to clean Markdown without crawling. Uses the same conv
 
 | Parameter | Description |
 |-----------|-------------|
-| `--ci` | Enable CI/CD quality gate. Crawler exits with code 10 if thresholds are not met. Default file outputs (HTML, JSON, TXT reports) are suppressed unless explicitly requested via `--output-*` options. |
+| `--ci` | Enable CI/CD quality gate. Crawler exits with code 10 if thresholds are not met. Default file outputs (HTML, JSON, TXT reports) are suppressed unless explicitly requested via `--output-*` options.<br>Instead of a row per URL, the console shows at most one progress line every 10 seconds (`--progress-interval=10`) unless `--progress-interval` is given; rows of failed URLs (4xx/5xx, connection errors, timeouts) are still printed. |
 | `--ci-min-score=<val>` | Minimum overall quality score (0.0-10.0). Default is `5.0`. |
 | `--ci-min-performance=<val>` | Minimum Performance category score (0.0-10.0). Default is `5.0`. |
 | `--ci-min-seo=<val>` | Minimum SEO category score (0.0-10.0). Default is `5.0`. |
@@ -764,7 +765,7 @@ Convert a local HTML file to clean Markdown without crawling. Uses the same conv
 | `--ci-junit-file=<file>` | Write the CI gate result as a JUnit XML report (renders natively in GitLab/Jenkins/GitHub test reporters). |
 | `--ci-github-annotations` | Print GitHub Actions `::error` annotations for failed checks. Auto-enabled when `GITHUB_ACTIONS=true`. |
 
-**Default behavior with `--ci` alone:** overall score >= 5.0, each category score >= 5.0 (Performance, SEO, Security, Best Practices) and Accessibility >= 3.0, 404 errors <= 0, 5xx errors <= 0, critical findings <= 0, HTML pages >= 10, assets >= 10. File outputs (HTML, JSON, TXT reports) are not generated. To save reports in CI mode, specify the desired output explicitly, e.g. `--ci --output-html-report=report.html`.
+**Default behavior with `--ci` alone:** overall score >= 5.0, each category score >= 5.0 (Performance, SEO, Security, Best Practices) and Accessibility >= 3.0, 404 errors <= 0, 5xx errors <= 0, critical findings <= 0, HTML pages >= 10, assets >= 10. File outputs (HTML, JSON, TXT reports) are not generated. To save reports in CI mode, specify the desired output explicitly, e.g. `--ci --output-html-report=report.html`. Instead of one row per URL, the console prints at most one progress line every 10 seconds plus the rows of failed URLs (4xx/5xx, connection errors, timeouts); use `--progress-interval=0` to get every row.
 
 ### 🌐 Browser rendering (optional)
 
@@ -1103,7 +1104,7 @@ Score labels:
 
 ## 🔄 CI/CD Integration
 
-The `--ci` flag enables a quality gate that evaluates configurable thresholds after crawling completes. When any threshold is not met, the crawler exits with **code 10** (distinct from exit code 1 for runtime errors). In CI mode, default file outputs (HTML, JSON, TXT reports) are automatically suppressed — only the console output and exit code matter. If you need report files in CI, specify them explicitly (e.g. `--output-html-report=report.html`).
+The `--ci` flag enables a quality gate that evaluates configurable thresholds after crawling completes. When any threshold is not met, the crawler exits with **code 10** (distinct from exit code 1 for runtime errors). In CI mode, default file outputs (HTML, JSON, TXT reports) are automatically suppressed — only the console output and exit code matter. If you need report files in CI, specify them explicitly (e.g. `--output-html-report=report.html`). To keep job logs small (GitLab stops a job log at 4 MB by default), `--ci` also replaces the per-URL table with at most one progress line every 10 seconds, printed as URLs finish, and keeps only the rows of failed URLs (4xx/5xx, connection errors, timeouts) so the log still shows what failed; set `--progress-interval` to change the interval (`0` = every row).
 
 **Bonus: Cache warming** — running the crawler as a post-deployment step in your CI/CD pipeline crawls every page and asset on your site, which populates the HTML/asset cache on your **reverse proxy** (Varnish, Nginx) or **CDN** (Cloudflare, CloudFront). This way, the first real visitors always hit a warm cache instead of cold origin requests.
 

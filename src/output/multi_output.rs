@@ -100,6 +100,12 @@ impl Output for MultiOutput {
         }
     }
 
+    fn finish_progress(&mut self) {
+        for output in &mut self.outputs {
+            output.finish_progress();
+        }
+    }
+
     fn add_super_table(&mut self, table: &SuperTable) {
         for output in &mut self.outputs {
             output.add_super_table(table);

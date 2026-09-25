@@ -89,7 +89,8 @@ impl Drop for LocalServer {
 }
 
 /// One canned answer of a `RecordingServer`: the request path it serves and the response
-/// headers and body (`Content-Length` and `Connection: close` are added automatically).
+/// headers and body (`Content-Length` and `Connection: close` are added automatically). A
+/// CGI-style `Status` header (e.g. `500 Internal Server Error`) replaces the default `200 OK`.
 pub struct Route {
     pub path: &'static str,
     pub headers: Vec<(&'static str, String)>,
@@ -128,7 +129,16 @@ impl RecordingServer {
                     .to_string();
                 recorded.lock().unwrap().push(head);
                 let response = match routes.iter().find(|route| route.path == path) {
-                    Some(route) => raw_http_response("200 OK", &route.headers, &route.body),
+                    Some(route) => {
+                        let status = route.headers.iter().find(|(name, _)| *name == "Status");
+                        let headers: Vec<(&str, String)> = route
+                            .headers
+                            .iter()
+                            .filter(|(name, _)| *name != "Status")
+                            .cloned()
+                            .collect();
+                        raw_http_response(status.map_or("200 OK", |(_, value)| value), &headers, &route.body)
+                    }
                     None => raw_http_response("404 Not Found", &[], b""),
                 };
                 stream.write_all(&response).ok();

@@ -110,6 +110,14 @@ Detected terminal width 138 < 140 chars - compact mode activated.
     *   `Access.`: Accessibility issues summary as compact numeric counts. Values like `3/1` mean "3 OK / 1 warning", `2/2` means "2 OK / 2 warnings", and a single number like `7` means that count of findings in the most relevant severity. Empty for non-HTML resources.
     *   `Best pr.`: Best practices issues summary in the same compact numeric format. Values like `1/6` mean "1 OK / 6 warnings". Empty for non-HTML resources.
 
+**Progress lines instead of rows (`--progress-interval`, `--ci`):** With `--progress-interval=<seconds>` greater than `0`, the console does not get one table row per URL. It prints at most one compact progress line every N seconds, printed as URLs finish, and a final one when crawling ends:
+
+```
+Progress: 22232/29504 (75%) | 31 URLs/s | avg 70 ms | 2xx 22000, 3xx 100, 4xx 120, 5xx 2, err 10 | 00:12:03
+```
+
+The line shows the URLs done out of those found so far, the crawl speed, the average response time, the count of URLs per status class (`err` = negative status codes such as connection errors, timeouts and skipped URLs) and the elapsed time. Rows of failed URLs (status 4xx/5xx or negative) are still printed in full as soon as they finish, so the log shows what failed. `--ci` implies `--progress-interval=10` unless the option is given; `--progress-interval=0` restores one row per URL. The text report (`--output-text-file`) always contains every row. In JSON mode (`--output=json`), the progress lines go to stderr instead.
+
 ### 3.2. Skipped URLs Summary
 
 Provides a high-level overview of why URLs were skipped during the crawl, grouped by reason and domain.

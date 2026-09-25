@@ -342,6 +342,7 @@ mod tests {
             show_scheme_and_host: false,
             do_not_truncate_url: false,
             hide_progress_bar: false,
+            progress_interval: 0,
             hide_columns: Vec::new(),
             no_color: false,
             force_color: false,

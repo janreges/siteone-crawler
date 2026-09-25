@@ -54,6 +54,9 @@ pub trait Output: Send + Sync {
         cache_lifetime: Option<i32>,
     );
 
+    /// Print the closing `--progress-interval` line once crawling has finished.
+    fn finish_progress(&mut self) {}
+
     /// Add a SuperTable to the output.
     fn add_super_table(&mut self, table: &SuperTable);
 
