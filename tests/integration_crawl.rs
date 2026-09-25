@@ -5228,6 +5228,55 @@ fn ai_utility_modes_never_print_credentials() {
 }
 
 #[test]
+fn ai_utility_mode_errors_are_json_also_from_a_config_file_or_a_malformed_flag() {
+    let tmp = TempDir::new("ai-utility-config");
+    let config = tmp.path.join("crawler.conf");
+    std::fs::write(
+        &config,
+        "--ai-check\n--ai-provider=openai-compatible\n--ai-endpoint=http://127.0.0.1:9/v1\n",
+    )
+    .expect("a config file");
+    let config_arg = format!("--config-file={}", config.display());
+    let connection = [
+        "--config-file=/dev/null",
+        "--ai-provider=openai-compatible",
+        "--ai-endpoint=http://127.0.0.1:9/v1",
+        "--ai-model=m",
+    ];
+    let cases: [(Vec<&str>, &str); 3] = [
+        (vec![&config_arg], "AI is enabled but --ai-model is missing."),
+        (
+            [&connection[..], &["--ai-check=wat"]].concat(),
+            "Option --ai-check (wat) must be boolean",
+        ),
+        (
+            [&connection[..], &["--ai-list-models=wat"]].concat(),
+            "Option --ai-list-models (wat) must be boolean",
+        ),
+    ];
+    let mut wrong = Vec::new();
+    for (mut args, message) in cases {
+        args.push("--no-color");
+        let output = run_crawler(&args);
+        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+        let answer = serde_json::from_str::<serde_json::Value>(&stdout).ok();
+        let is_json_failure = stdout.lines().count() == 1
+            && answer.as_ref().is_some_and(|answer| {
+                answer["ok"] == false && answer["error"].as_str().is_some_and(|error| error.contains(message))
+            });
+        if output.status.code() != Some(101) || !is_json_failure {
+            wrong.push(format!(
+                "{args:?}: exit {:?}, {} stdout line(s) starting {:?}",
+                output.status.code(),
+                stdout.lines().count(),
+                stdout.chars().take(80).collect::<String>()
+            ));
+        }
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+#[test]
 fn ai_utility_modes_report_configuration_errors_as_json() {
     let cases: [(&[&str], &str); 6] = [
         (&["--ai-list-models"], "--ai-list-models requires --ai-provider"),

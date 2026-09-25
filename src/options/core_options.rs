@@ -4039,7 +4039,7 @@ fn parse_line_list(content: &str) -> Vec<String> {
 
 /// Load config from file: --config-file=PATH, ~/.siteone-crawler.conf, or /etc/siteone-crawler.conf.
 /// Returns merged argv with config args prepended (CLI args take precedence).
-fn merge_config_file_args(argv: &[String]) -> Result<Vec<String>, CrawlerError> {
+pub(crate) fn merge_config_file_args(argv: &[String]) -> Result<Vec<String>, CrawlerError> {
     // Extract --config-file from argv
     let mut config_path: Option<String> = None;
     for arg in argv {

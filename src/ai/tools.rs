@@ -13,7 +13,7 @@ use serde::Serialize;
 use super::client::AiClient;
 use super::config::{self, AiConfig};
 use super::provider::{ChatMessage, ChatRequest, ModelInfo};
-use crate::options::core_options::CoreOptions;
+use crate::options::core_options::{CoreOptions, merge_config_file_args};
 use crate::utils;
 
 /// What `--ai-check` asks the model.
@@ -76,17 +76,21 @@ struct Failure<'a> {
     error: &'a str,
 }
 
-/// Whether `argv` asks for a utility mode, read from the raw arguments so that a configuration
-/// error can still be answered in JSON.
+/// Whether `argv` asks for a utility mode, read as the options parser reads it — the config file
+/// merged in, the last value winning — but before it validates, so that a configuration error can
+/// still be answered in JSON. A malformed value asks for the mode too; only a false one does not.
 pub fn requested(argv: &[String]) -> bool {
-    argv.iter().skip(1).any(|arg| {
-        ["--ai-list-models", "--ai-check"].iter().any(|flag| {
-            arg == flag
-                || arg
-                    .strip_prefix(flag)
-                    .and_then(|rest| rest.strip_prefix('='))
-                    .is_some_and(|value| ["1", "yes", "true"].contains(&value))
-        })
+    let merged = merge_config_file_args(argv).unwrap_or_else(|_| argv.to_vec());
+    ["--ai-list-models", "--ai-check"].iter().any(|flag| {
+        let last = merged
+            .iter()
+            .skip(1)
+            .filter_map(|arg| match arg == flag {
+                true => Some("true"),
+                false => arg.strip_prefix(flag)?.strip_prefix('='),
+            })
+            .next_back();
+        last.is_some_and(|value| !["0", "no", "false"].contains(&value.trim_matches(['"', '\'', '`'])))
     })
 }
 
@@ -244,6 +248,22 @@ mod tests {
         assert!(!requested(&argv(&["--ai-check=false"])));
         assert!(!requested(&argv(&["--url=https://example.com/", "--ai-dry-run"])));
         assert!(!requested(&argv(&["--ai-checkpoint"])));
+    }
+
+    #[test]
+    fn a_utility_mode_is_recognized_as_the_options_parser_reads_it() {
+        // A malformed value still asks for the mode; the parser rejects the value.
+        assert!(requested(&argv(&["--ai-check=wat"])));
+        assert!(requested(&argv(&["--ai-list-models=wat"])));
+        // The last value wins, as in the parser.
+        assert!(!requested(&argv(&["--ai-check", "--ai-check=false"])));
+        assert!(requested(&argv(&["--ai-check=no", "--ai-check"])));
+        // A mode from the config file, which the parser merges before the command line.
+        let config = tempfile::NamedTempFile::new().expect("a config file");
+        std::fs::write(config.path(), "--ai-check\n--ai-provider=openai-compatible\n").expect("written");
+        let config_arg = format!("--config-file={}", config.path().display());
+        assert!(requested(&argv(&[&config_arg])));
+        assert!(!requested(&argv(&[&config_arg, "--ai-check=0"])));
     }
 
     #[test]
