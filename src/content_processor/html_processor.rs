@@ -853,10 +853,24 @@ impl ContentProcessor for HtmlProcessor {
     fn apply_content_changes_for_offline_version(
         &self,
         content: &mut String,
-        _content_type: ContentTypeId,
+        content_type: ContentTypeId,
         url: &ParsedUrl,
         remove_unwanted_code: bool,
     ) {
+        // The crawler fetches a redirect target as it is, without the --force-relative-urls
+        // normalization, so a redirect record leads to where that target is stored (#35)
+        if content_type == ContentTypeId::Redirect && self.config.force_relative_urls {
+            let mut config = self.config.clone();
+            config.force_relative_urls = false;
+            HtmlProcessor::new(config).apply_content_changes_for_offline_version(
+                content,
+                content_type,
+                url,
+                remove_unwanted_code,
+            );
+            return;
+        }
+
         if !self.config.offline_export_no_url_rewriting {
             // Remove schema and host from full origin URLs
             *content = self.remove_schema_and_host_from_full_origin_urls(url, content);
@@ -1516,6 +1530,56 @@ mod tests {
             assert!(html.contains(expected), "missing {expected} in {html}");
         }
         assert!(!html.contains("_www.example.com"), "{html}");
+    }
+
+    #[test]
+    fn force_relative_urls_leads_a_redirect_record_to_where_its_target_is_stored() {
+        // #35: the crawler fetches a redirect target as it is, not normalized, so the record of /redirect
+        // (301 to /landing on the www twin) leads to the twin's copy, and so does the record of /about
+        // (301 to its www twin) instead of reloading itself
+        let mut config = make_config();
+        config.force_relative_urls = true;
+        let allow_www: crate::content_processor::base_processor::DomainAllowFn =
+            std::sync::Arc::new(|domain: &str| domain == "www.example.com");
+        config.is_external_domain_allowed_for_crawling = Some(allow_www);
+        let processor = HtmlProcessor::new(config);
+        for (record, location, expected) in [
+            (
+                "https://example.com/redirect",
+                "https://www.example.com/landing",
+                "url=_www.example.com/landing.html",
+            ),
+            (
+                "https://example.com/about",
+                "https://www.example.com/about",
+                "url=_www.example.com/about.html",
+            ),
+        ] {
+            let mut html =
+                format!(r#"<meta http-equiv="refresh" content="0; url={location}"> Redirecting to {location} ..."#);
+            processor.apply_content_changes_for_offline_version(
+                &mut html,
+                ContentTypeId::Redirect,
+                &ParsedUrl::parse(record, None),
+                false,
+            );
+            assert!(html.contains(expected), "missing {expected} in {html}");
+        }
+    }
+
+    #[test]
+    fn force_relative_urls_links_a_page_to_itself_via_its_own_file() {
+        // #35: a variant link to the page itself leads to its own file, also when the attribute has
+        // spaces around `=` (which the origin-stripping pass does not match)
+        let mut config = make_config();
+        config.force_relative_urls = true;
+        let processor = HtmlProcessor::new(config);
+        let page = ParsedUrl::parse("https://example.com/same", None);
+        let mut html = r#"<html><body><h1 id="part">Here</h1><a href="https://www.example.com/same#part">compact</a><a href = "https://www.example.com/same#part">spaced</a></body></html>"#.to_string();
+        processor.apply_content_changes_for_offline_version(&mut html, ContentTypeId::Html, &page, false);
+        for expected in [r#"href="same.html#part">compact"#, r#"href="same.html#part">spaced"#] {
+            assert!(html.contains(expected), "missing {expected} in {html}");
+        }
     }
 
     #[test]

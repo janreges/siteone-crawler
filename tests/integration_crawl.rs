@@ -2598,6 +2598,123 @@ fn force_relative_urls_exports_www_and_scheme_variants_as_the_same_files() {
     assert!(css.contains("url(img/a.png)"), "{css}");
 }
 
+/// #35: the crawler fetches a redirect target as it is, so with --force-relative-urls the record of
+/// /redirect (301 to /landing on the www twin) leads to the twin's copy, while a www-variant link of
+/// a page to itself (even with spaces around `=`) leads to the page's own file, also in Markdown
+/// (which stores no redirect records, so only the self-link is checked there).
+#[test]
+fn force_relative_urls_exports_redirects_to_the_www_twin_and_self_links() {
+    let tmp = TempDir::new("force-relative-redirect-path");
+    let site = tmp.path.join("site");
+    std::fs::create_dir_all(&site).expect("site dir");
+    let server = RedirectServer::start(
+        &site,
+        vec![Redirect {
+            host: Some("site.test"),
+            path: Some("/redirect"),
+            location: "http://www.site.test:{port}/landing",
+        }],
+    );
+    let port = server.port();
+    std::fs::write(
+        site.join("index.html"),
+        format!(
+            r#"<html><head><title>Home</title></head><body><h1 id="top">Home</h1>
+<a href="/redirect">Redirect</a> <a href = "http://www.site.test:{port}/#top">Top</a>
+</body></html>"#
+        ),
+    )
+    .expect("index.html");
+    std::fs::write(
+        site.join("landing.html"),
+        r#"<html><head><title>Landing</title></head><body>Destination</body></html>"#,
+    )
+    .expect("landing.html");
+    let export = tmp.path.join("export");
+    let markdown = tmp.path.join("markdown");
+
+    let output = run_crawler(&[
+        "--config-file=/dev/null",
+        &format!("--url=http://site.test:{port}/"),
+        &format!("--resolve=site.test:{port}:127.0.0.1"),
+        &format!("--resolve=www.site.test:{port}:127.0.0.1"),
+        LOCAL_ANALYZERS,
+        "--http-cache-dir=",
+        "--force-relative-urls",
+        &format!("--offline-export-dir={}", export.display()),
+        &format!("--markdown-export-dir={}", markdown.display()),
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    assert!(
+        export.join("_www.site.test/landing.html").is_file(),
+        "the redirect target is exported"
+    );
+    let record = std::fs::read_to_string(export.join("redirect.html")).expect("redirect.html");
+    assert!(record.contains("url=_www.site.test/landing.html"), "{record}");
+    let index = std::fs::read_to_string(export.join("index.html")).expect("index.html");
+    assert!(index.contains(r#"href="index.html#top""#), "{index}");
+    assert_eq!(dangling_references(&export), Vec::<String>::new());
+    let index_md = std::fs::read_to_string(markdown.join("index.md")).expect("index.md");
+    assert!(index_md.contains("[Top](index.md#top)"), "{index_md}");
+}
+
+/// #35: a www-variant reference in a stylesheet downloaded from an allowed external domain is
+/// fetched from the initial origin, so the exported stylesheet leads to the initial host's file.
+#[test]
+fn force_relative_urls_exports_variant_references_of_external_stylesheets() {
+    let tmp = TempDir::new("force-relative-cdn");
+    let site = tmp.path.join("site");
+    std::fs::create_dir_all(&site).expect("site dir");
+    let server = RedirectServer::start(&site, Vec::new());
+    let port = server.port();
+    std::fs::write(
+        site.join("index.html"),
+        format!(
+            r#"<html><head><title>Home</title><link rel="stylesheet" href="http://cdn.test:{port}/style.css"></head><body>Home</body></html>"#
+        ),
+    )
+    .expect("index.html");
+    std::fs::write(
+        site.join("style.css"),
+        "body{background:url(https://www.site.test/img.png)}",
+    )
+    .expect("css");
+    std::fs::write(site.join("img.png"), "PNG").expect("png");
+    let export = tmp.path.join("export");
+
+    let output = run_crawler(&[
+        "--config-file=/dev/null",
+        &format!("--url=http://site.test:{port}/"),
+        &format!("--resolve=site.test:{port}:127.0.0.1"),
+        &format!("--resolve=cdn.test:{port}:127.0.0.1"),
+        "--allowed-domain-for-external-files=cdn.test",
+        LOCAL_ANALYZERS,
+        "--http-cache-dir=",
+        "--force-relative-urls",
+        &format!("--offline-export-dir={}", export.display()),
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    assert!(
+        export.join("img.png").is_file(),
+        "the image is fetched from the initial origin"
+    );
+    let css = std::fs::read_to_string(export.join("_cdn.test/style.css")).expect("the CDN stylesheet");
+    assert!(css.contains("url(../img.png)"), "{css}");
+    assert_eq!(dangling_references(&export), Vec::<String>::new());
+}
+
 /// Writes a site whose pages live at extension-less URLs on several directory levels (#55).
 fn write_nested_site(dir: &Path) {
     let files = [

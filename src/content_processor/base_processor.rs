@@ -197,19 +197,18 @@ pub fn convert_url_to_relative(
     let mut parsed_target = ParsedUrl::parse(&normalized, Some(base_url));
 
     // --force-relative-urls: http/https and www/non-www variants of the initial host are the initial
-    // host, so their links lead to the same local files (#35). Only on pages stored under the initial
-    // host (when the initial URL redirects to its www twin, the pages live under _www.host/), and never
-    // for the page itself (its redirect record would reload itself).
+    // host, so their links lead to the same local files (#35), as the crawler fetched them from the
+    // initial origin, whatever host they were found on. Not on pages stored under the initial host's
+    // www twin (when the initial URL redirects there, the pages live under _www.host/ and their links
+    // stay within that copy). Redirect records are not normalized at all (see HtmlProcessor).
+    let is_on_initial_host_twin =
+        base_url.host != config.initial_url.host && is_initial_host_variant(base_url, &config.initial_url);
     if config.force_relative_urls
-        && base_url.host == config.initial_url.host
+        && !is_on_initial_host_twin
         && is_initial_host_variant(&parsed_target, &config.initial_url)
     {
-        let mut normalized_target = parsed_target.clone();
-        normalized_target.set_attributes(&config.initial_url, true, true, true);
-        if normalized_target.path != base_url.path || normalized_target.query != base_url.query {
-            normalized_target.url = normalized_target.get_full_url(true, true);
-            parsed_target = normalized_target;
-        }
+        parsed_target.set_attributes(&config.initial_url, true, true, true);
+        parsed_target.url = parsed_target.get_full_url(true, true);
     }
 
     if config.offline_export_preserve_urls {
@@ -480,21 +479,36 @@ mod tests {
     }
 
     #[test]
-    fn force_relative_urls_never_points_a_page_to_itself() {
-        // #35: the redirect record of /about (301 to its www twin) leads to the twin's copy instead
-        // of reloading itself
+    fn force_relative_urls_links_a_page_to_itself_via_its_own_file() {
+        // #35: a variant link to the page itself leads to the page's own file like any other variant
+        // link (redirect records, which are not normalized, are handled by the HTML processor)
         let mut cfg = config(false, false);
         cfg.force_relative_urls = true;
         let allow_www: DomainAllowFn = Arc::new(|domain: &str| domain == "www.example.com");
         cfg.is_external_domain_allowed_for_crawling = Some(allow_www);
-        let record = ParsedUrl::parse("https://example.com/about", None);
+        let page = ParsedUrl::parse("https://example.com/about", None);
         assert_eq!(
-            convert_url_to_relative(&record, "https://www.example.com/about", Some("href"), &cfg),
-            "_www.example.com/about.html"
+            convert_url_to_relative(&page, "https://www.example.com/about#team", Some("href"), &cfg),
+            "about.html#team"
         );
         assert_eq!(
-            convert_url_to_relative(&record, "https://www.example.com/contact", Some("href"), &cfg),
+            convert_url_to_relative(&page, "https://www.example.com/contact", Some("href"), &cfg),
             "contact.html"
+        );
+    }
+
+    #[test]
+    fn force_relative_urls_normalizes_variant_references_in_external_files() {
+        // #35: the crawler fetches a variant found in a downloaded external file (a CDN stylesheet)
+        // from the initial origin, so the reference leads to the initial host's file
+        let mut cfg = config(false, false);
+        cfg.force_relative_urls = true;
+        let allow_cdn: DomainAllowFn = Arc::new(|domain: &str| domain == "cdn.other.com");
+        cfg.is_domain_allowed_for_static_files = Some(allow_cdn);
+        let stylesheet = ParsedUrl::parse("https://cdn.other.com/style.css", None);
+        assert_eq!(
+            convert_url_to_relative(&stylesheet, "https://www.example.com/img.png", None, &cfg),
+            "../img.png"
         );
     }
 
